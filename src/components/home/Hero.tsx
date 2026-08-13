@@ -36,13 +36,13 @@ export function Hero() {
       </div>
 
       <a
-        className="focus-ring pressable group fixed bottom-5 right-5 z-[70] grid h-14 w-14 place-items-center rounded-[1.1rem] shadow-lifted transition duration-300 ease-out hover:-translate-y-1 hover:scale-105 hover:shadow-[0_18px_44px_rgba(37,211,102,0.42)] sm:bottom-6 sm:right-6"
+        className="focus-ring group fixed bottom-5 right-5 z-[70] grid h-14 w-14 place-items-center rounded-full transition-transform duration-200 ease-out hover:scale-110 active:scale-95 sm:bottom-6 sm:right-6"
         href={`https://wa.me/${WHATSAPP_NUMBER}`}
         target="_blank"
         rel="noreferrer"
         aria-label="WhatsApp"
       >
-        <img className="h-full w-full object-contain transition duration-300 ease-out group-hover:brightness-110 group-hover:saturate-125" src="/images/whatsapp.png" alt="" aria-hidden="true" />
+        <img className="h-full w-full object-contain transition duration-200 ease-out group-hover:brightness-110 group-hover:drop-shadow-[0_10px_18px_rgba(37,211,102,0.34)]" src="/images/whatsapp.png" alt="" aria-hidden="true" />
       </a>
 
       <Container className="relative grid min-h-[100dvh] place-items-center px-6 pb-16 pt-28 text-center">

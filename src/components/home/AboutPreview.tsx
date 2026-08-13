@@ -39,7 +39,7 @@ export function AboutPreview() {
       <Container>
         <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_420px] lg:items-center">
           <div>
-            <p className="text-sm font-bold uppercase tracking-[0.14em] text-ocean-200">
+            <p className="text-sm font-bold uppercase tracking-[0.14em] text-ocean-400">
               {language === 'es' ? 'Sobre nosotros' : 'About us'}
             </p>
             <h2 className="mt-3 max-w-3xl font-display text-4xl font-extrabold leading-tight sm:text-5xl">
@@ -61,20 +61,22 @@ export function AboutPreview() {
               </p>
             </div>
 
-            <div className="mt-7 flex justify-start">
+          </div>
+
+          <div>
+            <div className="rounded-[2rem] border border-white/10 bg-white/[0.06] p-3 shadow-lifted backdrop-blur-xl">
+              <img
+                className="aspect-[4/3] w-full rounded-[1.4rem] object-cover"
+                src="/images/placeholder-image.jpg"
+                alt={language === 'es' ? 'Bote privado en agua tropical' : 'Private boat on tropical water'}
+                loading="lazy"
+              />
+            </div>
+            <div className="mt-8 flex justify-center">
               <Button variant="secondary" to="/nosotros">
                 {language === 'es' ? 'Conocer la empresa' : 'Meet the company'}
               </Button>
             </div>
-          </div>
-
-          <div className="rounded-[2rem] border border-white/10 bg-white/[0.06] p-3 shadow-lifted backdrop-blur-xl">
-            <img
-              className="aspect-[4/3] w-full rounded-[1.4rem] object-cover"
-              src="/images/placeholder-image.jpg"
-              alt={language === 'es' ? 'Bote privado en agua tropical' : 'Private boat on tropical water'}
-              loading="lazy"
-            />
           </div>
         </div>
 

@@ -21,7 +21,7 @@ export function BoatTourCard({ boat, tour, isSelected, onSelect }: BoatTourCardP
 
   return (
     <>
-      <article className={`group relative h-full overflow-hidden rounded-2xl border border-white/10 bg-white/[0.06] shadow-soft backdrop-blur-xl transition duration-300 hover:-translate-y-1 hover:border-ocean-400/70 ${isSelected ? 'border-ocean-400 bg-ocean-500/15 ring-4 ring-ocean-500/10' : ''}`}>
+      <article className={`group relative flex h-full flex-col overflow-hidden rounded-2xl border border-white/10 bg-white/[0.06] shadow-soft backdrop-blur-xl transition duration-300 hover:-translate-y-1 hover:border-ocean-400/70 ${isSelected ? 'border-ocean-400 bg-ocean-500/15 ring-4 ring-ocean-500/10' : ''}`}>
         <div className="relative overflow-hidden">
           <img
             src={tour.image}
@@ -41,31 +41,31 @@ export function BoatTourCard({ boat, tour, isSelected, onSelect }: BoatTourCardP
           ) : null}
         </div>
 
-        <div className="p-5">
-          <h3 className="text-2xl font-extrabold text-white">{tour.name}</h3>
+        <div className="flex flex-1 flex-col p-5">
+          <h3 className="text-balance text-2xl font-extrabold leading-tight text-white">{tour.name}</h3>
           <p className="mt-2 text-sm font-bold text-ocean-400">Aboard {boat.name}</p>
           <div className="mt-4 grid gap-2 text-sm font-semibold text-ocean-200">
-            <span className="flex items-center gap-2">
+            <span className="grid grid-cols-[1rem_minmax(0,1fr)] items-center gap-2">
               <Clock size={16} className="text-ocean-400" />
               {tour.duration} Hours
             </span>
-            <span className="flex items-center gap-2">
+            <span className="grid grid-cols-[1rem_minmax(0,1fr)] items-center gap-2">
               <Users size={16} className="text-ocean-400" />
-              {includedGuests} guests included - max {effectiveMaxGuests}
+              <span>{includedGuests} guests included - max {effectiveMaxGuests}</span>
             </span>
           </div>
 
-          <div className="mt-6 flex items-end justify-between gap-4">
-            <div>
+          <div className="mt-auto flex flex-col gap-4 pt-6 min-[420px]:flex-row min-[420px]:items-end min-[420px]:justify-between">
+            <div className="min-w-0">
               <p className="text-xs font-bold uppercase tracking-[0.12em] text-ocean-300">From</p>
-              <p className="text-2xl font-extrabold text-ocean-400">{tour.customQuote ? 'Custom quote' : formatCurrency(tour.basePrice)}</p>
+              <p className="text-2xl font-extrabold leading-tight text-ocean-400">{tour.customQuote ? 'Custom quote' : formatCurrency(tour.basePrice)}</p>
             </div>
-            <div className="flex flex-col gap-2 sm:items-end">
-              <Button type="button" variant="secondary" className="min-h-10 px-4" onClick={() => setIsModalOpen(true)}>
+            <div className="grid w-full gap-2 min-[420px]:w-auto min-[420px]:justify-items-end">
+              <Button type="button" variant="secondary" className="min-h-10 w-full px-4 min-[420px]:w-auto" onClick={() => setIsModalOpen(true)}>
                 <Info size={16} />
                 Quick View
               </Button>
-              <Button type="button" onClick={() => onSelect(tour)}>
+              <Button type="button" className="w-full min-[420px]:w-auto" onClick={() => onSelect(tour)}>
                 Select Tour
               </Button>
             </div>
