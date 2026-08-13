@@ -1,0 +1,2 @@
+export const WHATSAPP_NUMBER = '50640002026';
+export const DISPLAY_PHONE = '+506 4000 2026';

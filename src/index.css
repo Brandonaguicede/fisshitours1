@@ -1,0 +1,117 @@
+@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Outfit:wght@400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: dark;
+    font-family: Outfit, ui-sans-serif, system-ui, sans-serif;
+    --background: #F2FAFD;
+    --surface: #DDEFF6;
+    --primary: #2B5F82;
+    --primary-hover: #133E62;
+    --secondary: #4986A7;
+    --accent: #E2A86D;
+    --navy: #2B5F82;
+    --navy-deep: #133E62;
+    --seafoam: #C9844A;
+    --text-primary: #133E62;
+    --text-secondary: #2B5F82;
+    --text-soft: #4986A7;
+    --border: #4986A7;
+    background: var(--background);
+    color: #133E62;
+    --ease-out-strong: cubic-bezier(0.23, 1, 0.32, 1);
+    --ease-in-out-strong: cubic-bezier(0.77, 0, 0.175, 1);
+  }
+
+  html {
+    scroll-behavior: smooth;
+    overflow-x: hidden;
+  }
+
+  body {
+    margin: 0;
+    min-width: 320px;
+    background:
+      radial-gradient(circle at top left, rgba(255, 255, 255, 0.72), transparent 32rem),
+      radial-gradient(circle at 82% 12%, rgba(221, 239, 246, 0.58), transparent 26rem),
+      linear-gradient(180deg, #FFFFFF 0%, #F2FAFD 26%, #6EACC9 58%, #133E62 100%);
+    text-rendering: optimizeLegibility;
+    overflow-x: hidden;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: rgba(43, 95, 130, 0.18);
+  }
+
+  img {
+    max-width: 100%;
+  }
+
+  ::selection {
+    background: #6EACC9;
+    color: #133E62;
+  }
+}
+
+@layer components {
+  .skip-link {
+    @apply focus-ring fixed left-4 top-4 z-[100] -translate-y-24 rounded-full bg-white px-5 py-3 text-sm font-bold text-ocean-900 shadow-lifted transition-transform duration-200 focus-visible:translate-y-0;
+  }
+
+  .focus-ring {
+    @apply focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ocean-600;
+  }
+
+  .glass-panel {
+    @apply border border-white/50 bg-white/70 shadow-soft backdrop-blur-xl;
+  }
+
+  .glass-card {
+    @apply border border-white/30 bg-white/20 shadow-soft backdrop-blur-2xl;
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.26),
+      0 18px 44px rgba(17, 19, 15, 0.26);
+  }
+
+  .glass-dark {
+    @apply border border-white/30 bg-white/15 shadow-soft backdrop-blur-2xl;
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.32),
+      0 18px 44px rgba(17, 19, 15, 0.26);
+  }
+
+  .glass-nav {
+    @apply border-b border-white/60 bg-white/70 shadow-sm backdrop-blur-2xl;
+  }
+
+  .section-y {
+    @apply py-16 sm:py-20 lg:py-24;
+  }
+
+  .pressable {
+    @apply transition-[transform,box-shadow,background-color,color,border-color] duration-200 ease-out active:scale-[0.98];
+  }
+}
+
+@keyframes team-carousel {
+  from {
+    transform: translateX(0);
+  }
+
+  to {
+    transform: translateX(calc(-50% - 0.375rem));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}

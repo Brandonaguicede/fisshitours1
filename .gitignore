@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.vercel/
+.agents/
+.codex/
+
+*.log
+*.local
+.env
+.env.*
+
+!.env.example
