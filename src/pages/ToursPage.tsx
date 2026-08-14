@@ -44,12 +44,12 @@ export default function ToursPage() {
           <div className="rounded-[2rem] bg-ocean-900 px-6 py-12 text-white shadow-lifted sm:px-10">
             <p className="text-sm font-bold uppercase tracking-[0.14em] text-ocean-200">{language === 'es' ? 'Reserva por flota' : 'Fleet first booking'}</p>
             <h1 className="mt-3 max-w-4xl font-display text-4xl font-extrabold leading-tight sm:text-6xl">
-              {language === 'es' ? 'Elige tu barco, explora sus tours y reserva con capacidad y precio precisos' : 'Choose your boat, explore its tours, reserve with accurate capacity and pricing'}
+              {language === 'es' ? 'Explora Second Wind, elige tu tour y reserva con precio claro' : 'Explore Second Wind, choose your tour and book with clear pricing'}
             </h1>
             <p className="mt-4 max-w-2xl text-lg leading-8 text-ocean-200">
               {language === 'es'
-                ? 'Cada barco tiene sus propias reglas de personas, lista de tours, horarios, precio por pasajero extra y capacidad máxima.'
-                : 'Each boat has its own guest rules, tour list, time slots, extra passenger pricing and maximum capacity.'}
+                ? 'El precio base cubre hasta 5 personas. Desde la sexta persona se agregan $65 por persona, con capacidad maxima de 10.'
+                : 'The base price covers up to 5 people. From the sixth guest onward, $65 is added per person, with maximum capacity of 10.'}
             </p>
           </div>
         </Container>
@@ -60,10 +60,10 @@ export default function ToursPage() {
           <SectionTitle
             align="left"
             eyebrow={language === 'es' ? 'Nuestra flota' : 'Our fleet'}
-            title={language === 'es' ? 'Barcos listos para pesca, playa y navegación privada' : 'Boats ready for fishing, beach and private navigation'}
+            title={language === 'es' ? 'Second Wind listo para pesca, playa, surf y aventura privada' : 'Second Wind ready for fishing, beach, surf and private adventure'}
             description={language === 'es'
-              ? 'La capacidad mostrada indica las personas incluidas en el precio base. La capacidad máxima se maneja por separado.'
-              : 'The displayed capacity is the number of guests included in the base price. Maximum allowed capacity is handled separately.'}
+              ? 'Bote Cigarette de 32 pies con motor Yamaha 250 HP, GPS Garmin, radio VHF, sonido JBL, bano, juguetes acuaticos y seguro.'
+              : '32 ft Cigarette boat with Yamaha 250 HP engine, Garmin GPS, VHF radio, JBL sound, restroom, water toys and insurance.'}
           />
           <div className="mt-10 grid gap-6 lg:grid-cols-3">
             {boats.map((boat) => (
@@ -92,7 +92,7 @@ export default function ToursPage() {
                 <p className="text-lg font-extrabold text-white">{selectedBoat.name}</p>
                 <p className="mt-1 text-sm text-ocean-200">
                   {language === 'es'
-                    ? `Incluye ${selectedBoat.includedGuests} personas, máximo ${selectedBoat.maxGuests}. Persona extra desde $${selectedBoat.extraGuestPrice}.`
+                    ? `Base para ${selectedBoat.includedGuests} personas, maximo ${selectedBoat.maxGuests}. Persona extra $${selectedBoat.extraGuestPrice}.`
                     : `Includes ${selectedBoat.includedGuests} guests, maximum ${selectedBoat.maxGuests}. Extra guest from $${selectedBoat.extraGuestPrice}.`}
                 </p>
               </div>
@@ -114,8 +114,8 @@ export default function ToursPage() {
             eyebrow={language === 'es' ? 'Reserva tu experiencia' : 'Reserve Your Experience'}
             title={language === 'es' ? 'La reserva responde al barco, tour, personas y horario que elijas' : 'Booking reacts to the boat, tour, guests and time you choose'}
             description={language === 'es'
-              ? 'La validación de capacidad, cargos por persona extra y cotizaciones se calculan desde datos configurables.'
-              : 'Capacity validation, extra guest charges and custom quote behavior are calculated from configurable data.'}
+              ? 'Escoge tipo de tour, paquete por precio, fecha, personas y comida opcional cuando el paquete sea Dia completo.'
+              : 'Choose tour type, package by price, date, guests and optional meal when the package is Full Day.'}
           />
           <div className="mt-10">
             <BookingPanel selectedBoat={selectedBoat} selectedTour={selectedTour} onBoatChange={changeBoatFromBooking} onTourChange={setSelectedTour} />

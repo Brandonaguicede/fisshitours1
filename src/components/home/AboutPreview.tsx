@@ -61,19 +61,19 @@ export function AboutPreview() {
             </p>
             <h2 className="mt-3 max-w-3xl font-display text-4xl font-extrabold leading-tight sm:text-5xl">
               {language === 'es'
-                ? 'Local passion and excellence on Costa Rica Pacific'
+                ? 'Pasion local y excelencia en el Pacifico de Costa Rica'
                 : 'Local passion and excellence on Costa Rica Pacific'}
             </h2>
 
             <div className="mt-6 grid max-w-3xl gap-4 text-base leading-8 text-ocean-200">
               <p>
                 {language === 'es'
-                  ? 'Papagayo Fishing Tour is a family-owned company founded by young local entrepreneurs Gabriel and Joshua, proudly from Playas del Coco.'
+                  ? 'Papagayo Fishing Tour es una empresa familiar fundada por los jovenes emprendedores locales Gabriel y Joshua, orgullosamente de Playas del Coco.'
                   : 'Papagayo Fishing Tour is a family-owned company founded by young local entrepreneurs Gabriel and Joshua, proudly from Playas del Coco.'}
               </p>
               <p>
                 {language === 'es'
-                  ? 'Every journey is thoughtfully designed to deliver exclusivity, comfort and authenticity across the waters of the Papagayo Peninsula.'
+                  ? 'Cada salida esta disenada con cuidado para ofrecer exclusividad, comodidad y autenticidad en las aguas de la Peninsula de Papagayo.'
                   : 'Every journey is thoughtfully designed to deliver exclusivity, comfort and authenticity across the waters of the Papagayo Peninsula.'}
               </p>
             </div>

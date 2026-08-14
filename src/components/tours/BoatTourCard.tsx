@@ -3,6 +3,8 @@ import { useState } from 'react';
 
 import type { Boat } from '../../types/boat';
 import type { BoatTour } from '../../types/boatTour';
+import { getPackageLabel, getTourText } from '../../i18n/content';
+import { useLanguage } from '../../i18n/LanguageContext';
 import { getEffectiveMaxGuests } from '../../utils/bookingPricing';
 import { formatCurrency } from '../../utils/formatCurrency';
 import { Button } from '../common/Button';
@@ -15,71 +17,15 @@ interface BoatTourCardProps {
   onSelect: (tour: BoatTour) => void;
 }
 
-const tourCardContent: Record<string, { title: string; tags: string[]; duration?: string; activities: string[]; included: string[] }> = {
-  'Snorkeling & Beach': {
-    title: 'Beach & Snorkeling',
-    tags: ['Snorkeling', 'Beaches', 'Wildlife'],
-    duration: '4-8 hours',
-    activities: ['Snorkeling', 'Beaches', 'Paddleboarding', 'Subwing', 'Wildlife watching'],
-    included: ['Alcoholic and non-alcoholic beverages', 'Chips with guacamole', 'Seasonal fruits', 'Lunch on full-day tours'],
-  },
-  Fishing: {
-    title: 'Fishing',
-    tags: ['Sport Fishing', 'Expert Crew', 'Equipment'],
-    duration: '4-8 hours',
-    activities: ['Yellowfin tuna', 'Mahi-mahi', 'Marlin', 'Snapper', 'Wahoo', 'Sailfish'],
-    included: ['Penn International and Shimano fishing equipment', 'Experienced local professionals', 'Alcoholic and non-alcoholic beverages', 'Chips with guacamole', 'Seasonal fruits', 'Lunch on full-day tours'],
-  },
-  Surfing: {
-    title: 'Surfing',
-    tags: ['Roca Bruja', 'Ollie’s Point', 'All Levels'],
-    duration: '4-8 hours',
-    activities: ['Cruising', 'Swimming', 'Roca Bruja', 'Ollie’s Point', 'Skill-level adapted itinerary'],
-    included: ['Alcoholic and non-alcoholic beverages', 'Chips with guacamole', 'Seasonal fruits', 'Lunch on full-day tours'],
-  },
-  'Water Toys': {
-    title: 'Water Toys',
-    tags: ['Wakeboard', 'Subwing', 'Tubing'],
-    duration: '4-8 hours',
-    activities: ['Wakeboarding', 'Paddleboarding', 'Snorkeling', 'Subwing', 'Tubing'],
-    included: ['Alcoholic and non-alcoholic beverages', 'Chips with guacamole', 'Seasonal fruits', 'Lunch on full-day tours'],
-  },
-  'Bioluminescence Basic': {
-    title: 'Bioluminescence',
-    tags: ['Night Tour', 'Classic', 'Deluxe'],
-    activities: ['Classic Experience', 'Deluxe Experience', 'Night tour', 'Shimmering blue sparks'],
-    included: ['Classic: alcoholic and non-alcoholic beverages, chips with guacamole, seasonal fruits', 'Deluxe: cheese board, ceviche, sparkling wine, alcoholic and non-alcoholic beverages'],
-  },
-  'Bioluminescence Deluxe': {
-    title: 'Bioluminescence',
-    tags: ['Night Tour', 'Classic', 'Deluxe'],
-    activities: ['Classic Experience', 'Deluxe Experience', 'Night tour', 'Shimmering blue sparks'],
-    included: ['Classic: alcoholic and non-alcoholic beverages, chips with guacamole, seasonal fruits', 'Deluxe: cheese board, ceviche, sparkling wine, alcoholic and non-alcoholic beverages'],
-  },
-};
-
-function getDisplayContent(tour: BoatTour) {
-  return tourCardContent[tour.category] ?? {
-    title: tour.name,
-    tags: [tour.category],
-    duration: tour.duration ? `${tour.duration} hours` : undefined,
-    activities: [tour.category],
-    included: [],
-  };
-}
-
 function getLowestPrice(tours: BoatTour[]) {
   return Math.min(...tours.map((item) => item.basePrice));
 }
 
-function formatPackageName(name: string) {
-  return name.replace(/^.* - /, '');
-}
-
 export function BoatTourCard({ boat, tour, relatedTours, isSelected, onSelect }: BoatTourCardProps) {
+  const { language } = useLanguage();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const packageTours = relatedTours?.length ? relatedTours : [tour];
-  const display = getDisplayContent(tour);
+  const display = getTourText(tour, language);
   const effectiveMaxGuests = getEffectiveMaxGuests(boat, tour);
   const lowestPrice = getLowestPrice(packageTours);
 
@@ -89,7 +35,7 @@ export function BoatTourCard({ boat, tour, relatedTours, isSelected, onSelect }:
         <div className="relative h-[185px] overflow-hidden sm:h-[215px]">
           <img
             src={tour.image}
-            alt={`${display.title} tour aboard ${boat.name}`}
+            alt={language === 'es' ? `Tour ${display.title} a bordo de ${boat.name}` : `${display.title} tour aboard ${boat.name}`}
             className="h-full w-full object-cover transition duration-700 ease-out group-hover:scale-[1.035]"
             loading="lazy"
           />
@@ -109,16 +55,16 @@ export function BoatTourCard({ boat, tour, relatedTours, isSelected, onSelect }:
           </div>
           <div className="mt-2.5 grid gap-1 text-xs font-semibold text-ocean-200 sm:mt-3 sm:gap-1.5 sm:text-sm">
             {display.duration ? <span className="flex items-center gap-2"><Clock size={16} className="text-ocean-400" /> {display.duration}</span> : null}
-            <span className="flex items-center gap-2"><Users size={16} className="text-ocean-400" /> Up to {effectiveMaxGuests} guests</span>
+            <span className="flex items-center gap-2"><Users size={16} className="text-ocean-400" /> {language === 'es' ? `Hasta ${effectiveMaxGuests} personas` : `Up to ${effectiveMaxGuests} guests`}</span>
           </div>
 
           <div className="mt-auto flex items-end justify-between gap-3 pt-3 sm:pt-4">
             <div className="min-w-0">
-              <p className="text-[0.65rem] font-bold uppercase tracking-[0.12em] text-ocean-300">From</p>
+              <p className="text-[0.65rem] font-bold uppercase tracking-[0.12em] text-ocean-300">{language === 'es' ? 'Desde' : 'From'}</p>
               <p className="text-xl font-extrabold leading-tight text-ocean-400 sm:text-2xl">{formatCurrency(lowestPrice)}</p>
             </div>
             <Button type="button" variant="secondary" className="group/button min-h-9 shrink-0 px-3 text-xs sm:min-h-10 sm:px-4 sm:text-sm" onClick={() => setIsModalOpen(true)}>
-              View Tour
+              {language === 'es' ? 'Ver Tour' : 'View Tour'}
               <ArrowRight size={16} className="transition-transform duration-300 group-hover/button:translate-x-0.5" />
             </Button>
           </div>
@@ -149,31 +95,31 @@ export function BoatTourCard({ boat, tour, relatedTours, isSelected, onSelect }:
               <p className="text-base leading-7 text-ocean-200">{tour.description}</p>
               <div className="mt-5 grid gap-3 sm:grid-cols-3">
                 <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4">
-                  <p className="text-xs font-bold uppercase tracking-[0.12em] text-ocean-400">Activities</p>
+                  <p className="text-xs font-bold uppercase tracking-[0.12em] text-ocean-400">{language === 'es' ? 'Actividades' : 'Activities'}</p>
                   <p className="mt-1 font-extrabold text-white">{display.activities.slice(0, 3).join(', ')}</p>
                 </div>
                 <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4">
-                  <p className="text-xs font-bold uppercase tracking-[0.12em] text-ocean-400">Capacity</p>
-                  <p className="mt-1 font-extrabold text-white">Up to {effectiveMaxGuests} guests</p>
+                  <p className="text-xs font-bold uppercase tracking-[0.12em] text-ocean-400">{language === 'es' ? 'Capacidad' : 'Capacity'}</p>
+                  <p className="mt-1 font-extrabold text-white">{language === 'es' ? `Hasta ${effectiveMaxGuests} personas` : `Up to ${effectiveMaxGuests} guests`}</p>
                 </div>
                 <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4">
-                  <p className="text-xs font-bold uppercase tracking-[0.12em] text-ocean-400">Additional guest</p>
-                  <p className="mt-1 font-extrabold text-ocean-400">{formatCurrency(tour.extraGuestPrice ?? boat.extraGuestPrice)} each</p>
+                  <p className="text-xs font-bold uppercase tracking-[0.12em] text-ocean-400">{language === 'es' ? 'Persona extra' : 'Additional guest'}</p>
+                  <p className="mt-1 font-extrabold text-ocean-400">{formatCurrency(tour.extraGuestPrice ?? boat.extraGuestPrice)} {language === 'es' ? 'cada una' : 'each'}</p>
                 </div>
               </div>
               <div className="mt-5 grid gap-4 sm:grid-cols-2">
                 <div>
-                  <p className="text-xs font-bold uppercase tracking-[0.12em] text-ocean-400">Included</p>
+                  <p className="text-xs font-bold uppercase tracking-[0.12em] text-ocean-400">{language === 'es' ? 'Incluye' : 'Included'}</p>
                   <ul className="mt-3 grid gap-2 text-sm leading-6 text-ocean-200">
                     {display.included.map((item) => <li key={item}>{item}</li>)}
                   </ul>
                 </div>
                 <div>
-                  <p className="text-xs font-bold uppercase tracking-[0.12em] text-ocean-400">Prices</p>
+                  <p className="text-xs font-bold uppercase tracking-[0.12em] text-ocean-400">{language === 'es' ? 'Precios' : 'Prices'}</p>
                   <div className="mt-3 grid gap-2">
                     {packageTours.map((item) => (
                       <div key={item.id} className="flex justify-between gap-4 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-sm">
-                        <span className="font-semibold text-ocean-200">{formatPackageName(item.name)}</span>
+                        <span className="font-semibold text-ocean-200">{getPackageLabel(item, language)}</span>
                         <span className="font-extrabold text-ocean-400">{formatCurrency(item.basePrice)}</span>
                       </div>
                     ))}
@@ -183,7 +129,7 @@ export function BoatTourCard({ boat, tour, relatedTours, isSelected, onSelect }:
 
               <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-end">
                 <Button type="button" variant="secondary" onClick={() => setIsModalOpen(false)}>
-                  Close
+                  {language === 'es' ? 'Cerrar' : 'Close'}
                 </Button>
                 <Button
                   type="button"
@@ -192,7 +138,7 @@ export function BoatTourCard({ boat, tour, relatedTours, isSelected, onSelect }:
                     onSelect(tour);
                   }}
                 >
-                  Reserve
+                  {language === 'es' ? 'Reservar' : 'Reserve'}
                 </Button>
               </div>
             </div>

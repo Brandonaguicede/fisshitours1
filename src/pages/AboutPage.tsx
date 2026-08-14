@@ -83,12 +83,12 @@ export default function AboutPage() {
             </p>
             <h1 className="mt-4 max-w-4xl font-display text-5xl font-extrabold leading-[0.95] sm:text-6xl lg:text-7xl">
               {language === 'es'
-                ? 'Local passion and excellence on Costa Rica Pacific'
+                ? 'Pasion local y excelencia en el Pacifico de Costa Rica'
                 : 'Local passion and excellence on Costa Rica Pacific'}
             </h1>
             <p className="mt-6 max-w-2xl text-lg font-semibold leading-8 text-ocean-100">
               {language === 'es'
-                ? 'Step aboard Second Wind and discover a sophisticated ocean experience where luxury meets nature.'
+                ? 'Sube a bordo de Second Wind y descubre una experiencia sofisticada donde el lujo se encuentra con la naturaleza.'
                 : 'Step aboard Second Wind and discover a sophisticated ocean experience where luxury meets nature.'}
             </p>
           </div>
@@ -124,12 +124,12 @@ export default function AboutPage() {
             <div className="mt-5 grid gap-5 text-base leading-8 text-ocean-100">
               <p>
                 {language === 'es'
-                  ? 'Papagayo Fishing Tour is a family-owned company founded by young local entrepreneurs Gabriel and Joshua, proudly from Playas del Coco. Driven by a deep connection to the ocean, they have redefined fishing experiences in the waters of the Papagayo Peninsula.'
+                  ? 'Papagayo Fishing Tour es una empresa familiar fundada por los jovenes emprendedores locales Gabriel y Joshua, orgullosamente de Playas del Coco. Su conexion profunda con el oceano redefine las experiencias de pesca en las aguas de la Peninsula de Papagayo.'
                   : 'Papagayo Fishing Tour is a family-owned company founded by young local entrepreneurs Gabriel and Joshua, proudly from Playas del Coco. Driven by a deep connection to the ocean, they have redefined fishing experiences in the waters of the Papagayo Peninsula.'}
               </p>
               <p>
                 {language === 'es'
-                  ? 'Sail across crystal-clear seas renowned for world-class fishing, surfing and snorkeling. Every journey is thoughtfully designed to deliver exclusivity, comfort and authenticity.'
+                  ? 'Navega por mares cristalinos reconocidos por pesca, surf y snorkeling de clase mundial. Cada viaje esta disenado para ofrecer exclusividad, comodidad y autenticidad.'
                   : 'Sail across crystal-clear seas renowned for world-class fishing, surfing and snorkeling. Every journey is thoughtfully designed to deliver exclusivity, comfort and authenticity.'}
               </p>
             </div>
@@ -161,7 +161,7 @@ export default function AboutPage() {
                 </h2>
                 <p className="mt-5 max-w-2xl text-base leading-8 text-ocean-200">
                   {language === 'es'
-                    ? 'Whether pursuing trophy fish or exploring vibrant marine life, each experience is personalized and handled with care. Our highly trained crew and strict safety standards ensure a seamless and unforgettable adventure.'
+                    ? 'Ya sea buscando peces trofeo o explorando vida marina, cada experiencia es personalizada y cuidada en cada detalle. Nuestra tripulacion capacitada y los estandares de seguridad garantizan una aventura fluida e inolvidable.'
                     : 'Whether pursuing trophy fish or exploring vibrant marine life, each experience is personalized and handled with care. Our highly trained crew and strict safety standards ensure a seamless and unforgettable adventure.'}
                 </p>
 

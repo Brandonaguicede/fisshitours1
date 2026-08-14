@@ -1,20 +1,21 @@
-import { CreditCard, Info, Mail, Phone, Ship, User, WalletCards } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { CreditCard, Info, Mail, MessageCircle, Phone, Ship, User, WalletCards } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
-import { DISPLAY_PHONE, WHATSAPP_NUMBER } from '../../constants/contact';
+import { DISPLAY_PHONE } from '../../constants/contact';
 import { boats } from '../../data/boats';
 import { boatTours } from '../../data/boatTours';
+import { getBoatText, getPackageLabel, getTourGroupKey, getTourText } from '../../i18n/content';
+import { useLanguage } from '../../i18n/LanguageContext';
+import { text, tr } from '../../i18n/translations';
+import { capturePayPalOrder, createPayPalOrder, loadPayPalSdk, type PayPalCaptureResult } from '../../services/paypalService';
 import type { Boat } from '../../types/boat';
 import type { BoatTour } from '../../types/boatTour';
+import { buildBookingPaymentPayload, createWhatsAppBookingMessage, getWhatsAppBookingUrl, type BookingPaymentMethod, type BookingStatus, type BookingPaymentPayload } from '../../utils/bookingPayment';
 import { calculateBookingTotal, getEffectiveMaxGuests, getExtraGuestPrice, getTourIncludedGuests } from '../../utils/bookingPricing';
 import { cn } from '../../utils/cn';
 import { formatCurrency } from '../../utils/formatCurrency';
 import { Button } from '../common/Button';
-import { useLanguage } from '../../i18n/LanguageContext';
-import { text, tr } from '../../i18n/translations';
 
-type PaymentMethod = 'bank-transfer' | 'sinpe-movil' | 'paypal';
-type BookingStatus = 'draft' | 'reviewing' | 'payment-link-requested' | 'reserved';
 type PaymentStatus = 'unpaid' | 'pending' | 'paid';
 
 interface BookingPanelProps {
@@ -25,30 +26,41 @@ interface BookingPanelProps {
   onTourChange: (tour?: BoatTour) => void;
 }
 
-const paymentMethods: Array<{ id: PaymentMethod; title: string; description: string; icon: typeof CreditCard }> = [
-  { id: 'bank-transfer', title: 'Bank transfer', description: '50% deposit required. Transfer fees are covered by the client.', icon: WalletCards },
-  { id: 'sinpe-movil', title: 'SINPE Movil', description: '50% deposit required to secure the reservation.', icon: Phone },
-  { id: 'paypal', title: 'PayPal', description: '50% deposit required. PayPal fees are covered by the client.', icon: CreditCard },
-];
-
-const bookingTerms = [
-  '50% deposit required to secure the reservation. Remaining balance is paid on the day of the tour.',
-  'Payment methods: bank transfer, SINPE Movil and PayPal. Bank transfer and PayPal fees are covered by the client.',
-  'Cancellation at least 3 days before the tour: 100% refund without penalty.',
-  'Cancellation within 3 days: 30% penalty due to operational and boat rental costs. Rescheduling within 3 days is allowed for another available date, subject to availability.',
-  'Cancellation within 24 hours: 100% penalty due to operational, boat rental, food and beverage costs. No-show deposits are not refunded.',
-  'Refund or rescheduling for weather applies only to hurricanes, strong wave forecasts, high winds or heavy rain within 24 hours before the tour. Cloudy days or limited sunlight do not qualify.',
+const paymentMethods: Array<{ id: BookingPaymentMethod; title: string; description: string; icon: typeof CreditCard }> = [
+  { id: 'paypal', title: 'Pay with PayPal', description: 'Pay the full reservation total securely in USD.', icon: CreditCard },
+  { id: 'whatsapp-link', title: 'Request Payment Link via WhatsApp', description: 'Send your booking details and request a payment link.', icon: MessageCircle },
+  { id: 'pay-on-day', title: 'Pay on the Day of the Tour', description: 'Request availability and leave the booking pending confirmation.', icon: WalletCards },
 ];
 
 const fullDayMealOptions = [
-  'Chicken wrap',
-  'Ham and cheese wrap',
-  'Chicken sandwich',
-  'Ham and cheese sandwich',
-  'Caprese sandwich',
-  'Chicken salad',
-  'Ceviche',
+  { en: 'Chicken wrap', es: 'Wrap de pollo' },
+  { en: 'Ham and cheese wrap', es: 'Wrap de jamon y queso' },
+  { en: 'Chicken sandwich', es: 'Sandwich de pollo' },
+  { en: 'Ham and cheese sandwich', es: 'Sandwich de jamon y queso' },
+  { en: 'Caprese sandwich', es: 'Sandwich caprese' },
+  { en: 'Chicken salad', es: 'Ensalada de pollo' },
+  { en: 'Ceviche', es: 'Ceviche' },
 ];
+
+function getBookingTerms(language: 'es' | 'en') {
+  return language === 'es'
+    ? [
+        'Se requiere un deposito del 50% para asegurar la reserva. El saldo restante se paga el dia del tour.',
+        'Metodos de pago: transferencia bancaria, SINPE Movil y PayPal. Las comisiones de transferencia y PayPal las cubre el cliente.',
+        'Cancelacion al menos 3 dias antes del tour: reembolso del 100% sin penalidad.',
+        'Cancelacion dentro de 3 dias: penalidad del 30% por costos operativos y alquiler del bote. Reprogramar dentro de 3 dias es permitido segun disponibilidad.',
+        'Cancelacion dentro de 24 horas: penalidad del 100% por costos operativos, alquiler del bote, comida y bebidas. No-show: el deposito no es reembolsable.',
+        'Reembolso o reprogramacion por clima solo aplica por huracanes, pronostico de oleaje fuerte, vientos altos o lluvia fuerte dentro de 24 horas antes del tour. Dias nublados o poca luz solar no califican.',
+      ]
+    : [
+        '50% deposit required to secure the reservation. Remaining balance is paid on the day of the tour.',
+        'Payment methods: bank transfer, SINPE Movil and PayPal. Bank transfer and PayPal fees are covered by the client.',
+        'Cancellation at least 3 days before the tour: 100% refund without penalty.',
+        'Cancellation within 3 days: 30% penalty due to operational and boat rental costs. Rescheduling within 3 days is allowed for another available date, subject to availability.',
+        'Cancellation within 24 hours: 100% penalty due to operational, boat rental, food and beverage costs. No-show deposits are not refunded.',
+        'Refund or rescheduling for weather applies only to hurricanes, strong wave forecasts, high winds or heavy rain within 24 hours before the tour. Cloudy days or limited sunlight do not qualify.',
+      ];
+}
 
 export function BookingPanel({ selectedBoat, selectedTour, selectedTimeSlotId, onBoatChange, onTourChange }: BookingPanelProps) {
   const { language } = useLanguage();
@@ -59,11 +71,17 @@ export function BookingPanel({ selectedBoat, selectedTour, selectedTimeSlotId, o
   const [customerName, setCustomerName] = useState('');
   const [customerEmail, setCustomerEmail] = useState('');
   const [customerWhatsapp, setCustomerWhatsapp] = useState('');
+  const [specialRequests, setSpecialRequests] = useState('');
   const [mealOption, setMealOption] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('bank-transfer');
-  const [isReviewOpen, setIsReviewOpen] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState<BookingPaymentMethod>('paypal');
+  const [isPayOnDayOpen, setIsPayOnDayOpen] = useState(false);
   const [bookingStatus, setBookingStatus] = useState<BookingStatus>('draft');
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>('unpaid');
+  const [validationMessage, setValidationMessage] = useState('');
+  const [paypalVisible, setPaypalVisible] = useState(false);
+  const [paypalError, setPaypalError] = useState('');
+  const [paypalSuccess, setPaypalSuccess] = useState<PayPalCaptureResult | null>(null);
+  const bookingReferenceRef = useRef(`PFT-${Date.now().toString(36).toUpperCase()}`);
 
   const availableTours = useMemo(() => boatTours.filter((tour) => tour.boatId === selectedBoat.id), [selectedBoat.id]);
   const effectiveMaxGuests = getEffectiveMaxGuests(selectedBoat, selectedTour);
@@ -75,7 +93,22 @@ export function BookingPanel({ selectedBoat, selectedTour, selectedTimeSlotId, o
   const steps = [tr(text.booking.steps.boat, language), tr(text.booking.steps.tour, language), tr(text.booking.steps.data, language)];
   const hasCapacityError = guests > effectiveMaxGuests;
   const canContinueToCustomer = Boolean(selectedTour && selectedTimeSlot && !hasCapacityError);
-  const canReview = Boolean(canContinueToCustomer && customerName.trim() && customerEmail.trim() && customerWhatsapp.trim());
+  const canReview = Boolean(canContinueToCustomer && customerName.trim() && customerEmail.trim() && customerWhatsapp.trim() && isValidEmail(customerEmail));
+  const bookingPayload = selectedTour
+    ? buildBookingPaymentPayload({
+        bookingReference: bookingReferenceRef.current,
+        customerName,
+        phone: customerWhatsapp,
+        email: customerEmail,
+        boat: selectedBoat,
+        tour: selectedTour,
+        timeSlot: selectedTimeSlot,
+        date,
+        guests,
+        pricing,
+        specialRequests,
+      })
+    : null;
 
   useEffect(() => {
     if (selectedTour && !selectedTour.timeSlots.some((slot) => slot.id === timeSlotId)) {
@@ -92,6 +125,8 @@ export function BookingPanel({ selectedBoat, selectedTour, selectedTimeSlotId, o
     setGuests(nextBoat.includedGuests);
     setBookingStatus('draft');
     setPaymentStatus('unpaid');
+    setPaypalVisible(false);
+    setPaypalSuccess(null);
   }
 
   function handleTourChange(tourId: string) {
@@ -102,12 +137,8 @@ export function BookingPanel({ selectedBoat, selectedTour, selectedTimeSlotId, o
     if (!nextTour || !isFullDayTour(nextTour)) setMealOption('');
     setBookingStatus('draft');
     setPaymentStatus('unpaid');
-  }
-
-  function openReview() {
-    if (!canReview) return;
-    setBookingStatus('reviewing');
-    setIsReviewOpen(true);
+    setPaypalVisible(false);
+    setPaypalSuccess(null);
   }
 
   function canVisitStep(stepIndex: number) {
@@ -121,37 +152,89 @@ export function BookingPanel({ selectedBoat, selectedTour, selectedTimeSlotId, o
     setActiveStep(stepIndex);
   }
 
-  function buildWhatsAppMessage() {
-    const lines = [
-      'Hello, I would like to request a booking confirmation.',
-      '',
-      `Boat: ${selectedBoat.name}`,
-      `Tour: ${selectedTour?.name ?? 'Not selected'}`,
-      `Date: ${formatDisplayDate(date)}`,
-      `Departure: ${selectedTimeSlot?.time ?? 'Not selected'}`,
-      `Guests: ${guests}`,
-      isFullDayTour(selectedTour) ? `Meal option: ${mealOption || 'Not selected'}` : '',
-      '',
-      pricing.isCustomQuote ? 'Pricing: Custom quote requested' : `Base price: ${formatCurrency(pricing.basePrice)}`,
-    ].filter(Boolean);
-
-    if (pricing.extraGuests > 0) {
-      lines.push(`Additional guests: ${pricing.extraGuests} x ${formatCurrency(pricing.extraGuestPrice)} = ${formatCurrency(pricing.extraGuestsTotal)}`);
+  function validateBookingForPayment() {
+    setValidationMessage('');
+    if (!selectedTour) {
+      setActiveStep(1);
+      setValidationMessage('Please select a tour.');
+      return null;
     }
-
-    if (!pricing.isCustomQuote) {
-      lines.push(`Required deposit: ${formatCurrency(pricing.total * 0.5)}`, 'Remaining balance: paid on the day of the tour');
+    if (!selectedTimeSlot) {
+      setActiveStep(1);
+      setValidationMessage('Please select a departure time.');
+      return null;
     }
-
-    lines.push('', `Total: ${pricing.isCustomQuote ? 'Custom quote' : formatCurrency(pricing.total)}`, '', `Name: ${customerName}`, `Email: ${customerEmail}`, `WhatsApp: ${customerWhatsapp}`, '', 'Please confirm availability for this reservation.');
-    return lines.join('\n');
+    if (!date) {
+      setActiveStep(1);
+      setValidationMessage('Please select a date.');
+      return null;
+    }
+    if (guests < 1 || guests > 10 || guests > effectiveMaxGuests) {
+      setActiveStep(1);
+      setValidationMessage('Please select between 1 and 10 guests.');
+      return null;
+    }
+    if (!customerName.trim()) {
+      setActiveStep(2);
+      setValidationMessage('Please enter the customer name.');
+      return null;
+    }
+    if (!customerWhatsapp.trim()) {
+      setActiveStep(2);
+      setValidationMessage('Please enter the phone number.');
+      return null;
+    }
+    if (!isValidEmail(customerEmail)) {
+      setActiveStep(2);
+      setValidationMessage('Please enter a valid email.');
+      return null;
+    }
+    if (pricing.isCustomQuote || pricing.total <= 0 || !bookingPayload) {
+      setActiveStep(1);
+      setValidationMessage('Please select a priced tour package.');
+      return null;
+    }
+    return bookingPayload;
   }
 
-  function handleConfirmReview() {
-    setBookingStatus('reserved');
+  function openWhatsAppBooking(booking: BookingPaymentPayload, variant: 'payment_link' | 'pay_on_day' | 'paid_confirmation') {
+    window.open(getWhatsAppBookingUrl(createWhatsAppBookingMessage(booking, variant)), '_blank', 'noopener,noreferrer');
+  }
+
+  function handlePaymentLinkRequest() {
+    const booking = validateBookingForPayment();
+    if (!booking) return;
+    setPaymentMethod('whatsapp-link');
+    setBookingStatus('payment_link_requested');
     setPaymentStatus('pending');
-    window.open(`https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(buildWhatsAppMessage())}`, '_blank', 'noopener,noreferrer');
-    setIsReviewOpen(false);
+    setPaypalVisible(false);
+    openWhatsAppBooking(booking, 'payment_link');
+  }
+
+  function handlePayOnDayRequest() {
+    const booking = validateBookingForPayment();
+    if (!booking) return;
+    setPaymentMethod('pay-on-day');
+    setIsPayOnDayOpen(true);
+  }
+
+  function handleConfirmPayOnDay() {
+    const booking = validateBookingForPayment();
+    if (!booking) return;
+    setBookingStatus('pay_on_tour_day');
+    setPaymentStatus('pending');
+    setIsPayOnDayOpen(false);
+    openWhatsAppBooking(booking, 'pay_on_day');
+  }
+
+  function handlePayPalRequest() {
+    const booking = validateBookingForPayment();
+    if (!booking) return;
+    setPaymentMethod('paypal');
+    setBookingStatus('pending_payment');
+    setPaymentStatus('pending');
+    setPaypalError('');
+    setPaypalVisible(true);
   }
 
   return (
@@ -220,16 +303,45 @@ export function BookingPanel({ selectedBoat, selectedTour, selectedTimeSlotId, o
               customerName={customerName}
               customerEmail={customerEmail}
               customerWhatsapp={customerWhatsapp}
+              specialRequests={specialRequests}
               paymentMethod={paymentMethod}
               paymentMethods={paymentMethods}
               bookingStatus={bookingStatus}
+              paymentStatus={paymentStatus}
               canReview={canReview}
+              validationMessage={validationMessage}
+              booking={bookingPayload}
+              paypalVisible={paypalVisible}
+              paypalError={paypalError}
+              paypalSuccess={paypalSuccess}
               onCustomerNameChange={setCustomerName}
               onCustomerEmailChange={setCustomerEmail}
               onCustomerWhatsappChange={setCustomerWhatsapp}
+              onSpecialRequestsChange={setSpecialRequests}
               onPaymentMethodChange={setPaymentMethod}
+              onPayPalRequest={handlePayPalRequest}
+              onPaymentLinkRequest={handlePaymentLinkRequest}
+              onPayOnDayRequest={handlePayOnDayRequest}
+              onPayPalSuccess={(result) => {
+                setPaypalSuccess(result);
+                setBookingStatus('paid');
+                setPaymentStatus('paid');
+              }}
+              onPayPalError={(message) => {
+                setPaypalError(message);
+                setBookingStatus('payment_failed');
+                setPaymentStatus('unpaid');
+              }}
+              onPayPalCancel={() => {
+                setPaypalError('Payment was cancelled. You can try again or select another payment method.');
+                setBookingStatus('payment_failed');
+                setPaymentStatus('unpaid');
+              }}
+              onSendPaidConfirmation={() => {
+                const booking = validateBookingForPayment();
+                if (booking) openWhatsAppBooking(booking, 'paid_confirmation');
+              }}
               onBack={() => setActiveStep(1)}
-              onReview={openReview}
             />
           ) : null}
         </div>
@@ -262,7 +374,7 @@ export function BookingPanel({ selectedBoat, selectedTour, selectedTimeSlotId, o
         </div>
       </div>
 
-      {isReviewOpen ? (
+      {isPayOnDayOpen && bookingPayload ? (
         <ReviewModal
           selectedBoat={selectedBoat}
           selectedTour={selectedTour}
@@ -273,10 +385,11 @@ export function BookingPanel({ selectedBoat, selectedTour, selectedTimeSlotId, o
           customerName={customerName}
           customerEmail={customerEmail}
           customerWhatsapp={customerWhatsapp}
-          paymentMethod={selectedPayment.title}
+          specialRequests={specialRequests}
+          paymentMethod="Pay on the Day of the Tour"
           pricing={pricing}
-          onBack={() => setIsReviewOpen(false)}
-          onConfirm={handleConfirmReview}
+          onBack={() => setIsPayOnDayOpen(false)}
+          onConfirm={handleConfirmPayOnDay}
         />
       ) : null}
     </div>
@@ -348,8 +461,8 @@ function TourDetailsStep(props: {
   onNext: () => void;
 }) {
   const { language } = useLanguage();
-  const tourGroups = getBookingTourGroups(props.availableTours);
-  const activeGroup = props.selectedTour ? getBookingTourGroupKey(props.selectedTour) : '';
+  const tourGroups = getBookingTourGroups(props.availableTours, language);
+  const activeGroup = props.selectedTour ? getTourGroupKey(props.selectedTour) : '';
   const activeGroupData = tourGroups.find((group) => group.key === activeGroup);
 
   return (
@@ -377,12 +490,12 @@ function TourDetailsStep(props: {
 
       {activeGroupData ? (
         <fieldset>
-          <legend className="text-sm font-bold text-ocean-100">Choose by price</legend>
+          <legend className="text-sm font-bold text-ocean-100">{language === 'es' ? 'Escoge por precio' : 'Choose by price'}</legend>
           <div className="mt-3 grid gap-2 min-[420px]:grid-cols-2 min-[640px]:grid-cols-3">
             {activeGroupData.tours.map((tour) => (
               <label key={tour.id} className={cn('pressable min-w-0 rounded-xl border border-white/10 bg-white/[0.04] p-2.5 hover:bg-ocean-500/10 sm:p-3', props.selectedTour?.id === tour.id && 'border-ocean-400 bg-ocean-500/15 ring-4 ring-ocean-500/10')}>
                 <input className="sr-only" type="radio" name="tourPackage" value={tour.id} checked={props.selectedTour?.id === tour.id} onChange={() => props.onTourChange(tour.id)} />
-                <span className="block truncate text-xs font-extrabold text-white">{getBookingPackageLabel(tour)}</span>
+                <span className="block truncate text-xs font-extrabold text-white">{getPackageLabel(tour, language)}</span>
                 <span className="mt-1 block text-lg font-extrabold text-ocean-400">{formatCurrency(tour.basePrice)}</span>
               </label>
             ))}
@@ -392,17 +505,17 @@ function TourDetailsStep(props: {
 
       {isFullDayTour(props.selectedTour) ? (
         <fieldset className="rounded-2xl border border-white/10 bg-white/[0.04] p-3 sm:p-4">
-          <legend className="px-1 text-sm font-bold text-ocean-100">Optional meal for Full Day</legend>
+          <legend className="px-1 text-sm font-bold text-ocean-100">{language === 'es' ? 'Comida opcional para Dia completo' : 'Optional meal for Full Day'}</legend>
           <div className="mt-3 grid gap-2 min-[420px]:grid-cols-2">
             {fullDayMealOptions.map((meal) => (
-              <label key={meal} className={cn('pressable rounded-xl border border-white/10 bg-white/[0.04] p-2.5 text-xs font-bold leading-5 text-ocean-100 hover:bg-ocean-500/10 sm:p-3 sm:text-sm', props.mealOption === meal && 'border-ocean-400 bg-ocean-500/15 ring-4 ring-ocean-500/10')}>
-                <input className="sr-only" type="radio" name="mealOption" value={meal} checked={props.mealOption === meal} onChange={() => props.onMealOptionChange(meal)} />
-                {meal}
+              <label key={meal.en} className={cn('pressable rounded-xl border border-white/10 bg-white/[0.04] p-2.5 text-xs font-bold leading-5 text-ocean-100 hover:bg-ocean-500/10 sm:p-3 sm:text-sm', props.mealOption === meal[language] && 'border-ocean-400 bg-ocean-500/15 ring-4 ring-ocean-500/10')}>
+                <input className="sr-only" type="radio" name="mealOption" value={meal[language]} checked={props.mealOption === meal[language]} onChange={() => props.onMealOptionChange(meal[language])} />
+                {meal[language]}
               </label>
             ))}
           </div>
           <button className="mt-3 text-xs font-bold text-ocean-400 underline-offset-4 hover:underline" type="button" onClick={() => props.onMealOptionChange('')}>
-            No meal selected
+            {language === 'es' ? 'Sin comida seleccionada' : 'No meal selected'}
           </button>
         </fieldset>
       ) : null}
@@ -414,8 +527,8 @@ function TourDetailsStep(props: {
         </label>
         <label className="grid min-w-0 gap-2 text-sm font-bold text-ocean-100">
           {tr(text.booking.guests, language)}
-          <input className="focus-ring min-w-0 w-full rounded-2xl border border-white/10 bg-ocean-900 px-3 py-3 text-sm text-white focus:border-ocean-400 focus:ring-4 focus:ring-ocean-500/15 sm:px-4" type="number" inputMode="numeric" min={1} max={props.effectiveMaxGuests} value={props.guests} onChange={(event) => props.onGuestsChange(Number(event.target.value))} />
-          {props.hasCapacityError ? <span className="text-sm text-red-300">This boat has a maximum capacity of {props.effectiveMaxGuests} guests.</span> : null}
+          <input className="focus-ring min-w-0 w-full rounded-2xl border border-white/10 bg-ocean-900 px-3 py-3 text-sm text-white focus:border-ocean-400 focus:ring-4 focus:ring-ocean-500/15 sm:px-4" type="number" inputMode="numeric" min={1} max={props.effectiveMaxGuests} value={props.guests} onChange={(event) => props.onGuestsChange(clampGuests(Number(event.target.value), props.effectiveMaxGuests))} />
+          {props.hasCapacityError ? <span className="text-sm text-red-300">{language === 'es' ? `Este barco tiene capacidad maxima de ${props.effectiveMaxGuests} personas.` : `This boat has a maximum capacity of ${props.effectiveMaxGuests} guests.`}</span> : null}
         </label>
       </div>
 
@@ -436,8 +549,8 @@ function TourDetailsStep(props: {
 
       {props.selectedTour && props.guests > props.includedGuests && !props.hasCapacityError ? (
         <div className="rounded-2xl border border-ocean-400/30 bg-ocean-500/10 p-3 text-ocean-100 sm:p-4">
-          <p className="flex items-start gap-2 text-sm font-bold sm:text-base"><Info size={18} className="mt-0.5 shrink-0 text-ocean-600" /> Your tour includes {props.includedGuests} guests.</p>
-          <p className="mt-2 text-sm">{props.pricing.extraGuests} additional guests x {formatCurrency(props.extraGuestPrice)} = {formatCurrency(props.pricing.extraGuestsTotal)}</p>
+          <p className="flex items-start gap-2 text-sm font-bold sm:text-base"><Info size={18} className="mt-0.5 shrink-0 text-ocean-600" /> {language === 'es' ? `Tu tour incluye ${props.includedGuests} personas.` : `Your tour includes ${props.includedGuests} guests.`}</p>
+          <p className="mt-2 text-sm">{language === 'es' ? `${props.pricing.extraGuests} personas extra x ${formatCurrency(props.extraGuestPrice)} = ${formatCurrency(props.pricing.extraGuestsTotal)}` : `${props.pricing.extraGuests} additional guests x ${formatCurrency(props.extraGuestPrice)} = ${formatCurrency(props.pricing.extraGuestsTotal)}`}</p>
         </div>
       ) : null}
 
@@ -453,39 +566,20 @@ function TourDetailsStep(props: {
   );
 }
 
-function getBookingTourGroupKey(tour: BoatTour) {
-  if (tour.category === 'Bioluminescence Basic' || tour.category === 'Bioluminescence Deluxe') return 'Bioluminescence';
-  return tour.category;
-}
-
-function getBookingTourLabel(key: string) {
-  const labels: Record<string, string> = {
-    'Snorkeling & Beach': 'Beach & Snorkeling',
-    Fishing: 'Fishing',
-    Surfing: 'Surfing',
-    'Water Toys': 'Water Toys',
-    Bioluminescence: 'Bioluminescence',
-  };
-
-  return labels[key] ?? key;
-}
-
-function getBookingPackageLabel(tour: BoatTour) {
-  return tour.name.replace(/^.* - /, '');
-}
-
-function getBookingTourGroups(tours: BoatTour[]) {
+function getBookingTourGroups(tours: BoatTour[], language: 'es' | 'en') {
   const groups = new Map<string, BoatTour[]>();
 
   tours.forEach((tour) => {
-    const key = getBookingTourGroupKey(tour);
+    const key = getTourGroupKey(tour);
     groups.set(key, [...(groups.get(key) ?? []), tour]);
   });
 
   return Array.from(groups.entries()).map(([key, groupTours]) => ({
     key,
-    label: getBookingTourLabel(key),
     tours: [...groupTours].sort((a, b) => a.basePrice - b.basePrice),
+  })).map((group) => ({
+    ...group,
+    label: String(getTourText(group.tours[0], language).title),
   }));
 }
 
@@ -493,20 +587,43 @@ function isFullDayTour(tour?: BoatTour) {
   return Boolean(tour?.name.toLowerCase().includes('full day'));
 }
 
+function clampGuests(value: number, maxGuests: number) {
+  if (!Number.isFinite(value)) return 1;
+  return Math.min(Math.max(Math.round(value), 1), Math.min(maxGuests, 10));
+}
+
+function isValidEmail(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+}
+
 function CustomerStep(props: {
   customerName: string;
   customerEmail: string;
   customerWhatsapp: string;
-  paymentMethod: PaymentMethod;
+  specialRequests: string;
+  paymentMethod: BookingPaymentMethod;
   paymentMethods: typeof paymentMethods;
   bookingStatus: BookingStatus;
+  paymentStatus: PaymentStatus;
   canReview: boolean;
+  validationMessage: string;
+  booking: BookingPaymentPayload | null;
+  paypalVisible: boolean;
+  paypalError: string;
+  paypalSuccess: PayPalCaptureResult | null;
   onCustomerNameChange: (name: string) => void;
   onCustomerEmailChange: (email: string) => void;
   onCustomerWhatsappChange: (value: string) => void;
-  onPaymentMethodChange: (method: PaymentMethod) => void;
+  onSpecialRequestsChange: (value: string) => void;
+  onPaymentMethodChange: (method: BookingPaymentMethod) => void;
+  onPayPalRequest: () => void;
+  onPaymentLinkRequest: () => void;
+  onPayOnDayRequest: () => void;
+  onPayPalSuccess: (result: PayPalCaptureResult) => void;
+  onPayPalError: (message: string) => void;
+  onPayPalCancel: () => void;
+  onSendPaidConfirmation: () => void;
   onBack: () => void;
-  onReview: () => void;
 }) {
   const { language } = useLanguage();
 
@@ -522,7 +639,7 @@ function CustomerStep(props: {
           {tr(text.booking.fullName, language)}
           <span className="relative">
             <User className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-ocean-500" size={17} />
-            <input className="focus-ring w-full rounded-xl border border-white/10 bg-ocean-950/65 py-3 pl-11 pr-4 text-sm font-medium normal-case tracking-normal text-white placeholder:text-ocean-500 focus:border-ocean-400 focus:ring-4 focus:ring-ocean-500/15" value={props.customerName} onChange={(event) => props.onCustomerNameChange(event.target.value)} placeholder="Juan Perez" autoComplete="name" />
+            <input className="focus-ring w-full rounded-xl border border-white/10 bg-ocean-950/65 py-3 pl-11 pr-4 text-sm font-medium normal-case tracking-normal text-white placeholder:text-ocean-500 focus:border-ocean-400 focus:ring-4 focus:ring-ocean-500/15" value={props.customerName} onChange={(event) => props.onCustomerNameChange(event.target.value)} placeholder="John Smith" autoComplete="name" />
           </span>
         </label>
 
@@ -530,7 +647,7 @@ function CustomerStep(props: {
           {tr(text.booking.email, language)}
           <span className="relative">
             <Mail className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-ocean-500" size={17} />
-            <input className="focus-ring w-full rounded-xl border border-white/10 bg-ocean-950/65 py-3 pl-11 pr-4 text-sm font-medium normal-case tracking-normal text-white placeholder:text-ocean-500 focus:border-ocean-400 focus:ring-4 focus:ring-ocean-500/15" type="email" value={props.customerEmail} onChange={(event) => props.onCustomerEmailChange(event.target.value)} placeholder="juan@email.com" autoComplete="email" spellCheck={false} />
+            <input className="focus-ring w-full rounded-xl border border-white/10 bg-ocean-950/65 py-3 pl-11 pr-4 text-sm font-medium normal-case tracking-normal text-white placeholder:text-ocean-500 focus:border-ocean-400 focus:ring-4 focus:ring-ocean-500/15" type="email" value={props.customerEmail} onChange={(event) => props.onCustomerEmailChange(event.target.value)} placeholder="john@email.com" autoComplete="email" spellCheck={false} />
           </span>
         </label>
 
@@ -541,39 +658,173 @@ function CustomerStep(props: {
             <input className="focus-ring w-full rounded-xl border border-white/10 bg-ocean-950/65 py-3 pl-11 pr-4 text-sm font-medium normal-case tracking-normal text-white placeholder:text-ocean-500 focus:border-ocean-400 focus:ring-4 focus:ring-ocean-500/15" type="tel" inputMode="tel" value={props.customerWhatsapp} onChange={(event) => props.onCustomerWhatsappChange(event.target.value)} placeholder={DISPLAY_PHONE} autoComplete="tel" />
           </span>
         </label>
+
+        <label className="grid gap-2 text-xs font-extrabold uppercase tracking-[0.12em] text-ocean-400">
+          Special requests
+          <textarea className="focus-ring min-h-[6rem] w-full resize-y rounded-xl border border-white/10 bg-ocean-950/65 px-4 py-3 text-sm font-medium normal-case tracking-normal text-white placeholder:text-ocean-500 focus:border-ocean-400 focus:ring-4 focus:ring-ocean-500/15" value={props.specialRequests} onChange={(event) => props.onSpecialRequestsChange(event.target.value)} placeholder="Optional meal notes, celebration details, accessibility needs..." />
+        </label>
       </div>
+
+      <div className="mt-5">
+        <BookingPaymentSummary booking={props.booking} />
+      </div>
+
+      {props.validationMessage ? (
+        <div className="mt-4 rounded-2xl border border-red-300/30 bg-red-500/10 p-4 text-sm font-bold text-red-100" aria-live="polite">
+          {props.validationMessage}
+        </div>
+      ) : null}
 
       <fieldset className="mt-5">
         <legend className="text-xs font-extrabold uppercase tracking-[0.12em] text-ocean-400">Payment method</legend>
         <div className="mt-3 grid gap-2">
           {props.paymentMethods.map((method) => (
-            <label key={method.id} className={cn('pressable flex items-start gap-3 rounded-xl border border-white/10 bg-white/[0.04] p-3 hover:bg-ocean-500/10', props.paymentMethod === method.id && 'border-ocean-400 bg-ocean-500/15 ring-4 ring-ocean-500/10')}>
-              <input className="sr-only" type="radio" name="paymentMethod" value={method.id} checked={props.paymentMethod === method.id} onChange={() => props.onPaymentMethodChange(method.id)} />
+            <button
+              key={method.id}
+              className={cn('pressable flex min-w-0 items-start gap-3 rounded-xl border border-white/10 bg-white/[0.04] p-3 text-left hover:bg-ocean-500/10', props.paymentMethod === method.id && 'border-ocean-400 bg-ocean-500/15 ring-4 ring-ocean-500/10')}
+              type="button"
+              onClick={() => props.onPaymentMethodChange(method.id)}
+            >
               <method.icon className="mt-0.5 shrink-0 text-ocean-400" size={17} />
-              <span>
+              <span className="min-w-0">
                 <span className="block text-sm font-extrabold text-white">{method.title}</span>
                 <span className="mt-0.5 block text-xs leading-5 text-ocean-200">{method.description}</span>
               </span>
-            </label>
+            </button>
           ))}
         </div>
       </fieldset>
 
-      {props.bookingStatus === 'payment-link-requested' ? (
-        <div className="mt-5 rounded-2xl border border-ocean-400/30 bg-ocean-500/10 p-4 text-ocean-100">
-          <p className="font-bold">Payment link request ready</p>
-          <p className="mt-1 text-sm">Complete the request in WhatsApp. Our team will send you the payment link.</p>
+      <div className="mt-4 grid gap-2 lg:grid-cols-3">
+        <Button className="min-h-[3rem]" type="button" onClick={props.onPayPalRequest}>Pay with PayPal</Button>
+        <Button className="min-h-[3rem] bg-ocean-500 text-ocean-950 hover:bg-[#7ED8F4]" type="button" onClick={props.onPaymentLinkRequest}>Request Payment Link via WhatsApp</Button>
+        <Button className="min-h-[3rem]" type="button" variant="secondary" onClick={props.onPayOnDayRequest}>Pay on the Day of the Tour</Button>
+      </div>
+
+      {props.paypalVisible && props.booking ? (
+        <PayPalCheckoutBox booking={props.booking} onSuccess={props.onPayPalSuccess} onError={props.onPayPalError} onCancel={props.onPayPalCancel} />
+      ) : null}
+
+      {props.paypalError ? (
+        <div className="mt-4 rounded-2xl border border-red-300/30 bg-red-500/10 p-4 text-sm text-red-100">
+          <p className="font-bold">Payment could not be completed</p>
+          <p className="mt-1">{props.paypalError}</p>
         </div>
       ) : null}
 
-      <div className="mt-auto flex flex-col-reverse gap-3 pt-7 sm:flex-row sm:justify-between">
-        <Button type="button" variant="secondary" onClick={props.onBack}>
-          ← {tr(text.booking.back, language)}
-        </Button>
-        <Button disabled={!props.canReview} type="button" onClick={props.onReview}>
-          {tr(text.booking.confirm, language)}
-        </Button>
+      {props.paypalSuccess && props.booking ? (
+        <div className="mt-4 rounded-2xl border border-seafoam-400/30 bg-seafoam-500/10 p-4 text-ocean-50">
+          <p className="text-lg font-extrabold">Payment completed successfully</p>
+          <div className="mt-3 grid gap-2 text-sm">
+            <SummaryLine label="Booking reference" value={props.paypalSuccess.bookingReference} />
+            <SummaryLine label="Amount paid" value={`${props.paypalSuccess.amount} ${props.paypalSuccess.currency}`} />
+            <SummaryLine label="PayPal order reference" value={props.paypalSuccess.orderId} />
+            <SummaryLine label="PayPal transaction reference" value={props.paypalSuccess.transactionId} />
+            <SummaryLine label="Tour information" value={`${getTourText(props.booking.tour, 'en').title} - ${props.booking.packageLabel}`} />
+          </div>
+          <Button className="mt-4 w-full bg-ocean-500 text-ocean-950 hover:bg-[#7ED8F4]" type="button" onClick={props.onSendPaidConfirmation}>Send confirmation via WhatsApp</Button>
+        </div>
+      ) : null}
+
+      {props.bookingStatus === 'payment_link_requested' ? (
+        <div className="mt-5 rounded-2xl border border-ocean-400/30 bg-ocean-500/10 p-4 text-ocean-100">
+          <p className="font-bold">Payment link request opened</p>
+          <p className="mt-1 text-sm">Complete the request in WhatsApp. This does not mark the reservation as paid.</p>
+        </div>
+      ) : null}
+
+      {props.bookingStatus === 'pay_on_tour_day' ? (
+        <div className="mt-5 rounded-2xl border border-ocean-400/30 bg-ocean-500/10 p-4 text-ocean-100">
+          <p className="font-bold">Reservation request opened</p>
+          <p className="mt-1 text-sm">The reservation remains pending confirmation until availability is confirmed.</p>
+        </div>
+      ) : null}
+
+      <div className="mt-auto flex flex-col-reverse gap-3 pt-7 sm:flex-row sm:items-center sm:justify-between">
+        <Button type="button" variant="secondary" onClick={props.onBack}>Back</Button>
+        <span className="text-xs font-semibold text-ocean-400">Status: {props.bookingStatus.split('_').join(' ')} - Payment: {props.paymentStatus}</span>
       </div>
+    </div>
+  );
+}
+
+function BookingPaymentSummary({ booking }: { booking: BookingPaymentPayload | null }) {
+  if (!booking) {
+    return (
+      <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4 text-sm text-ocean-200">
+        Complete the tour selection to review the reservation summary.
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4 text-sm">
+      <p className="text-xs font-extrabold uppercase tracking-[0.12em] text-ocean-400">Reservation summary</p>
+      <div className="mt-3 grid gap-2 text-ocean-100">
+        <SummaryLine label="Customer name" value={booking.customerName || 'Required'} />
+        <SummaryLine label="Phone" value={booking.phone || 'Required'} />
+        <SummaryLine label="Email" value={booking.email || 'Required'} />
+        <SummaryLine label="Boat" value={booking.boat.name} />
+        <SummaryLine label="Tour" value={String(getTourText(booking.tour, 'en').title)} />
+        <SummaryLine label="Package or duration" value={booking.packageLabel} />
+        <SummaryLine label="Date" value={formatDisplayDate(booking.date)} />
+        <SummaryLine label="Time" value={booking.time || 'Required'} />
+        <SummaryLine label="Number of guests" value={String(booking.guests)} />
+        <SummaryLine label="Base price" value={formatCurrency(booking.basePrice)} />
+        <SummaryLine label="Additional guests" value={String(booking.additionalGuests)} />
+        <SummaryLine label="Additional guest charge" value={formatCurrency(booking.additionalGuestCharge)} />
+        <SummaryLine label="Total price" value={formatCurrency(booking.total)} />
+        <SummaryLine label="Special requests" value={booking.specialRequests || 'None'} />
+      </div>
+    </div>
+  );
+}
+
+function PayPalCheckoutBox(props: {
+  booking: BookingPaymentPayload;
+  onSuccess: (result: PayPalCaptureResult) => void;
+  onError: (message: string) => void;
+  onCancel: () => void;
+}) {
+  const { booking, onSuccess, onError, onCancel } = props;
+  const clientId = import.meta.env.VITE_PAYPAL_CLIENT_ID;
+  const containerId = `paypal-button-container-${booking.bookingReference}`;
+
+  useEffect(() => {
+    let isMounted = true;
+    const container = document.getElementById(containerId);
+    if (container) container.innerHTML = '';
+
+    if (!clientId) {
+      onError('PayPal is not configured. Set VITE_PAYPAL_CLIENT_ID to enable sandbox checkout.');
+      return;
+    }
+
+    loadPayPalSdk(clientId)
+      .then(() => {
+        if (!isMounted || !window.paypal) return;
+        return window.paypal.Buttons({
+          style: { layout: 'vertical', color: 'blue', shape: 'rect', label: 'paypal' },
+          createOrder: () => createPayPalOrder(booking),
+          onApprove: async (data) => {
+            const result = await capturePayPalOrder(data.orderID, booking);
+            onSuccess(result);
+          },
+          onCancel,
+          onError: () => onError('PayPal returned an error. Please try again or choose another payment method.'),
+        }).render(`#${containerId}`);
+      })
+      .catch((error: Error) => onError(error.message));
+
+    return () => {
+      isMounted = false;
+    };
+  }, [booking, booking.bookingReference, clientId, containerId]);
+
+  return (
+    <div className="mt-4 rounded-2xl border border-ocean-400/30 bg-ocean-500/10 p-4">
+      <p className="mb-3 text-sm font-bold text-ocean-100">PayPal Sandbox checkout</p>
+      <div id={containerId} />
     </div>
   );
 }
@@ -590,7 +841,9 @@ function BookingSummary(props: {
   pricing: ReturnType<typeof calculateBookingTotal>;
 }) {
   const { language } = useLanguage();
+  const terms = getBookingTerms(language);
   const coverImage = props.selectedBoat.image;
+  const selectedTourName = props.selectedTour ? `${getTourText(props.selectedTour, language).title} - ${getPackageLabel(props.selectedTour, language)}` : tr(text.booking.selectTour, language);
   const subtotal = props.selectedTour?.customQuote ? 'Custom quote' : formatCurrency(props.pricing.basePrice);
   const taxes = props.selectedTour?.customQuote ? '-' : formatCurrency(Math.max(props.pricing.total - props.pricing.basePrice - props.pricing.extraGuestsTotal, 0));
 
@@ -603,17 +856,17 @@ function BookingSummary(props: {
         <p className="mt-1 text-sm font-semibold text-ocean-300">{props.selectedBoat.includedGuests} {tr(text.booking.people, language)} - {props.selectedBoat.length} - {props.selectedBoat.engine}</p>
       </div>
       <div className="mt-4 grid gap-2 text-sm text-ocean-100">
-        <SummaryRow label={tr(text.booking.tourType, language)} value={props.selectedTour ? `${props.selectedTour.name}${props.selectedTour.duration ? ` (${props.selectedTour.duration}h)` : ''}` : tr(text.booking.selectTour, language)} />
+        <SummaryRow label={tr(text.booking.tourType, language)} value={props.selectedTour ? `${selectedTourName}${props.selectedTour.duration ? ` (${props.selectedTour.duration}h)` : ''}` : tr(text.booking.selectTour, language)} />
         <SummaryRow label={tr(text.booking.date, language)} value={formatDisplayDate(props.date)} />
         <SummaryRow label={language === 'es' ? 'Salida' : 'Departure'} value={props.selectedTimeSlot?.time ?? tr(text.booking.selectTime, language)} />
         <SummaryRow label={tr(text.booking.guests, language)} value={`${props.guests} ${tr(text.booking.people, language)}`} />
-        {isFullDayTour(props.selectedTour) ? <SummaryRow label="Meal option" value={props.mealOption || 'Not selected'} /> : null}
+        {isFullDayTour(props.selectedTour) ? <SummaryRow label={language === 'es' ? 'Comida' : 'Meal option'} value={props.mealOption || (language === 'es' ? 'No seleccionada' : 'Not selected')} /> : null}
       </div>
       <div className="mt-4 rounded-2xl border border-ocean-500/25 bg-ocean-900/70 p-3 sm:mt-6 sm:p-4">
         <SummaryRow label="Subtotal" value={subtotal} />
         {props.pricing.extraGuests > 0 ? <SummaryRow label={tr(text.booking.extraPeople, language)} value={`${props.pricing.extraGuests} x ${formatCurrency(props.pricing.extraGuestPrice)}`} /> : null}
         <SummaryRow label={tr(text.booking.taxes, language)} value={taxes} />
-        <SummaryRow label="Required deposit" value={props.selectedTour?.customQuote ? 'To be confirmed' : formatCurrency(props.pricing.total * 0.5)} />
+        <SummaryRow label={language === 'es' ? 'Deposito requerido' : 'Required deposit'} value={props.selectedTour?.customQuote ? (language === 'es' ? 'Por confirmar' : 'To be confirmed') : formatCurrency(props.pricing.total * 0.5)} />
         <div className="mt-4 flex flex-wrap items-end justify-between gap-3 border-t border-white/10 pt-4">
           <span className="font-extrabold text-white">Total</span>
           <span className="text-2xl font-extrabold text-ocean-400 sm:text-3xl">{props.selectedTour?.customQuote ? 'Cotizar' : formatCurrency(props.pricing.total)}</span>
@@ -621,7 +874,7 @@ function BookingSummary(props: {
       </div>
       <p className="mt-4 text-xs font-medium text-ocean-300">{tr(text.booking.secure, language)}</p>
       <div className="mt-4 grid gap-2 border-t border-white/10 pt-4 text-xs leading-5 text-ocean-300">
-        {bookingTerms.slice(0, 3).map((term) => (
+        {terms.slice(0, 3).map((term) => (
           <p key={term}>{term}</p>
         ))}
       </div>
@@ -641,6 +894,7 @@ function BookingProgressSummary(props: {
 }) {
   const { language } = useLanguage();
   const total = props.selectedTour?.customQuote ? 'Cotizar' : formatCurrency(props.pricing.total);
+  const selectedTourName = props.selectedTour ? `${getTourText(props.selectedTour, language).title} - ${getPackageLabel(props.selectedTour, language)}` : tr(text.booking.selectTour, language);
 
   return (
     <aside className="rounded-2xl border border-ocean-500/30 bg-white/[0.06] p-3 text-white shadow-soft backdrop-blur-xl">
@@ -657,7 +911,7 @@ function BookingProgressSummary(props: {
 
       {props.activeStep >= 1 ? (
         <div className="mt-3 grid min-w-0 gap-2 border-t border-white/10 pt-3 text-xs text-ocean-100 min-[520px]:grid-cols-3">
-          <SummaryMini label={tr(text.booking.tourType, language)} value={props.selectedTour?.name ?? tr(text.booking.selectTour, language)} />
+          <SummaryMini label={tr(text.booking.tourType, language)} value={selectedTourName} />
           <SummaryMini label={tr(text.booking.date, language)} value={formatDisplayDate(props.date)} />
           <SummaryMini label={language === 'es' ? 'Salida' : 'Departure'} value={props.selectedTimeSlot?.time ?? tr(text.booking.selectTime, language)} />
           {isFullDayTour(props.selectedTour) ? <SummaryMini label="Meal" value={props.mealOption || 'Not selected'} /> : null}
@@ -693,46 +947,51 @@ function ReviewModal(props: {
   customerName: string;
   customerEmail: string;
   customerWhatsapp: string;
+  specialRequests: string;
   paymentMethod: string;
   pricing: ReturnType<typeof calculateBookingTotal>;
   onBack: () => void;
   onConfirm: () => void;
 }) {
+  const { language } = useLanguage();
+  const terms = getBookingTerms(language);
+  const selectedTourName = props.selectedTour ? `${getTourText(props.selectedTour, language).title} - ${getPackageLabel(props.selectedTour, language)}` : (language === 'es' ? 'No seleccionado' : 'Not selected');
   return (
     <div className="fixed inset-0 z-[80] grid place-items-center bg-ocean-950/70 px-3 py-4 backdrop-blur-sm sm:px-4">
       <div className="max-h-[92dvh] w-full max-w-2xl overflow-y-auto rounded-3xl border border-white/10 bg-ocean-950 p-4 text-white shadow-lifted sm:rounded-[2rem] sm:p-8">
         <img className="mb-5 aspect-[16/7] w-full rounded-2xl object-cover" src={props.selectedBoat.image} alt={props.selectedBoat.name} loading="lazy" />
-        <h3 className="text-3xl font-extrabold text-white">Review reservation</h3>
+        <h3 className="text-3xl font-extrabold text-white">{language === 'es' ? 'Revisar reserva' : 'Review reservation'}</h3>
         <p className="mt-3 leading-7 text-ocean-200">
-          Review your reservation details before confirming this request. A 50% deposit is required to secure the reservation, and the remaining balance is paid on the day of the tour.
+          {language === 'es' ? 'Revisa los detalles antes de confirmar la solicitud. Se requiere un deposito del 50% para asegurar la reserva y el saldo restante se paga el dia del tour.' : 'Review your reservation details before confirming this request. A 50% deposit is required to secure the reservation, and the remaining balance is paid on the day of the tour.'}
         </p>
         <div className="mt-6 grid gap-3 rounded-2xl border border-white/10 bg-white/[0.04] p-4 text-sm">
-          <SummaryLine label="Boat" value={props.selectedBoat.name} />
-          <SummaryLine label="Tour" value={props.selectedTour?.name ?? 'Not selected'} />
-          <SummaryLine label="Date" value={formatDisplayDate(props.date)} />
-          <SummaryLine label="Departure time" value={props.departure} />
-          <SummaryLine label="Guests" value={String(props.guests)} />
-          {isFullDayTour(props.selectedTour) ? <SummaryLine label="Meal option" value={props.mealOption || 'Not selected'} /> : null}
-          <SummaryLine label="Additional guest charges" value={props.pricing.extraGuests > 0 ? `${props.pricing.extraGuests} x ${formatCurrency(props.pricing.extraGuestPrice)} = ${formatCurrency(props.pricing.extraGuestsTotal)}` : '$0'} />
+          <SummaryLine label={language === 'es' ? 'Barco' : 'Boat'} value={props.selectedBoat.name} />
+          <SummaryLine label="Tour" value={selectedTourName} />
+          <SummaryLine label={language === 'es' ? 'Fecha' : 'Date'} value={formatDisplayDate(props.date)} />
+          <SummaryLine label={language === 'es' ? 'Salida' : 'Departure time'} value={props.departure} />
+          <SummaryLine label={language === 'es' ? 'Personas' : 'Guests'} value={String(props.guests)} />
+          {isFullDayTour(props.selectedTour) ? <SummaryLine label={language === 'es' ? 'Comida' : 'Meal option'} value={props.mealOption || (language === 'es' ? 'No seleccionada' : 'Not selected')} /> : null}
+          <SummaryLine label={language === 'es' ? 'Cargos por personas extra' : 'Additional guest charges'} value={props.pricing.extraGuests > 0 ? `${props.pricing.extraGuests} x ${formatCurrency(props.pricing.extraGuestPrice)} = ${formatCurrency(props.pricing.extraGuestsTotal)}` : '$0'} />
           <SummaryLine label="Total" value={props.pricing.isCustomQuote ? 'Custom quote' : formatCurrency(props.pricing.total)} />
-          <SummaryLine label="Required deposit" value={props.pricing.isCustomQuote ? 'To be confirmed' : formatCurrency(props.pricing.total * 0.5)} />
-          <SummaryLine label="Remaining balance" value="Paid on the day of the tour" />
-          <SummaryLine label="Customer name" value={props.customerName} />
+          <SummaryLine label={language === 'es' ? 'Deposito requerido' : 'Required deposit'} value={props.pricing.isCustomQuote ? (language === 'es' ? 'Por confirmar' : 'To be confirmed') : formatCurrency(props.pricing.total * 0.5)} />
+          <SummaryLine label={language === 'es' ? 'Saldo restante' : 'Remaining balance'} value={language === 'es' ? 'Se paga el dia del tour' : 'Paid on the day of the tour'} />
+          <SummaryLine label={language === 'es' ? 'Nombre' : 'Customer name'} value={props.customerName} />
           <SummaryLine label="Email" value={props.customerEmail} />
-          <SummaryLine label="WhatsApp number" value={props.customerWhatsapp} />
-          <SummaryLine label="Payment method" value={props.paymentMethod} />
+          <SummaryLine label={language === 'es' ? 'Numero de WhatsApp' : 'WhatsApp number'} value={props.customerWhatsapp} />
+          <SummaryLine label="Special requests" value={props.specialRequests || 'None'} />
+          <SummaryLine label={language === 'es' ? 'Metodo de pago' : 'Payment method'} value={props.paymentMethod} />
         </div>
         <div className="mt-4 grid gap-2 rounded-2xl border border-white/10 bg-white/[0.04] p-4 text-xs leading-5 text-ocean-200">
-          {bookingTerms.map((term) => (
+          {terms.map((term) => (
             <p key={term}>{term}</p>
           ))}
         </div>
         <div className="mt-7 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
           <Button variant="secondary" type="button" onClick={props.onBack}>
-            Go Back
+            {language === 'es' ? 'Volver' : 'Go Back'}
           </Button>
           <Button type="button" onClick={props.onConfirm}>
-            Confirm reservation
+            {language === 'es' ? 'Confirmar reserva' : 'Confirm reservation'}
           </Button>
         </div>
       </div>
@@ -751,9 +1010,9 @@ function SummaryRow({ label, value }: { label: string; value: string }) {
 
 function SummaryLine({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex flex-wrap justify-between gap-x-4 gap-y-1">
+    <div className="flex min-w-0 flex-wrap justify-between gap-x-4 gap-y-1">
       <span className="font-semibold text-ocean-300">{label}</span>
-      <span className="text-right font-bold text-white">{value}</span>
+      <span className="min-w-0 max-w-full break-words text-right font-bold text-white">{value}</span>
     </div>
   );
 }

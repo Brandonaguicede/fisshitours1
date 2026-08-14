@@ -4,6 +4,8 @@ import { useState } from 'react';
 import type { Boat } from '../../types/boat';
 import type { BoatTour } from '../../types/boatTour';
 import { boatTours } from '../../data/boatTours';
+import { getBoatText, getTourGroupKey, getTourText } from '../../i18n/content';
+import type { Language } from '../../i18n/LanguageContext';
 import { formatCurrency } from '../../utils/formatCurrency';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { text, tr } from '../../i18n/translations';
@@ -19,24 +21,17 @@ interface FleetSectionProps {
   onViewTourType: (tour: BoatTour) => void;
 }
 
-const tourTypeLabels: Record<string, string> = {
-  'Snorkeling & Beach': 'Beach & Snorkeling',
-  Fishing: 'Fishing',
-  Surfing: 'Surfing',
-  'Water Toys': 'Water Toys',
-  Bioluminescence: 'Bioluminescence',
-};
-
 export function FleetSection({ boats, selectedBoat, onSelectBoat, onViewTourType }: FleetSectionProps) {
   const { language } = useLanguage();
   const [modalBoat, setModalBoat] = useState<Boat | null>(null);
+  const modalBoatText = modalBoat ? getBoatText(modalBoat, language) : null;
 
   function openBoatDetails(boat: Boat) {
     onSelectBoat(boat);
     setModalBoat(boat);
   }
 
-  const modalTourTypes = getModalTourTypes(modalBoat);
+  const modalTourTypes = getModalTourTypes(modalBoat, language);
 
   function handleViewTourType(tour: BoatTour) {
     onViewTourType(tour);
@@ -74,26 +69,26 @@ export function FleetSection({ boats, selectedBoat, onSelectBoat, onViewTourType
                 <X size={20} />
               </button>
               <div className="absolute bottom-4 left-4 right-4 text-white sm:bottom-6 sm:left-6 sm:right-6">
-                <p className="text-xs font-bold uppercase tracking-[0.14em] text-ocean-200 sm:text-sm">{modalBoat.badge ?? 'Private charter'}</p>
+                <p className="text-xs font-bold uppercase tracking-[0.14em] text-ocean-200 sm:text-sm">{modalBoatText?.badge ?? (language === 'es' ? 'Charter privado' : 'Private charter')}</p>
                 <h3 className="mt-1 text-3xl font-extrabold sm:mt-2 sm:text-4xl">{modalBoat.name}</h3>
               </div>
             </div>
 
             <div className="grid gap-5 p-4 sm:p-6 lg:grid-cols-[0.8fr_1.2fr] lg:gap-8 lg:p-8">
               <aside>
-                <p className="text-sm font-bold uppercase tracking-[0.14em] text-ocean-600">Boat details</p>
+                <p className="text-sm font-bold uppercase tracking-[0.14em] text-ocean-600">{language === 'es' ? 'Detalles del barco' : 'Boat details'}</p>
                 <div className="mt-4 grid gap-3 text-sm text-ocean-200">
-                  <DetailRow label="Size" value={modalBoat.length} />
-                  <DetailRow label="Motor" value={modalBoat.engine} />
-                  <DetailRow label="Maximum capacity" value={`${modalBoat.maxGuests} people`} />
-                  <DetailRow label="Additional guest" value={`${formatCurrency(modalBoat.extraGuestPrice)} each`} />
+                  <DetailRow label={language === 'es' ? 'Tamano' : 'Size'} value={modalBoatText?.length ?? modalBoat.length} />
+                  <DetailRow label={language === 'es' ? 'Motor' : 'Motor'} value={modalBoat.engine} />
+                  <DetailRow label={language === 'es' ? 'Capacidad maxima' : 'Maximum capacity'} value={language === 'es' ? `${modalBoat.maxGuests} personas` : `${modalBoat.maxGuests} people`} />
+                  <DetailRow label={language === 'es' ? 'Persona extra' : 'Additional guest'} value={language === 'es' ? `${formatCurrency(modalBoat.extraGuestPrice)} cada una` : `${formatCurrency(modalBoat.extraGuestPrice)} each`} />
                 </div>
-                <p className="mt-4 rounded-2xl border border-ocean-400/25 bg-ocean-500/10 p-3 text-sm font-semibold leading-6 text-ocean-100 sm:mt-5 sm:p-4">{modalBoat.featuredSpec}</p>
+                <p className="mt-4 rounded-2xl border border-ocean-400/25 bg-ocean-500/10 p-3 text-sm font-semibold leading-6 text-ocean-100 sm:mt-5 sm:p-4">{modalBoatText?.featuredSpec ?? modalBoat.featuredSpec}</p>
               </aside>
 
               <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4 shadow-soft sm:p-5">
-                <p className="text-sm font-bold uppercase tracking-[0.14em] text-ocean-600">Tour types</p>
-                <h4 className="mt-2 text-xl font-extrabold leading-tight text-white sm:text-2xl">Choose the experience you want to explore</h4>
+                <p className="text-sm font-bold uppercase tracking-[0.14em] text-ocean-600">{language === 'es' ? 'Tipos de tour' : 'Tour types'}</p>
+                <h4 className="mt-2 text-xl font-extrabold leading-tight text-white sm:text-2xl">{language === 'es' ? 'Elige la experiencia que quieres explorar' : 'Choose the experience you want to explore'}</h4>
                 <div className="mt-5 grid gap-3 sm:grid-cols-2">
                   {modalTourTypes.map((tour) => (
                     <button
@@ -106,14 +101,14 @@ export function FleetSection({ boats, selectedBoat, onSelectBoat, onViewTourType
                       <div className="mt-2 grid min-w-0 gap-2">
                         <h5 className="min-w-0 text-left text-base font-extrabold leading-tight text-white sm:text-lg">{tour.title}</h5>
                         <span className="w-fit max-w-full rounded-full bg-ocean-500/10 px-2.5 py-1 text-left text-xs font-extrabold leading-tight text-ocean-400 sm:text-sm">
-                          From {formatCurrency(tour.price)}
+                          {language === 'es' ? 'Desde' : 'From'} {formatCurrency(tour.price)}
                         </span>
                       </div>
                     </button>
                   ))}
                 </div>
                 <Button className="mt-5" type="button" onClick={() => modalTourTypes[0] && handleViewTourType(modalTourTypes[0].representativeTour)}>
-                  View All Tours
+                  {language === 'es' ? 'Ver todos los tours' : 'View All Tours'}
                 </Button>
               </div>
             </div>
@@ -124,23 +119,24 @@ export function FleetSection({ boats, selectedBoat, onSelectBoat, onViewTourType
   );
 }
 
-function getModalTourTypes(boat: Boat | null) {
+function getModalTourTypes(boat: Boat | null, language: Language) {
   if (!boat) return [];
 
   const groups = new Map<string, BoatTour[]>();
   boatTours
     .filter((tour) => tour.boatId === boat.id)
     .forEach((tour) => {
-      const key = tour.category === 'Bioluminescence Basic' || tour.category === 'Bioluminescence Deluxe' ? 'Bioluminescence' : tour.category;
+      const key = getTourGroupKey(tour);
       groups.set(key, [...(groups.get(key) ?? []), tour]);
     });
 
   return Array.from(groups.entries()).map(([key, relatedTours]) => {
     const sortedTours = [...relatedTours].sort((a, b) => a.basePrice - b.basePrice);
+    const display = getTourText(sortedTours[0], language);
     return {
       key,
-      title: tourTypeLabels[key] ?? key,
-      category: key,
+      title: display.title,
+      category: display.category,
       price: sortedTours[0].basePrice,
       representativeTour: sortedTours[0],
     };
