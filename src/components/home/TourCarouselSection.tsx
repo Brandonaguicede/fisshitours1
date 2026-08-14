@@ -22,13 +22,15 @@ export function TourCarouselSection({ boats, tours, selectedTour, onSelectTour }
   const scrollerRef = useRef<HTMLDivElement | null>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(true);
+  const [activeBoatId, setActiveBoatId] = useState<string>('all');
+  const visibleTours = activeBoatId === 'all' ? tours : tours.filter((tour) => tour.boatId === activeBoatId);
 
   useEffect(() => {
     const element = scrollerRef.current;
     if (!element) return;
     element.scrollTo({ left: 0, behavior: 'smooth' });
     window.setTimeout(updateControls, 120);
-  }, [tours.length]);
+  }, [visibleTours.length, activeBoatId]);
 
   function updateControls() {
     const element = scrollerRef.current;
@@ -52,8 +54,8 @@ export function TourCarouselSection({ boats, tours, selectedTour, onSelectTour }
             eyebrow="Tours"
             title={tr(text.home.toursTitle, language)}
           />
-          <div className="flex items-center gap-3">
-            <span className="hidden text-sm font-bold text-ocean-200 sm:inline">{tours.length} {tr(text.home.toursAvailable, language)}</span>
+          <div className="flex items-center gap-3 self-end md:self-auto">
+            <span className="hidden text-sm font-bold text-ocean-200 sm:inline">{visibleTours.length} {tr(text.home.toursAvailable, language)}</span>
             <button
               className={cn('focus-ring pressable grid h-10 w-10 place-items-center rounded-full border border-white/10 bg-white/10 text-white shadow-sm transition-all duration-300 disabled:cursor-not-allowed disabled:opacity-35', canScrollLeft && 'hover:border-ocean-400 hover:bg-white/15 hover:text-ocean-300')}
               type="button"
@@ -75,16 +77,42 @@ export function TourCarouselSection({ boats, tours, selectedTour, onSelectTour }
           </div>
         </div>
 
+        <div className="mt-6 flex snap-x gap-2 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" aria-label={language === 'es' ? 'Filtrar tours por barco' : 'Filter tours by boat'}>
+          <button
+            className={cn(
+              'focus-ring pressable shrink-0 snap-start rounded-full border px-4 py-2 text-sm font-extrabold transition-all duration-200',
+              activeBoatId === 'all' ? 'border-ocean-400 bg-ocean-500 text-ocean-950' : 'border-white/10 bg-white/[0.06] text-ocean-100 hover:border-ocean-400 hover:text-ocean-300',
+            )}
+            type="button"
+            onClick={() => setActiveBoatId('all')}
+          >
+            {language === 'es' ? 'Todos' : 'All'}
+          </button>
+          {boats.map((boat) => (
+            <button
+              key={boat.id}
+              className={cn(
+                'focus-ring pressable shrink-0 snap-start rounded-full border px-4 py-2 text-sm font-extrabold transition-all duration-200',
+                activeBoatId === boat.id ? 'border-ocean-400 bg-ocean-500 text-ocean-950' : 'border-white/10 bg-white/[0.06] text-ocean-100 hover:border-ocean-400 hover:text-ocean-300',
+              )}
+              type="button"
+              onClick={() => setActiveBoatId(boat.id)}
+            >
+              {boat.name}
+            </button>
+          ))}
+        </div>
+
         <div className="relative mt-8">
           <div className="pointer-events-none absolute inset-y-0 left-0 z-10 hidden w-12 bg-gradient-to-r from-ocean-900/95 to-transparent md:block" />
           <div className="pointer-events-none absolute inset-y-0 right-0 z-10 hidden w-16 bg-gradient-to-l from-ocean-900/95 to-transparent md:block" />
           <div
             ref={scrollerRef}
-            className="flex cursor-grab snap-x snap-mandatory gap-5 overflow-x-auto scroll-smooth px-1 pb-5 active:cursor-grabbing [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            className="flex cursor-grab snap-x snap-mandatory gap-4 overflow-x-auto scroll-smooth px-1 pb-5 active:cursor-grabbing sm:gap-5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
             onScroll={updateControls}
           >
-            {tours.map((tour) => (
-              <div key={tour.id} className="min-w-[84%] snap-start sm:min-w-[48%] lg:min-w-[31%] xl:min-w-[29%]">
+            {visibleTours.map((tour) => (
+              <div key={tour.id} className="min-w-[86%] snap-start min-[480px]:min-w-[72%] sm:min-w-[48%] lg:min-w-[31%] xl:min-w-[29%]">
                 <BoatTourCard boat={boats.find((boat) => boat.id === tour.boatId)!} tour={tour} isSelected={tour.id === selectedTour?.id} onSelect={onSelectTour} />
               </div>
             ))}

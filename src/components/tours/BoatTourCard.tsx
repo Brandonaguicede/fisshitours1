@@ -41,7 +41,7 @@ export function BoatTourCard({ boat, tour, isSelected, onSelect }: BoatTourCardP
           ) : null}
         </div>
 
-        <div className="flex flex-1 flex-col p-5">
+        <div className="flex flex-1 flex-col p-4 sm:p-5">
           <h3 className="text-balance text-2xl font-extrabold leading-tight text-white">{tour.name}</h3>
           <p className="mt-2 text-sm font-bold text-ocean-400">Aboard {boat.name}</p>
           <div className="mt-4 grid gap-2 text-sm font-semibold text-ocean-200">
@@ -55,17 +55,17 @@ export function BoatTourCard({ boat, tour, isSelected, onSelect }: BoatTourCardP
             </span>
           </div>
 
-          <div className="mt-auto flex flex-col gap-4 pt-6 min-[420px]:flex-row min-[420px]:items-end min-[420px]:justify-between">
+          <div className="mt-auto flex flex-col gap-4 pt-6 min-[520px]:flex-row min-[520px]:items-end min-[520px]:justify-between">
             <div className="min-w-0">
               <p className="text-xs font-bold uppercase tracking-[0.12em] text-ocean-300">From</p>
               <p className="text-2xl font-extrabold leading-tight text-ocean-400">{tour.customQuote ? 'Custom quote' : formatCurrency(tour.basePrice)}</p>
             </div>
-            <div className="grid w-full gap-2 min-[420px]:w-auto min-[420px]:justify-items-end">
-              <Button type="button" variant="secondary" className="min-h-10 w-full px-4 min-[420px]:w-auto" onClick={() => setIsModalOpen(true)}>
+            <div className="grid w-full gap-2 min-[520px]:w-auto min-[520px]:justify-items-end">
+              <Button type="button" variant="secondary" className="min-h-10 w-full px-4 min-[520px]:w-auto" onClick={() => setIsModalOpen(true)}>
                 <Info size={16} />
                 Quick View
               </Button>
-              <Button type="button" className="w-full min-[420px]:w-auto" onClick={() => onSelect(tour)}>
+              <Button type="button" className="w-full min-[520px]:w-auto" onClick={() => onSelect(tour)}>
                 Select Tour
               </Button>
             </div>
@@ -74,10 +74,10 @@ export function BoatTourCard({ boat, tour, isSelected, onSelect }: BoatTourCardP
       </article>
 
       {isModalOpen ? (
-        <div className="fixed inset-0 z-[95] grid place-items-center bg-ocean-950/65 px-4 py-8 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label={`${tour.name} details`}>
-          <div className="w-full max-w-2xl overflow-hidden rounded-2xl border border-white/10 bg-ocean-950 shadow-lifted">
+        <div className="fixed inset-0 z-[95] grid place-items-center bg-ocean-950/65 px-3 py-4 backdrop-blur-sm sm:px-4 sm:py-8" role="dialog" aria-modal="true" aria-label={`${tour.name} details`}>
+          <div className="max-h-[92dvh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-white/10 bg-ocean-950 shadow-lifted">
             <div className="relative">
-              <img src={tour.image} alt={tour.name} className="h-64 w-full object-cover" />
+              <img src={tour.image} alt={tour.name} className="h-56 w-full object-cover sm:h-64" />
               <div className="absolute inset-0 bg-gradient-to-t from-ocean-950/75 via-ocean-950/20 to-transparent" />
               <button
                 className="focus-ring absolute right-4 top-4 grid h-10 w-10 place-items-center rounded-full bg-white/10 text-white backdrop-blur-xl transition hover:bg-white/15"
@@ -93,7 +93,7 @@ export function BoatTourCard({ boat, tour, isSelected, onSelect }: BoatTourCardP
               </div>
             </div>
 
-            <div className="p-6">
+            <div className="p-4 sm:p-6">
               <p className="text-base leading-7 text-ocean-200">{tour.description}</p>
               <div className="mt-5 grid gap-3 sm:grid-cols-3">
                 <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4">

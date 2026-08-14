@@ -136,20 +136,20 @@ export function BookingPanel({ selectedBoat, selectedTour, selectedTimeSlotId, o
   }
 
   return (
-    <div className="relative overflow-hidden rounded-[2rem] border border-ocean-500/20 bg-ocean-950 p-5 text-white shadow-lifted sm:p-8">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_0%,rgba(110,172,201,0.22),transparent_26rem),radial-gradient(circle_at_92%_16%,rgba(73,134,167,0.16),transparent_24rem)]" />
-      <div className="relative mx-auto max-w-4xl text-center">
-        <span className="inline-flex rounded-full border border-ocean-500/35 bg-ocean-500/10 px-4 py-1.5 text-[0.68rem] font-extrabold uppercase tracking-[0.18em] text-ocean-400">{tr(text.booking.badge, language)}</span>
-        <h2 className="mt-5 text-4xl font-extrabold leading-tight text-white sm:text-5xl">{tr(text.booking.title, language)}</h2>
-        <p className="mt-3 text-sm font-medium text-ocean-200">{tr(text.booking.subtitle, language)}</p>
+    <div className="relative -mx-4 overflow-hidden rounded-none border-y border-ocean-500/20 bg-ocean-950 p-3 text-white shadow-lifted sm:mx-0 sm:rounded-2xl sm:border sm:p-4 lg:p-5">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_0%,rgba(110,172,201,0.16),transparent_24rem),radial-gradient(circle_at_92%_16%,rgba(73,134,167,0.12),transparent_22rem)]" />
+      <div className="relative mx-auto max-w-xl text-center">
+        <span className="inline-flex rounded-full border border-ocean-500/35 bg-ocean-500/10 px-3 py-1.5 text-[0.62rem] font-extrabold uppercase tracking-[0.14em] text-ocean-400 sm:px-4 sm:text-[0.68rem] sm:tracking-[0.18em]">{tr(text.booking.badge, language)}</span>
+        <h2 className="mt-2 text-2xl font-extrabold leading-tight text-white min-[420px]:text-3xl sm:text-[2rem]">{tr(text.booking.title, language)}</h2>
+        <p className="mx-auto mt-2 max-w-md text-xs font-medium leading-5 text-ocean-200 sm:text-sm">{tr(text.booking.subtitle, language)}</p>
       </div>
 
-      <div className="relative mx-auto mt-9 grid max-w-xl grid-cols-3 items-start gap-3">
+      <div className="relative mx-auto mt-4 grid max-w-sm grid-cols-3 items-start gap-1 sm:mt-5 sm:gap-2">
         {steps.map((step, index) => (
           <button
             key={step}
             className={cn(
-              'focus-ring group relative grid justify-items-center gap-2 rounded-2xl px-2 py-1 text-center transition-colors duration-200',
+              'focus-ring group relative grid min-w-0 justify-items-center gap-2 rounded-2xl px-1 py-1 text-center transition-colors duration-200 sm:px-2',
               index < steps.length - 1 && 'after:absolute after:left-[calc(50%+1.25rem)] after:top-4 after:h-px after:w-[calc(100%-2.5rem)] after:bg-ocean-700/70',
             )}
             type="button"
@@ -157,16 +157,16 @@ export function BookingPanel({ selectedBoat, selectedTour, selectedTimeSlotId, o
             aria-disabled={!canVisitStep(index)}
             onClick={() => goToStep(index)}
           >
-            <span className={cn('grid h-8 w-8 place-items-center rounded-full border text-sm font-extrabold transition-[background-color,border-color,color,box-shadow] duration-200', activeStep === index ? 'border-ocean-400 bg-ocean-500 text-ocean-950 shadow-[0_0_24px_rgba(110,172,201,0.36)]' : activeStep > index ? 'border-seafoam-400 bg-seafoam-500 text-ocean-950' : 'border-ocean-700 bg-ocean-900 text-ocean-300')}>
+            <span className={cn('grid h-7 w-7 place-items-center rounded-full border text-xs font-extrabold transition-[background-color,border-color,color,box-shadow] duration-200 sm:h-8 sm:w-8 sm:text-sm', activeStep === index ? 'border-ocean-400 bg-ocean-500 text-ocean-950 shadow-[0_0_18px_rgba(110,172,201,0.28)]' : activeStep > index ? 'border-seafoam-400 bg-seafoam-500 text-ocean-950' : 'border-ocean-700 bg-ocean-900 text-ocean-300')}>
               {index + 1}
             </span>
-            <span className={cn('text-[0.68rem] font-bold', activeStep === index ? 'text-ocean-300' : 'text-ocean-600')}>{step}</span>
+            <span className={cn('max-w-full text-[0.62rem] font-bold leading-tight sm:text-[0.68rem]', activeStep === index ? 'text-ocean-300' : 'text-ocean-600')}>{step}</span>
           </button>
         ))}
       </div>
 
-      <div className="relative mt-10 grid gap-6 lg:grid-cols-[minmax(0,1fr)_420px]">
-        <div className="min-h-[520px] rounded-3xl border border-white/10 bg-white/[0.06] p-5 shadow-soft backdrop-blur-xl sm:p-6">
+      <div className="relative mt-5 grid gap-3 xl:mt-6 xl:grid-cols-[minmax(0,1fr)_300px] xl:gap-4">
+        <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-3 shadow-soft backdrop-blur-xl min-[420px]:p-4">
           {activeStep === 0 ? (
             <BoatStep selectedBoat={selectedBoat} onBoatChange={handleBoatChange} onNext={() => setActiveStep(1)} />
           ) : null}
@@ -210,16 +210,30 @@ export function BookingPanel({ selectedBoat, selectedTour, selectedTimeSlotId, o
           ) : null}
         </div>
 
-        <BookingSummary
-          selectedBoat={selectedBoat}
-          selectedTour={selectedTour}
-          date={date}
-          selectedTimeSlot={selectedTimeSlot}
-          guests={guests}
-          selectedPayment={selectedPayment.title}
-          paymentStatus={paymentStatus}
-          pricing={pricing}
-        />
+        <div className="xl:hidden">
+          <BookingProgressSummary
+            selectedBoat={selectedBoat}
+            selectedTour={selectedTour}
+            date={date}
+            selectedTimeSlot={selectedTimeSlot}
+            guests={guests}
+            pricing={pricing}
+            activeStep={activeStep}
+          />
+        </div>
+
+        <div className="hidden xl:block">
+          <BookingSummary
+            selectedBoat={selectedBoat}
+            selectedTour={selectedTour}
+            date={date}
+            selectedTimeSlot={selectedTimeSlot}
+            guests={guests}
+            selectedPayment={selectedPayment.title}
+            paymentStatus={paymentStatus}
+            pricing={pricing}
+          />
+        </div>
       </div>
 
       {isReviewOpen ? (
@@ -248,26 +262,26 @@ function BoatStep(props: { selectedBoat: Boat; onBoatChange: (boatId: string) =>
   return (
     <div>
       <div className="flex items-center gap-3 text-white">
-        <span className="grid h-11 w-11 place-items-center rounded-full bg-ocean-500/15 text-ocean-300"><Ship size={20} /></span>
+        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-ocean-500/15 text-ocean-300 sm:h-10 sm:w-10"><Ship size={19} /></span>
         <div>
-          <p className="text-sm font-bold uppercase tracking-[0.12em] text-ocean-400">{tr(text.booking.privateFleet, language)}</p>
-          <h3 className="text-2xl font-extrabold text-white">{tr(text.booking.chooseBoat, language)}</h3>
+          <p className="text-xs font-bold uppercase tracking-[0.12em] text-ocean-400 sm:text-sm">{tr(text.booking.privateFleet, language)}</p>
+          <h3 className="text-lg font-extrabold text-white sm:text-xl">{tr(text.booking.chooseBoat, language)}</h3>
         </div>
       </div>
-      <div className="mt-6 grid gap-3">
+      <div className="mt-4 grid gap-2 sm:mt-6 sm:gap-3">
         {boats.map((boat) => (
           <button
             key={boat.id}
             className={cn(
-              'focus-ring pressable grid grid-cols-[4rem_minmax(0,1fr)] items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.04] p-3 text-left transition-[background-color,border-color,box-shadow,transform] duration-200 hover:border-ocean-400/60 hover:bg-ocean-500/10 sm:grid-cols-[4.5rem_minmax(0,1fr)_auto] sm:gap-4',
+              'focus-ring pressable grid grid-cols-[3.25rem_minmax(0,1fr)] items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.04] p-2.5 text-left transition-[background-color,border-color,box-shadow,transform] duration-200 hover:border-ocean-400/60 hover:bg-ocean-500/10 sm:grid-cols-[4rem_minmax(0,1fr)_auto] sm:gap-3 sm:p-2.5',
               props.selectedBoat.id === boat.id && 'border-ocean-400 bg-ocean-500/15 shadow-[0_0_0_1px_rgba(110,172,201,0.22)]',
             )}
             type="button"
             onClick={() => props.onBoatChange(boat.id)}
           >
-            <img src={boat.image} alt={boat.name} className="h-16 w-16 rounded-xl object-cover" />
+            <img src={boat.image} alt={boat.name} className="h-12 w-12 rounded-xl object-cover sm:h-14 sm:w-14" />
             <span className="min-w-0">
-              <span className="block truncate text-base font-extrabold text-white">{boat.name}</span>
+              <span className="block truncate text-sm font-extrabold text-white sm:text-base">{boat.name}</span>
               <span className="mt-1 block text-xs font-semibold text-ocean-200">{boat.includedGuests} {tr(text.booking.people, language)} - {boat.length}</span>
               <span className="mt-1 block text-xs font-medium text-ocean-400">{boat.featuredSpec}</span>
             </span>
@@ -275,8 +289,8 @@ function BoatStep(props: { selectedBoat: Boat; onBoatChange: (boatId: string) =>
           </button>
         ))}
       </div>
-      <div className="mt-7">
-        <Button className="w-full bg-ocean-500 text-ocean-950 hover:bg-ocean-400" type="button" onClick={props.onNext}>
+      <div className="mt-4 sm:mt-5">
+        <Button className="w-full bg-ocean-500 text-ocean-950 hover:bg-[#7ED8F4]" type="button" onClick={props.onNext}>
           {tr(text.booking.continue, language)}
         </Button>
       </div>
@@ -307,27 +321,27 @@ function TourDetailsStep(props: {
   const { language } = useLanguage();
 
   return (
-    <div className="grid gap-5 text-white">
+    <div className="grid gap-4 text-white sm:gap-5">
       <div>
-        <p className="text-sm font-bold uppercase tracking-[0.12em] text-ocean-400">{tr(text.booking.tourDetails, language)}</p>
-        <h3 className="mt-1 text-2xl font-extrabold text-white">{tr(text.booking.buildReservation, language)}</h3>
+        <p className="text-xs font-bold uppercase tracking-[0.12em] text-ocean-400 sm:text-sm">{tr(text.booking.tourDetails, language)}</p>
+        <h3 className="mt-1 text-xl font-extrabold text-white sm:text-2xl">{tr(text.booking.buildReservation, language)}</h3>
       </div>
-      <label className="grid gap-2 text-sm font-bold text-ocean-100">
-        {tr(text.booking.tourAboard, language)} {props.selectedBoat.name}
-        <select className="focus-ring rounded-2xl border border-white/10 bg-ocean-900 px-4 py-3 text-white focus:border-ocean-400 focus:ring-4 focus:ring-ocean-500/15" value={props.selectedTour?.id ?? ''} onChange={(event) => props.onTourChange(event.target.value)}>
-          <option value="">{tr(text.booking.selectTour, language)} {props.selectedBoat.name}</option>
+      <label className="grid min-w-0 gap-2 text-sm font-bold text-ocean-100">
+        <span className="min-w-0 truncate">{tr(text.booking.tourAboard, language)} {props.selectedBoat.name}</span>
+        <select className="focus-ring min-w-0 w-full rounded-2xl border border-white/10 bg-ocean-900 px-3 py-3 text-sm text-white focus:border-ocean-400 focus:ring-4 focus:ring-ocean-500/15 sm:px-4" value={props.selectedTour?.id ?? ''} onChange={(event) => props.onTourChange(event.target.value)}>
+          <option value="">{tr(text.booking.selectTour, language)}</option>
           {props.availableTours.map((tour) => <option key={tour.id} value={tour.id}>{tour.name}</option>)}
         </select>
       </label>
 
-      <div className="grid gap-5 sm:grid-cols-2">
-        <label className="grid gap-2 text-sm font-bold text-ocean-100">
+      <div className="grid gap-4 sm:grid-cols-2">
+        <label className="grid min-w-0 gap-2 text-sm font-bold text-ocean-100">
           {tr(text.booking.date, language)}
-          <input className="focus-ring rounded-2xl border border-white/10 bg-ocean-900 px-4 py-3 text-white focus:border-ocean-400 focus:ring-4 focus:ring-ocean-500/15" type="date" value={props.date} onChange={(event) => props.onDateChange(event.target.value)} />
+          <input className="focus-ring min-w-0 w-full rounded-2xl border border-white/10 bg-ocean-900 px-3 py-3 text-sm text-white focus:border-ocean-400 focus:ring-4 focus:ring-ocean-500/15 sm:px-4" type="date" value={props.date} onChange={(event) => props.onDateChange(event.target.value)} />
         </label>
-        <label className="grid gap-2 text-sm font-bold text-ocean-100">
+        <label className="grid min-w-0 gap-2 text-sm font-bold text-ocean-100">
           {tr(text.booking.guests, language)}
-          <input className="focus-ring rounded-2xl border border-white/10 bg-ocean-900 px-4 py-3 text-white focus:border-ocean-400 focus:ring-4 focus:ring-ocean-500/15" type="number" inputMode="numeric" min={1} max={props.effectiveMaxGuests} value={props.guests} onChange={(event) => props.onGuestsChange(Number(event.target.value))} />
+          <input className="focus-ring min-w-0 w-full rounded-2xl border border-white/10 bg-ocean-900 px-3 py-3 text-sm text-white focus:border-ocean-400 focus:ring-4 focus:ring-ocean-500/15 sm:px-4" type="number" inputMode="numeric" min={1} max={props.effectiveMaxGuests} value={props.guests} onChange={(event) => props.onGuestsChange(Number(event.target.value))} />
           {props.hasCapacityError ? <span className="text-sm text-red-300">This boat has a maximum capacity of {props.effectiveMaxGuests} guests.</span> : null}
         </label>
       </div>
@@ -335,12 +349,12 @@ function TourDetailsStep(props: {
       {props.selectedTour ? (
         <fieldset>
           <legend className="text-sm font-bold text-ocean-100">{tr(text.booking.departure, language)}</legend>
-          <div className="mt-3 grid gap-3 md:grid-cols-3">
+          <div className="mt-3 grid grid-cols-2 gap-2 min-[520px]:grid-cols-3">
             {props.selectedTour.timeSlots.map((slot) => (
-              <label key={slot.id} className={cn('pressable rounded-2xl border border-white/10 bg-white/[0.04] p-4 hover:bg-ocean-500/10', props.timeSlotId === slot.id && 'border-ocean-400 bg-ocean-500/15 ring-4 ring-ocean-500/10')}>
+              <label key={slot.id} className={cn('pressable min-w-0 rounded-xl border border-white/10 bg-white/[0.04] p-3 text-center hover:bg-ocean-500/10', props.timeSlotId === slot.id && 'border-ocean-400 bg-ocean-500/15 ring-4 ring-ocean-500/10')}>
                 <input className="sr-only" type="radio" name="timeSlot" value={slot.id} checked={props.timeSlotId === slot.id} onChange={() => props.onTimeSlotChange(slot.id)} />
-                <span className="block text-sm font-extrabold text-white">{slot.label}</span>
-                <span className="mt-1 block text-2xl font-extrabold text-ocean-600">{slot.time}</span>
+                <span className="block truncate text-xs font-extrabold text-white">{slot.label}</span>
+                <span className="mt-1 block text-base font-extrabold text-ocean-600 sm:text-lg">{slot.time}</span>
               </label>
             ))}
           </div>
@@ -348,8 +362,8 @@ function TourDetailsStep(props: {
       ) : null}
 
       {props.selectedTour && props.guests > props.includedGuests && !props.hasCapacityError ? (
-        <div className="rounded-2xl border border-ocean-400/30 bg-ocean-500/10 p-4 text-ocean-100">
-          <p className="flex items-center gap-2 font-bold"><Info size={18} className="text-ocean-600" /> Your tour includes {props.includedGuests} guests.</p>
+        <div className="rounded-2xl border border-ocean-400/30 bg-ocean-500/10 p-3 text-ocean-100 sm:p-4">
+          <p className="flex items-start gap-2 text-sm font-bold sm:text-base"><Info size={18} className="mt-0.5 shrink-0 text-ocean-600" /> Your tour includes {props.includedGuests} guests.</p>
           <p className="mt-2 text-sm">{props.pricing.extraGuests} additional guests x {formatCurrency(props.extraGuestPrice)} = {formatCurrency(props.pricing.extraGuestsTotal)}</p>
         </div>
       ) : null}
@@ -381,13 +395,13 @@ function CustomerStep(props: {
   const { language } = useLanguage();
 
   return (
-    <div className="flex min-h-[472px] flex-col text-white">
+    <div className="flex flex-col text-white">
       <div>
-        <p className="text-sm font-bold uppercase tracking-[0.12em] text-ocean-400">{tr(text.booking.yourData, language)}</p>
-        <h3 className="mt-1 text-2xl font-extrabold text-white">{tr(text.booking.basicInfo, language)}</h3>
+        <p className="text-xs font-bold uppercase tracking-[0.12em] text-ocean-400 sm:text-sm">{tr(text.booking.yourData, language)}</p>
+        <h3 className="mt-1 text-xl font-extrabold text-white sm:text-2xl">{tr(text.booking.basicInfo, language)}</h3>
       </div>
 
-      <div className="mt-6 grid gap-4">
+      <div className="mt-5 grid gap-4 sm:mt-6">
         <label className="grid gap-2 text-xs font-extrabold uppercase tracking-[0.12em] text-ocean-400">
           {tr(text.booking.fullName, language)}
           <span className="relative">
@@ -448,30 +462,82 @@ function BookingSummary(props: {
   const taxes = props.selectedTour?.customQuote ? '-' : formatCurrency(Math.max(props.pricing.total - props.pricing.basePrice - props.pricing.extraGuestsTotal, 0));
 
   return (
-    <aside className="h-fit rounded-3xl border border-ocean-500/35 bg-white/[0.06] p-6 text-white shadow-soft backdrop-blur-xl">
+    <aside className="h-fit rounded-2xl border border-ocean-500/35 bg-white/[0.06] p-3 text-white shadow-soft backdrop-blur-xl min-[420px]:p-4 sm:p-4">
       <p className="text-sm font-bold uppercase tracking-[0.14em] text-ocean-400">{tr(text.booking.summary, language)}</p>
-      <img src={coverImage} alt={props.selectedTour?.name ?? props.selectedBoat.name} className="mt-5 aspect-[16/7] w-full rounded-2xl object-cover" />
-      <div className="mt-5">
+      <img src={coverImage} alt={props.selectedTour?.name ?? props.selectedBoat.name} className="mt-3 hidden aspect-[16/7] w-full rounded-2xl object-cover min-[520px]:block xl:aspect-[16/8]" loading="lazy" />
+      <div className="mt-3 sm:mt-5">
         <h3 className="text-xl font-extrabold text-white">{props.selectedBoat.name}</h3>
         <p className="mt-1 text-sm font-semibold text-ocean-300">{props.selectedBoat.includedGuests} {tr(text.booking.people, language)} - {props.selectedBoat.length} - {props.selectedBoat.engine}</p>
       </div>
-      <div className="mt-6 grid gap-3 text-sm text-ocean-100">
+      <div className="mt-4 grid gap-2 text-sm text-ocean-100">
         <SummaryRow label={tr(text.booking.tourType, language)} value={props.selectedTour ? `${props.selectedTour.name} (${props.selectedTour.duration}h)` : tr(text.booking.selectTour, language)} />
         <SummaryRow label={tr(text.booking.date, language)} value={formatDisplayDate(props.date)} />
         <SummaryRow label={language === 'es' ? 'Salida' : 'Departure'} value={props.selectedTimeSlot?.time ?? tr(text.booking.selectTime, language)} />
         <SummaryRow label={tr(text.booking.guests, language)} value={`${props.guests} ${tr(text.booking.people, language)}`} />
       </div>
-      <div className="mt-6 rounded-2xl border border-ocean-500/25 bg-ocean-900/70 p-4">
+      <div className="mt-4 rounded-2xl border border-ocean-500/25 bg-ocean-900/70 p-3 sm:mt-6 sm:p-4">
         <SummaryRow label="Subtotal" value={subtotal} />
         {props.pricing.extraGuests > 0 ? <SummaryRow label={tr(text.booking.extraPeople, language)} value={`${props.pricing.extraGuests} x ${formatCurrency(props.pricing.extraGuestPrice)}`} /> : null}
         <SummaryRow label={tr(text.booking.taxes, language)} value={taxes} />
-        <div className="mt-4 flex items-end justify-between border-t border-white/10 pt-4">
+        <div className="mt-4 flex flex-wrap items-end justify-between gap-3 border-t border-white/10 pt-4">
           <span className="font-extrabold text-white">Total</span>
-          <span className="text-3xl font-extrabold text-ocean-400">{props.selectedTour?.customQuote ? 'Cotizar' : formatCurrency(props.pricing.total)}</span>
+          <span className="text-2xl font-extrabold text-ocean-400 sm:text-3xl">{props.selectedTour?.customQuote ? 'Cotizar' : formatCurrency(props.pricing.total)}</span>
         </div>
       </div>
       <p className="mt-4 text-xs font-medium text-ocean-300">{tr(text.booking.secure, language)}</p>
     </aside>
+  );
+}
+
+function BookingProgressSummary(props: {
+  selectedBoat: Boat;
+  selectedTour?: BoatTour;
+  date: string;
+  selectedTimeSlot?: { id: string; label: string; time: string };
+  guests: number;
+  pricing: ReturnType<typeof calculateBookingTotal>;
+  activeStep: number;
+}) {
+  const { language } = useLanguage();
+  const total = props.selectedTour?.customQuote ? 'Cotizar' : formatCurrency(props.pricing.total);
+
+  return (
+    <aside className="rounded-2xl border border-ocean-500/30 bg-white/[0.06] p-3 text-white shadow-soft backdrop-blur-xl">
+      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
+        <div className="min-w-0">
+          <p className="text-xs font-bold uppercase tracking-[0.12em] text-ocean-400">{tr(text.booking.summary, language)}</p>
+          <p className="mt-1 truncate text-sm font-extrabold text-white">{props.selectedBoat.name}</p>
+        </div>
+        <div className="shrink-0 text-right">
+          <p className="text-xs font-semibold text-ocean-300">Total</p>
+          <p className="text-lg font-extrabold text-ocean-400">{total}</p>
+        </div>
+      </div>
+
+      {props.activeStep >= 1 ? (
+        <div className="mt-3 grid min-w-0 gap-2 border-t border-white/10 pt-3 text-xs text-ocean-100 min-[520px]:grid-cols-3">
+          <SummaryMini label={tr(text.booking.tourType, language)} value={props.selectedTour?.name ?? tr(text.booking.selectTour, language)} />
+          <SummaryMini label={tr(text.booking.date, language)} value={formatDisplayDate(props.date)} />
+          <SummaryMini label={language === 'es' ? 'Salida' : 'Departure'} value={props.selectedTimeSlot?.time ?? tr(text.booking.selectTime, language)} />
+        </div>
+      ) : null}
+
+      {props.activeStep >= 2 ? (
+        <div className="mt-3 flex flex-wrap justify-between gap-3 rounded-xl border border-ocean-500/20 bg-ocean-900/60 p-3 text-sm">
+          <span className="text-ocean-300">{tr(text.booking.guests, language)}</span>
+          <span className="font-bold text-white">{props.guests} {tr(text.booking.people, language)}</span>
+        </div>
+      ) : null}
+    </aside>
+  );
+}
+
+function SummaryMini({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0 overflow-hidden">
+      <p className="text-ocean-400">{label}</p>
+      <p className="truncate font-bold text-white">{value}</p>
+    </div>
   );
 }
 
@@ -490,8 +556,8 @@ function ReviewModal(props: {
   onConfirm: () => void;
 }) {
   return (
-    <div className="fixed inset-0 z-[80] grid place-items-center bg-ocean-950/70 px-4 backdrop-blur-sm">
-      <div className="w-full max-w-2xl rounded-[2rem] border border-white/10 bg-ocean-950 p-6 text-white shadow-lifted sm:p-8">
+    <div className="fixed inset-0 z-[80] grid place-items-center bg-ocean-950/70 px-3 py-4 backdrop-blur-sm sm:px-4">
+      <div className="max-h-[92dvh] w-full max-w-2xl overflow-y-auto rounded-3xl border border-white/10 bg-ocean-950 p-4 text-white shadow-lifted sm:rounded-[2rem] sm:p-8">
         <h3 className="text-3xl font-extrabold text-white">{props.paymentMethod === 'Payment link via WhatsApp' ? 'Request your payment link' : 'Review reservation'}</h3>
         <p className="mt-3 leading-7 text-ocean-200">
           {props.paymentMethod === 'Payment link via WhatsApp'
@@ -526,7 +592,7 @@ function ReviewModal(props: {
 
 function SummaryRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex justify-between gap-4 border-b border-white/10 pb-2 last:border-b-0 last:pb-0">
+    <div className="flex flex-wrap justify-between gap-x-4 gap-y-1 border-b border-white/10 pb-2 last:border-b-0 last:pb-0">
       <span className="text-ocean-300">{label}</span>
       <span className="text-right font-bold text-white">{value}</span>
     </div>
@@ -535,7 +601,7 @@ function SummaryRow({ label, value }: { label: string; value: string }) {
 
 function SummaryLine({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex justify-between gap-4">
+    <div className="flex flex-wrap justify-between gap-x-4 gap-y-1">
       <span className="font-semibold text-ocean-300">{label}</span>
       <span className="text-right font-bold text-white">{value}</span>
     </div>

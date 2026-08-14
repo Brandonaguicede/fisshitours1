@@ -8,7 +8,7 @@
   :root {
     color-scheme: dark;
     font-family: Outfit, ui-sans-serif, system-ui, sans-serif;
-    --background: #F2FAFD;
+    --background: #0B2842;
     --surface: #DDEFF6;
     --primary: #2B5F82;
     --primary-hover: #133E62;
@@ -35,10 +35,7 @@
   body {
     margin: 0;
     min-width: 320px;
-    background:
-      radial-gradient(circle at top left, rgba(255, 255, 255, 0.72), transparent 32rem),
-      radial-gradient(circle at 82% 12%, rgba(221, 239, 246, 0.58), transparent 26rem),
-      linear-gradient(180deg, #FFFFFF 0%, #F2FAFD 26%, #6EACC9 58%, #133E62 100%);
+    background: #0B2842;
     text-rendering: optimizeLegibility;
     overflow-x: hidden;
     touch-action: manipulation;
