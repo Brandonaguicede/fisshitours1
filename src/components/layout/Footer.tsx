@@ -1,7 +1,7 @@
 import { Facebook, Instagram, Mail, MapPin, Phone } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
-import { DISPLAY_PHONE } from '../../constants/contact';
+import { DISPLAY_PHONE, FACEBOOK_URL, INSTAGRAM_URL } from '../../constants/contact';
 import { navigationItems } from '../../constants/navigation';
 import { tours } from '../../data/tours';
 import { useLanguage } from '../../i18n/LanguageContext';
@@ -38,10 +38,10 @@ export function Footer() {
               : 'Fishing charters, private navigation, snorkeling, beach and bioluminescence in Costa Rica.'}
           </p>
           <div className="mt-5 flex gap-3">
-            <a className="focus-ring pressable rounded-full bg-white/10 p-2 hover:bg-white/15" href="https://instagram.com" aria-label="Instagram">
+            <a className="focus-ring pressable rounded-full bg-white/10 p-2 hover:bg-white/15" href={INSTAGRAM_URL} target="_blank" rel="noreferrer" aria-label="Instagram">
               <Instagram size={18} />
             </a>
-            <a className="focus-ring pressable rounded-full bg-white/10 p-2 hover:bg-white/15" href="https://facebook.com" aria-label="Facebook">
+            <a className="focus-ring pressable rounded-full bg-white/10 p-2 hover:bg-white/15" href={FACEBOOK_URL} target="_blank" rel="noreferrer" aria-label="Facebook">
               <Facebook size={18} />
             </a>
           </div>

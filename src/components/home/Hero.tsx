@@ -2,7 +2,7 @@ import { ArrowDown, Facebook, Instagram } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 import { Container } from '../common/Container';
-import { WHATSAPP_NUMBER } from '../../constants/contact';
+import { FACEBOOK_URL, INSTAGRAM_URL, WHATSAPP_NUMBER } from '../../constants/contact';
 import { useLanguage } from '../../i18n/LanguageContext';
 
 export function Hero() {
@@ -27,10 +27,10 @@ export function Hero() {
       <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-black/80 to-transparent" />
 
       <div className="absolute bottom-24 left-1/2 z-10 flex -translate-x-1/2 gap-3 sm:left-auto sm:right-32 sm:translate-x-0 md:bottom-24 lg:right-40">
-        <a className="focus-ring pressable grid h-10 w-10 place-items-center rounded-full border border-white/30 bg-white/8 text-white backdrop-blur-xl hover:bg-white/15" href="https://instagram.com" aria-label="Instagram">
+        <a className="focus-ring pressable grid h-10 w-10 place-items-center rounded-full border border-white/30 bg-white/8 text-white backdrop-blur-xl hover:bg-white/15" href={INSTAGRAM_URL} target="_blank" rel="noreferrer" aria-label="Instagram">
           <Instagram size={18} />
         </a>
-        <a className="focus-ring pressable grid h-10 w-10 place-items-center rounded-full border border-white/30 bg-white/8 text-white backdrop-blur-xl hover:bg-white/15" href="https://facebook.com" aria-label="Facebook">
+        <a className="focus-ring pressable grid h-10 w-10 place-items-center rounded-full border border-white/30 bg-white/8 text-white backdrop-blur-xl hover:bg-white/15" href={FACEBOOK_URL} target="_blank" rel="noreferrer" aria-label="Facebook">
           <Facebook size={18} />
         </a>
       </div>
