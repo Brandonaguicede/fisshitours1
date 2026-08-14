@@ -14,14 +14,7 @@ export const boats: Boat[] = [
     length: '40 ft',
     engine: '350 HP',
     featuredSpec: 'Deep sea fishing ready',
-    tours: [
-      'mamacita-fishing',
-      'mamacita-half-day-fishing',
-      'mamacita-three-quarter-fishing',
-      'mamacita-full-day-fishing',
-      'mamacita-half-fishing-half-beach',
-      'mamacita-custom',
-    ],
+    tours: ['mamacita-fishing'],
   },
   {
     id: 'segundo-viento',
@@ -44,7 +37,7 @@ export const boats: Boat[] = [
     length: '32 ft',
     engine: '250 HP',
     featuredSpec: 'Beach and snorkeling setup',
-    tours: ['segundo-fishing', 'segundo-snorkeling-beach', 'segundo-toy-tour', 'segundo-half-day-fishing', 'segundo-three-quarter-fishing', 'segundo-custom'],
+    tours: ['segundo-fishing', 'segundo-snorkeling-beach', 'segundo-toy-tour'],
   },
   {
     id: 'luna-azul',
@@ -59,6 +52,6 @@ export const boats: Boat[] = [
     length: '28 ft',
     engine: '180 HP',
     featuredSpec: 'Calm water navigation',
-    tours: ['luna-bioluminescence-basic', 'luna-bioluminescence-deluxe', 'luna-snorkeling-beach', 'luna-custom'],
+    tours: ['luna-bioluminescence-basic', 'luna-bioluminescence-deluxe'],
   },
 ];

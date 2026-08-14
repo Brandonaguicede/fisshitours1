@@ -1,4 +1,5 @@
 import { Anchor, HeartHandshake, ShieldCheck, SlidersHorizontal, Users, Waves } from 'lucide-react';
+import { useEffect, useState } from 'react';
 
 import { Button } from '../components/common/Button';
 import { Container } from '../components/common/Container';
@@ -39,21 +40,37 @@ const capabilities = [
 
 const teamPhotos = [
   {
-    src: '/images/placeholder-image.jpg',
-    alt: { es: 'Equipo de pesca preparando una salida', en: 'Fishing crew preparing a departure' },
+    src: '/about/8809f2f5-0a3b-45bd-9771-1ac3505181bc.jpeg',
+    alt: { es: 'Tripulacion y cliente con pesca en Guanacaste', en: 'Crew and guest with a catch in Guanacaste' },
   },
   {
-    src: '/images/placeholder-image.jpg',
-    alt: { es: 'Tripulacion coordinando el tour', en: 'Crew coordinating the tour' },
+    src: '/about/IMG_1020 (1).jpeg',
+    alt: { es: 'Tripulacion asistiendo una liberacion en alta mar', en: 'Crew assisting an offshore release' },
   },
   {
-    src: '/images/placeholder-image.jpg',
-    alt: { es: 'Grupo de trabajo local', en: 'Local work team' },
+    src: '/galeria/fec8db08-1bbc-435a-8ac6-03e31aadc685.jpeg',
+    alt: { es: 'Equipo y familia durante una salida de pesca', en: 'Crew and family during a fishing trip' },
   },
+];
+
+const aboutHeroImages = [
+  '/about/8809f2f5-0a3b-45bd-9771-1ac3505181bc.jpeg',
+  '/about/IMG_1020 (1).jpeg',
+  '/galeria/fec8db08-1bbc-435a-8ac6-03e31aadc685.jpeg',
+  '/galeria/IMG_9407.jpeg',
 ];
 
 export default function AboutPage() {
   const { language } = useLanguage();
+  const [activeHeroImage, setActiveHeroImage] = useState(0);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      setActiveHeroImage((index) => (index + 1) % aboutHeroImages.length);
+    }, 3400);
+
+    return () => window.clearInterval(interval);
+  }, []);
 
   return (
     <main className="bg-ocean-950 text-white">
@@ -77,12 +94,23 @@ export default function AboutPage() {
           </div>
 
           <div className="rounded-[2rem] border border-white/10 bg-white/[0.06] p-3 shadow-lifted backdrop-blur-xl">
-            <img
-              className="aspect-[4/3] w-full rounded-[1.4rem] object-cover"
-              src="/images/placeholder-image.jpg"
-              alt={language === 'es' ? 'Bote privado en agua tropical' : 'Private boat on tropical water'}
-              loading="lazy"
-            />
+            <div className="relative aspect-[4/3] overflow-hidden rounded-[1.4rem]">
+              {aboutHeroImages.map((image, index) => (
+                <img
+                  key={image}
+                  className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-700 ${index === activeHeroImage ? 'opacity-100' : 'opacity-0'}`}
+                  src={image}
+                  alt={index === 0 ? (language === 'es' ? 'Tripulacion con pesca en aguas de Guanacaste' : 'Crew with a catch in Guanacaste waters') : ''}
+                  aria-hidden={index === 0 ? undefined : true}
+                  loading={index === 0 ? 'lazy' : 'eager'}
+                />
+              ))}
+              <div className="absolute bottom-4 left-4 flex gap-1.5" aria-hidden="true">
+                {aboutHeroImages.map((image, index) => (
+                  <span key={image} className={`h-1.5 rounded-full transition-all duration-300 ${index === activeHeroImage ? 'w-5 bg-white' : 'w-1.5 bg-white/45'}`} />
+                ))}
+              </div>
+            </div>
           </div>
         </Container>
       </section>

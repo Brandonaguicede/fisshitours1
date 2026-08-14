@@ -1,4 +1,5 @@
 import { Anchor, ShieldCheck, SlidersHorizontal } from 'lucide-react';
+import { useEffect, useState } from 'react';
 
 import { Button } from '../common/Button';
 import { Container } from '../common/Container';
@@ -31,8 +32,24 @@ const valueCards = [
   },
 ];
 
+const aboutImages = [
+  '/about/8809f2f5-0a3b-45bd-9771-1ac3505181bc.jpeg',
+  '/about/IMG_1020 (1).jpeg',
+  '/galeria/fec8db08-1bbc-435a-8ac6-03e31aadc685.jpeg',
+  '/galeria/IMG_9407.jpeg',
+];
+
 export function AboutPreview() {
   const { language } = useLanguage();
+  const [activeImage, setActiveImage] = useState(0);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      setActiveImage((index) => (index + 1) % aboutImages.length);
+    }, 3400);
+
+    return () => window.clearInterval(interval);
+  }, []);
 
   return (
     <section className="section-y bg-ocean-900 text-white">
@@ -65,12 +82,23 @@ export function AboutPreview() {
 
           <div>
             <div className="rounded-[2rem] border border-white/10 bg-white/[0.06] p-3 shadow-lifted backdrop-blur-xl">
-              <img
-                className="aspect-[4/3] w-full rounded-[1.4rem] object-cover"
-                src="/images/placeholder-image.jpg"
-                alt={language === 'es' ? 'Bote privado en agua tropical' : 'Private boat on tropical water'}
-                loading="lazy"
-              />
+              <div className="relative aspect-[4/3] overflow-hidden rounded-[1.4rem]">
+                {aboutImages.map((image, index) => (
+                  <img
+                    key={image}
+                    className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-700 ${index === activeImage ? 'opacity-100' : 'opacity-0'}`}
+                    src={image}
+                    alt={index === 0 ? (language === 'es' ? 'Tripulacion con pesca en aguas de Guanacaste' : 'Crew with a catch in Guanacaste waters') : ''}
+                    aria-hidden={index === 0 ? undefined : true}
+                    loading={index === 0 ? 'lazy' : 'eager'}
+                  />
+                ))}
+                <div className="absolute bottom-4 left-4 flex gap-1.5" aria-hidden="true">
+                  {aboutImages.map((image, index) => (
+                    <span key={image} className={`h-1.5 rounded-full transition-all duration-300 ${index === activeImage ? 'w-5 bg-white' : 'w-1.5 bg-white/45'}`} />
+                  ))}
+                </div>
+              </div>
             </div>
             <div className="mt-8 flex justify-center">
               <Button variant="secondary" to="/nosotros">
