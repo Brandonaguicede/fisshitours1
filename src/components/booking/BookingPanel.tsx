@@ -627,6 +627,13 @@ function CustomerStep(props: {
 }) {
   const { language } = useLanguage();
 
+  function handlePaymentMethodAction(method: BookingPaymentMethod) {
+    props.onPaymentMethodChange(method);
+    if (method === 'paypal') props.onPayPalRequest();
+    if (method === 'whatsapp-link') props.onPaymentLinkRequest();
+    if (method === 'pay-on-day') props.onPayOnDayRequest();
+  }
+
   return (
     <div className="flex flex-col text-white">
       <div>
@@ -683,7 +690,7 @@ function CustomerStep(props: {
               key={method.id}
               className={cn('pressable flex min-w-0 items-start gap-3 rounded-xl border border-white/10 bg-white/[0.04] p-3 text-left hover:bg-ocean-500/10', props.paymentMethod === method.id && 'border-ocean-400 bg-ocean-500/15 ring-4 ring-ocean-500/10')}
               type="button"
-              onClick={() => props.onPaymentMethodChange(method.id)}
+              onClick={() => handlePaymentMethodAction(method.id)}
             >
               <method.icon className="mt-0.5 shrink-0 text-ocean-400" size={17} />
               <span className="min-w-0">
@@ -694,12 +701,6 @@ function CustomerStep(props: {
           ))}
         </div>
       </fieldset>
-
-      <div className="mt-4 grid gap-2 lg:grid-cols-3">
-        <Button className="min-h-[3rem]" type="button" onClick={props.onPayPalRequest}>Pay with PayPal</Button>
-        <Button className="min-h-[3rem] bg-ocean-500 text-ocean-950 hover:bg-[#7ED8F4]" type="button" onClick={props.onPaymentLinkRequest}>Request Payment Link via WhatsApp</Button>
-        <Button className="min-h-[3rem]" type="button" variant="secondary" onClick={props.onPayOnDayRequest}>Pay on the Day of the Tour</Button>
-      </div>
 
       {props.paypalVisible && props.booking ? (
         <PayPalCheckoutBox booking={props.booking} onSuccess={props.onPayPalSuccess} onError={props.onPayPalError} onCancel={props.onPayPalCancel} />
