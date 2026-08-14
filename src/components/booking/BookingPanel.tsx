@@ -457,14 +457,14 @@ function BookingSummary(props: {
   pricing: ReturnType<typeof calculateBookingTotal>;
 }) {
   const { language } = useLanguage();
-  const coverImage = props.selectedTour?.image ?? props.selectedBoat.image;
+  const coverImage = props.selectedBoat.image;
   const subtotal = props.selectedTour?.customQuote ? 'Custom quote' : formatCurrency(props.pricing.basePrice);
   const taxes = props.selectedTour?.customQuote ? '-' : formatCurrency(Math.max(props.pricing.total - props.pricing.basePrice - props.pricing.extraGuestsTotal, 0));
 
   return (
     <aside className="h-fit rounded-2xl border border-ocean-500/35 bg-white/[0.06] p-3 text-white shadow-soft backdrop-blur-xl min-[420px]:p-4 sm:p-4">
       <p className="text-sm font-bold uppercase tracking-[0.14em] text-ocean-400">{tr(text.booking.summary, language)}</p>
-      <img src={coverImage} alt={props.selectedTour?.name ?? props.selectedBoat.name} className="mt-3 hidden aspect-[16/7] w-full rounded-2xl object-cover min-[520px]:block xl:aspect-[16/8]" loading="lazy" />
+      <img src={coverImage} alt={props.selectedBoat.name} className="mt-3 hidden aspect-[16/7] w-full rounded-2xl object-cover min-[520px]:block xl:aspect-[16/8]" loading="lazy" />
       <div className="mt-3 sm:mt-5">
         <h3 className="text-xl font-extrabold text-white">{props.selectedBoat.name}</h3>
         <p className="mt-1 text-sm font-semibold text-ocean-300">{props.selectedBoat.includedGuests} {tr(text.booking.people, language)} - {props.selectedBoat.length} - {props.selectedBoat.engine}</p>
@@ -558,6 +558,7 @@ function ReviewModal(props: {
   return (
     <div className="fixed inset-0 z-[80] grid place-items-center bg-ocean-950/70 px-3 py-4 backdrop-blur-sm sm:px-4">
       <div className="max-h-[92dvh] w-full max-w-2xl overflow-y-auto rounded-3xl border border-white/10 bg-ocean-950 p-4 text-white shadow-lifted sm:rounded-[2rem] sm:p-8">
+        <img className="mb-5 aspect-[16/7] w-full rounded-2xl object-cover" src={props.selectedBoat.image} alt={props.selectedBoat.name} loading="lazy" />
         <h3 className="text-3xl font-extrabold text-white">{props.paymentMethod === 'Payment link via WhatsApp' ? 'Request your payment link' : 'Review reservation'}</h3>
         <p className="mt-3 leading-7 text-ocean-200">
           {props.paymentMethod === 'Payment link via WhatsApp'

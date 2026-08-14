@@ -9,15 +9,13 @@ import { SectionTitle } from '../common/SectionTitle';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { text, tr } from '../../i18n/translations';
 
-const filters: Array<{ label: string; value: GalleryCategory | 'all' }> = [
-  { label: 'All', value: 'all' },
-  { label: 'Fishing', value: 'fishing' },
-  { label: 'Boats', value: 'boats' },
-  { label: 'Beach', value: 'beach' },
-  { label: 'Snorkeling', value: 'snorkeling' },
-  { label: 'Wildlife', value: 'wildlife' },
-  { label: 'Sunsets', value: 'sunsets' },
-  { label: 'Experiences', value: 'experiences' },
+const filters: Array<{ label: { es: string; en: string }; value: GalleryCategory | 'all' }> = [
+  { label: { es: 'Todo', en: 'All' }, value: 'all' },
+  { label: { es: 'Pesca', en: 'Fishing' }, value: 'fishing' },
+  { label: { es: 'Barcos', en: 'Boats' }, value: 'boats' },
+  { label: { es: 'Playa', en: 'Beach' }, value: 'beach' },
+  { label: { es: 'Fauna', en: 'Wildlife' }, value: 'wildlife' },
+  { label: { es: 'Experiencias', en: 'Experiences' }, value: 'experiences' },
 ];
 
 export function GallerySection() {
@@ -59,7 +57,7 @@ export function GallerySection() {
                 type="button"
                 onClick={() => changeFilter(filter.value)}
               >
-                {filter.label}
+              {filter.label[language]}
               </button>
             ))}
           </div>

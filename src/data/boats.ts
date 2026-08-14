@@ -26,8 +26,16 @@ export const boats: Boat[] = [
   {
     id: 'segundo-viento',
     slug: 'segundo-viento',
-    name: 'Segundo Viento',
-    image: '/images/placeholder-image.jpg',
+    name: 'Second Wind',
+    image: '/botes/IMG_4792.jpeg',
+    images: [
+      '/botes/IMG_4792.jpeg',
+      '/botes/cffc9ef1-c305-40ad-9cd4-e5fe431e0dea.jpeg',
+      '/botes/D8EAD874-70EB-444D-ACED-E66D32B684A0.jpeg',
+      '/botes/bc8a597a-e04d-40c7-999d-b1117052eff6.jpeg',
+      '/botes/39188b9b-2a17-4296-a7dc-17bfca5cb618.jpeg',
+      '/botes/33408243-8c66-40a2-bcea-27272519d847.jpeg',
+    ],
     badge: 'Family favorite',
     basePriceLabel: 'From $950',
     includedGuests: 6,

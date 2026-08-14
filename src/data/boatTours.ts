@@ -59,7 +59,7 @@ export const boatTours: BoatTour[] = [
     includedGuests: 6,
     maxGuests: 10,
     extraGuestPrice: 60,
-    image: '/images/placeholder-image.jpg',
+    image: '/botes/D8EAD874-70EB-444D-ACED-E66D32B684A0.jpeg',
     timeSlots: [morning],
   },
   {
@@ -87,7 +87,7 @@ export const boatTours: BoatTour[] = [
     includedGuests: 6,
     maxGuests: 10,
     extraGuestPrice: 60,
-    image: '/images/placeholder-image.jpg',
+    image: '/botes/IMG_4792.jpeg',
     timeSlots: [morning],
   },
   {
@@ -130,7 +130,7 @@ export const boatTours: BoatTour[] = [
     includedGuests: 6,
     maxGuests: 10,
     extraGuestPrice: 50,
-    image: '/images/placeholder-image.jpg',
+    image: '/botes/33408243-8c66-40a2-bcea-27272519d847.jpeg',
     timeSlots: [morning, midday, afternoon],
   },
   {
@@ -144,7 +144,7 @@ export const boatTours: BoatTour[] = [
     includedGuests: 6,
     maxGuests: 10,
     extraGuestPrice: 50,
-    image: '/images/placeholder-image.jpg',
+    image: '/botes/39188b9b-2a17-4296-a7dc-17bfca5cb618.jpeg',
     timeSlots: [midday, afternoon],
   },
   {
@@ -158,7 +158,7 @@ export const boatTours: BoatTour[] = [
     includedGuests: 6,
     maxGuests: 10,
     extraGuestPrice: 60,
-    image: '/images/placeholder-image.jpg',
+    image: '/botes/D8EAD874-70EB-444D-ACED-E66D32B684A0.jpeg',
     timeSlots: [morning],
   },
   {
@@ -173,7 +173,7 @@ export const boatTours: BoatTour[] = [
     includedGuests: 6,
     maxGuests: 10,
     extraGuestPrice: 60,
-    image: '/images/placeholder-image.jpg',
+    image: '/botes/bc8a597a-e04d-40c7-999d-b1117052eff6.jpeg',
     timeSlots: [morning, midday, afternoon],
   },
   {

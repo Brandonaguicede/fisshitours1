@@ -3,6 +3,7 @@ export interface Boat {
   slug: string;
   name: string;
   image: string;
+  images?: string[];
   badge?: string;
   basePriceLabel: string;
   length: string;
