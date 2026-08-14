@@ -83,13 +83,13 @@ export default function AboutPage() {
             </p>
             <h1 className="mt-4 max-w-4xl font-display text-5xl font-extrabold leading-[0.95] sm:text-6xl lg:text-7xl">
               {language === 'es'
-                ? 'Pasion local y excelencia en el Pacifico costarricense'
+                ? 'Local passion and excellence on Costa Rica Pacific'
                 : 'Local passion and excellence on Costa Rica Pacific'}
             </h1>
             <p className="mt-6 max-w-2xl text-lg font-semibold leading-8 text-ocean-100">
               {language === 'es'
-                ? 'En Papagayo Fishing Tour, transformamos la navegacion en experiencias memorables.'
-                : 'At Papagayo Fishing Tour, we transform navigation into memorable experiences.'}
+                ? 'Step aboard Second Wind and discover a sophisticated ocean experience where luxury meets nature.'
+                : 'Step aboard Second Wind and discover a sophisticated ocean experience where luxury meets nature.'}
             </p>
           </div>
 
@@ -124,13 +124,13 @@ export default function AboutPage() {
             <div className="mt-5 grid gap-5 text-base leading-8 text-ocean-100">
               <p>
                 {language === 'es'
-                  ? 'Nacimos del amor por el oceano y el conocimiento profundo de las aguas de Guanacaste, ofreciendo charters privados de pesca deportiva, snorkeling y navegacion de lujo.'
-                  : 'Born from a love for the ocean and deep knowledge of Guanacaste waters, we offer private sport fishing, snorkeling and luxury navigation charters.'}
+                  ? 'Papagayo Fishing Tour is a family-owned company founded by young local entrepreneurs Gabriel and Joshua, proudly from Playas del Coco. Driven by a deep connection to the ocean, they have redefined fishing experiences in the waters of the Papagayo Peninsula.'
+                  : 'Papagayo Fishing Tour is a family-owned company founded by young local entrepreneurs Gabriel and Joshua, proudly from Playas del Coco. Driven by a deep connection to the ocean, they have redefined fishing experiences in the waters of the Papagayo Peninsula.'}
               </p>
               <p>
                 {language === 'es'
-                  ? 'Disenamos cada salida a la medida para que puedas desconectar, conectar con la naturaleza y disfrutar de la Peninsula de Papagayo con total confort, flexibilidad y seguridad.'
-                  : 'We design every departure around you, so you can disconnect, connect with nature and enjoy the Papagayo Peninsula with comfort, flexibility and safety.'}
+                  ? 'Sail across crystal-clear seas renowned for world-class fishing, surfing and snorkeling. Every journey is thoughtfully designed to deliver exclusivity, comfort and authenticity.'
+                  : 'Sail across crystal-clear seas renowned for world-class fishing, surfing and snorkeling. Every journey is thoughtfully designed to deliver exclusivity, comfort and authenticity.'}
               </p>
             </div>
           </div>
@@ -161,8 +161,8 @@ export default function AboutPage() {
                 </h2>
                 <p className="mt-5 max-w-2xl text-base leading-8 text-ocean-200">
                   {language === 'es'
-                    ? 'Nuestro equipo combina experiencia en navegacion, atencion personalizada y conocimiento real de las aguas de Guanacaste. Desde la coordinacion hasta la tripulacion a bordo, cada detalle se prepara para que el grupo viaje seguro, comodo y con confianza.'
-                    : 'Our team combines navigation experience, personalized service and real knowledge of Guanacaste waters. From coordination to the crew on board, every detail is prepared so the group travels safely, comfortably and with confidence.'}
+                    ? 'Whether pursuing trophy fish or exploring vibrant marine life, each experience is personalized and handled with care. Our highly trained crew and strict safety standards ensure a seamless and unforgettable adventure.'
+                    : 'Whether pursuing trophy fish or exploring vibrant marine life, each experience is personalized and handled with care. Our highly trained crew and strict safety standards ensure a seamless and unforgettable adventure.'}
                 </p>
 
                 <div className="mt-7 grid gap-3 sm:grid-cols-3">

@@ -60,7 +60,7 @@ export const text = {
     selectTime: { es: 'Selecciona hora', en: 'Select time' },
     extraPeople: { es: 'Personas extra', en: 'Extra guests' },
     taxes: { es: 'Impuestos', en: 'Taxes' },
-    secure: { es: 'Pago seguro. Cancelación gratuita hasta 48h antes del tour.', en: 'Secure payment. Free cancellation up to 48h before the tour.' },
+    secure: { es: '50% deposit required. Bank transfer and PayPal fees are covered by the client.', en: '50% deposit required. Bank transfer and PayPal fees are covered by the client.' },
   },
 } as const;
 

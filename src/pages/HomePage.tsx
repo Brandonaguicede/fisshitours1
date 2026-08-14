@@ -40,6 +40,15 @@ export default function HomePage() {
     window.setTimeout(() => bookingRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80);
   }
 
+  function viewTourOnHome(tour: BoatTour) {
+    const tourBoat = boats.find((boat) => boat.id === tour.boatId);
+    if (tourBoat) {
+      setSelectedBoat(tourBoat);
+    }
+    setSelectedTour(tour);
+    window.setTimeout(() => toursRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80);
+  }
+
   function changeBoatFromBooking(boat: Boat) {
     setSelectedBoat(boat);
     setSelectedTour(undefined);
@@ -48,7 +57,7 @@ export default function HomePage() {
   return (
     <>
       <Hero />
-      <FleetSection boats={boats} selectedBoat={selectedBoat} onSelectBoat={selectBoat} onSelectTour={selectTour} />
+      <FleetSection boats={boats} selectedBoat={selectedBoat} onSelectBoat={selectBoat} onViewTourType={viewTourOnHome} />
       <div ref={toursRef}>
         <TourCarouselSection boats={boats} tours={toursWithKnownBoats} selectedTour={selectedTour} onSelectTour={selectTour} />
       </div>

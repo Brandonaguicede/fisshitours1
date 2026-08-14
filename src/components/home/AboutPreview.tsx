@@ -61,20 +61,20 @@ export function AboutPreview() {
             </p>
             <h2 className="mt-3 max-w-3xl font-display text-4xl font-extrabold leading-tight sm:text-5xl">
               {language === 'es'
-                ? 'Pasion local y excelencia en el Pacifico costarricense'
+                ? 'Local passion and excellence on Costa Rica Pacific'
                 : 'Local passion and excellence on Costa Rica Pacific'}
             </h2>
 
             <div className="mt-6 grid max-w-3xl gap-4 text-base leading-8 text-ocean-200">
               <p>
                 {language === 'es'
-                  ? 'En Papagayo Fishing Tour, transformamos la navegacion en experiencias memorables. Nacimos del amor por el oceano y el conocimiento profundo de las aguas de Guanacaste, ofreciendo charters privados de pesca deportiva, snorkeling y navegacion de lujo.'
-                  : 'At Papagayo Fishing Tour, we transform navigation into memorable experiences. Born from a love for the ocean and deep knowledge of Guanacaste waters, we offer private sport fishing, snorkeling and luxury navigation charters.'}
+                  ? 'Papagayo Fishing Tour is a family-owned company founded by young local entrepreneurs Gabriel and Joshua, proudly from Playas del Coco.'
+                  : 'Papagayo Fishing Tour is a family-owned company founded by young local entrepreneurs Gabriel and Joshua, proudly from Playas del Coco.'}
               </p>
               <p>
                 {language === 'es'
-                  ? 'Disenamos cada salida a la medida para que puedas desconectar, conectar con la naturaleza y disfrutar de la Peninsula de Papagayo con total confort, flexibilidad y seguridad.'
-                  : 'We design every departure around you, so you can disconnect, connect with nature and enjoy the Papagayo Peninsula with comfort, flexibility and safety.'}
+                  ? 'Every journey is thoughtfully designed to deliver exclusivity, comfort and authenticity across the waters of the Papagayo Peninsula.'
+                  : 'Every journey is thoughtfully designed to deliver exclusivity, comfort and authenticity across the waters of the Papagayo Peninsula.'}
               </p>
             </div>
 

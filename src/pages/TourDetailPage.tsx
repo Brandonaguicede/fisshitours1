@@ -32,9 +32,11 @@ export default function TourDetailPage() {
               <span className="glass-card flex items-center gap-2 rounded-full px-4 py-2">
                 <MapPin size={18} className="text-ocean-600" /> {tour.location}
               </span>
-              <span className="glass-card flex items-center gap-2 rounded-full px-4 py-2">
-                <Clock size={18} className="text-ocean-600" /> {tour.duration}
-              </span>
+              {tour.duration ? (
+                <span className="glass-card flex items-center gap-2 rounded-full px-4 py-2">
+                  <Clock size={18} className="text-ocean-600" /> {tour.duration}
+                </span>
+              ) : null}
               <span className="glass-card flex items-center gap-2 rounded-full px-4 py-2">
                 <Star className="fill-amber-400 text-amber-400" size={18} /> {tour.rating}
               </span>
@@ -46,9 +48,9 @@ export default function TourDetailPage() {
 
       <Container className="grid gap-10 pb-20 pt-6 lg:grid-cols-[1fr_380px]">
         <div className="glass-card rounded-[2rem] p-6 sm:p-8">
-          <h2 className="text-3xl font-extrabold text-white">Descripción de la experiencia</h2>
+          <h2 className="text-3xl font-extrabold text-white">Experience Description</h2>
           <p className="mt-5 text-lg leading-8 text-ocean-200">{tour.longDescription}</p>
-          <h3 className="mt-10 text-2xl font-extrabold text-ocean-900">Momentos destacados</h3>
+          <h3 className="mt-10 text-2xl font-extrabold text-ocean-900">Highlights</h3>
           <div className="mt-5 grid gap-3 sm:grid-cols-2">
             {tour.highlights.map((item) => (
               <span key={item} className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.04] p-4 text-ocean-100">
@@ -59,7 +61,7 @@ export default function TourDetailPage() {
         </div>
 
         <aside className="h-fit rounded-[2rem] bg-ocean-900 p-6 text-white shadow-lifted">
-          <p className="text-sm font-bold uppercase tracking-[0.14em] text-ocean-200">Desde</p>
+          <p className="text-sm font-bold uppercase tracking-[0.14em] text-ocean-200">From</p>
           <p className="mt-2 text-4xl font-extrabold text-ocean-400">{formatCurrency(tour.price)}</p>
           <div className="mt-6 grid gap-3">
             {tour.included.map((item) => (
@@ -69,7 +71,7 @@ export default function TourDetailPage() {
             ))}
           </div>
           <Button className="mt-7 w-full" variant="secondary" to="/tours">
-            Reservar este tour
+            Book this tour
           </Button>
         </aside>
       </Container>

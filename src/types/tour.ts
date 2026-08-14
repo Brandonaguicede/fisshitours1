@@ -7,7 +7,7 @@ export interface Tour {
   longDescription: string;
   image: string;
   price: number;
-  duration: string;
+  duration?: string;
   rating: number;
   category: string;
   highlights: string[];

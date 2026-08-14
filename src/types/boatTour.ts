@@ -1,14 +1,10 @@
 export type TourCategory =
   | 'Fishing'
-  | 'Half Day Fishing'
-  | '3/4 Day Fishing'
-  | 'Full Day Fishing'
   | 'Snorkeling & Beach'
+  | 'Surfing'
   | 'Bioluminescence Basic'
   | 'Bioluminescence Deluxe'
-  | 'Toy Tour'
-  | 'Custom Tour'
-  | 'Half Fishing + Half Beach';
+  | 'Water Toys';
 
 export interface TourTimeSlot {
   id: string;
@@ -22,7 +18,7 @@ export interface BoatTour {
   name: string;
   category: TourCategory;
   description: string;
-  duration: number;
+  duration?: number;
   basePrice: number;
   includedGuests?: number;
   maxGuests?: number;

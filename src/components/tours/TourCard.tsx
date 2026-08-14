@@ -28,9 +28,11 @@ export function TourCard({ tour }: TourCardProps) {
         </div>
         <h3 className="mt-4 text-xl font-extrabold leading-tight text-white">{tour.title}</h3>
         <p className="mt-2 line-clamp-2 text-sm leading-6 text-ocean-200">{tour.description}</p>
-        <span className="mt-4 flex items-center gap-2 text-sm text-ocean-200">
-          <Clock size={16} className="text-ocean-600" /> {tour.duration}
-        </span>
+        {tour.duration ? (
+          <span className="mt-4 flex items-center gap-2 text-sm text-ocean-200">
+            <Clock size={16} className="text-ocean-600" /> {tour.duration}
+          </span>
+        ) : null}
         <div className="mt-5 flex items-center justify-between gap-4">
           <span className="text-lg font-extrabold text-ocean-400">{formatCurrency(tour.price)}</span>
           <Button className="gap-2 px-4" to={`/tours/${tour.slug}`}>

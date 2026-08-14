@@ -1,11 +1,10 @@
 import { X } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 
-import { boatTours } from '../../data/boatTours';
 import type { Boat } from '../../types/boat';
 import type { BoatTour } from '../../types/boatTour';
+import { boatTours } from '../../data/boatTours';
 import { formatCurrency } from '../../utils/formatCurrency';
-import { getEffectiveMaxGuests, getTourIncludedGuests } from '../../utils/bookingPricing';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { text, tr } from '../../i18n/translations';
 import { BoatCard } from '../boats/BoatCard';
@@ -17,27 +16,30 @@ interface FleetSectionProps {
   boats: Boat[];
   selectedBoat: Boat;
   onSelectBoat: (boat: Boat) => void;
-  onSelectTour: (tour: BoatTour) => void;
+  onViewTourType: (tour: BoatTour) => void;
 }
 
-export function FleetSection({ boats, selectedBoat, onSelectBoat, onSelectTour }: FleetSectionProps) {
+const tourTypeLabels: Record<string, string> = {
+  'Snorkeling & Beach': 'Beach & Snorkeling',
+  Fishing: 'Fishing',
+  Surfing: 'Surfing',
+  'Water Toys': 'Water Toys',
+  Bioluminescence: 'Bioluminescence',
+};
+
+export function FleetSection({ boats, selectedBoat, onSelectBoat, onViewTourType }: FleetSectionProps) {
   const { language } = useLanguage();
   const [modalBoat, setModalBoat] = useState<Boat | null>(null);
-
-  const modalTours = useMemo(() => {
-    if (!modalBoat) return [];
-    return boatTours.filter((tour) => tour.boatId === modalBoat.id);
-  }, [modalBoat]);
 
   function openBoatDetails(boat: Boat) {
     onSelectBoat(boat);
     setModalBoat(boat);
   }
 
-  function selectTourAndContinue(tour: BoatTour) {
-    if (!modalBoat) return;
-    onSelectBoat(modalBoat);
-    onSelectTour(tour);
+  const modalTourTypes = getModalTourTypes(modalBoat);
+
+  function handleViewTourType(tour: BoatTour) {
+    onViewTourType(tour);
     setModalBoat(null);
   }
 
@@ -58,11 +60,11 @@ export function FleetSection({ boats, selectedBoat, onSelectBoat, onSelectTour }
       </Container>
 
       {modalBoat ? (
-        <div className="fixed inset-0 z-[90] grid place-items-center bg-ocean-950/75 px-4 py-8 backdrop-blur-sm">
-          <div className="max-h-[90dvh] w-full max-w-5xl overflow-y-auto rounded-[2rem] border border-white/10 bg-ocean-950 shadow-lifted">
+        <div className="fixed inset-0 z-[90] grid place-items-start bg-ocean-950/75 px-3 py-4 backdrop-blur-sm sm:place-items-center sm:px-4 sm:py-8">
+          <div className="max-h-[94dvh] w-full max-w-5xl overflow-y-auto rounded-2xl border border-white/10 bg-ocean-950 shadow-lifted sm:max-h-[90dvh] sm:rounded-[2rem]">
             <div className="relative">
-              <img className="h-72 w-full rounded-t-[2rem] object-cover" src={modalBoat.image} alt={modalBoat.name} />
-              <div className="absolute inset-0 rounded-t-[2rem] bg-gradient-to-t from-ocean-950/80 to-transparent" />
+              <img className="h-48 w-full rounded-t-2xl object-cover sm:h-72 sm:rounded-t-[2rem]" src={modalBoat.image} alt={modalBoat.name} />
+              <div className="absolute inset-0 rounded-t-2xl bg-gradient-to-t from-ocean-950/80 to-transparent sm:rounded-t-[2rem]" />
               <button
                 className="focus-ring pressable absolute right-5 top-5 grid h-11 w-11 place-items-center rounded-full bg-white/10 text-white backdrop-blur-xl"
                 type="button"
@@ -71,54 +73,48 @@ export function FleetSection({ boats, selectedBoat, onSelectBoat, onSelectTour }
               >
                 <X size={20} />
               </button>
-              <div className="absolute bottom-6 left-6 right-6 text-white">
-                <p className="text-sm font-bold uppercase tracking-[0.14em] text-ocean-200">{modalBoat.badge ?? 'Private charter'}</p>
-                <h3 className="mt-2 text-4xl font-extrabold">{modalBoat.name}</h3>
+              <div className="absolute bottom-4 left-4 right-4 text-white sm:bottom-6 sm:left-6 sm:right-6">
+                <p className="text-xs font-bold uppercase tracking-[0.14em] text-ocean-200 sm:text-sm">{modalBoat.badge ?? 'Private charter'}</p>
+                <h3 className="mt-1 text-3xl font-extrabold sm:mt-2 sm:text-4xl">{modalBoat.name}</h3>
               </div>
             </div>
 
-            <div className="grid gap-8 p-6 lg:grid-cols-[0.8fr_1.2fr] lg:p-8">
+            <div className="grid gap-5 p-4 sm:p-6 lg:grid-cols-[0.8fr_1.2fr] lg:gap-8 lg:p-8">
               <aside>
                 <p className="text-sm font-bold uppercase tracking-[0.14em] text-ocean-600">Boat details</p>
                 <div className="mt-4 grid gap-3 text-sm text-ocean-200">
                   <DetailRow label="Size" value={modalBoat.length} />
                   <DetailRow label="Motor" value={modalBoat.engine} />
-                  <DetailRow label="Guests included" value={`${modalBoat.includedGuests} people`} />
                   <DetailRow label="Maximum capacity" value={`${modalBoat.maxGuests} people`} />
                   <DetailRow label="Additional guest" value={`${formatCurrency(modalBoat.extraGuestPrice)} each`} />
                 </div>
-                <p className="mt-5 rounded-2xl border border-ocean-400/25 bg-ocean-500/10 p-4 text-sm font-semibold leading-6 text-ocean-100">{modalBoat.featuredSpec}</p>
+                <p className="mt-4 rounded-2xl border border-ocean-400/25 bg-ocean-500/10 p-3 text-sm font-semibold leading-6 text-ocean-100 sm:mt-5 sm:p-4">{modalBoat.featuredSpec}</p>
               </aside>
 
-              <div>
-                <p className="text-sm font-bold uppercase tracking-[0.14em] text-ocean-600">Available tours</p>
-                <h4 className="mt-2 text-2xl font-extrabold text-white">Choose a tour to continue to payment</h4>
-                <div className="mt-5 grid gap-4">
-                  {modalTours.map((tour) => {
-                    const includedGuests = getTourIncludedGuests(modalBoat, tour);
-                    const maxGuests = getEffectiveMaxGuests(modalBoat, tour);
-
-                    return (
-                      <article key={tour.id} className="rounded-2xl border border-white/10 bg-white/[0.04] p-4 transition hover:border-ocean-400/70 hover:bg-ocean-500/10">
-                        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                          <div>
-                            <p className="text-xs font-extrabold uppercase tracking-[0.1em] text-ocean-600">{tour.category}</p>
-                            <h5 className="mt-1 text-xl font-extrabold text-white">{tour.name}</h5>
-                            <p className="mt-2 max-w-xl text-sm leading-6 text-ocean-200">
-                              {tour.duration} Hours · {includedGuests} guests included · Max {maxGuests} · Extra guest {formatCurrency(tour.extraGuestPrice ?? modalBoat.extraGuestPrice)}
-                            </p>
-                          </div>
-                          <div className="shrink-0 sm:text-right">
-                            <p className="text-lg font-extrabold text-ocean-600">{tour.customQuote ? 'Custom quote' : formatCurrency(tour.basePrice)}</p>
-                            <Button className="mt-3" type="button" onClick={() => selectTourAndContinue(tour)}>
-                              Select and Pay
-                            </Button>
-                          </div>
-                        </div>
-                      </article>
-                    );
-                  })}
+              <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4 shadow-soft sm:p-5">
+                <p className="text-sm font-bold uppercase tracking-[0.14em] text-ocean-600">Tour types</p>
+                <h4 className="mt-2 text-xl font-extrabold leading-tight text-white sm:text-2xl">Choose the experience you want to explore</h4>
+                <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                  {modalTourTypes.map((tour) => (
+                    <button
+                      key={tour.key}
+                      className="focus-ring group min-w-0 rounded-2xl border border-white/10 bg-white/[0.05] p-4 transition duration-300 hover:-translate-y-0.5 hover:border-ocean-400/70 hover:bg-ocean-500/10"
+                      type="button"
+                      onClick={() => handleViewTourType(tour.representativeTour)}
+                    >
+                      <p className="truncate text-left text-xs font-extrabold uppercase tracking-[0.1em] text-ocean-500">{tour.category}</p>
+                      <div className="mt-2 grid min-w-0 gap-2">
+                        <h5 className="min-w-0 text-left text-base font-extrabold leading-tight text-white sm:text-lg">{tour.title}</h5>
+                        <span className="w-fit max-w-full rounded-full bg-ocean-500/10 px-2.5 py-1 text-left text-xs font-extrabold leading-tight text-ocean-400 sm:text-sm">
+                          From {formatCurrency(tour.price)}
+                        </span>
+                      </div>
+                    </button>
+                  ))}
                 </div>
+                <Button className="mt-5" type="button" onClick={() => modalTourTypes[0] && handleViewTourType(modalTourTypes[0].representativeTour)}>
+                  View All Tours
+                </Button>
               </div>
             </div>
           </div>
@@ -126,6 +122,29 @@ export function FleetSection({ boats, selectedBoat, onSelectBoat, onSelectTour }
       ) : null}
     </section>
   );
+}
+
+function getModalTourTypes(boat: Boat | null) {
+  if (!boat) return [];
+
+  const groups = new Map<string, BoatTour[]>();
+  boatTours
+    .filter((tour) => tour.boatId === boat.id)
+    .forEach((tour) => {
+      const key = tour.category === 'Bioluminescence Basic' || tour.category === 'Bioluminescence Deluxe' ? 'Bioluminescence' : tour.category;
+      groups.set(key, [...(groups.get(key) ?? []), tour]);
+    });
+
+  return Array.from(groups.entries()).map(([key, relatedTours]) => {
+    const sortedTours = [...relatedTours].sort((a, b) => a.basePrice - b.basePrice);
+    return {
+      key,
+      title: tourTypeLabels[key] ?? key,
+      category: key,
+      price: sortedTours[0].basePrice,
+      representativeTour: sortedTours[0],
+    };
+  });
 }
 
 function DetailRow({ label, value }: { label: string; value: string }) {

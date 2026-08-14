@@ -24,13 +24,14 @@ export function TourCarouselSection({ boats, tours, selectedTour, onSelectTour }
   const [canScrollRight, setCanScrollRight] = useState(true);
   const [activeBoatId, setActiveBoatId] = useState<string>('all');
   const visibleTours = activeBoatId === 'all' ? tours : tours.filter((tour) => tour.boatId === activeBoatId);
+  const groupedTours = groupToursForCards(visibleTours);
 
   useEffect(() => {
     const element = scrollerRef.current;
     if (!element) return;
     element.scrollTo({ left: 0, behavior: 'smooth' });
     window.setTimeout(updateControls, 120);
-  }, [visibleTours.length, activeBoatId]);
+  }, [groupedTours.length, activeBoatId]);
 
   function updateControls() {
     const element = scrollerRef.current;
@@ -55,7 +56,7 @@ export function TourCarouselSection({ boats, tours, selectedTour, onSelectTour }
             title={tr(text.home.toursTitle, language)}
           />
           <div className="flex items-center gap-3 self-end md:self-auto">
-            <span className="hidden text-sm font-bold text-ocean-200 sm:inline">{visibleTours.length} {tr(text.home.toursAvailable, language)}</span>
+            <span className="hidden text-sm font-bold text-ocean-200 sm:inline">{groupedTours.length} {tr(text.home.toursAvailable, language)}</span>
             <button
               className={cn('focus-ring pressable grid h-10 w-10 place-items-center rounded-full border border-white/10 bg-white/10 text-white shadow-sm transition-all duration-300 disabled:cursor-not-allowed disabled:opacity-35', canScrollLeft && 'hover:border-ocean-400 hover:bg-white/15 hover:text-ocean-300')}
               type="button"
@@ -111,9 +112,9 @@ export function TourCarouselSection({ boats, tours, selectedTour, onSelectTour }
             className="flex cursor-grab snap-x snap-mandatory gap-4 overflow-x-auto scroll-smooth px-1 pb-5 active:cursor-grabbing sm:gap-5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
             onScroll={updateControls}
           >
-            {visibleTours.map((tour) => (
-              <div key={tour.id} className="min-w-[86%] snap-start min-[480px]:min-w-[72%] sm:min-w-[48%] lg:min-w-[31%] xl:min-w-[29%]">
-                <BoatTourCard boat={boats.find((boat) => boat.id === tour.boatId)!} tour={tour} isSelected={tour.id === selectedTour?.id} onSelect={onSelectTour} />
+            {groupedTours.map(({ key, tour, relatedTours }) => (
+              <div key={key} className="min-w-[82%] snap-start min-[480px]:min-w-[68%] sm:min-w-[48%] lg:min-w-[31.5%]">
+                <BoatTourCard boat={boats.find((boat) => boat.id === tour.boatId)!} tour={tour} relatedTours={relatedTours} isSelected={relatedTours.some((item) => item.id === selectedTour?.id)} onSelect={onSelectTour} />
               </div>
             ))}
           </div>
@@ -121,4 +122,24 @@ export function TourCarouselSection({ boats, tours, selectedTour, onSelectTour }
       </Container>
     </section>
   );
+}
+
+function getTourGroupKey(tour: BoatTour) {
+  if (tour.category === 'Bioluminescence Basic' || tour.category === 'Bioluminescence Deluxe') return `${tour.boatId}-Bioluminescence`;
+  return `${tour.boatId}-${tour.category}`;
+}
+
+function groupToursForCards(tours: BoatTour[]) {
+  const groups = new Map<string, BoatTour[]>();
+
+  tours.forEach((tour) => {
+    const key = getTourGroupKey(tour);
+    groups.set(key, [...(groups.get(key) ?? []), tour]);
+  });
+
+  return Array.from(groups.entries()).map(([key, relatedTours]) => ({
+    key,
+    tour: [...relatedTours].sort((a, b) => a.basePrice - b.basePrice)[0],
+    relatedTours: [...relatedTours].sort((a, b) => a.basePrice - b.basePrice),
+  }));
 }

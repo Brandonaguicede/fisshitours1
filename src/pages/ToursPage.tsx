@@ -19,6 +19,7 @@ export default function ToursPage() {
   const bookingRef = useRef<HTMLElement | null>(null);
 
   const availableTours = useMemo(() => boatTours.filter((tour) => tour.boatId === selectedBoat.id), [selectedBoat.id]);
+  const groupedTours = useMemo(() => groupToursForCards(availableTours), [availableTours]);
 
   function selectBoat(boat: Boat) {
     setSelectedBoat(boat);
@@ -99,8 +100,8 @@ export default function ToursPage() {
           </div>
 
           <div className="mt-10 grid gap-6 lg:grid-cols-3">
-            {availableTours.map((tour) => (
-              <BoatTourCard key={tour.id} boat={selectedBoat} tour={tour} isSelected={tour.id === selectedTour?.id} onSelect={selectTour} />
+            {groupedTours.map(({ key, tour, relatedTours }) => (
+              <BoatTourCard key={key} boat={selectedBoat} tour={tour} relatedTours={relatedTours} isSelected={relatedTours.some((item) => item.id === selectedTour?.id)} onSelect={selectTour} />
             ))}
           </div>
         </Container>
@@ -123,4 +124,24 @@ export default function ToursPage() {
       </section>
     </>
   );
+}
+
+function getTourGroupKey(tour: BoatTour) {
+  if (tour.category === 'Bioluminescence Basic' || tour.category === 'Bioluminescence Deluxe') return `${tour.boatId}-Bioluminescence`;
+  return `${tour.boatId}-${tour.category}`;
+}
+
+function groupToursForCards(tours: BoatTour[]) {
+  const groups = new Map<string, BoatTour[]>();
+
+  tours.forEach((tour) => {
+    const key = getTourGroupKey(tour);
+    groups.set(key, [...(groups.get(key) ?? []), tour]);
+  });
+
+  return Array.from(groups.entries()).map(([key, relatedTours]) => ({
+    key,
+    tour: [...relatedTours].sort((a, b) => a.basePrice - b.basePrice)[0],
+    relatedTours: [...relatedTours].sort((a, b) => a.basePrice - b.basePrice),
+  }));
 }

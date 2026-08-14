@@ -1,4 +1,4 @@
-import { CreditCard, Info, Mail, MessageCircle, Phone, Ship, User, WalletCards } from 'lucide-react';
+import { CreditCard, Info, Mail, Phone, Ship, User, WalletCards } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 
 import { DISPLAY_PHONE, WHATSAPP_NUMBER } from '../../constants/contact';
@@ -13,7 +13,7 @@ import { Button } from '../common/Button';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { text, tr } from '../../i18n/translations';
 
-type PaymentMethod = 'paypal' | 'pay-on-day' | 'whatsapp-link';
+type PaymentMethod = 'bank-transfer' | 'sinpe-movil' | 'paypal';
 type BookingStatus = 'draft' | 'reviewing' | 'payment-link-requested' | 'reserved';
 type PaymentStatus = 'unpaid' | 'pending' | 'paid';
 
@@ -26,9 +26,28 @@ interface BookingPanelProps {
 }
 
 const paymentMethods: Array<{ id: PaymentMethod; title: string; description: string; icon: typeof CreditCard }> = [
-  { id: 'paypal', title: 'PayPal', description: 'Secure online payment.', icon: CreditCard },
-  { id: 'pay-on-day', title: 'Pay on the day', description: 'Reserve now and pay on the day of your tour.', icon: WalletCards },
-  { id: 'whatsapp-link', title: 'Payment link via WhatsApp', description: 'Send your booking details and receive a payment link from our team.', icon: MessageCircle },
+  { id: 'bank-transfer', title: 'Bank transfer', description: '50% deposit required. Transfer fees are covered by the client.', icon: WalletCards },
+  { id: 'sinpe-movil', title: 'SINPE Movil', description: '50% deposit required to secure the reservation.', icon: Phone },
+  { id: 'paypal', title: 'PayPal', description: '50% deposit required. PayPal fees are covered by the client.', icon: CreditCard },
+];
+
+const bookingTerms = [
+  '50% deposit required to secure the reservation. Remaining balance is paid on the day of the tour.',
+  'Payment methods: bank transfer, SINPE Movil and PayPal. Bank transfer and PayPal fees are covered by the client.',
+  'Cancellation at least 3 days before the tour: 100% refund without penalty.',
+  'Cancellation within 3 days: 30% penalty due to operational and boat rental costs. Rescheduling within 3 days is allowed for another available date, subject to availability.',
+  'Cancellation within 24 hours: 100% penalty due to operational, boat rental, food and beverage costs. No-show deposits are not refunded.',
+  'Refund or rescheduling for weather applies only to hurricanes, strong wave forecasts, high winds or heavy rain within 24 hours before the tour. Cloudy days or limited sunlight do not qualify.',
+];
+
+const fullDayMealOptions = [
+  'Chicken wrap',
+  'Ham and cheese wrap',
+  'Chicken sandwich',
+  'Ham and cheese sandwich',
+  'Caprese sandwich',
+  'Chicken salad',
+  'Ceviche',
 ];
 
 export function BookingPanel({ selectedBoat, selectedTour, selectedTimeSlotId, onBoatChange, onTourChange }: BookingPanelProps) {
@@ -40,7 +59,8 @@ export function BookingPanel({ selectedBoat, selectedTour, selectedTimeSlotId, o
   const [customerName, setCustomerName] = useState('');
   const [customerEmail, setCustomerEmail] = useState('');
   const [customerWhatsapp, setCustomerWhatsapp] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('paypal');
+  const [mealOption, setMealOption] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('bank-transfer');
   const [isReviewOpen, setIsReviewOpen] = useState(false);
   const [bookingStatus, setBookingStatus] = useState<BookingStatus>('draft');
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>('unpaid');
@@ -79,6 +99,7 @@ export function BookingPanel({ selectedBoat, selectedTour, selectedTimeSlotId, o
     onTourChange(nextTour);
     setTimeSlotId(nextTour?.timeSlots[0]?.id ?? '');
     if (nextTour) setGuests(getTourIncludedGuests(selectedBoat, nextTour));
+    if (!nextTour || !isFullDayTour(nextTour)) setMealOption('');
     setBookingStatus('draft');
     setPaymentStatus('unpaid');
   }
@@ -102,36 +123,34 @@ export function BookingPanel({ selectedBoat, selectedTour, selectedTimeSlotId, o
 
   function buildWhatsAppMessage() {
     const lines = [
-      'Hello, I would like to request a payment link for my booking.',
+      'Hello, I would like to request a booking confirmation.',
       '',
       `Boat: ${selectedBoat.name}`,
       `Tour: ${selectedTour?.name ?? 'Not selected'}`,
       `Date: ${formatDisplayDate(date)}`,
       `Departure: ${selectedTimeSlot?.time ?? 'Not selected'}`,
       `Guests: ${guests}`,
+      isFullDayTour(selectedTour) ? `Meal option: ${mealOption || 'Not selected'}` : '',
       '',
       pricing.isCustomQuote ? 'Pricing: Custom quote requested' : `Base price: ${formatCurrency(pricing.basePrice)}`,
-    ];
+    ].filter(Boolean);
 
     if (pricing.extraGuests > 0) {
       lines.push(`Additional guests: ${pricing.extraGuests} x ${formatCurrency(pricing.extraGuestPrice)} = ${formatCurrency(pricing.extraGuestsTotal)}`);
     }
 
-    lines.push('', `Total: ${pricing.isCustomQuote ? 'Custom quote' : formatCurrency(pricing.total)}`, '', `Name: ${customerName}`, `Email: ${customerEmail}`, `WhatsApp: ${customerWhatsapp}`, '', 'Please send me the payment link for this reservation.');
+    if (!pricing.isCustomQuote) {
+      lines.push(`Required deposit: ${formatCurrency(pricing.total * 0.5)}`, 'Remaining balance: paid on the day of the tour');
+    }
+
+    lines.push('', `Total: ${pricing.isCustomQuote ? 'Custom quote' : formatCurrency(pricing.total)}`, '', `Name: ${customerName}`, `Email: ${customerEmail}`, `WhatsApp: ${customerWhatsapp}`, '', 'Please confirm availability for this reservation.');
     return lines.join('\n');
   }
 
   function handleConfirmReview() {
-    if (paymentMethod === 'whatsapp-link') {
-      setBookingStatus('payment-link-requested');
-      setPaymentStatus('pending');
-      window.open(`https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(buildWhatsAppMessage())}`, '_blank', 'noopener,noreferrer');
-      setIsReviewOpen(false);
-      return;
-    }
-
     setBookingStatus('reserved');
     setPaymentStatus('pending');
+    window.open(`https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(buildWhatsAppMessage())}`, '_blank', 'noopener,noreferrer');
     setIsReviewOpen(false);
   }
 
@@ -183,11 +202,13 @@ export function BookingPanel({ selectedBoat, selectedTour, selectedTimeSlotId, o
               effectiveMaxGuests={effectiveMaxGuests}
               extraGuestPrice={extraGuestPrice}
               pricing={pricing}
+              mealOption={mealOption}
               hasCapacityError={hasCapacityError}
               canContinue={canContinueToCustomer}
               onTourChange={handleTourChange}
               onDateChange={setDate}
               onGuestsChange={setGuests}
+              onMealOptionChange={setMealOption}
               onTimeSlotChange={setTimeSlotId}
               onBack={() => setActiveStep(0)}
               onNext={() => setActiveStep(2)}
@@ -199,11 +220,14 @@ export function BookingPanel({ selectedBoat, selectedTour, selectedTimeSlotId, o
               customerName={customerName}
               customerEmail={customerEmail}
               customerWhatsapp={customerWhatsapp}
+              paymentMethod={paymentMethod}
+              paymentMethods={paymentMethods}
               bookingStatus={bookingStatus}
               canReview={canReview}
               onCustomerNameChange={setCustomerName}
               onCustomerEmailChange={setCustomerEmail}
               onCustomerWhatsappChange={setCustomerWhatsapp}
+              onPaymentMethodChange={setPaymentMethod}
               onBack={() => setActiveStep(1)}
               onReview={openReview}
             />
@@ -217,6 +241,7 @@ export function BookingPanel({ selectedBoat, selectedTour, selectedTimeSlotId, o
             date={date}
             selectedTimeSlot={selectedTimeSlot}
             guests={guests}
+            mealOption={mealOption}
             pricing={pricing}
             activeStep={activeStep}
           />
@@ -231,6 +256,7 @@ export function BookingPanel({ selectedBoat, selectedTour, selectedTimeSlotId, o
             guests={guests}
             selectedPayment={selectedPayment.title}
             paymentStatus={paymentStatus}
+            mealOption={mealOption}
             pricing={pricing}
           />
         </div>
@@ -243,6 +269,7 @@ export function BookingPanel({ selectedBoat, selectedTour, selectedTimeSlotId, o
           date={date}
           departure={selectedTimeSlot?.time ?? 'Not selected'}
           guests={guests}
+          mealOption={mealOption}
           customerName={customerName}
           customerEmail={customerEmail}
           customerWhatsapp={customerWhatsapp}
@@ -309,16 +336,21 @@ function TourDetailsStep(props: {
   effectiveMaxGuests: number;
   extraGuestPrice: number;
   pricing: ReturnType<typeof calculateBookingTotal>;
+  mealOption: string;
   hasCapacityError: boolean;
   canContinue: boolean;
   onTourChange: (tourId: string) => void;
   onDateChange: (date: string) => void;
   onGuestsChange: (guests: number) => void;
+  onMealOptionChange: (meal: string) => void;
   onTimeSlotChange: (slotId: string) => void;
   onBack: () => void;
   onNext: () => void;
 }) {
   const { language } = useLanguage();
+  const tourGroups = getBookingTourGroups(props.availableTours);
+  const activeGroup = props.selectedTour ? getBookingTourGroupKey(props.selectedTour) : '';
+  const activeGroupData = tourGroups.find((group) => group.key === activeGroup);
 
   return (
     <div className="grid gap-4 text-white sm:gap-5">
@@ -326,13 +358,54 @@ function TourDetailsStep(props: {
         <p className="text-xs font-bold uppercase tracking-[0.12em] text-ocean-400 sm:text-sm">{tr(text.booking.tourDetails, language)}</p>
         <h3 className="mt-1 text-xl font-extrabold text-white sm:text-2xl">{tr(text.booking.buildReservation, language)}</h3>
       </div>
-      <label className="grid min-w-0 gap-2 text-sm font-bold text-ocean-100">
-        <span className="min-w-0 truncate">{tr(text.booking.tourAboard, language)} {props.selectedBoat.name}</span>
-        <select className="focus-ring min-w-0 w-full rounded-2xl border border-white/10 bg-ocean-900 px-3 py-3 text-sm text-white focus:border-ocean-400 focus:ring-4 focus:ring-ocean-500/15 sm:px-4" value={props.selectedTour?.id ?? ''} onChange={(event) => props.onTourChange(event.target.value)}>
-          <option value="">{tr(text.booking.selectTour, language)}</option>
-          {props.availableTours.map((tour) => <option key={tour.id} value={tour.id}>{tour.name}</option>)}
-        </select>
-      </label>
+      <fieldset>
+        <legend className="text-sm font-bold text-ocean-100">{tr(text.booking.tourAboard, language)} {props.selectedBoat.name}</legend>
+        <div className="mt-3 grid gap-2 min-[420px]:grid-cols-2">
+          {tourGroups.map((group) => (
+            <button
+              key={group.key}
+              className={cn('focus-ring pressable min-w-0 rounded-2xl border border-white/10 bg-white/[0.04] p-2.5 text-left hover:bg-ocean-500/10 sm:p-3', activeGroup === group.key && 'border-ocean-400 bg-ocean-500/15 ring-4 ring-ocean-500/10')}
+              type="button"
+              onClick={() => props.onTourChange(group.tours[0].id)}
+            >
+              <span className="block truncate text-sm font-extrabold text-white">{group.label}</span>
+              <span className="mt-1 block text-xs font-bold text-ocean-400">From {formatCurrency(group.tours[0].basePrice)}</span>
+            </button>
+          ))}
+        </div>
+      </fieldset>
+
+      {activeGroupData ? (
+        <fieldset>
+          <legend className="text-sm font-bold text-ocean-100">Choose by price</legend>
+          <div className="mt-3 grid gap-2 min-[420px]:grid-cols-2 min-[640px]:grid-cols-3">
+            {activeGroupData.tours.map((tour) => (
+              <label key={tour.id} className={cn('pressable min-w-0 rounded-xl border border-white/10 bg-white/[0.04] p-2.5 hover:bg-ocean-500/10 sm:p-3', props.selectedTour?.id === tour.id && 'border-ocean-400 bg-ocean-500/15 ring-4 ring-ocean-500/10')}>
+                <input className="sr-only" type="radio" name="tourPackage" value={tour.id} checked={props.selectedTour?.id === tour.id} onChange={() => props.onTourChange(tour.id)} />
+                <span className="block truncate text-xs font-extrabold text-white">{getBookingPackageLabel(tour)}</span>
+                <span className="mt-1 block text-lg font-extrabold text-ocean-400">{formatCurrency(tour.basePrice)}</span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
+      ) : null}
+
+      {isFullDayTour(props.selectedTour) ? (
+        <fieldset className="rounded-2xl border border-white/10 bg-white/[0.04] p-3 sm:p-4">
+          <legend className="px-1 text-sm font-bold text-ocean-100">Optional meal for Full Day</legend>
+          <div className="mt-3 grid gap-2 min-[420px]:grid-cols-2">
+            {fullDayMealOptions.map((meal) => (
+              <label key={meal} className={cn('pressable rounded-xl border border-white/10 bg-white/[0.04] p-2.5 text-xs font-bold leading-5 text-ocean-100 hover:bg-ocean-500/10 sm:p-3 sm:text-sm', props.mealOption === meal && 'border-ocean-400 bg-ocean-500/15 ring-4 ring-ocean-500/10')}>
+                <input className="sr-only" type="radio" name="mealOption" value={meal} checked={props.mealOption === meal} onChange={() => props.onMealOptionChange(meal)} />
+                {meal}
+              </label>
+            ))}
+          </div>
+          <button className="mt-3 text-xs font-bold text-ocean-400 underline-offset-4 hover:underline" type="button" onClick={() => props.onMealOptionChange('')}>
+            No meal selected
+          </button>
+        </fieldset>
+      ) : null}
 
       <div className="grid gap-4 sm:grid-cols-2">
         <label className="grid min-w-0 gap-2 text-sm font-bold text-ocean-100">
@@ -380,15 +453,58 @@ function TourDetailsStep(props: {
   );
 }
 
+function getBookingTourGroupKey(tour: BoatTour) {
+  if (tour.category === 'Bioluminescence Basic' || tour.category === 'Bioluminescence Deluxe') return 'Bioluminescence';
+  return tour.category;
+}
+
+function getBookingTourLabel(key: string) {
+  const labels: Record<string, string> = {
+    'Snorkeling & Beach': 'Beach & Snorkeling',
+    Fishing: 'Fishing',
+    Surfing: 'Surfing',
+    'Water Toys': 'Water Toys',
+    Bioluminescence: 'Bioluminescence',
+  };
+
+  return labels[key] ?? key;
+}
+
+function getBookingPackageLabel(tour: BoatTour) {
+  return tour.name.replace(/^.* - /, '');
+}
+
+function getBookingTourGroups(tours: BoatTour[]) {
+  const groups = new Map<string, BoatTour[]>();
+
+  tours.forEach((tour) => {
+    const key = getBookingTourGroupKey(tour);
+    groups.set(key, [...(groups.get(key) ?? []), tour]);
+  });
+
+  return Array.from(groups.entries()).map(([key, groupTours]) => ({
+    key,
+    label: getBookingTourLabel(key),
+    tours: [...groupTours].sort((a, b) => a.basePrice - b.basePrice),
+  }));
+}
+
+function isFullDayTour(tour?: BoatTour) {
+  return Boolean(tour?.name.toLowerCase().includes('full day'));
+}
+
 function CustomerStep(props: {
   customerName: string;
   customerEmail: string;
   customerWhatsapp: string;
+  paymentMethod: PaymentMethod;
+  paymentMethods: typeof paymentMethods;
   bookingStatus: BookingStatus;
   canReview: boolean;
   onCustomerNameChange: (name: string) => void;
   onCustomerEmailChange: (email: string) => void;
   onCustomerWhatsappChange: (value: string) => void;
+  onPaymentMethodChange: (method: PaymentMethod) => void;
   onBack: () => void;
   onReview: () => void;
 }) {
@@ -427,6 +543,22 @@ function CustomerStep(props: {
         </label>
       </div>
 
+      <fieldset className="mt-5">
+        <legend className="text-xs font-extrabold uppercase tracking-[0.12em] text-ocean-400">Payment method</legend>
+        <div className="mt-3 grid gap-2">
+          {props.paymentMethods.map((method) => (
+            <label key={method.id} className={cn('pressable flex items-start gap-3 rounded-xl border border-white/10 bg-white/[0.04] p-3 hover:bg-ocean-500/10', props.paymentMethod === method.id && 'border-ocean-400 bg-ocean-500/15 ring-4 ring-ocean-500/10')}>
+              <input className="sr-only" type="radio" name="paymentMethod" value={method.id} checked={props.paymentMethod === method.id} onChange={() => props.onPaymentMethodChange(method.id)} />
+              <method.icon className="mt-0.5 shrink-0 text-ocean-400" size={17} />
+              <span>
+                <span className="block text-sm font-extrabold text-white">{method.title}</span>
+                <span className="mt-0.5 block text-xs leading-5 text-ocean-200">{method.description}</span>
+              </span>
+            </label>
+          ))}
+        </div>
+      </fieldset>
+
       {props.bookingStatus === 'payment-link-requested' ? (
         <div className="mt-5 rounded-2xl border border-ocean-400/30 bg-ocean-500/10 p-4 text-ocean-100">
           <p className="font-bold">Payment link request ready</p>
@@ -454,6 +586,7 @@ function BookingSummary(props: {
   guests: number;
   selectedPayment: string;
   paymentStatus: PaymentStatus;
+  mealOption: string;
   pricing: ReturnType<typeof calculateBookingTotal>;
 }) {
   const { language } = useLanguage();
@@ -470,21 +603,28 @@ function BookingSummary(props: {
         <p className="mt-1 text-sm font-semibold text-ocean-300">{props.selectedBoat.includedGuests} {tr(text.booking.people, language)} - {props.selectedBoat.length} - {props.selectedBoat.engine}</p>
       </div>
       <div className="mt-4 grid gap-2 text-sm text-ocean-100">
-        <SummaryRow label={tr(text.booking.tourType, language)} value={props.selectedTour ? `${props.selectedTour.name} (${props.selectedTour.duration}h)` : tr(text.booking.selectTour, language)} />
+        <SummaryRow label={tr(text.booking.tourType, language)} value={props.selectedTour ? `${props.selectedTour.name}${props.selectedTour.duration ? ` (${props.selectedTour.duration}h)` : ''}` : tr(text.booking.selectTour, language)} />
         <SummaryRow label={tr(text.booking.date, language)} value={formatDisplayDate(props.date)} />
         <SummaryRow label={language === 'es' ? 'Salida' : 'Departure'} value={props.selectedTimeSlot?.time ?? tr(text.booking.selectTime, language)} />
         <SummaryRow label={tr(text.booking.guests, language)} value={`${props.guests} ${tr(text.booking.people, language)}`} />
+        {isFullDayTour(props.selectedTour) ? <SummaryRow label="Meal option" value={props.mealOption || 'Not selected'} /> : null}
       </div>
       <div className="mt-4 rounded-2xl border border-ocean-500/25 bg-ocean-900/70 p-3 sm:mt-6 sm:p-4">
         <SummaryRow label="Subtotal" value={subtotal} />
         {props.pricing.extraGuests > 0 ? <SummaryRow label={tr(text.booking.extraPeople, language)} value={`${props.pricing.extraGuests} x ${formatCurrency(props.pricing.extraGuestPrice)}`} /> : null}
         <SummaryRow label={tr(text.booking.taxes, language)} value={taxes} />
+        <SummaryRow label="Required deposit" value={props.selectedTour?.customQuote ? 'To be confirmed' : formatCurrency(props.pricing.total * 0.5)} />
         <div className="mt-4 flex flex-wrap items-end justify-between gap-3 border-t border-white/10 pt-4">
           <span className="font-extrabold text-white">Total</span>
           <span className="text-2xl font-extrabold text-ocean-400 sm:text-3xl">{props.selectedTour?.customQuote ? 'Cotizar' : formatCurrency(props.pricing.total)}</span>
         </div>
       </div>
       <p className="mt-4 text-xs font-medium text-ocean-300">{tr(text.booking.secure, language)}</p>
+      <div className="mt-4 grid gap-2 border-t border-white/10 pt-4 text-xs leading-5 text-ocean-300">
+        {bookingTerms.slice(0, 3).map((term) => (
+          <p key={term}>{term}</p>
+        ))}
+      </div>
     </aside>
   );
 }
@@ -495,6 +635,7 @@ function BookingProgressSummary(props: {
   date: string;
   selectedTimeSlot?: { id: string; label: string; time: string };
   guests: number;
+  mealOption: string;
   pricing: ReturnType<typeof calculateBookingTotal>;
   activeStep: number;
 }) {
@@ -519,6 +660,7 @@ function BookingProgressSummary(props: {
           <SummaryMini label={tr(text.booking.tourType, language)} value={props.selectedTour?.name ?? tr(text.booking.selectTour, language)} />
           <SummaryMini label={tr(text.booking.date, language)} value={formatDisplayDate(props.date)} />
           <SummaryMini label={language === 'es' ? 'Salida' : 'Departure'} value={props.selectedTimeSlot?.time ?? tr(text.booking.selectTime, language)} />
+          {isFullDayTour(props.selectedTour) ? <SummaryMini label="Meal" value={props.mealOption || 'Not selected'} /> : null}
         </div>
       ) : null}
 
@@ -547,6 +689,7 @@ function ReviewModal(props: {
   date: string;
   departure: string;
   guests: number;
+  mealOption: string;
   customerName: string;
   customerEmail: string;
   customerWhatsapp: string;
@@ -559,11 +702,9 @@ function ReviewModal(props: {
     <div className="fixed inset-0 z-[80] grid place-items-center bg-ocean-950/70 px-3 py-4 backdrop-blur-sm sm:px-4">
       <div className="max-h-[92dvh] w-full max-w-2xl overflow-y-auto rounded-3xl border border-white/10 bg-ocean-950 p-4 text-white shadow-lifted sm:rounded-[2rem] sm:p-8">
         <img className="mb-5 aspect-[16/7] w-full rounded-2xl object-cover" src={props.selectedBoat.image} alt={props.selectedBoat.name} loading="lazy" />
-        <h3 className="text-3xl font-extrabold text-white">{props.paymentMethod === 'Payment link via WhatsApp' ? 'Request your payment link' : 'Review reservation'}</h3>
+        <h3 className="text-3xl font-extrabold text-white">Review reservation</h3>
         <p className="mt-3 leading-7 text-ocean-200">
-          {props.paymentMethod === 'Payment link via WhatsApp'
-            ? 'Review your reservation details before sending the request. Our team will receive your booking information and send you a payment link through WhatsApp.'
-            : 'Review your reservation details before confirming this request.'}
+          Review your reservation details before confirming this request. A 50% deposit is required to secure the reservation, and the remaining balance is paid on the day of the tour.
         </p>
         <div className="mt-6 grid gap-3 rounded-2xl border border-white/10 bg-white/[0.04] p-4 text-sm">
           <SummaryLine label="Boat" value={props.selectedBoat.name} />
@@ -571,19 +712,27 @@ function ReviewModal(props: {
           <SummaryLine label="Date" value={formatDisplayDate(props.date)} />
           <SummaryLine label="Departure time" value={props.departure} />
           <SummaryLine label="Guests" value={String(props.guests)} />
+          {isFullDayTour(props.selectedTour) ? <SummaryLine label="Meal option" value={props.mealOption || 'Not selected'} /> : null}
           <SummaryLine label="Additional guest charges" value={props.pricing.extraGuests > 0 ? `${props.pricing.extraGuests} x ${formatCurrency(props.pricing.extraGuestPrice)} = ${formatCurrency(props.pricing.extraGuestsTotal)}` : '$0'} />
           <SummaryLine label="Total" value={props.pricing.isCustomQuote ? 'Custom quote' : formatCurrency(props.pricing.total)} />
+          <SummaryLine label="Required deposit" value={props.pricing.isCustomQuote ? 'To be confirmed' : formatCurrency(props.pricing.total * 0.5)} />
+          <SummaryLine label="Remaining balance" value="Paid on the day of the tour" />
           <SummaryLine label="Customer name" value={props.customerName} />
           <SummaryLine label="Email" value={props.customerEmail} />
           <SummaryLine label="WhatsApp number" value={props.customerWhatsapp} />
           <SummaryLine label="Payment method" value={props.paymentMethod} />
+        </div>
+        <div className="mt-4 grid gap-2 rounded-2xl border border-white/10 bg-white/[0.04] p-4 text-xs leading-5 text-ocean-200">
+          {bookingTerms.map((term) => (
+            <p key={term}>{term}</p>
+          ))}
         </div>
         <div className="mt-7 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
           <Button variant="secondary" type="button" onClick={props.onBack}>
             Go Back
           </Button>
           <Button type="button" onClick={props.onConfirm}>
-            {props.paymentMethod === 'Payment link via WhatsApp' ? 'Send via WhatsApp' : 'Confirm reservation'}
+            Confirm reservation
           </Button>
         </div>
       </div>
