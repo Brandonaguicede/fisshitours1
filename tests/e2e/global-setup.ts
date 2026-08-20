@@ -17,6 +17,8 @@ function runReset(attempt: number) {
 }
 
 export default function globalSetup() {
+  if (process.env.SKIP_SUPABASE_RESET === '1') return;
+
   for (let attempt = 1; attempt <= 3; attempt += 1) {
     if (runReset(attempt)) return;
   }
