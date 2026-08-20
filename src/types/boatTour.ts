@@ -15,6 +15,8 @@ export interface TourTimeSlot {
 export interface BoatTour {
   id: string;
   boatId: string;
+  boatTourId?: string;
+  tourId?: string;
   name: string;
   category: TourCategory;
   description: string;

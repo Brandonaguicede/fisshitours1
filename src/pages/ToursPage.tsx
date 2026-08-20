@@ -1,40 +1,66 @@
 import { useMemo, useRef, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 
 import { BoatCard } from '../components/boats/BoatCard';
 import { BookingPanel } from '../components/booking/BookingPanel';
 import { Container } from '../components/common/Container';
 import { SectionTitle } from '../components/common/SectionTitle';
 import { BoatTourCard } from '../components/tours/BoatTourCard';
-import { boatTours } from '../data/boatTours';
-import { boats } from '../data/boats';
 import { useLanguage } from '../i18n/LanguageContext';
+import { getActiveBoats } from '../services/boatService';
+import { getActiveBoatTours } from '../services/boatTourService';
 import type { Boat } from '../types/boat';
 import type { BoatTour } from '../types/boatTour';
 
 export default function ToursPage() {
   const { language } = useLanguage();
-  const [selectedBoat, setSelectedBoat] = useState<Boat>(boats[0]);
-  const [selectedTour, setSelectedTour] = useState<BoatTour | undefined>(boatTours.find((tour) => tour.boatId === boats[0].id));
+  const boatsQuery = useQuery({ queryKey: ['boats', 'active'], queryFn: getActiveBoats });
+  const toursQuery = useQuery({ queryKey: ['boatTours', 'active'], queryFn: getActiveBoatTours });
+  const catalogBoats = boatsQuery.data ?? [];
+  const catalogTours = toursQuery.data ?? [];
+  const [selectedBoatId, setSelectedBoatId] = useState('segundo-viento');
+  const [selectedTourId, setSelectedTourId] = useState<string | undefined>();
   const toursRef = useRef<HTMLElement | null>(null);
   const bookingRef = useRef<HTMLElement | null>(null);
 
-  const availableTours = useMemo(() => boatTours.filter((tour) => tour.boatId === selectedBoat.id), [selectedBoat.id]);
+  const selectedBoat = useMemo(() => catalogBoats.find((boat) => boat.id === selectedBoatId) ?? catalogBoats[0], [catalogBoats, selectedBoatId]);
+  const availableTours = useMemo(() => selectedBoat ? catalogTours.filter((tour) => tour.boatId === selectedBoat.id) : [], [catalogTours, selectedBoat]);
+  const selectedTour = useMemo(() => availableTours.find((tour) => tour.id === selectedTourId), [availableTours, selectedTourId]);
   const groupedTours = useMemo(() => groupToursForCards(availableTours), [availableTours]);
+  const isLoading = boatsQuery.isLoading || toursQuery.isLoading;
+  const isError = boatsQuery.isError || toursQuery.isError;
 
   function selectBoat(boat: Boat) {
-    setSelectedBoat(boat);
-    setSelectedTour(undefined);
+    setSelectedBoatId(boat.id);
+    setSelectedTourId(undefined);
     window.setTimeout(() => toursRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80);
   }
 
   function selectTour(tour: BoatTour) {
-    setSelectedTour(tour);
+    setSelectedTourId(tour.id);
     window.setTimeout(() => bookingRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80);
   }
 
   function changeBoatFromBooking(boat: Boat) {
-    setSelectedBoat(boat);
-    setSelectedTour(undefined);
+    setSelectedBoatId(boat.id);
+    setSelectedTourId(undefined);
+  }
+
+  if (isError) {
+    return (
+      <section className="section-y pt-28">
+        <Container>
+          <div className="rounded-2xl border border-red-300/30 bg-red-500/10 p-6 text-white">
+            <p className="font-bold">We couldn’t load the booking information. Please try again.</p>
+            <button className="mt-4 rounded-xl bg-ocean-500 px-4 py-2 font-bold text-ocean-950" type="button" onClick={() => { boatsQuery.refetch(); toursQuery.refetch(); }}>Retry</button>
+          </div>
+        </Container>
+      </section>
+    );
+  }
+
+  if (isLoading || !selectedBoat) {
+    return <section className="section-y pt-28 text-center text-white">Loading booking information...</section>;
   }
 
   return (
@@ -66,7 +92,7 @@ export default function ToursPage() {
               : '32 ft Cigarette boat with Yamaha 250 HP engine, Garmin GPS, VHF radio, JBL sound, restroom, water toys and insurance.'}
           />
           <div className="mt-10 grid gap-6 lg:grid-cols-3">
-            {boats.map((boat) => (
+            {catalogBoats.map((boat) => (
               <BoatCard key={boat.id} boat={boat} isSelected={boat.id === selectedBoat.id} onSelect={selectBoat} />
             ))}
           </div>
@@ -118,7 +144,7 @@ export default function ToursPage() {
               : 'Choose tour type, package by price, date, guests and optional meal when the package is Full Day.'}
           />
           <div className="mt-10">
-            <BookingPanel selectedBoat={selectedBoat} selectedTour={selectedTour} onBoatChange={changeBoatFromBooking} onTourChange={setSelectedTour} />
+            <BookingPanel selectedBoat={selectedBoat} selectedTour={selectedTour} boats={catalogBoats} tours={catalogTours} onBoatChange={changeBoatFromBooking} onTourChange={(tour) => setSelectedTourId(tour?.id)} />
           </div>
         </Container>
       </section>

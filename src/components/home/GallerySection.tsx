@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 
 import { galleryImages } from '../../data/gallery';
 import type { GalleryCategory } from '../../types/gallery';
@@ -8,6 +9,7 @@ import { Container } from '../common/Container';
 import { SectionTitle } from '../common/SectionTitle';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { text, tr } from '../../i18n/translations';
+import { supabase } from '../../lib/supabase';
 
 const filters: Array<{ label: { es: string; en: string }; value: GalleryCategory | 'all' }> = [
   { label: { es: 'Todo', en: 'All' }, value: 'all' },
@@ -22,10 +24,29 @@ export function GallerySection() {
   const { language } = useLanguage();
   const [activeFilter, setActiveFilter] = useState<GalleryCategory | 'all'>('all');
   const [visibleCount, setVisibleCount] = useState(8);
+  const galleryQuery = useQuery({
+    queryKey: ['gallery-images', 'active'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('gallery_images')
+        .select('id, src, image_url, alt, category')
+        .eq('active', true)
+        .order('sort_order');
+      if (error) throw new Error(error.message);
+      return (data ?? []).map((image) => ({
+        id: image.id,
+        src: image.src ?? image.image_url ?? '/images/placeholder-image.jpg',
+        alt: image.alt,
+        category: image.category as GalleryCategory,
+      }));
+    },
+  });
+
+  const sourceImages = galleryQuery.data && galleryQuery.data.length > 0 ? galleryQuery.data : galleryImages;
 
   const filteredImages = useMemo(
-    () => (activeFilter === 'all' ? galleryImages : galleryImages.filter((image) => image.category === activeFilter)),
-    [activeFilter],
+    () => (activeFilter === 'all' ? sourceImages : sourceImages.filter((image) => image.category === activeFilter)),
+    [activeFilter, sourceImages],
   );
 
   const visibleImages = filteredImages.slice(0, visibleCount);

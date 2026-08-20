@@ -1,5 +1,5 @@
 import { ArrowRight, CheckCircle, Clock, Users, X } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import type { Boat } from '../../types/boat';
 import type { BoatTour } from '../../types/boatTour';
@@ -24,10 +24,35 @@ function getLowestPrice(tours: BoatTour[]) {
 export function BoatTourCard({ boat, tour, relatedTours, isSelected, onSelect }: BoatTourCardProps) {
   const { language } = useLanguage();
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const openerRef = useRef<HTMLElement | null>(null);
   const packageTours = relatedTours?.length ? relatedTours : [tour];
   const display = getTourText(tour, language);
   const effectiveMaxGuests = getEffectiveMaxGuests(boat, tour);
   const lowestPrice = getLowestPrice(packageTours);
+
+  function openModal() {
+    openerRef.current = document.activeElement as HTMLElement | null;
+    setIsModalOpen(true);
+  }
+
+  function closeModal() {
+    setIsModalOpen(false);
+    window.setTimeout(() => openerRef.current?.focus(), 0);
+  }
+
+  useEffect(() => {
+    if (!isModalOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') closeModal();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, [isModalOpen]);
 
   return (
     <>
@@ -63,7 +88,7 @@ export function BoatTourCard({ boat, tour, relatedTours, isSelected, onSelect }:
               <p className="text-[0.65rem] font-bold uppercase tracking-[0.12em] text-ocean-300">{language === 'es' ? 'Desde' : 'From'}</p>
               <p className="text-xl font-extrabold leading-tight text-ocean-400 sm:text-2xl">{formatCurrency(lowestPrice)}</p>
             </div>
-            <Button type="button" variant="secondary" className="group/button min-h-9 shrink-0 px-3 text-xs sm:min-h-10 sm:px-4 sm:text-sm" onClick={() => setIsModalOpen(true)}>
+            <Button type="button" variant="secondary" className="group/button min-h-9 shrink-0 px-3 text-xs sm:min-h-10 sm:px-4 sm:text-sm" onClick={openModal}>
               {language === 'es' ? 'Ver Tour' : 'View Tour'}
               <ArrowRight size={16} className="transition-transform duration-300 group-hover/button:translate-x-0.5" />
             </Button>
@@ -81,7 +106,7 @@ export function BoatTourCard({ boat, tour, relatedTours, isSelected, onSelect }:
                 className="focus-ring absolute right-4 top-4 grid h-10 w-10 place-items-center rounded-full bg-white/10 text-white backdrop-blur-xl transition hover:bg-white/15"
                 type="button"
                 aria-label="Close tour details"
-                onClick={() => setIsModalOpen(false)}
+                onClick={closeModal}
               >
                 <X size={18} />
               </button>
@@ -128,13 +153,13 @@ export function BoatTourCard({ boat, tour, relatedTours, isSelected, onSelect }:
               </div>
 
               <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-end">
-                <Button type="button" variant="secondary" onClick={() => setIsModalOpen(false)}>
+                <Button type="button" variant="secondary" onClick={closeModal}>
                   {language === 'es' ? 'Cerrar' : 'Close'}
                 </Button>
                 <Button
                   type="button"
                   onClick={() => {
-                    setIsModalOpen(false);
+                    closeModal();
                     onSelect(tour);
                   }}
                 >

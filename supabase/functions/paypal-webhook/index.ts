@@ -1,5 +1,6 @@
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2';
+import { areExternalProviderMocksAllowed } from '../_shared/environment.ts';
 
 serve(async (req) => {
   if (req.method !== 'POST') return Response.json({ message: 'Method not allowed' }, { status: 405 });
@@ -53,6 +54,7 @@ function getPayPalBaseUrl() {
 }
 
 async function getPayPalAccessToken() {
+  if (areExternalProviderMocksAllowed()) return 'mock-paypal-access-token';
   const clientId = Deno.env.get('PAYPAL_CLIENT_ID');
   const clientSecret = Deno.env.get('PAYPAL_CLIENT_SECRET');
   if (!clientId || !clientSecret) throw new Error('PayPal secrets are not configured');
@@ -70,6 +72,7 @@ async function getPayPalAccessToken() {
 }
 
 async function verifyPayPalWebhook(req: Request, payload: unknown, webhookId: string) {
+  if (areExternalProviderMocksAllowed()) return req.headers.get('paypal-transmission-id') === 'mock-valid-webhook';
   const accessToken = await getPayPalAccessToken();
   const response = await fetchWithTimeout(`${getPayPalBaseUrl()}/v1/notifications/verify-webhook-signature`, {
     method: 'POST',

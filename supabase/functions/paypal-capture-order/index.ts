@@ -1,6 +1,7 @@
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { z } from 'npm:zod@3.23.8';
+import { areExternalProviderMocksAllowed } from '../_shared/environment.ts';
 
 const schema = z.object({ bookingId: z.string().uuid(), orderId: z.string().min(1) });
 const headers = {
@@ -23,7 +24,7 @@ serve(async (req) => {
     .single();
 
   if (error || !booking) return Response.json({ message: 'Booking not found' }, { status: 404, headers });
-  if (booking.paypal_order_id && booking.paypal_order_id !== parsed.data.orderId) {
+  if (!booking.paypal_order_id || booking.paypal_order_id !== parsed.data.orderId) {
     return Response.json({ message: 'PayPal order does not match booking' }, { status: 400, headers });
   }
 
@@ -34,7 +35,7 @@ serve(async (req) => {
       Authorization: `Bearer ${accessToken}`,
       'Content-Type': 'application/json',
     },
-  });
+  }, 15000, Number(booking.total_snapshot).toFixed(2));
   const data = await response.json();
   if (!response.ok) return Response.json({ message: 'PayPal payment could not be captured' }, { status: 400, headers });
 
@@ -78,6 +79,7 @@ function getPayPalBaseUrl() {
 }
 
 async function getPayPalAccessToken() {
+  if (areExternalProviderMocksAllowed()) return 'mock-paypal-access-token';
   const clientId = Deno.env.get('PAYPAL_CLIENT_ID');
   const clientSecret = Deno.env.get('PAYPAL_CLIENT_SECRET');
   if (!clientId || !clientSecret) throw new Error('PayPal secrets are not configured');
@@ -95,7 +97,15 @@ async function getPayPalAccessToken() {
   return data.access_token as string;
 }
 
-async function fetchWithTimeout(input: string, init: RequestInit, ms = 15000) {
+async function fetchWithTimeout(input: string, init: RequestInit, ms = 15000, expectedAmount = '715.00') {
+  if (areExternalProviderMocksAllowed() && input.includes('/capture')) {
+    const orderId = decodeURIComponent(input.split('/').at(-2) ?? 'MOCK-ORDER');
+    if (orderId.includes('PENDING')) return Response.json({ status: 'PENDING', purchase_units: [{ payments: { captures: [{ id: 'MOCK-CAPTURE-PENDING', status: 'PENDING', amount: { value: '0.00', currency_code: 'USD' } }] } }] });
+    if (orderId.includes('DECLINED')) return Response.json({ status: 'COMPLETED', purchase_units: [{ payments: { captures: [{ id: 'MOCK-CAPTURE-DECLINED', status: 'DECLINED', amount: { value: '0.00', currency_code: 'USD' } }] } }] });
+    if (orderId.includes('BADAMOUNT')) return Response.json({ status: 'COMPLETED', purchase_units: [{ payments: { captures: [{ id: 'MOCK-CAPTURE-BADAMOUNT', status: 'COMPLETED', amount: { value: '1.00', currency_code: 'USD' } }] } }] });
+    if (orderId.includes('BADCURRENCY')) return Response.json({ status: 'COMPLETED', purchase_units: [{ payments: { captures: [{ id: 'MOCK-CAPTURE-BADCURRENCY', status: 'COMPLETED', amount: { value: expectedAmount, currency_code: 'CRC' } }] } }] });
+    return Response.json({ status: 'COMPLETED', purchase_units: [{ payments: { captures: [{ id: `CAP-${orderId}`, status: 'COMPLETED', amount: { value: expectedAmount, currency_code: 'USD' } }] } }] });
+  }
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), ms);
   try {

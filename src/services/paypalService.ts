@@ -1,4 +1,4 @@
-import type { BookingPaymentPayload } from '../utils/bookingPayment';
+import { functionsUrl, supabase } from '../lib/supabase';
 
 declare global {
   interface Window {
@@ -18,10 +18,13 @@ interface PayPalButtonOptions {
 
 export interface PayPalCaptureResult {
   bookingReference: string;
+  bookingId: string;
   orderId: string;
   transactionId: string;
   amount: string;
   currency: string;
+  paymentStatus: string;
+  bookingStatus: string;
 }
 
 let paypalSdkPromise: Promise<void> | null = null;
@@ -42,24 +45,44 @@ export function loadPayPalSdk(clientId: string) {
   return paypalSdkPromise;
 }
 
-export async function createPayPalOrder(booking: BookingPaymentPayload) {
-  const response = await fetch('/api/paypal/create-order', {
+async function callPayPalFunction<T>(name: string, body: unknown): Promise<T> {
+  const { data: session } = await supabase.auth.getSession();
+  const token = session.session?.access_token ?? import.meta.env.VITE_SUPABASE_ANON_KEY;
+  const response = await fetch(`${functionsUrl}/${name}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ booking }),
+    headers: {
+      Authorization: `Bearer ${token}`,
+      apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
   });
   const data = await response.json();
-  if (!response.ok) throw new Error(data?.message || 'PayPal order could not be created.');
-  return data.id as string;
+  if (!response.ok) throw new Error(data?.message || 'PayPal request could not be completed.');
+  return data as T;
 }
 
-export async function capturePayPalOrder(orderId: string, booking: BookingPaymentPayload) {
-  const response = await fetch('/api/paypal/capture-order', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ orderId, booking }),
-  });
-  const data = await response.json();
-  if (!response.ok) throw new Error(data?.message || 'PayPal payment could not be captured.');
-  return data as PayPalCaptureResult;
+export async function createPayPalOrder(bookingId: string) {
+  const data = await callPayPalFunction<{ id: string }>('paypal-create-order', { bookingId });
+  return data.id;
+}
+
+export async function capturePayPalOrder(orderId: string, bookingId: string, bookingReference: string) {
+  const data = await callPayPalFunction<{
+    booking_id: string;
+    booking_status: string;
+    payment_status: string;
+    paypal_order_id: string;
+    paypal_capture_id: string;
+  }>('paypal-capture-order', { bookingId, orderId });
+  return {
+    bookingReference,
+    bookingId: data.booking_id,
+    orderId: data.paypal_order_id,
+    transactionId: data.paypal_capture_id,
+    amount: '',
+    currency: 'USD',
+    paymentStatus: data.payment_status,
+    bookingStatus: data.booking_status,
+  } satisfies PayPalCaptureResult;
 }

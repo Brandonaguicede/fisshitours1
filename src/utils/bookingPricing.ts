@@ -21,6 +21,7 @@ export function calculateBookingTotal(boat: Boat, tour: BoatTour | undefined, gu
       extraGuests: 0,
       extraGuestPrice: getExtraGuestPrice(boat, tour),
       extraGuestsTotal: 0,
+      extrasTotal: 0,
       total: 0,
     };
   }
@@ -36,6 +37,7 @@ export function calculateBookingTotal(boat: Boat, tour: BoatTour | undefined, gu
     extraGuests,
     extraGuestPrice,
     extraGuestsTotal,
+    extrasTotal: 0,
     total: tour.basePrice + extraGuestsTotal,
   };
 }

@@ -73,7 +73,6 @@ VITE_SUPABASE_URL=
 VITE_SUPABASE_ANON_KEY=
 VITE_PAYPAL_CLIENT_ID=
 VITE_WHATSAPP_NUMBER=
-VITE_CLOUDFLARE_IMAGES_DELIVERY_URL=
 VITE_TURNSTILE_SITE_KEY=
 ```
 
@@ -87,9 +86,6 @@ PAYPAL_CLIENT_ID=
 PAYPAL_CLIENT_SECRET=
 PAYPAL_ENVIRONMENT=sandbox
 PAYPAL_WEBHOOK_ID=
-CLOUDFLARE_ACCOUNT_ID=
-CLOUDFLARE_IMAGES_API_TOKEN=
-CLOUDFLARE_ACCOUNT_HASH=
 CLOUDFLARE_TURNSTILE_SECRET_KEY=
 RATE_LIMIT_HASH_SECRET=
 ALLOWED_ORIGIN=
@@ -107,11 +103,114 @@ Estructura actual:
 - `paypal-create-order`
 - `paypal-capture-order`
 - `paypal-webhook`
-- `cloudflare-upload-image`
-- `cloudflare-delete-image`
+- `storage-upload-image`
+- `storage-delete-image`
 - `create-review`
+- `get-booking-availability`
 
 Las funciones sensibles usan service role desde Supabase Edge Functions. No debe haber inserciones publicas directas en `customers`, `bookings`, `payments` o `reviews`.
+
+### Secrets Locales
+
+Crear `supabase/functions/.env.local` con claves locales de `npx supabase status` y valores falsos para proveedores:
+
+```env
+SUPABASE_URL=http://127.0.0.1:54321
+SUPABASE_ANON_KEY=<local anon key>
+SUPABASE_SERVICE_ROLE_KEY=<local service role key>
+PAYPAL_CLIENT_ID=test-client
+PAYPAL_CLIENT_SECRET=test-secret
+PAYPAL_ENVIRONMENT=sandbox
+PAYPAL_WEBHOOK_ID=test-webhook
+CLOUDFLARE_TURNSTILE_SECRET_KEY=test-turnstile
+RATE_LIMIT_HASH_SECRET=local-test-secret-with-sufficient-length
+ALLOWED_ORIGIN=http://localhost:5173
+WHATSAPP_NUMBER=50600000000
+APP_ENV=local
+MOCK_EXTERNAL_PROVIDERS=false
+BOOKING_RATE_LIMIT_MAX_REQUESTS=8
+BOOKING_RATE_LIMIT_WINDOW_MINUTES=15
+TURNSTILE_EXPECTED_HOSTNAME=
+TURNSTILE_BOOKING_ACTION=booking
+TURNSTILE_REVIEW_ACTION=review
+```
+
+El archivo queda ignorado por Git mediante `*.local` y `.env.*`. No usar credenciales reales en local.
+
+### Servir Funciones Localmente
+
+```powershell
+npx supabase functions serve --env-file supabase/functions/.env.local
+```
+
+No usar `--no-verify-jwt` como modo global. Las funciones publicas controladas se invocan con JWT local anon valido. Las funciones administrativas requieren JWT de usuario autenticado y perfil activo con rol `admin` o `editor`.
+
+Nota: Supabase CLI local ignora variables `SUPABASE_*` leidas desde `--env-file`, pero el runtime local las inyecta automaticamente desde el stack.
+
+### Mocks Locales
+
+`MOCK_EXTERNAL_PROVIDERS=true` evita llamadas reales solo cuando `APP_ENV` es `local` o `test` y `SUPABASE_URL` apunta a `127.0.0.1` o `localhost`:
+
+- Turnstile acepta solamente `mock-valid-turnstile`.
+- PayPal crea ordenes `MOCK-*`, captura ordenes mock y permite probar estados fallidos por IDs especiales.
+- PayPal webhook acepta firma solo si `paypal-transmission-id` es `mock-valid-webhook`.
+
+No habilitar `MOCK_EXTERNAL_PROVIDERS` en Sandbox autorizado ni produccion.
+
+### Tipos De Funcion
+
+Publicas controladas:
+
+- `create-booking`
+- `calculate-booking-price`
+- `create-review`
+- `paypal-webhook`
+- `get-booking-availability`
+
+Protegidas:
+
+- `storage-upload-image`
+- `storage-delete-image`
+
+PayPal:
+
+- `paypal-create-order`
+- `paypal-capture-order`
+
+PayPal siempre usa la reserva guardada y `total_snapshot`; el navegador no controla totales ni estados.
+
+### Pruebas Locales
+
+Validar en este orden:
+
+```powershell
+npx supabase db reset --local
+npx supabase db lint --local
+npm run typecheck
+npm run build
+```
+
+Para pruebas HTTP, usar `http://127.0.0.1:54321/functions/v1/<function-name>` con `Authorization: Bearer <local anon key>` en funciones publicas. Para Storage, crear un usuario local de Auth, insertar/actualizar su fila en `profiles` con rol `admin` o `editor`, iniciar sesion y usar su access token.
+
+### Frontend Local
+
+El frontend usa solo variables publicas Vite:
+
+```env
+VITE_SUPABASE_URL=http://127.0.0.1:54321
+VITE_SUPABASE_ANON_KEY=<local anon key>
+VITE_PAYPAL_CLIENT_ID=mock
+VITE_WHATSAPP_NUMBER=50600000000
+VITE_TURNSTILE_SITE_KEY=
+```
+
+No exponer `SUPABASE_SERVICE_ROLE_KEY`, secretos PayPal, tokens Cloudflare ni Turnstile secret en `VITE_*`.
+
+Limitaciones pendientes:
+
+- Pruebas contra PayPal Sandbox real requieren credenciales Sandbox autorizadas.
+- Turnstile real requiere site key/secret configurados por dominio.
+- El panel admin actualiza `media_assets` y referencias en la base; las paginas publicas del sitio aun consumen datos estaticos en `src/data/`.
 
 ## Reglas De Reservas
 
@@ -123,12 +222,15 @@ Las funciones sensibles usan service role desde Supabase Edge Functions. No debe
 - La doble reserva se bloquea en PostgreSQL con indice unico parcial en `availability_blocks(boat_id, tour_date, time_slot_id)`.
 - Las reservas PayPal pendientes pueden expirar mediante `expire_pending_paypal_bookings()`.
 
-## Cloudflare Images
+## Supabase Storage
 
 - Upload y delete exigen bearer token Supabase.
 - Solo perfiles activos `admin` o `editor`.
 - No se acepta un rol enviado por body.
-- Se valida MIME, firma del archivo, tamano, recurso asociado y referencias antes de eliminar.
+- Se valida MIME, firma binaria (JPEG/PNG/WebP, se rechaza SVG/GIF aunque se declare otro MIME), tamano (max 10 MB), recurso asociado, carpeta permitida y traversal antes de subir o eliminar.
+- Las rutas son `<carpeta>/<resource-id>/<uuid>.ext` en el bucket publico `site-images`.
+- Una imagen en uso por algun recurso no se puede eliminar (409).
+- Las subidas nunca sobrescriben: se crea un asset nuevo y se elimina el anterior solo despues de confirmar la nueva referencia.
 - La auditoria se guarda en `audit_log`.
 
 ## Reviews

@@ -1,26 +1,30 @@
 import { CreditCard, Info, Mail, MessageCircle, Phone, Ship, User, WalletCards } from 'lucide-react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-import { DISPLAY_PHONE } from '../../constants/contact';
-import { boats } from '../../data/boats';
-import { boatTours } from '../../data/boatTours';
 import { getBoatText, getPackageLabel, getTourGroupKey, getTourText } from '../../i18n/content';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { text, tr } from '../../i18n/translations';
+import { MOCK_TURNSTILE_TOKEN, USE_LOCAL_TURNSTILE_MOCK } from '../../lib/turnstile';
 import { capturePayPalOrder, createPayPalOrder, loadPayPalSdk, type PayPalCaptureResult } from '../../services/paypalService';
+import { getBookingAvailability, type AvailabilitySlot } from '../../services/availabilityService';
+import { calculateBookingPrice, createBooking, type BookingResult, type PriceResult } from '../../services/bookingService';
+import { getActivePaymentMethods } from '../../services/paymentService';
 import type { Boat } from '../../types/boat';
 import type { BoatTour } from '../../types/boatTour';
-import { buildBookingPaymentPayload, createWhatsAppBookingMessage, getWhatsAppBookingUrl, type BookingPaymentMethod, type BookingStatus, type BookingPaymentPayload } from '../../utils/bookingPayment';
+import { buildBookingPaymentPayload, createWhatsAppBookingMessage, getWhatsAppBookingUrl, type BookingPaymentMethod, type BookingStatus, type BookingPaymentPayload, type PaymentStatus } from '../../utils/bookingPayment';
 import { calculateBookingTotal, getEffectiveMaxGuests, getExtraGuestPrice, getTourIncludedGuests } from '../../utils/bookingPricing';
 import { cn } from '../../utils/cn';
 import { formatCurrency } from '../../utils/formatCurrency';
 import { Button } from '../common/Button';
-
-type PaymentStatus = 'unpaid' | 'pending' | 'paid';
+import { TurnstileBox } from '../common/TurnstileBox';
 
 interface BookingPanelProps {
   selectedBoat: Boat;
   selectedTour?: BoatTour;
+  boats: Boat[];
+  tours: BoatTour[];
+  catalogLoading?: boolean;
   selectedTimeSlotId?: string;
   onBoatChange: (boat: Boat) => void;
   onTourChange: (tour?: BoatTour) => void;
@@ -28,7 +32,7 @@ interface BookingPanelProps {
 
 const paymentMethods: Array<{ id: BookingPaymentMethod; title: string; description: string; icon: typeof CreditCard; logo?: string; logoAlt?: string }> = [
   { id: 'paypal', title: 'Pay with PayPal', description: 'Secure USD checkout.', icon: CreditCard, logo: '/images/paypal.png', logoAlt: 'PayPal' },
-  { id: 'whatsapp-link', title: 'Request Payment Link via WhatsApp', description: 'Request a payment link.', icon: MessageCircle, logo: '/images/whatsapp.png', logoAlt: 'WhatsApp' },
+{ id: 'whatsapp-link', title: 'Request Payment Link via WhatsApp', description: 'Request a payment link.', icon: MessageCircle, logo: '/images/whatsapp.png', logoAlt: 'WhatsApp' },
   { id: 'pay-on-day', title: 'Pay on the Day of the Tour', description: 'Pay when the tour starts.', icon: WalletCards },
 ];
 
@@ -45,27 +49,28 @@ const fullDayMealOptions = [
 function getBookingTerms(language: 'es' | 'en') {
   return language === 'es'
     ? [
-        'Se requiere un deposito del 50% para asegurar la reserva. El saldo restante se paga el dia del tour.',
-        'Metodos de pago: transferencia bancaria, SINPE Movil y PayPal. Las comisiones de transferencia y PayPal las cubre el cliente.',
+        'La solicitud queda sujeta a confirmacion de disponibilidad por el equipo.',
+        'Metodos de pago: PayPal, enlace de pago por WhatsApp o pago el dia del tour.',
         'Cancelacion al menos 3 dias antes del tour: reembolso del 100% sin penalidad.',
         'Cancelacion dentro de 3 dias: penalidad del 30% por costos operativos y alquiler del bote. Reprogramar dentro de 3 dias es permitido segun disponibilidad.',
-        'Cancelacion dentro de 24 horas: penalidad del 100% por costos operativos, alquiler del bote, comida y bebidas. No-show: el deposito no es reembolsable.',
+        'Cancelacion dentro de 24 horas: penalidad del 100% por costos operativos, alquiler del bote, comida y bebidas.',
         'Reembolso o reprogramacion por clima solo aplica por huracanes, pronostico de oleaje fuerte, vientos altos o lluvia fuerte dentro de 24 horas antes del tour. Dias nublados o poca luz solar no califican.',
       ]
     : [
-        '50% deposit required to secure the reservation. Remaining balance is paid on the day of the tour.',
-        'Payment methods: bank transfer, SINPE Movil and PayPal. Bank transfer and PayPal fees are covered by the client.',
+        'The request remains subject to availability confirmation by the team.',
+        'Payment methods: PayPal, WhatsApp payment link or pay on the day of the tour.',
         'Cancellation at least 3 days before the tour: 100% refund without penalty.',
         'Cancellation within 3 days: 30% penalty due to operational and boat rental costs. Rescheduling within 3 days is allowed for another available date, subject to availability.',
-        'Cancellation within 24 hours: 100% penalty due to operational, boat rental, food and beverage costs. No-show deposits are not refunded.',
+        'Cancellation within 24 hours: 100% penalty due to operational, boat rental, food and beverage costs.',
         'Refund or rescheduling for weather applies only to hurricanes, strong wave forecasts, high winds or heavy rain within 24 hours before the tour. Cloudy days or limited sunlight do not qualify.',
       ];
 }
 
-export function BookingPanel({ selectedBoat, selectedTour, selectedTimeSlotId, onBoatChange, onTourChange }: BookingPanelProps) {
+export function BookingPanel({ selectedBoat, selectedTour, boats, tours, catalogLoading, selectedTimeSlotId, onBoatChange, onTourChange }: BookingPanelProps) {
   const { language } = useLanguage();
+  const queryClient = useQueryClient();
   const [activeStep, setActiveStep] = useState(0);
-  const [date, setDate] = useState('2026-08-15');
+  const [date, setDate] = useState(() => new Date(Date.now() + 86400000).toISOString().slice(0, 10));
   const [timeSlotId, setTimeSlotId] = useState(selectedTimeSlotId ?? selectedTour?.timeSlots[0]?.id ?? '');
   const [guests, setGuests] = useState(selectedTour ? getTourIncludedGuests(selectedBoat, selectedTour) : selectedBoat.includedGuests);
   const [customerName, setCustomerName] = useState('');
@@ -75,28 +80,60 @@ export function BookingPanel({ selectedBoat, selectedTour, selectedTimeSlotId, o
   const [mealOption, setMealOption] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<BookingPaymentMethod>('paypal');
   const [isPayOnDayOpen, setIsPayOnDayOpen] = useState(false);
-  const [bookingStatus, setBookingStatus] = useState<BookingStatus>('draft');
-  const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>('unpaid');
+  const [bookingStatus, setBookingStatus] = useState<BookingStatus>('pending');
+  const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>('pending');
   const [validationMessage, setValidationMessage] = useState('');
   const [paypalVisible, setPaypalVisible] = useState(false);
   const [paypalError, setPaypalError] = useState('');
   const [paypalSuccess, setPaypalSuccess] = useState<PayPalCaptureResult | null>(null);
-  const bookingReferenceRef = useRef(`PFT-${Date.now().toString(36).toUpperCase()}`);
+  const [createdBooking, setCreatedBooking] = useState<BookingResult | null>(null);
+  const [turnstileToken, setTurnstileToken] = useState('');
+  const [turnstileResetKey, setTurnstileResetKey] = useState(0);
+  const headingRef = useRef<HTMLHeadingElement | null>(null);
 
-  const availableTours = useMemo(() => boatTours.filter((tour) => tour.boatId === selectedBoat.id), [selectedBoat.id]);
-  const effectiveMaxGuests = getEffectiveMaxGuests(selectedBoat, selectedTour);
-  const includedGuests = getTourIncludedGuests(selectedBoat, selectedTour);
-  const extraGuestPrice = getExtraGuestPrice(selectedBoat, selectedTour);
-  const pricing = calculateBookingTotal(selectedBoat, selectedTour, guests);
-  const selectedTimeSlot = selectedTour?.timeSlots.find((slot) => slot.id === timeSlotId);
-  const selectedPayment = paymentMethods.find((method) => method.id === paymentMethod) ?? paymentMethods[0];
+  const availableTours = useMemo(() => tours.filter((tour) => tour.boatId === selectedBoat.id), [selectedBoat.id, tours]);
+  const availabilityQuery = useQuery({
+    queryKey: ['availability', selectedBoat.id, date],
+    queryFn: () => getBookingAvailability(selectedBoat.id, date),
+    enabled: Boolean(selectedBoat.id && date),
+  });
+  const paymentMethodsQuery = useQuery({ queryKey: ['paymentMethods', 'active'], queryFn: getActivePaymentMethods });
+  const backendPaymentMethods = paymentMethodsQuery.data?.map((method) => ({
+    id: method.key as BookingPaymentMethod,
+    title: method.name,
+    description: method.description ?? '',
+    icon: method.key === 'paypal' ? CreditCard : method.key === 'whatsapp-link' ? MessageCircle : WalletCards,
+    logo: method.logo_url ?? undefined,
+    logoAlt: method.name,
+  })) ?? paymentMethods;
+  const priceQuery = useQuery({
+    queryKey: ['bookingPrice', selectedBoat.id, selectedTour?.tourId, selectedTour?.id, guests],
+    queryFn: () => calculateBookingPrice({
+      boatId: selectedBoat.id,
+      tourId: selectedTour?.tourId ?? selectedTour?.category ?? '',
+      boatTourId: selectedTour?.boatTourId,
+      tourPackageId: selectedTour?.id ?? '',
+      guests,
+      extras: [],
+    }),
+    enabled: Boolean(selectedTour?.id && guests > 0),
+    staleTime: 250,
+  });
+  const pricing = mapBackendPricing(selectedBoat, selectedTour, guests, priceQuery.data);
+  const effectiveMaxGuests = priceQuery.data?.max_guests ?? getEffectiveMaxGuests(selectedBoat, selectedTour);
+  const includedGuests = priceQuery.data?.included_guests ?? getTourIncludedGuests(selectedBoat, selectedTour);
+  const extraGuestPrice = priceQuery.data?.extra_guest_price ?? getExtraGuestPrice(selectedBoat, selectedTour);
+  const currentSlots: Array<AvailabilitySlot | (BoatTour['timeSlots'][number] & { available?: boolean })> = availabilityQuery.data ?? selectedTour?.timeSlots ?? [];
+  const selectedTimeSlot = currentSlots.find((slot) => slot.id === timeSlotId);
+  const selectedPayment = backendPaymentMethods.find((method) => method.id === paymentMethod) ?? backendPaymentMethods[0];
   const steps = [tr(text.booking.steps.boat, language), tr(text.booking.steps.tour, language), tr(text.booking.steps.data, language)];
   const hasCapacityError = guests > effectiveMaxGuests;
-  const canContinueToCustomer = Boolean(selectedTour && selectedTimeSlot && !hasCapacityError);
-  const canReview = Boolean(canContinueToCustomer && customerName.trim() && customerEmail.trim() && customerWhatsapp.trim() && isValidEmail(customerEmail));
-  const bookingPayload = selectedTour
+  const canContinueToCustomer = Boolean(selectedTour && selectedTimeSlot && !hasCapacityError && !priceQuery.isError && !availabilityQuery.isError && selectedTimeSlot.available !== false);
+  const hasTurnstileToken = USE_LOCAL_TURNSTILE_MOCK || Boolean(turnstileToken);
+  const canReview = Boolean(canContinueToCustomer && customerName.trim() && customerEmail.trim() && customerWhatsapp.trim() && isValidEmail(customerEmail) && hasTurnstileToken);
+const bookingPayload = selectedTour
     ? buildBookingPaymentPayload({
-        bookingReference: bookingReferenceRef.current,
+        bookingReference: createdBooking?.booking_reference ?? 'Pending',
         customerName,
         phone: customerWhatsapp,
         email: customerEmail,
@@ -106,15 +143,21 @@ export function BookingPanel({ selectedBoat, selectedTour, selectedTimeSlotId, o
         date,
         guests,
         pricing,
+        extras: priceQuery.data?.extras,
         specialRequests,
       })
     : null;
 
   useEffect(() => {
-    if (selectedTour && !selectedTour.timeSlots.some((slot) => slot.id === timeSlotId)) {
-      setTimeSlotId(selectedTour.timeSlots[0]?.id ?? '');
+    const slots: Array<AvailabilitySlot | (BoatTour['timeSlots'][number] & { available?: boolean })> = availabilityQuery.data ?? selectedTour?.timeSlots ?? [];
+    if (selectedTour && slots.length && !slots.some((slot) => slot.id === timeSlotId && slot.available !== false)) {
+      setTimeSlotId(slots.find((slot) => slot.available !== false)?.id ?? '');
     }
-  }, [selectedTour, timeSlotId]);
+  }, [availabilityQuery.data, selectedTour, timeSlotId]);
+
+  useEffect(() => {
+    headingRef.current?.focus();
+  }, [activeStep]);
 
   function handleBoatChange(boatId: string) {
     const nextBoat = boats.find((boat) => boat.id === boatId);
@@ -123,10 +166,11 @@ export function BookingPanel({ selectedBoat, selectedTour, selectedTimeSlotId, o
     onTourChange(undefined);
     setTimeSlotId('');
     setGuests(nextBoat.includedGuests);
-    setBookingStatus('draft');
-    setPaymentStatus('unpaid');
+    setBookingStatus('pending');
+    setPaymentStatus('pending');
     setPaypalVisible(false);
     setPaypalSuccess(null);
+    setCreatedBooking(null);
   }
 
   function handleTourChange(tourId: string) {
@@ -135,10 +179,11 @@ export function BookingPanel({ selectedBoat, selectedTour, selectedTimeSlotId, o
     setTimeSlotId(nextTour?.timeSlots[0]?.id ?? '');
     if (nextTour) setGuests(getTourIncludedGuests(selectedBoat, nextTour));
     if (!nextTour || !isFullDayTour(nextTour)) setMealOption('');
-    setBookingStatus('draft');
-    setPaymentStatus('unpaid');
+    setBookingStatus('pending');
+    setPaymentStatus('pending');
     setPaypalVisible(false);
     setPaypalSuccess(null);
+    setCreatedBooking(null);
   }
 
   function canVisitStep(stepIndex: number) {
@@ -197,18 +242,60 @@ export function BookingPanel({ selectedBoat, selectedTour, selectedTimeSlotId, o
     return bookingPayload;
   }
 
+  const createBookingMutation = useMutation({
+    mutationFn: createBooking,
+    onSuccess: (booking) => {
+      setCreatedBooking(booking);
+      queryClient.invalidateQueries({ queryKey: ['availability', selectedBoat.id, date] });
+    },
+    onError: (error: Error & { status?: number }) => {
+      setTurnstileToken('');
+      setTurnstileResetKey((value) => value + 1);
+      if (error.status === 409) {
+        setValidationMessage('This time slot is no longer available. Please select another time.');
+        queryClient.invalidateQueries({ queryKey: ['availability', selectedBoat.id, date] });
+        setActiveStep(1);
+        return;
+      }
+      setValidationMessage(error.message || 'We couldn’t create the booking. Please try again.');
+    },
+  });
+
+  async function submitBooking(method: BookingPaymentMethod) {
+    const booking = validateBookingForPayment();
+    if (!booking || !selectedTour || !selectedTimeSlot) return null;
+    const result = await createBookingMutation.mutateAsync({
+      customer: { fullName: customerName, email: customerEmail, whatsapp: customerWhatsapp },
+      boatId: selectedBoat.id,
+      tourId: selectedTour.tourId ?? selectedTour.category,
+      tourPackageId: selectedTour.id,
+      tourDate: date,
+      timeSlotId,
+      guests,
+      mealOption: mealOption || undefined,
+      specialRequests: specialRequests || undefined,
+      paymentMethodKey: method,
+      extras: [],
+      turnstileToken: USE_LOCAL_TURNSTILE_MOCK ? MOCK_TURNSTILE_TOKEN : turnstileToken,
+    });
+    setTurnstileToken('');
+    setTurnstileResetKey((value) => value + 1);
+    return result;
+  }
+
   function openWhatsAppBooking(booking: BookingPaymentPayload, variant: 'payment_link' | 'pay_on_day' | 'paid_confirmation') {
     window.open(getWhatsAppBookingUrl(createWhatsAppBookingMessage(booking, variant)), '_blank', 'noopener,noreferrer');
   }
 
   function handlePaymentLinkRequest() {
-    const booking = validateBookingForPayment();
-    if (!booking) return;
-    setPaymentMethod('whatsapp-link');
-    setBookingStatus('payment_link_requested');
-    setPaymentStatus('pending');
-    setPaypalVisible(false);
-    openWhatsAppBooking(booking, 'payment_link');
+    submitBooking('whatsapp-link').then((result) => {
+      if (!result || !bookingPayload) return;
+      setPaymentMethod('whatsapp-link');
+      setBookingStatus('pending_confirmation');
+      setPaymentStatus('pending');
+      setPaypalVisible(false);
+      openWhatsAppBooking({ ...bookingPayload, bookingReference: result.booking_reference, total: result.total_snapshot }, 'payment_link');
+    }).catch(() => undefined);
   }
 
   function handlePayOnDayRequest() {
@@ -221,20 +308,25 @@ export function BookingPanel({ selectedBoat, selectedTour, selectedTimeSlotId, o
   function handleConfirmPayOnDay() {
     const booking = validateBookingForPayment();
     if (!booking) return;
-    setBookingStatus('pay_on_tour_day');
-    setPaymentStatus('pending');
-    setIsPayOnDayOpen(false);
-    openWhatsAppBooking(booking, 'pay_on_day');
+    submitBooking('pay-on-day').then((result) => {
+      if (!result || !bookingPayload) return;
+      setBookingStatus('pending_confirmation');
+      setPaymentStatus('not_required_yet');
+      setIsPayOnDayOpen(false);
+      openWhatsAppBooking({ ...bookingPayload, bookingReference: result.booking_reference, total: result.total_snapshot }, 'pay_on_day');
+    }).catch(() => undefined);
   }
 
   function handlePayPalRequest() {
     const booking = validateBookingForPayment();
     if (!booking) return;
-    setPaymentMethod('paypal');
-    setBookingStatus('pending_payment');
-    setPaymentStatus('pending');
-    setPaypalError('');
-    setPaypalVisible(true);
+    submitBooking('paypal').then(() => {
+      setPaymentMethod('paypal');
+      setBookingStatus('pending_payment');
+      setPaymentStatus('pending');
+      setPaypalError('');
+      setPaypalVisible(true);
+    }).catch(() => undefined);
   }
 
   return (
@@ -242,7 +334,7 @@ export function BookingPanel({ selectedBoat, selectedTour, selectedTimeSlotId, o
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(135deg,rgba(110,172,201,0.10),transparent_32%),radial-gradient(circle_at_92%_12%,rgba(73,134,167,0.10),transparent_20rem)]" />
       <div className="relative mx-auto max-w-xl text-center">
         <span className="inline-flex rounded-full border border-ocean-400/25 bg-white/[0.04] px-3 py-1 text-[0.6rem] font-extrabold uppercase tracking-[0.14em] text-ocean-300 sm:text-[0.66rem]">{tr(text.booking.badge, language)}</span>
-        <h2 className="mt-2 text-2xl font-extrabold leading-tight text-white min-[420px]:text-[1.75rem] sm:text-[1.9rem]">{tr(text.booking.title, language)}</h2>
+        <h2 ref={headingRef} tabIndex={-1} className="mt-2 text-2xl font-extrabold leading-tight text-white outline-none min-[420px]:text-[1.75rem] sm:text-[1.9rem]">{tr(text.booking.title, language)}</h2>
         <p className="mx-auto mt-1.5 max-w-md text-xs font-medium leading-5 text-ocean-200/90 sm:text-sm">{tr(text.booking.subtitle, language)}</p>
       </div>
 
@@ -270,7 +362,7 @@ export function BookingPanel({ selectedBoat, selectedTour, selectedTimeSlotId, o
       <div className="relative mt-4 grid gap-3 xl:mt-5 xl:grid-cols-[minmax(0,1fr)_290px] xl:gap-4">
         <div className="rounded-2xl border border-white/10 bg-white/[0.045] p-3 shadow-[0_12px_30px_rgba(0,0,0,0.14)] backdrop-blur-xl min-[420px]:p-4">
           {activeStep === 0 ? (
-            <BoatStep selectedBoat={selectedBoat} onBoatChange={handleBoatChange} onNext={() => setActiveStep(1)} />
+            <BoatStep boats={boats} selectedBoat={selectedBoat} catalogLoading={catalogLoading} onBoatChange={handleBoatChange} onNext={() => setActiveStep(1)} />
           ) : null}
 
           {activeStep === 1 ? (
@@ -285,6 +377,11 @@ export function BookingPanel({ selectedBoat, selectedTour, selectedTimeSlotId, o
               effectiveMaxGuests={effectiveMaxGuests}
               extraGuestPrice={extraGuestPrice}
               pricing={pricing}
+              priceLoading={priceQuery.isFetching}
+              priceError={priceQuery.isError}
+              availabilitySlots={availabilityQuery.data ?? []}
+              availabilityLoading={availabilityQuery.isFetching}
+              availabilityError={availabilityQuery.isError}
               mealOption={mealOption}
               hasCapacityError={hasCapacityError}
               canContinue={canContinueToCustomer}
@@ -305,12 +402,17 @@ export function BookingPanel({ selectedBoat, selectedTour, selectedTimeSlotId, o
               customerWhatsapp={customerWhatsapp}
               specialRequests={specialRequests}
               paymentMethod={paymentMethod}
-              paymentMethods={paymentMethods}
+              paymentMethods={backendPaymentMethods}
               bookingStatus={bookingStatus}
               paymentStatus={paymentStatus}
               canReview={canReview}
               validationMessage={validationMessage}
+              isSubmitting={createBookingMutation.isPending}
               booking={bookingPayload}
+              createdBooking={createdBooking}
+              turnstileToken={turnstileToken}
+              turnstileResetKey={turnstileResetKey}
+              onTurnstileTokenChange={setTurnstileToken}
               paypalVisible={paypalVisible}
               paypalError={paypalError}
               paypalSuccess={paypalSuccess}
@@ -324,18 +426,20 @@ export function BookingPanel({ selectedBoat, selectedTour, selectedTimeSlotId, o
               onPayOnDayRequest={handlePayOnDayRequest}
               onPayPalSuccess={(result) => {
                 setPaypalSuccess(result);
-                setBookingStatus('paid');
-                setPaymentStatus('paid');
+                if (result.paymentStatus === 'paid') {
+                  setBookingStatus('confirmed');
+                  setPaymentStatus('paid');
+                }
               }}
               onPayPalError={(message) => {
                 setPaypalError(message);
-                setBookingStatus('payment_failed');
-                setPaymentStatus('unpaid');
+                setBookingStatus('pending_payment');
+                setPaymentStatus('failed');
               }}
               onPayPalCancel={() => {
                 setPaypalError('Payment was cancelled. You can try again or select another payment method.');
-                setBookingStatus('payment_failed');
-                setPaymentStatus('unpaid');
+                setBookingStatus('pending_payment');
+                setPaymentStatus('failed');
               }}
               onSendPaidConfirmation={() => {
                 const booking = validateBookingForPayment();
@@ -396,7 +500,7 @@ export function BookingPanel({ selectedBoat, selectedTour, selectedTimeSlotId, o
   );
 }
 
-function BoatStep(props: { selectedBoat: Boat; onBoatChange: (boatId: string) => void; onNext: () => void }) {
+function BoatStep(props: { boats: Boat[]; selectedBoat: Boat; catalogLoading?: boolean; onBoatChange: (boatId: string) => void; onNext: () => void }) {
   const { language } = useLanguage();
 
   return (
@@ -409,7 +513,8 @@ function BoatStep(props: { selectedBoat: Boat; onBoatChange: (boatId: string) =>
         </div>
       </div>
       <div className="mt-4 grid gap-2 sm:mt-6 sm:gap-3">
-        {boats.map((boat) => (
+        {props.catalogLoading ? <p className="text-sm font-semibold text-ocean-200">Loading boats...</p> : null}
+        {props.boats.map((boat) => (
           <button
             key={boat.id}
             className={cn(
@@ -449,6 +554,11 @@ function TourDetailsStep(props: {
   effectiveMaxGuests: number;
   extraGuestPrice: number;
   pricing: ReturnType<typeof calculateBookingTotal>;
+  priceLoading: boolean;
+  priceError: boolean;
+  availabilitySlots: Array<{ id: string; label: string; time: string; available?: boolean }>;
+  availabilityLoading: boolean;
+  availabilityError: boolean;
   mealOption: string;
   hasCapacityError: boolean;
   canContinue: boolean;
@@ -536,16 +646,41 @@ function TourDetailsStep(props: {
         <fieldset>
           <legend className="text-sm font-bold text-ocean-100">{tr(text.booking.departure, language)}</legend>
           <div className="mt-3 grid grid-cols-2 gap-2 min-[520px]:grid-cols-3">
-            {props.selectedTour.timeSlots.map((slot) => (
-              <label key={slot.id} className={cn('pressable min-w-0 rounded-xl border border-white/10 bg-white/[0.035] p-3 text-center transition-[background-color,border-color,box-shadow] duration-200 hover:border-ocean-400/45 hover:bg-ocean-500/8', props.timeSlotId === slot.id && 'border-ocean-400/70 bg-ocean-500/10 ring-4 ring-ocean-500/8')}>
-                <input className="sr-only" type="radio" name="timeSlot" value={slot.id} checked={props.timeSlotId === slot.id} onChange={() => props.onTimeSlotChange(slot.id)} />
+            {(props.availabilitySlots.length ? props.availabilitySlots : props.selectedTour.timeSlots.map((slot) => ({ ...slot, available: true }))).map((slot) => (
+              <label key={slot.id} className={cn('pressable min-w-0 rounded-xl border border-white/10 bg-white/[0.035] p-3 text-center transition-[background-color,border-color,box-shadow] duration-200 hover:border-ocean-400/45 hover:bg-ocean-500/8', props.timeSlotId === slot.id && 'border-ocean-400/70 bg-ocean-500/10 ring-4 ring-ocean-500/8', slot.available === false && 'cursor-not-allowed opacity-45')}>
+                <input className="sr-only" type="radio" name="timeSlot" value={slot.id} checked={props.timeSlotId === slot.id} disabled={slot.available === false} onChange={() => props.onTimeSlotChange(slot.id)} />
                 <span className="block truncate text-xs font-extrabold text-white">{slot.label}</span>
                 <span className="mt-1 block text-base font-extrabold text-ocean-600 sm:text-lg">{slot.time}</span>
+                {slot.available === false ? <span className="mt-1 block text-[0.65rem] font-bold text-red-200">Unavailable</span> : null}
               </label>
             ))}
           </div>
+          {props.availabilityLoading ? <p className="mt-2 text-xs font-semibold text-ocean-300">Checking availability...</p> : null}
+          {props.availabilityError ? <p className="mt-2 text-xs font-semibold text-red-200">We couldn’t load the booking information. Please try again.</p> : null}
         </fieldset>
       ) : null}
+
+      <div className="rounded-2xl border border-white/10 bg-ocean-900/55 p-3 text-sm text-ocean-100 sm:p-4">
+        <p className="text-xs font-extrabold uppercase tracking-[0.12em] text-ocean-400">Price</p>
+        {props.priceLoading ? <p className="mt-2 font-semibold">Calculating...</p> : null}
+        {props.priceError ? <p className="mt-2 font-semibold text-red-200">We couldn’t load the booking information. Please try again.</p> : null}
+        {!props.priceLoading && !props.priceError ? (
+          <div className="mt-2 grid gap-1.5">
+            {props.pricing.isCustomQuote ? (
+              <p className="font-extrabold text-ocean-300">Custom quote required</p>
+            ) : (
+              <>
+                <SummaryLine label="Base price" value={formatCurrency(props.pricing.basePrice)} />
+                <SummaryLine label="Included guests" value={String(props.includedGuests)} />
+                <SummaryLine label="Additional guests" value={`${props.pricing.extraGuests} x ${formatCurrency(props.extraGuestPrice)}`} />
+                <SummaryLine label="Additional guest charge" value={formatCurrency(props.pricing.extraGuestsTotal)} />
+                <SummaryLine label="Extras" value={formatCurrency(props.pricing.extrasTotal ?? 0)} />
+                <SummaryLine label="Total" value={formatCurrency(props.pricing.total)} />
+              </>
+            )}
+          </div>
+        ) : null}
+      </div>
 
       {props.selectedTour && props.guests > props.includedGuests && !props.hasCapacityError ? (
         <div className="rounded-2xl border border-ocean-400/30 bg-ocean-500/10 p-3 text-ocean-100 sm:p-4">
@@ -583,6 +718,30 @@ function getBookingTourGroups(tours: BoatTour[], language: 'es' | 'en') {
   }));
 }
 
+function mapBackendPricing(boat: Boat, tour: BoatTour | undefined, guests: number, price?: PriceResult): ReturnType<typeof calculateBookingTotal> {
+  if (!price) return calculateBookingTotal(boat, tour, guests);
+  if (price.custom_quote) {
+    return {
+      isCustomQuote: true,
+      basePrice: 0,
+      extraGuests: 0,
+      extraGuestPrice: Number(price.extra_guest_price ?? tour?.extraGuestPrice ?? boat.extraGuestPrice),
+      extraGuestsTotal: 0,
+      extrasTotal: 0,
+      total: 0,
+    };
+  }
+  return {
+    isCustomQuote: false,
+    basePrice: Number(price.base_price ?? 0),
+    extraGuests: Number(price.extra_guests ?? 0),
+    extraGuestPrice: Number(price.extra_guest_price ?? 0),
+    extraGuestsTotal: Number(price.extra_guests_total ?? 0),
+    extrasTotal: Number(price.extras_total ?? 0),
+    total: Number(price.total ?? 0),
+  };
+}
+
 function isFullDayTour(tour?: BoatTour) {
   return Boolean(tour?.name.toLowerCase().includes('full day'));
 }
@@ -607,7 +766,11 @@ function CustomerStep(props: {
   paymentStatus: PaymentStatus;
   canReview: boolean;
   validationMessage: string;
+  isSubmitting: boolean;
   booking: BookingPaymentPayload | null;
+  createdBooking: BookingResult | null;
+  turnstileToken: string;
+  turnstileResetKey: number;
   paypalVisible: boolean;
   paypalError: string;
   paypalSuccess: PayPalCaptureResult | null;
@@ -615,6 +778,7 @@ function CustomerStep(props: {
   onCustomerEmailChange: (email: string) => void;
   onCustomerWhatsappChange: (value: string) => void;
   onSpecialRequestsChange: (value: string) => void;
+  onTurnstileTokenChange: (token: string) => void;
   onPaymentMethodChange: (method: BookingPaymentMethod) => void;
   onPayPalRequest: () => void;
   onPaymentLinkRequest: () => void;
@@ -662,7 +826,7 @@ function CustomerStep(props: {
           {tr(text.booking.phone, language)}
           <span className="relative">
             <Phone className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-ocean-500" size={17} />
-            <input className="focus-ring w-full rounded-xl border border-white/10 bg-ocean-950/50 py-3 pl-11 pr-4 text-sm font-medium normal-case tracking-normal text-white placeholder:text-ocean-500 focus:border-ocean-400 focus:ring-4 focus:ring-ocean-500/15" type="tel" inputMode="tel" value={props.customerWhatsapp} onChange={(event) => props.onCustomerWhatsappChange(event.target.value)} placeholder={DISPLAY_PHONE} autoComplete="tel" />
+            <input className="focus-ring w-full rounded-xl border border-white/10 bg-ocean-950/50 py-3 pl-11 pr-4 text-sm font-medium normal-case tracking-normal text-white placeholder:text-ocean-500 focus:border-ocean-400 focus:ring-4 focus:ring-ocean-500/15" type="tel" inputMode="tel" value={props.customerWhatsapp} onChange={(event) => props.onCustomerWhatsappChange(event.target.value)} placeholder="+506 0000 0000" autoComplete="tel" />
           </span>
         </label>
 
@@ -682,6 +846,13 @@ function CustomerStep(props: {
         </div>
       ) : null}
 
+<TurnstileBox
+        className="mt-5"
+        resetKey={props.turnstileResetKey}
+        token={props.turnstileToken}
+        onTokenChange={props.onTurnstileTokenChange}
+      />
+
       <fieldset className="mt-5 rounded-xl border border-white/10 bg-ocean-950/30 p-3 sm:p-4">
         <div className="flex flex-wrap items-end justify-between gap-2">
           <legend className="text-xs font-extrabold uppercase tracking-[0.12em] text-ocean-400">Payment method</legend>
@@ -689,13 +860,15 @@ function CustomerStep(props: {
         </div>
         <div className="mt-3 grid gap-2 lg:grid-cols-3">
           {props.paymentMethods.map((method, index) => (
-            <button
+<button
               key={method.id}
+              data-payment-method={method.id}
               className={cn(
                 'focus-ring pressable group flex min-w-0 items-center gap-2.5 rounded-xl border border-white/10 bg-white/[0.03] p-2.5 text-left transition-[background-color,border-color,box-shadow,transform] duration-200 hover:-translate-y-0.5 hover:border-ocean-400/40 hover:bg-white/[0.055] sm:p-3 lg:min-h-[5.25rem]',
                 props.paymentMethod === method.id && 'border-ocean-400/60 bg-ocean-500/8 ring-2 ring-ocean-500/8',
               )}
               type="button"
+              disabled={props.isSubmitting}
               onClick={() => handlePaymentMethodAction(method.id)}
             >
               <span className={cn('grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-white/10 bg-white/[0.08] text-ocean-300 transition-transform duration-200 group-hover:scale-[1.03]', method.logo && 'bg-white')}>
@@ -714,8 +887,8 @@ function CustomerStep(props: {
         </div>
       </fieldset>
 
-      {props.paypalVisible && props.booking ? (
-        <PayPalCheckoutBox booking={props.booking} onSuccess={props.onPayPalSuccess} onError={props.onPayPalError} onCancel={props.onPayPalCancel} />
+      {props.paypalVisible && props.booking && props.createdBooking ? (
+        <PayPalCheckoutBox booking={props.booking} createdBooking={props.createdBooking} onSuccess={props.onPayPalSuccess} onError={props.onPayPalError} onCancel={props.onPayPalCancel} />
       ) : null}
 
       {props.paypalError ? (
@@ -727,7 +900,7 @@ function CustomerStep(props: {
 
       {props.paypalSuccess && props.booking ? (
         <div className="mt-4 rounded-2xl border border-seafoam-400/30 bg-seafoam-500/10 p-4 text-ocean-50">
-          <p className="text-lg font-extrabold">Payment completed successfully</p>
+          <p className="text-lg font-extrabold">Payment Successful</p>
           <div className="mt-3 grid gap-2 text-sm">
             <SummaryLine label="Booking reference" value={props.paypalSuccess.bookingReference} />
             <SummaryLine label="Amount paid" value={`${props.paypalSuccess.amount} ${props.paypalSuccess.currency}`} />
@@ -739,17 +912,19 @@ function CustomerStep(props: {
         </div>
       ) : null}
 
-      {props.bookingStatus === 'payment_link_requested' ? (
+      {props.isSubmitting ? <p className="mt-4 text-sm font-semibold text-ocean-300">Creating booking request...</p> : null}
+
+      {props.bookingStatus === 'pending_confirmation' && props.paymentStatus === 'pending' ? (
         <div className="mt-5 rounded-2xl border border-ocean-400/30 bg-ocean-500/10 p-4 text-ocean-100">
-          <p className="font-bold">Payment link request opened</p>
-          <p className="mt-1 text-sm">Complete the request in WhatsApp. This does not mark the reservation as paid.</p>
+          <p className="font-bold">Booking Request Created</p>
+          <p className="mt-1 text-sm">Your booking request has been created. Send the prepared message to continue.</p>
         </div>
       ) : null}
 
-      {props.bookingStatus === 'pay_on_tour_day' ? (
+      {props.bookingStatus === 'pending_confirmation' && props.paymentStatus === 'not_required_yet' ? (
         <div className="mt-5 rounded-2xl border border-ocean-400/30 bg-ocean-500/10 p-4 text-ocean-100">
-          <p className="font-bold">Reservation request opened</p>
-          <p className="mt-1 text-sm">The reservation remains pending confirmation until availability is confirmed.</p>
+          <p className="font-bold">Booking Request Received</p>
+          <p className="mt-1 text-sm">Your booking request has been received and is awaiting confirmation.</p>
         </div>
       ) : null}
 
@@ -795,11 +970,12 @@ function BookingPaymentSummary({ booking }: { booking: BookingPaymentPayload | n
 
 function PayPalCheckoutBox(props: {
   booking: BookingPaymentPayload;
+  createdBooking: BookingResult;
   onSuccess: (result: PayPalCaptureResult) => void;
   onError: (message: string) => void;
   onCancel: () => void;
 }) {
-  const { booking, onSuccess, onError, onCancel } = props;
+  const { booking, createdBooking, onSuccess, onError, onCancel } = props;
   const clientId = import.meta.env.VITE_PAYPAL_CLIENT_ID;
   const containerId = `paypal-button-container-${booking.bookingReference}`;
 
@@ -813,14 +989,24 @@ function PayPalCheckoutBox(props: {
       return;
     }
 
+    if (clientId === 'mock') {
+      createPayPalOrder(createdBooking.booking_id)
+        .then((orderId) => capturePayPalOrder(orderId, createdBooking.booking_id, createdBooking.booking_reference))
+        .then((result) => {
+          if (isMounted) onSuccess(result);
+        })
+        .catch((error: Error) => onError(error.message));
+      return;
+    }
+
     loadPayPalSdk(clientId)
       .then(() => {
         if (!isMounted || !window.paypal) return;
         return window.paypal.Buttons({
           style: { layout: 'vertical', color: 'blue', shape: 'rect', label: 'paypal' },
-          createOrder: () => createPayPalOrder(booking),
+          createOrder: () => createPayPalOrder(createdBooking.booking_id),
           onApprove: async (data) => {
-            const result = await capturePayPalOrder(data.orderID, booking);
+            const result = await capturePayPalOrder(data.orderID, createdBooking.booking_id, createdBooking.booking_reference);
             onSuccess(result);
           },
           onCancel,
@@ -832,7 +1018,7 @@ function PayPalCheckoutBox(props: {
     return () => {
       isMounted = false;
     };
-  }, [booking, booking.bookingReference, clientId, containerId]);
+  }, [booking, booking.bookingReference, clientId, containerId, createdBooking.booking_id, createdBooking.booking_reference, onError, onSuccess]);
 
   return (
     <div className="mt-4 rounded-xl border border-ocean-400/25 bg-ocean-500/8 p-4">
@@ -879,7 +1065,6 @@ function BookingSummary(props: {
         <SummaryRow label="Subtotal" value={subtotal} />
         {props.pricing.extraGuests > 0 ? <SummaryRow label={tr(text.booking.extraPeople, language)} value={`${props.pricing.extraGuests} x ${formatCurrency(props.pricing.extraGuestPrice)}`} /> : null}
         <SummaryRow label={tr(text.booking.taxes, language)} value={taxes} />
-        <SummaryRow label={language === 'es' ? 'Deposito requerido' : 'Required deposit'} value={props.selectedTour?.customQuote ? (language === 'es' ? 'Por confirmar' : 'To be confirmed') : formatCurrency(props.pricing.total * 0.5)} />
         <div className="mt-4 flex flex-wrap items-end justify-between gap-3 border-t border-white/10 pt-4">
           <span className="font-extrabold text-white">Total</span>
           <span className="text-2xl font-extrabold text-ocean-400">{props.selectedTour?.customQuote ? 'Cotizar' : formatCurrency(props.pricing.total)}</span>
@@ -975,7 +1160,7 @@ function ReviewModal(props: {
         <img className="mb-5 aspect-[16/7] w-full rounded-2xl object-cover" src={props.selectedBoat.image} alt={props.selectedBoat.name} loading="lazy" />
         <h3 className="text-3xl font-extrabold text-white">{language === 'es' ? 'Revisar reserva' : 'Review reservation'}</h3>
         <p className="mt-3 leading-7 text-ocean-200">
-          {language === 'es' ? 'Revisa los detalles antes de confirmar la solicitud. Se requiere un deposito del 50% para asegurar la reserva y el saldo restante se paga el dia del tour.' : 'Review your reservation details before confirming this request. A 50% deposit is required to secure the reservation, and the remaining balance is paid on the day of the tour.'}
+          {language === 'es' ? 'Revisa los detalles antes de confirmar la solicitud. La disponibilidad y el metodo de pago seleccionado se validan al crear la reserva.' : 'Review your reservation details before confirming this request. Availability and the selected payment method are validated when the booking is created.'}
         </p>
         <div className="mt-6 grid gap-3 rounded-2xl border border-white/10 bg-white/[0.04] p-4 text-sm">
           <SummaryLine label={language === 'es' ? 'Barco' : 'Boat'} value={props.selectedBoat.name} />
@@ -986,8 +1171,6 @@ function ReviewModal(props: {
           {isFullDayTour(props.selectedTour) ? <SummaryLine label={language === 'es' ? 'Comida' : 'Meal option'} value={props.mealOption || (language === 'es' ? 'No seleccionada' : 'Not selected')} /> : null}
           <SummaryLine label={language === 'es' ? 'Cargos por personas extra' : 'Additional guest charges'} value={props.pricing.extraGuests > 0 ? `${props.pricing.extraGuests} x ${formatCurrency(props.pricing.extraGuestPrice)} = ${formatCurrency(props.pricing.extraGuestsTotal)}` : '$0'} />
           <SummaryLine label="Total" value={props.pricing.isCustomQuote ? 'Custom quote' : formatCurrency(props.pricing.total)} />
-          <SummaryLine label={language === 'es' ? 'Deposito requerido' : 'Required deposit'} value={props.pricing.isCustomQuote ? (language === 'es' ? 'Por confirmar' : 'To be confirmed') : formatCurrency(props.pricing.total * 0.5)} />
-          <SummaryLine label={language === 'es' ? 'Saldo restante' : 'Remaining balance'} value={language === 'es' ? 'Se paga el dia del tour' : 'Paid on the day of the tour'} />
           <SummaryLine label={language === 'es' ? 'Nombre' : 'Customer name'} value={props.customerName} />
           <SummaryLine label="Email" value={props.customerEmail} />
           <SummaryLine label={language === 'es' ? 'Numero de WhatsApp' : 'WhatsApp number'} value={props.customerWhatsapp} />

@@ -60,7 +60,7 @@ export const text = {
     selectTime: { es: 'Selecciona hora', en: 'Select time' },
     extraPeople: { es: 'Personas extra', en: 'Extra guests' },
     taxes: { es: 'Impuestos', en: 'Taxes' },
-    secure: { es: 'Se requiere 50% de deposito. Las comisiones de transferencia bancaria y PayPal las cubre el cliente.', en: '50% deposit required. Bank transfer and PayPal fees are covered by the client.' },
+    secure: { es: 'La reserva queda pendiente de confirmacion del equipo.', en: 'Your booking request remains pending confirmation by the team.' },
   },
 } as const;
 

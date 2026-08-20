@@ -41,7 +41,7 @@ export const adminData = {
       total: 1145,
       paymentMethod: 'WhatsApp link',
       paymentStatus: 'pending',
-      reservationStatus: 'payment_link_requested',
+      reservationStatus: 'pending_confirmation',
     },
     {
       id: 'res-003',
@@ -55,21 +55,20 @@ export const adminData = {
       guests: 4,
       total: 750,
       paymentMethod: 'Pay on day',
-      paymentStatus: 'pending',
-      reservationStatus: 'pay_on_tour_day',
+      paymentStatus: 'not_required_yet',
+      reservationStatus: 'pending_confirmation',
     },
   ],
   paymentMethods: [
     { id: 'paypal', name: 'PayPal', type: 'paypal', active: true, description: 'Secure USD checkout.' },
     { id: 'whatsapp-link', name: 'WhatsApp payment link', type: 'whatsapp_link', active: true, description: 'Admin sends a payment link manually.' },
     { id: 'pay-on-day', name: 'Pay on day', type: 'pay_on_day', active: true, description: 'Customer pays when the tour starts.' },
-    { id: 'sinpe', name: 'SINPE Movil', type: 'sinpe', active: false, description: 'Manual Costa Rica transfer.' },
   ],
   content: [
     { key: 'home.hero.title', locale: 'en', group: 'Home', type: 'text', value: 'Private Fishing Tours Costa Rica', active: true },
     { key: 'home.hero.subtitle', locale: 'en', group: 'Home', type: 'textarea', value: 'Private ocean adventures aboard Second Wind.', active: true },
     { key: 'contact.whatsapp', locale: 'en', group: 'Contact', type: 'text', value: '+506 8610 5784', active: true },
-    { key: 'booking.terms.deposit', locale: 'en', group: 'Booking', type: 'textarea', value: '50% deposit required to secure the reservation.', active: true },
+    { key: 'booking.terms.confirmation', locale: 'en', group: 'Booking', type: 'textarea', value: 'Booking requests remain pending until availability is confirmed.', active: true },
   ],
 };
 

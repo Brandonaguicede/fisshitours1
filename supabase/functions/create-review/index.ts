@@ -1,6 +1,7 @@
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { z } from 'npm:zod@3.23.8';
+import { areExternalProviderMocksAllowed } from '../_shared/environment.ts';
 
 const schema = z.object({
   name: z.string().min(2).max(100),
@@ -9,7 +10,7 @@ const schema = z.object({
   rating: z.number().int().min(1).max(5),
   tourId: z.string().optional(),
   boatId: z.string().optional(),
-  turnstileToken: z.string().min(1),
+  turnstileToken: z.string().optional(),
 });
 
 const headers = {
@@ -91,6 +92,7 @@ async function hashIp(value: string) {
 }
 
 async function verifyTurnstile(token: string, req: Request) {
+  if (areExternalProviderMocksAllowed()) return token === 'mock-valid-turnstile';
   const secret = Deno.env.get('CLOUDFLARE_TURNSTILE_SECRET_KEY');
   if (!secret) return false;
   const controller = new AbortController();
@@ -108,7 +110,7 @@ async function verifyTurnstile(token: string, req: Request) {
     });
     const data = await response.json();
     const expectedHostname = Deno.env.get('TURNSTILE_EXPECTED_HOSTNAME');
-    const expectedAction = Deno.env.get('TURNSTILE_EXPECTED_ACTION');
+    const expectedAction = Deno.env.get('TURNSTILE_REVIEW_ACTION') ?? Deno.env.get('TURNSTILE_EXPECTED_ACTION');
     if (expectedHostname && data.hostname !== expectedHostname) return false;
     if (expectedAction && data.action !== expectedAction) return false;
     return response.ok && data.success === true;

@@ -1,12 +1,28 @@
 import { ArrowDown, Facebook, Instagram } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { useQuery } from '@tanstack/react-query';
 
 import { Container } from '../common/Container';
 import { FACEBOOK_URL, INSTAGRAM_URL, WHATSAPP_NUMBER } from '../../constants/contact';
 import { useLanguage } from '../../i18n/LanguageContext';
+import { supabase } from '../../lib/supabase';
+
+const FALLBACK_HERO_IMAGE = '/images/placeholder-image.jpg';
+
+async function getHeroPoster() {
+  const { data } = await supabase
+    .from('site_settings')
+    .select('value')
+    .eq('key', 'home.hero.image')
+    .eq('active', true)
+    .maybeSingle();
+  return data?.value || FALLBACK_HERO_IMAGE;
+}
 
 export function Hero() {
   const { language } = useLanguage();
+  const heroPosterQuery = useQuery({ queryKey: ['site-settings', 'home.hero.image'], queryFn: getHeroPoster, staleTime: 60_000 });
+  const heroPoster = heroPosterQuery.data ?? FALLBACK_HERO_IMAGE;
 
   function scrollToFleet() {
     document.getElementById('fleet')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -21,6 +37,7 @@ export function Hero() {
         loop
         playsInline
         preload="metadata"
+        poster={heroPoster}
       >
         <source src="/videos/hero-ocean-charter.mp4" type="video/mp4" />
       </video>

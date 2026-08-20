@@ -1,31 +1,226 @@
-import { Plus } from 'lucide-react';
+import { Pencil, Plus, X } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
 
+import AdminImageManager from '../../components/admin/AdminImageManager';
 import { AdminBadge, AdminPageHeader, AdminTable, AdminToolbar } from '../../components/admin/AdminPrimitives';
-import { adminData, money } from './adminMockData';
+import { Modal } from '../../components/common/Modal';
+import { supabase } from '../../lib/supabase';
+import type { StorageImage } from '../../services/imageService';
+import { money } from './adminMockData';
+
+interface BoatOption { id: string; name: string }
+interface BoatTourOption { id: string; boat_id: string; tour_id: string }
+
+interface PackageRow {
+  id: string;
+  boat_tour_id: string;
+  name: string;
+  package_type: string;
+  description: string | null;
+  duration_minutes: number | null;
+  base_price: number;
+  included_guests: number;
+  max_guests: number;
+  extra_guest_price: number;
+  custom_quote: boolean;
+  image_url: string | null;
+  image_public_id: string | null;
+  active: boolean;
+  sort_order: number;
+  boat_tours?: { boat_id: string; tour_id: string; boats?: { name: string } | null; tours?: { title: string } | null } | null;
+}
 
 export default function AdminBoatToursPage() {
+  const [packages, setPackages] = useState<PackageRow[]>([]);
+  const [boats, setBoats] = useState<BoatOption[]>([]);
+  const [boatTours, setBoatTours] = useState<BoatTourOption[]>([]);
+  const [editing, setEditing] = useState<PackageRow | null>(null);
+  const [boatFilter, setBoatFilter] = useState('all');
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+
+  async function loadData() {
+    setLoading(true);
+    setError('');
+    const [packagesRes, boatsRes, boatToursRes] = await Promise.all([
+      supabase
+        .from('tour_packages')
+        .select('*, boat_tours(boat_id, tour_id, boats(name), tours(title))')
+        .order('sort_order'),
+      supabase.from('boats').select('id, name').order('sort_order'),
+      supabase.from('boat_tours').select('id, boat_id, tour_id').eq('active', true).order('sort_order'),
+    ]);
+    setLoading(false);
+    if (packagesRes.error || boatsRes.error || boatToursRes.error) {
+      setError(packagesRes.error?.message ?? boatsRes.error?.message ?? boatToursRes.error?.message ?? 'No se pudieron cargar los paquetes.');
+      return;
+    }
+    setPackages((packagesRes.data ?? []) as unknown as PackageRow[]);
+    setBoats((boatsRes.data ?? []) as BoatOption[]);
+    setBoatTours((boatToursRes.data ?? []) as BoatTourOption[]);
+  }
+
+  useEffect(() => {
+    void loadData();
+  }, []);
+
+  async function createPackage() {
+    const firstBoatTour = boatTours[0];
+    if (!firstBoatTour) {
+      setError('Crea primero una asociacion bote-tour activa.');
+      return;
+    }
+    const id = `package-${crypto.randomUUID().slice(0, 8)}`;
+    const { data, error } = await supabase
+      .from('tour_packages')
+      .insert({
+        id,
+        boat_tour_id: firstBoatTour.id,
+        name: 'Nuevo paquete',
+        package_type: 'standard',
+        base_price: 0,
+        included_guests: 1,
+        max_guests: 6,
+        extra_guest_price: 0,
+        custom_quote: false,
+        active: true,
+        sort_order: packages.length + 1,
+      })
+      .select('*, boat_tours(boat_id, tour_id, boats(name), tours(title))')
+      .single();
+    if (error) {
+      setError(error.message);
+      return;
+    }
+    setEditing(data as unknown as PackageRow);
+    await loadData();
+  }
+
+  async function savePackage() {
+    if (!editing) return;
+    setSaving(true);
+    setError('');
+    setNotice('');
+    const { error } = await supabase
+      .from('tour_packages')
+      .update({
+        boat_tour_id: editing.boat_tour_id,
+        name: editing.name,
+        package_type: editing.package_type,
+        description: editing.description,
+        duration_minutes: editing.duration_minutes,
+        base_price: editing.base_price,
+        included_guests: editing.included_guests,
+        max_guests: editing.max_guests,
+        extra_guest_price: editing.extra_guest_price,
+        custom_quote: editing.custom_quote,
+        active: editing.active,
+        sort_order: editing.sort_order,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', editing.id);
+    setSaving(false);
+    if (error) {
+      setError(error.message);
+      return;
+    }
+    setNotice('Paquete actualizado.');
+    await loadData();
+  }
+
+  async function onImageSaved(image: StorageImage) {
+    if (!editing) return;
+    const { error } = await supabase
+      .from('tour_packages')
+      .update({ image_url: image.public_url, image_public_id: image.storage_path, updated_at: new Date().toISOString() })
+      .eq('id', editing.id);
+    if (error) throw new Error(error.message);
+    setEditing({ ...editing, image_url: image.public_url, image_public_id: image.storage_path });
+    await loadData();
+  }
+
+  const visiblePackages = useMemo(
+    () => packages.filter((item) => boatFilter === 'all' || item.boat_tours?.boat_id === boatFilter),
+    [packages, boatFilter],
+  );
+
   return (
     <div className="admin-page">
-      <AdminPageHeader title="Paquetes por bote" description="Paquetes reservables, horarios, capacidades y precios reales." actions={<button className="admin-btn"><Plus size={16} /> Crear paquete</button>} />
+      <AdminPageHeader title="Paquetes por bote" description="Paquetes reservables, capacidades y precios reales." actions={<button className="admin-btn" type="button" onClick={() => void createPackage()}><Plus size={16} /> Crear paquete</button>} />
       <AdminToolbar>
-        <input className="admin-input" placeholder="Buscar paquete" />
-        <select className="admin-select"><option>Todos los botes</option><option>Second Wind</option></select>
-        <select className="admin-select"><option>Todas las categorias</option><option>Fishing</option><option>Water Toys</option></select>
+        <select className="admin-select" value={boatFilter} onChange={(event) => setBoatFilter(event.target.value)}>
+          <option value="all">Todos los botes</option>
+          {boats.map((boat) => <option key={boat.id} value={boat.id}>{boat.name}</option>)}
+        </select>
       </AdminToolbar>
-      <AdminTable headers={['Paquete', 'Categoria', 'Duracion', 'Precio base', 'Capacidad', 'Horarios', 'Estado', 'Acciones']}>
-        {adminData.boatTours.map((tour) => (
-          <tr key={tour.id}>
-            <td>{tour.name}<div className="admin-muted">{tour.id}</div></td>
-            <td>{tour.category}</td>
-            <td>{tour.duration ? `${tour.duration}h` : 'Noche'}</td>
-            <td>{tour.customQuote ? 'Cotizar' : money(tour.basePrice)}</td>
-            <td>{tour.includedGuests} incluidos / {tour.maxGuests} max</td>
-            <td>{tour.timeSlots.map((slot) => slot.time).join(', ')}</td>
-            <td><AdminBadge value /></td>
-            <td><button className="admin-btn admin-btn--ghost">Editar</button></td>
-          </tr>
-        ))}
-      </AdminTable>
+      {error ? <div className="admin-alert admin-alert--danger">{error}</div> : null}
+      {notice ? <div className="admin-alert admin-alert--success">{notice}</div> : null}
+      {loading ? (
+        <p className="admin-muted">Cargando paquetes...</p>
+      ) : (
+        <AdminTable headers={['Paquete', 'Bote', 'Tour', 'Precio base', 'Capacidad', 'Orden', 'Estado', 'Acciones']}>
+          {visiblePackages.map((item) => (
+            <tr key={item.id}>
+              <td>{item.name}<div className="admin-muted">{item.id}</div></td>
+              <td>{item.boat_tours?.boats?.name ?? item.boat_tours?.boat_id ?? '-'}</td>
+              <td>{item.boat_tours?.tours?.title ?? item.boat_tours?.tour_id ?? '-'}</td>
+              <td>{item.custom_quote ? 'Cotizar' : money(Number(item.base_price))}</td>
+              <td>{item.included_guests} incluidos / {item.max_guests} max</td>
+              <td>{item.sort_order}</td>
+              <td><AdminBadge value={item.active} /></td>
+              <td><button className="admin-btn admin-btn--ghost" type="button" onClick={() => setEditing(item)}><Pencil size={14} /> Editar</button></td>
+            </tr>
+          ))}
+          {visiblePackages.length === 0 ? <tr><td colSpan={8} className="admin-muted">No hay paquetes.</td></tr> : null}
+        </AdminTable>
+      )}
+
+      <Modal open={Boolean(editing)} onClose={() => setEditing(null)} titleId="package-edit-title" className="max-w-2xl">
+        {editing ? (
+          <div className="rounded-2xl border border-white/60 bg-white p-4 shadow-2xl sm:p-5">
+            <div className="flex items-start justify-between gap-3">
+              <h2 id="package-edit-title" className="admin-card__title"><Pencil size={18} /> Editar paquete</h2>
+              <button className="admin-icon-btn" type="button" aria-label="Cerrar" onClick={() => setEditing(null)}><X size={18} /></button>
+            </div>
+            <div className="mt-4 grid gap-4">
+              <AdminImageManager
+                resourceTable="tour_packages"
+                resourceId={editing.id}
+                folder="tours"
+                currentImageUrl={editing.image_url}
+                currentStoragePath={editing.image_public_id}
+                label={editing.name}
+                aspect={3 / 2}
+                maxWidth={1200}
+                maxHeight={800}
+                maxSizeMB={0.35}
+                requireReplacementToDelete
+                onImageSaved={onImageSaved}
+              />
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="grid gap-1"><span className="admin-muted">Asociacion bote-tour</span><select className="admin-select" value={editing.boat_tour_id} onChange={(event) => setEditing({ ...editing, boat_tour_id: event.target.value })}>{boatTours.map((item) => <option key={item.id} value={item.id}>{item.boat_id} / {item.tour_id}</option>)}</select></label>
+                <label className="grid gap-1"><span className="admin-muted">Nombre</span><input className="admin-input" value={editing.name} onChange={(event) => setEditing({ ...editing, name: event.target.value })} /></label>
+                <label className="grid gap-1"><span className="admin-muted">Tipo</span><input className="admin-input" value={editing.package_type} onChange={(event) => setEditing({ ...editing, package_type: event.target.value })} /></label>
+                <label className="grid gap-1"><span className="admin-muted">Duracion minutos</span><input className="admin-input" type="number" value={editing.duration_minutes ?? ''} onChange={(event) => setEditing({ ...editing, duration_minutes: event.target.value ? Number(event.target.value) : null })} /></label>
+                <label className="grid gap-1"><span className="admin-muted">Precio base</span><input className="admin-input" type="number" min={0} value={editing.base_price} onChange={(event) => setEditing({ ...editing, base_price: Number(event.target.value) })} /></label>
+                <label className="grid gap-1"><span className="admin-muted">Precio extra</span><input className="admin-input" type="number" min={0} value={editing.extra_guest_price} onChange={(event) => setEditing({ ...editing, extra_guest_price: Number(event.target.value) })} /></label>
+                <label className="grid gap-1"><span className="admin-muted">Incluidos</span><input className="admin-input" type="number" min={0} value={editing.included_guests} onChange={(event) => setEditing({ ...editing, included_guests: Number(event.target.value) })} /></label>
+                <label className="grid gap-1"><span className="admin-muted">Maximo</span><input className="admin-input" type="number" min={1} value={editing.max_guests} onChange={(event) => setEditing({ ...editing, max_guests: Number(event.target.value) })} /></label>
+                <label className="grid gap-1"><span className="admin-muted">Orden</span><input className="admin-input" type="number" value={editing.sort_order} onChange={(event) => setEditing({ ...editing, sort_order: Number(event.target.value) })} /></label>
+              </div>
+              <label className="grid gap-1"><span className="admin-muted">Descripcion</span><textarea className="admin-input" value={editing.description ?? ''} onChange={(event) => setEditing({ ...editing, description: event.target.value || null })} /></label>
+              <label className="flex items-center gap-2"><input type="checkbox" checked={editing.custom_quote} onChange={(event) => setEditing({ ...editing, custom_quote: event.target.checked })} /><span className="admin-muted">Cotizar manualmente</span></label>
+              <label className="flex items-center gap-2"><input type="checkbox" checked={editing.active} onChange={(event) => setEditing({ ...editing, active: event.target.checked })} /><span className="admin-muted">Activo</span></label>
+              <div className="admin-image-manager__actions">
+                <button className="admin-btn" type="button" disabled={saving} onClick={() => void savePackage()}>{saving ? 'Guardando...' : 'Guardar cambios'}</button>
+                <button className="admin-btn admin-btn--ghost" type="button" onClick={() => setEditing(null)}>Cerrar</button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+      </Modal>
     </div>
   );
 }

@@ -8,5 +8,8 @@ dist/
 *.local
 .env
 .env.*
+test-results/
+playwright-report/
+tmp-playwright/
 
 !.env.example

@@ -5,15 +5,21 @@ import type { BoatTour, TourTimeSlot } from '../types/boatTour';
 import type { calculateBookingTotal } from './bookingPricing';
 
 export type BookingPaymentMethod = 'paypal' | 'whatsapp-link' | 'pay-on-day';
-export type BookingStatus =
-  | 'draft'
-  | 'pending_payment'
-  | 'payment_link_requested'
-  | 'pay_on_tour_day'
+export type PaymentStatus =
+  | 'pending'
+  | 'processing'
   | 'paid'
+  | 'failed'
+  | 'refunded'
+  | 'not_required_yet';
+
+export type BookingStatus =
+  | 'pending'
+  | 'pending_payment'
+  | 'pending_confirmation'
   | 'confirmed'
   | 'cancelled'
-  | 'payment_failed';
+  | 'completed';
 
 export interface BookingPaymentPayload {
   bookingReference: string;
@@ -30,8 +36,12 @@ export interface BookingPaymentPayload {
   additionalGuests: number;
   additionalGuestPrice: number;
   additionalGuestCharge: number;
+  extras: Array<{ key: string; label: string; quantity: number; unit_price: number; total: number }>;
+  extrasTotal: number;
   total: number;
   specialRequests: string;
+  paymentMethod?: string;
+  paymentStatus?: PaymentStatus;
 }
 
 type BookingPricing = ReturnType<typeof calculateBookingTotal>;
@@ -47,6 +57,7 @@ export function buildBookingPaymentPayload(input: {
   date: string;
   guests: number;
   pricing: BookingPricing;
+  extras?: Array<{ key: string; label: string; quantity: number; unit_price: number; total: number }>;
   specialRequests: string;
 }): BookingPaymentPayload {
   const tourText = getTourText(input.tour, 'en');
@@ -66,6 +77,8 @@ export function buildBookingPaymentPayload(input: {
     additionalGuests: input.pricing.extraGuests,
     additionalGuestPrice: input.pricing.extraGuestPrice,
     additionalGuestCharge: input.pricing.extraGuestsTotal,
+    extras: input.extras ?? [],
+    extrasTotal: input.pricing.extrasTotal,
     total: input.pricing.total,
     specialRequests: cleanText(input.specialRequests) || 'None',
   };
@@ -88,6 +101,7 @@ export function createWhatsAppBookingMessage(booking: BookingPaymentPayload, var
     `Email: ${booking.email}`,
     '',
     'BOOKING DETAILS',
+    `Booking reference: ${booking.bookingReference}`,
     `Boat: ${booking.boat.name}`,
     `Tour: ${getTourText(booking.tour, 'en').title}`,
     `Package: ${booking.packageLabel}`,
@@ -99,12 +113,13 @@ export function createWhatsAppBookingMessage(booking: BookingPaymentPayload, var
     `Base price: ${formatMessageCurrency(booking.basePrice)}`,
     `Additional guests: ${booking.additionalGuests} x ${formatMessageCurrency(booking.additionalGuestPrice)}`,
     `Additional guest charge: ${formatMessageCurrency(booking.additionalGuestCharge)}`,
+    `Extras: ${booking.extras.length ? booking.extras.map((extra) => `${extra.label} x${extra.quantity}`).join(', ') : 'None'}`,
+    `Extras charge: ${formatMessageCurrency(booking.extrasTotal)}`,
     `Total: ${formatMessageCurrency(booking.total)}`,
+    '',
+    'PAYMENT METHOD',
+    booking.paymentMethod ?? (variant === 'pay_on_day' ? 'Pay on the day of the tour.' : variant === 'payment_link' ? 'WhatsApp payment link.' : 'PayPal.'),
   ];
-
-  if (variant === 'pay_on_day') {
-    lines.push('', 'PAYMENT METHOD', 'Pay on the day of the tour.');
-  }
 
   lines.push('', 'SPECIAL REQUESTS', booking.specialRequests || 'None', '');
   lines.push(variant === 'payment_link' ? 'Please confirm availability and send me the payment link.' : 'Please confirm the availability of this reservation.');

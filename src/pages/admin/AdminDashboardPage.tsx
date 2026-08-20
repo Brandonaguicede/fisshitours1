@@ -1,11 +1,21 @@
+import { useQuery } from '@tanstack/react-query';
 import { CalendarDays, CreditCard, DollarSign, MessageSquare, Plus, Ship, Star } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 import { AdminBadge, AdminPageHeader, AdminStatCard, AdminTable } from '../../components/admin/AdminPrimitives';
+import { supabase } from '../../lib/supabase';
 import { adminData, money } from './adminMockData';
 
 export default function AdminDashboardPage() {
-  const pendingReviews = adminData.testimonials.length;
+  const pendingReviewsQuery = useQuery({
+    queryKey: ['admin', 'pendingReviews'],
+    queryFn: async () => {
+      const { count, error } = await supabase.from('reviews').select('id', { count: 'exact', head: true }).eq('status', 'pending');
+      if (error) throw new Error(error.message);
+      return count ?? 0;
+    },
+  });
+  const pendingReviews = pendingReviewsQuery.data ?? 0;
   const estimatedRevenue = adminData.reservations.reduce((sum, item) => sum + item.total, 0);
 
   return (

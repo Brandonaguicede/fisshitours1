@@ -64,11 +64,26 @@ values
 ('second-wind-bioluminescence-deluxe', '55555555-5555-4555-8555-555555555555', 'Bioluminescence Tour - Deluxe Experience', 'deluxe', 'A deluxe bioluminescence night experience with cheese board, ceviche, sparkling wine and beverages aboard Second Wind.', null, 750, 5, 10, 65, false, '/images/placeholder-image.jpg', 14)
 on conflict (id) do update set name = excluded.name, base_price = excluded.base_price, updated_at = now();
 
+insert into public.extras (id, key, label, description, unit_price, active, sort_order)
+values
+('cheese-board', 'cheese-board', 'Cheese board', 'Assorted cheeses with crackers and dried fruits.', 25, true, 1),
+('ceviche', 'ceviche', 'Fresh ceviche', 'Fresh catch ceviche with lime and cilantro.', 20, true, 2),
+('sparkling-wine', 'sparkling-wine', 'Sparkling wine', 'Chilled sparkling wine for the group.', 30, true, 3)
+on conflict (id) do update set label = excluded.label, unit_price = excluded.unit_price, updated_at = now();
+
+insert into public.package_extras (tour_package_id, extra_id, active, sort_order)
+values
+('second-wind-bioluminescence-deluxe', 'cheese-board', true, 1),
+('second-wind-bioluminescence-deluxe', 'ceviche', true, 2),
+('second-wind-bioluminescence-deluxe', 'sparkling-wine', true, 3),
+('second-wind-bioluminescence-classic', 'ceviche', true, 1)
+on conflict (tour_package_id, extra_id) do update set active = excluded.active;
+
 insert into public.payment_methods (key, name, description, type, active, instructions, logo_url, sort_order)
 values
 ('paypal', 'PayPal', 'Secure USD checkout for the full booking total.', 'paypal', true, 'Customer pays the complete total through PayPal checkout.', '/images/paypal.png', 1),
 ('whatsapp-link', 'WhatsApp payment link', 'Request a manual payment link through WhatsApp.', 'whatsapp_link', true, 'Leaves booking pending payment until the admin verifies payment manually.', '/images/whatsapp.png', 2),
-('pay-on-day', 'Pay on tour day', 'Customer requests to pay when the tour starts.', 'pay_on_day', true, 'Leaves booking pending confirmation. It does not mark the booking as paid.', null, 3)
+('pay-on-day', 'Pay on the Day of the Tour', 'Customer requests to pay when the tour starts.', 'pay_on_day', true, 'Leaves booking pending confirmation. It does not mark the booking as paid.', null, 3)
 on conflict (key) do update set name = excluded.name, description = excluded.description, active = excluded.active, updated_at = now();
 
 insert into public.reviews (name, country, quote, rating, status, featured)

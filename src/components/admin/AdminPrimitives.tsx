@@ -27,15 +27,15 @@ export function AdminStatCard(props: { label: string; value: string; icon: Lucid
 
 export function AdminBadge({ value }: { value: string | boolean }) {
   const text = typeof value === 'boolean' ? (value ? 'Activo' : 'Inactivo') : value.split('_').join(' ');
-  const normalized = String(value);
+  const normalized = String(value).toLowerCase();
   const tone =
     normalized.includes('paid') || normalized.includes('confirmed') || normalized === 'true' || normalized.includes('approved')
-      ? 'success'
-      : normalized.includes('pending') || normalized.includes('requested') || normalized.includes('day')
-        ? 'warning'
-        : normalized.includes('cancel') || normalized.includes('failed') || normalized.includes('rejected') || normalized === 'false'
-          ? 'danger'
-          : 'neutral';
+        ? 'success'
+        : normalized.includes('pending') || normalized.includes('requested') || normalized.includes('day')
+          ? 'warning'
+          : normalized.includes('cancel') || normalized.includes('failed') || normalized.includes('rejected') || normalized === 'false'
+            ? 'danger'
+            : 'neutral';
   return <span className={`admin-badge admin-badge--${tone}`}>{text}</span>;
 }
 

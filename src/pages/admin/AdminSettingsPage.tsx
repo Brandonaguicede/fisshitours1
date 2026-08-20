@@ -16,7 +16,7 @@ export default function AdminSettingsPage() {
       </section>
       <section className="admin-card">
         <h2>Variables esperadas</h2>
-        <p>VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY, PAYPAL_CLIENT_ID, PAYPAL_CLIENT_SECRET, CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_IMAGES_API_TOKEN.</p>
+        <p>Variables publicas de Vite para el navegador y secretos privados configurados solo en Edge Functions.</p>
       </section>
     </div>
   );

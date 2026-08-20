@@ -1,9 +1,8 @@
 import { X } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import type { Boat } from '../../types/boat';
 import type { BoatTour } from '../../types/boatTour';
-import { boatTours } from '../../data/boatTours';
 import { getBoatText, getTourGroupKey, getTourText } from '../../i18n/content';
 import type { Language } from '../../i18n/LanguageContext';
 import { formatCurrency } from '../../utils/formatCurrency';
@@ -16,26 +15,48 @@ import { SectionTitle } from '../common/SectionTitle';
 
 interface FleetSectionProps {
   boats: Boat[];
+  tours: BoatTour[];
   selectedBoat: Boat;
   onSelectBoat: (boat: Boat) => void;
   onViewTourType: (tour: BoatTour) => void;
 }
 
-export function FleetSection({ boats, selectedBoat, onSelectBoat, onViewTourType }: FleetSectionProps) {
+export function FleetSection({ boats, tours, selectedBoat, onSelectBoat, onViewTourType }: FleetSectionProps) {
   const { language } = useLanguage();
   const [modalBoat, setModalBoat] = useState<Boat | null>(null);
+  const openerRef = useRef<HTMLElement | null>(null);
   const modalBoatText = modalBoat ? getBoatText(modalBoat, language) : null;
 
   function openBoatDetails(boat: Boat) {
+    openerRef.current = document.activeElement as HTMLElement | null;
     onSelectBoat(boat);
     setModalBoat(boat);
   }
 
-  const modalTourTypes = getModalTourTypes(modalBoat, language);
+  function closeBoatDetails() {
+    setModalBoat(null);
+    window.setTimeout(() => openerRef.current?.focus(), 0);
+  }
+
+  useEffect(() => {
+    if (!modalBoat) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') closeBoatDetails();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, [modalBoat]);
+
+  const modalTourTypes = getModalTourTypes(modalBoat, tours, language);
 
   function handleViewTourType(tour: BoatTour) {
     onViewTourType(tour);
-    setModalBoat(null);
+    closeBoatDetails();
   }
 
   return (
@@ -55,7 +76,7 @@ export function FleetSection({ boats, selectedBoat, onSelectBoat, onViewTourType
       </Container>
 
       {modalBoat ? (
-        <div className="fixed inset-0 z-[90] grid place-items-start bg-ocean-950/75 px-3 py-4 backdrop-blur-sm sm:place-items-center sm:px-4 sm:py-8">
+        <div className="fixed inset-0 z-[90] grid place-items-start bg-ocean-950/75 px-3 py-4 backdrop-blur-sm sm:place-items-center sm:px-4 sm:py-8" role="dialog" aria-modal="true" aria-label={`${modalBoat.name} details`}>
           <div className="max-h-[94dvh] w-full max-w-5xl overflow-y-auto rounded-2xl border border-white/10 bg-ocean-950 shadow-lifted sm:max-h-[90dvh] sm:rounded-[2rem]">
             <div className="relative">
               <img className="h-48 w-full rounded-t-2xl object-cover sm:h-72 sm:rounded-t-[2rem]" src={modalBoat.image} alt={modalBoat.name} />
@@ -64,7 +85,7 @@ export function FleetSection({ boats, selectedBoat, onSelectBoat, onViewTourType
                 className="focus-ring pressable absolute right-5 top-5 grid h-11 w-11 place-items-center rounded-full bg-white/10 text-white backdrop-blur-xl"
                 type="button"
                 aria-label="Close boat details"
-                onClick={() => setModalBoat(null)}
+                onClick={closeBoatDetails}
               >
                 <X size={20} />
               </button>
@@ -119,11 +140,11 @@ export function FleetSection({ boats, selectedBoat, onSelectBoat, onViewTourType
   );
 }
 
-function getModalTourTypes(boat: Boat | null, language: Language) {
+function getModalTourTypes(boat: Boat | null, tours: BoatTour[], language: Language) {
   if (!boat) return [];
 
   const groups = new Map<string, BoatTour[]>();
-  boatTours
+  tours
     .filter((tour) => tour.boatId === boat.id)
     .forEach((tour) => {
       const key = getTourGroupKey(tour);

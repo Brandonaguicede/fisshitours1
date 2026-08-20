@@ -16,6 +16,7 @@ export const boatTours: BoatTour[] = [
   {
     ...standardGuests,
     id: 'second-wind-beach-snorkeling-half',
+    tourId: 'beach-snorkeling',
     name: 'Beach & Snorkeling Tour - Half Day',
     category: 'Snorkeling & Beach',
     description: 'Discover the stunning beaches and vibrant marine life of the Gulf of Papagayo with snorkeling, paddleboarding, subwing or relaxed time in crystal-clear waters.',
@@ -27,6 +28,7 @@ export const boatTours: BoatTour[] = [
   {
     ...standardGuests,
     id: 'second-wind-beach-snorkeling-three-quarter',
+    tourId: 'beach-snorkeling',
     name: 'Beach & Snorkeling Tour - Three-Quarter Day',
     category: 'Snorkeling & Beach',
     description: 'A longer Gulf of Papagayo beach and snorkeling route with time for marine life, paddleboarding, subwing and relaxed swimming.',
@@ -38,6 +40,7 @@ export const boatTours: BoatTour[] = [
   {
     ...standardGuests,
     id: 'second-wind-beach-snorkeling-full',
+    tourId: 'beach-snorkeling',
     name: 'Beach & Snorkeling Tour - Full Day',
     category: 'Snorkeling & Beach',
     description: 'Full-day beach and snorkeling experience with lunch, crystal-clear water, paddleboarding, subwing and opportunities to observe dolphins, whales and sea turtles.',
@@ -49,6 +52,7 @@ export const boatTours: BoatTour[] = [
   {
     ...standardGuests,
     id: 'second-wind-fishing-half',
+    tourId: 'fishing',
     name: 'Fishing Tour - Half Day',
     category: 'Fishing',
     description: 'An unforgettable fishing adventure for experienced anglers and beginners, guided by experienced local professionals with Penn International and Shimano equipment.',
@@ -60,6 +64,7 @@ export const boatTours: BoatTour[] = [
   {
     ...standardGuests,
     id: 'second-wind-fishing-three-quarter',
+    tourId: 'fishing',
     name: 'Fishing Tour - Three-Quarter Day',
     category: 'Fishing',
     description: 'A longer fishing route targeting yellowfin tuna, mahi-mahi, marlin, snapper, wahoo and sailfish with professional local guidance.',
@@ -71,6 +76,7 @@ export const boatTours: BoatTour[] = [
   {
     ...standardGuests,
     id: 'second-wind-fishing-full',
+    tourId: 'fishing',
     name: 'Fishing Tour - Full Day',
     category: 'Fishing',
     description: 'Full-day sport fishing aboard Second Wind with Penn International and Shimano gear, local professionals and lunch included.',
@@ -82,6 +88,7 @@ export const boatTours: BoatTour[] = [
   {
     ...standardGuests,
     id: 'second-wind-surfing-half',
+    tourId: 'surfing',
     name: 'Surfing Tour - Half Day',
     category: 'Surfing',
     description: 'Cruise, swim and surf at iconic Costa Rican breaks such as Roca Bruja and Ollie’s Point, with the itinerary adapted to the group skill level.',
@@ -93,6 +100,7 @@ export const boatTours: BoatTour[] = [
   {
     ...standardGuests,
     id: 'second-wind-surfing-three-quarter',
+    tourId: 'surfing',
     name: 'Surfing Tour - Three-Quarter Day',
     category: 'Surfing',
     description: 'More water time for cruising, swimming and surfing at Roca Bruja and Ollie’s Point, adjusted to the participants’ skill level.',
@@ -104,6 +112,7 @@ export const boatTours: BoatTour[] = [
   {
     ...standardGuests,
     id: 'second-wind-surfing-full',
+    tourId: 'surfing',
     name: 'Surfing Tour - Full Day',
     category: 'Surfing',
     description: 'Full-day surf route with lunch, cruising, swimming and surfing at two iconic Costa Rican surf locations.',
@@ -115,6 +124,7 @@ export const boatTours: BoatTour[] = [
   {
     ...standardGuests,
     id: 'second-wind-water-toys-half',
+    tourId: 'water-toys',
     name: 'Water Toys Tour - Half Day',
     category: 'Water Toys',
     description: 'A fun Gulf of Papagayo tour combining wakeboarding, paddleboarding, snorkeling, subwing and tubing.',
@@ -126,6 +136,7 @@ export const boatTours: BoatTour[] = [
   {
     ...standardGuests,
     id: 'second-wind-water-toys-three-quarter',
+    tourId: 'water-toys',
     name: 'Water Toys Tour - Three-Quarter Day',
     category: 'Water Toys',
     description: 'A longer adventure with wakeboarding, paddleboarding, snorkeling, subwing, tubing and relaxed time in the Gulf of Papagayo.',
@@ -137,6 +148,7 @@ export const boatTours: BoatTour[] = [
   {
     ...standardGuests,
     id: 'second-wind-water-toys-full',
+    tourId: 'water-toys',
     name: 'Water Toys Tour - Full Day',
     category: 'Water Toys',
     description: 'Full-day water toys adventure with wakeboarding, paddleboarding, snorkeling, subwing, tubing and lunch included.',
@@ -148,6 +160,7 @@ export const boatTours: BoatTour[] = [
   {
     ...standardGuests,
     id: 'second-wind-bioluminescence-classic',
+    tourId: 'bioluminescence',
     name: 'Bioluminescence Tour - Classic Experience',
     category: 'Bioluminescence Basic',
     description: 'Discover the magical phenomenon of bioluminescence in the Gulf of Papagayo as every movement creates shimmering blue sparks across the ocean.',
@@ -158,6 +171,7 @@ export const boatTours: BoatTour[] = [
   {
     ...standardGuests,
     id: 'second-wind-bioluminescence-deluxe',
+    tourId: 'bioluminescence',
     name: 'Bioluminescence Tour - Deluxe Experience',
     category: 'Bioluminescence Deluxe',
     description: 'A deluxe bioluminescence night experience with cheese board, ceviche, sparkling wine and beverages aboard Second Wind.',

@@ -1,6 +1,7 @@
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { z } from 'npm:zod@3.23.8';
+import { areExternalProviderMocksAllowed } from '../_shared/environment.ts';
 
 const schema = z.object({ bookingId: z.string().uuid() });
 const headers = {
@@ -77,6 +78,7 @@ function getPayPalBaseUrl() {
 }
 
 async function getPayPalAccessToken() {
+  if (areExternalProviderMocksAllowed()) return 'mock-paypal-access-token';
   const clientId = Deno.env.get('PAYPAL_CLIENT_ID');
   const clientSecret = Deno.env.get('PAYPAL_CLIENT_SECRET');
   if (!clientId || !clientSecret) throw new Error('PayPal secrets are not configured');
@@ -95,6 +97,10 @@ async function getPayPalAccessToken() {
 }
 
 async function fetchWithTimeout(input: string, init: RequestInit, ms = 15000) {
+  if (areExternalProviderMocksAllowed() && input.includes('/v2/checkout/orders')) {
+    const body = JSON.parse(String(init.body ?? '{}'));
+    return Response.json({ id: `MOCK-${body.purchase_units?.[0]?.invoice_id ?? crypto.randomUUID()}`, status: 'CREATED' });
+  }
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), ms);
   try {
