@@ -915,6 +915,28 @@ test.describe('backend flows', () => {
     expect(source).toContain('127.0.0.1');
   });
 
+  test('storage: frontend image service sends auth headers and blocks missing sessions before upload', async () => {
+    const source = fs.readFileSync(path.join(PROJECT_ROOT, 'src/services/imageService.ts'), 'utf8');
+    expect(source).toContain('supabase.auth.getSession()');
+    expect(source).toContain('throw new ImageSessionExpiredError()');
+    expect(source).toContain("super('Tu sesión expiró. Inicia sesión nuevamente')");
+    expect(source).toContain('Authorization: `Bearer ${auth.token}`');
+    expect(source).toContain('apikey: auth.apikey');
+    expect(source).toContain("xhr.setRequestHeader('Authorization', headers.Authorization)");
+    expect(source).toContain("xhr.setRequestHeader('apikey', headers.apikey)");
+    expect(source).not.toContain("xhr.setRequestHeader('Content-Type'");
+  });
+
+  test('storage: frontend image service refreshes once on 401 and signs out after a second 401', async () => {
+    const source = fs.readFileSync(path.join(PROJECT_ROOT, 'src/services/imageService.ts'), 'utf8');
+    expect(source.match(/refreshAuthorizedRequest\(\)/g)?.length).toBeGreaterThanOrEqual(3);
+    expect(source).toContain('supabase.auth.refreshSession()');
+    expect(source).toContain('if (first.status !== 401) return first');
+    expect(source).toContain('if (first.status !== 401) return parseUploadResult(first)');
+    expect(source).toContain('if (retry.status === 401)');
+    expect(source).toContain('supabase.auth.signOut()');
+  });
+
   test('paypal: create order for a nonexistent booking returns 404', async ({ request }) => {
     const res = await fn(request, 'paypal-create-order', { bookingId: '00000000-0000-4000-8000-000000000000' });
     expect(res.status).toBe(404);

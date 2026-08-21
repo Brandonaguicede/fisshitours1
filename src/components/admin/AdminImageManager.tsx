@@ -4,8 +4,8 @@ import { useCallback, useEffect, useRef, useState, type DragEvent } from 'react'
 import Cropper, { type Area } from 'react-easy-crop';
 
 import { Modal } from '../common/Modal';
-import { deleteStorageImage, type StorageImage } from '../../services/imageService';
-import { functionsUrl, isSupabaseConfigured, supabase } from '../../lib/supabase';
+import { deleteStorageImage, ImageSessionExpiredError, uploadStorageImageWithProgress, type StorageImage } from '../../services/imageService';
+import { isSupabaseConfigured } from '../../lib/supabase';
 import { formatBytes } from '../../utils/format';
 
 interface AdminImageManagerProps {
@@ -156,10 +156,6 @@ export default function AdminImageManager({
         throw new Error('Supabase no esta configurado para gestionar imagenes en este entorno.');
       }
 
-      const { data } = await supabase.auth.getSession();
-      const token = data.session?.access_token;
-      if (!token) throw new Error('Se requiere una sesión de admin o editor.');
-
       const form = new FormData();
       form.append('file', blob, 'image.webp');
       form.append('resourceTable', resourceTable);
@@ -168,7 +164,7 @@ export default function AdminImageManager({
       form.append('width', String(width));
       form.append('height', String(height));
 
-      const image = await uploadWithProgress(form, token, setProgress);
+      const image = await uploadStorageImageWithProgress(form, setProgress);
 
       try {
         await onImageSaved?.(image);
@@ -292,7 +288,12 @@ export default function AdminImageManager({
       </div>
 
       {message ? (
-        <p className={`admin-alert admin-alert--${message.kind}`} role="status" aria-live="polite">{message.text}</p>
+        <div className={`admin-alert admin-alert--${message.kind}`} role="status" aria-live="polite">
+          <span>{message.text}</span>
+          {message.text === new ImageSessionExpiredError().message ? (
+            <a className="ml-2 font-extrabold underline" href="/admin/login">Ir al login</a>
+          ) : null}
+        </div>
       ) : null}
 
       <Modal open={Boolean(cropFile)} onClose={() => cropFile && !processing && setCropFile(null)} titleId="image-crop-title" className="max-w-2xl">
@@ -333,35 +334,4 @@ export default function AdminImageManager({
       </Modal>
     </div>
   );
-}
-
-function uploadWithProgress(
-  form: FormData,
-  token: string,
-  onProgress: (percent: number) => void,
-): Promise<StorageImage> {
-  return new Promise((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    xhr.open('POST', `${functionsUrl}/storage-upload-image`);
-    xhr.setRequestHeader('Authorization', `Bearer ${token}`);
-    xhr.upload.onprogress = (event) => {
-      if (event.lengthComputable) onProgress(Math.round((event.loaded / event.total) * 100));
-    };
-    xhr.onload = () => {
-      if (xhr.status >= 200 && xhr.status < 300) {
-        resolve(JSON.parse(xhr.responseText) as StorageImage);
-      } else {
-        let message = 'Error al subir la imagen.';
-        try {
-          const body = JSON.parse(xhr.responseText);
-          if (typeof body.message === 'string') message = body.message;
-        } catch {
-          // ignore parse errors
-        }
-        reject(new Error(message));
-      }
-    };
-    xhr.onerror = () => reject(new Error('Error de red al subir la imagen.'));
-    xhr.send(form);
-  });
 }

@@ -24,6 +24,7 @@ export const supabaseConfigurationError = !supabaseUrl || !supabaseAnonKey
 
 const publicSupabaseUrl = isSupabaseConfigured ? supabaseUrl : 'https://example.invalid';
 const publicSupabaseAnonKey = isSupabaseConfigured ? supabaseAnonKey : 'missing-public-supabase-key';
+export const supabasePublishableKey = publicSupabaseAnonKey;
 
 export const supabase = createClient<Database>(publicSupabaseUrl, publicSupabaseAnonKey, {
   auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
