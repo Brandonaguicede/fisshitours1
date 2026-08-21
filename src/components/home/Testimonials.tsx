@@ -18,6 +18,7 @@ interface DisplayReview {
   country: string;
   quote: string;
   rating: number;
+  image_url?: string | null;
 }
 
 export function Testimonials() {
@@ -27,7 +28,7 @@ export function Testimonials() {
 
   const reviews: DisplayReview[] =
     reviewsQuery.data && reviewsQuery.data.length > 0
-      ? reviewsQuery.data.map((review) => ({ id: review.id, name: review.name, country: review.country ?? '', quote: review.quote, rating: review.rating }))
+      ? reviewsQuery.data.map((review) => ({ id: review.id, name: review.name, country: review.country ?? '', quote: review.quote, rating: review.rating, image_url: review.image_url }))
       : fallbackTestimonials;
 
   const starLabel = (count: number) =>
@@ -99,9 +100,13 @@ export function Testimonials() {
                   </div>
                   <p className="mt-5 text-lg font-medium leading-8 text-ocean-100">"{review.quote}"</p>
                   <div className="mt-7 flex items-center gap-3 border-t border-white/10 pt-5">
-                    <div className="grid h-11 w-11 place-items-center rounded-full bg-gradient-to-br from-ocean-300 to-ocean-600 text-ocean-950">
-                      <User size={18} strokeWidth={2.6} />
-                    </div>
+                    {review.image_url ? (
+                      <img className="h-11 w-11 rounded-full object-cover" src={review.image_url} alt="" loading="lazy" decoding="async" />
+                    ) : (
+                      <div className="grid h-11 w-11 place-items-center rounded-full bg-gradient-to-br from-ocean-300 to-ocean-600 text-ocean-950" aria-hidden="true">
+                        <User size={18} strokeWidth={2.6} />
+                      </div>
+                    )}
                     <div>
                       <p className="font-extrabold text-white">{review.name}</p>
                       {review.country ? <p className="text-sm font-medium text-ocean-300">{review.country}</p> : null}

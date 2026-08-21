@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 
-import { galleryImages } from '../../data/gallery';
 import type { GalleryCategory } from '../../types/gallery';
 import { cn } from '../../utils/cn';
 import { Button } from '../common/Button';
@@ -42,7 +41,7 @@ export function GallerySection() {
     },
   });
 
-  const sourceImages = galleryQuery.data && galleryQuery.data.length > 0 ? galleryQuery.data : galleryImages;
+  const sourceImages = galleryQuery.data ?? [];
 
   const filteredImages = useMemo(
     () => (activeFilter === 'all' ? sourceImages : sourceImages.filter((image) => image.category === activeFilter)),
@@ -91,6 +90,12 @@ export function GallerySection() {
             </figure>
           ))}
         </div>
+
+        {!galleryQuery.isLoading && visibleImages.length === 0 ? (
+          <div className="mt-10 rounded-3xl border border-white/10 bg-white/[0.06] p-8 text-center text-ocean-200">
+            {language === 'es' ? 'La galeria se esta actualizando. Vuelve pronto para ver nuevas imagenes.' : 'The gallery is being updated. Check back soon for new images.'}
+          </div>
+        ) : null}
 
         {hasMore ? (
           <div className="mt-8 text-center">

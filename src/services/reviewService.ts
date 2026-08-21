@@ -7,6 +7,7 @@ export interface ApprovedReview {
   quote: string;
   rating: number;
   featured: boolean;
+  image_url: string | null;
 }
 
 export interface SubmitReviewRequest {
@@ -23,11 +24,14 @@ export interface SubmitReviewResult {
 }
 
 export async function getApprovedReviews(limit = 6): Promise<ApprovedReview[]> {
-  const { data, error } = await supabase
+  const db = supabase as any;
+  const { data, error } = await db
     .from('reviews')
-    .select('id, name, country, quote, rating, featured')
+    .select('id, name, country, quote, rating, featured, image_url')
     .eq('status', 'approved')
+    .eq('active', true)
     .order('featured', { ascending: false })
+    .order('sort_order', { ascending: true })
     .order('created_at', { ascending: false })
     .limit(limit);
 

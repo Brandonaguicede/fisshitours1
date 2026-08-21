@@ -93,7 +93,7 @@ async function hashIp(value: string) {
 
 async function verifyTurnstile(token: string, req: Request) {
   if (areExternalProviderMocksAllowed()) return token === 'mock-valid-turnstile';
-  const secret = Deno.env.get('CLOUDFLARE_TURNSTILE_SECRET_KEY');
+  const secret = Deno.env.get('TURNSTILE_SECRET_KEY') ?? Deno.env.get('CLOUDFLARE_TURNSTILE_SECRET_KEY');
   if (!secret) return false;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 8000);

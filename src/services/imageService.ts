@@ -78,11 +78,7 @@ export async function uploadStorageImage(input: UploadImageInput): Promise<Stora
   if (input.width) form.append('width', String(input.width));
   if (input.height) form.append('height', String(input.height));
 
-  const response = await authorizedFetch(`${functionsUrl}/storage-upload-image`, {
-    method: 'POST',
-    body: form,
-  });
-
+  const response = await authorizedFetch(`${functionsUrl}/storage-upload-image`, { method: 'POST', body: form });
   if (!response.ok) throw new Error(await errorMessage(response));
   return (await response.json()) as StorageImage;
 }
@@ -93,14 +89,10 @@ export async function deleteStorageImage(input: DeleteImageInput): Promise<void>
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input),
   });
-
   if (!response.ok) throw new Error(await errorMessage(response));
 }
 
-export async function uploadStorageImageWithProgress(
-  form: FormData,
-  onProgress: (percent: number) => void,
-): Promise<StorageImage> {
+export async function uploadStorageImageWithProgress(form: FormData, onProgress: (percent: number) => void): Promise<StorageImage> {
   const firstAuth = await requireAuthorizedRequest();
   const first = await xhrUpload(form, firstAuth, onProgress);
   if (first.status !== 401) return parseUploadResult(first);
@@ -134,11 +126,7 @@ async function authorizedFetch(url: string, init: RequestInit): Promise<Response
   return retry;
 }
 
-function xhrUpload(
-  form: FormData,
-  auth: AuthorizedRequest,
-  onProgress: (percent: number) => void,
-): Promise<{ status: number; responseText: string }> {
+function xhrUpload(form: FormData, auth: AuthorizedRequest, onProgress: (percent: number) => void): Promise<{ status: number; responseText: string }> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open('POST', `${functionsUrl}/storage-upload-image`);

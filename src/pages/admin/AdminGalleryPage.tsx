@@ -34,6 +34,7 @@ export default function AdminGalleryPage() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [editing, setEditing] = useState<GalleryRow | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<GalleryRow | null>(null);
   const [saving, setSaving] = useState(false);
 
   async function loadImages() {
@@ -120,7 +121,6 @@ export default function AdminGalleryPage() {
   }
 
   async function deleteRow(row: GalleryRow) {
-    if (!window.confirm(`¿Eliminar la imagen "${row.alt}" de la galería?`)) return;
     if (row.image_public_id) {
       await deleteStorageImage({ storagePath: row.image_public_id, resourceTable: 'gallery_images', resourceId: row.id });
     }
@@ -129,6 +129,7 @@ export default function AdminGalleryPage() {
       setError(error.message);
       return;
     }
+    setPendingDelete(null);
     setNotice('Imagen eliminada de la galería.');
     await loadImages();
   }
@@ -172,14 +173,18 @@ export default function AdminGalleryPage() {
         <section className="admin-media-grid">
           {visibleImages.map((image) => (
             <article className="admin-media-card" key={image.id}>
-              <img src={image.src ?? image.image_url ?? '/galeria/IMG_1088.jpeg'} alt={image.alt} loading="lazy" decoding="async" width={1600} height={1200} />
+              {image.src ?? image.image_url ? (
+                <img src={image.src ?? image.image_url ?? ''} alt={image.alt} loading="lazy" decoding="async" width={1600} height={1200} />
+              ) : (
+                <div className="grid aspect-[4/3] place-items-center bg-ocean-950/10 text-sm font-semibold text-ocean-600">Sin imagen</div>
+              )}
               <div className="admin-media-card__body">
                 <strong>{image.category}</strong>
                 <span className="admin-muted">{image.alt}</span>
                 <div className="admin-actions">
                   <AdminBadge value={image.active} />
                   <button className="admin-btn admin-btn--ghost" type="button" onClick={() => setEditing(image)}><Pencil size={14} /> Editar</button>
-                  <button className="admin-btn admin-btn--ghost" type="button" onClick={() => void deleteRow(image)}><Trash2 size={14} /></button>
+                  <button className="admin-btn admin-btn--ghost" type="button" onClick={() => setPendingDelete(image)}><Trash2 size={14} /></button>
                 </div>
               </div>
             </article>
@@ -239,6 +244,20 @@ export default function AdminGalleryPage() {
                 </button>
                 <button className="admin-btn admin-btn--ghost" type="button" onClick={() => void closeEditor()}>Cerrar</button>
               </div>
+            </div>
+          </div>
+        ) : null}
+      </Modal>
+
+      <Modal open={Boolean(pendingDelete)} onClose={() => setPendingDelete(null)} titleId="gallery-delete-title" className="max-w-md">
+        {pendingDelete ? (
+          <div className="rounded-2xl border border-white/60 bg-white p-5 shadow-2xl">
+            <h2 id="gallery-delete-title" className="admin-card__title"><Trash2 size={18} /> Eliminar imagen</h2>
+            <p className="admin-muted mt-2">Se solicitara borrar el objeto en Storage y luego se eliminara la referencia de la galeria.</p>
+            <p className="mt-3 font-semibold text-ocean-950">{pendingDelete.title ?? pendingDelete.alt}</p>
+            <div className="admin-image-manager__actions mt-5">
+              <button className="admin-btn admin-btn--danger" type="button" onClick={() => void deleteRow(pendingDelete)}>Eliminar</button>
+              <button className="admin-btn admin-btn--ghost" type="button" onClick={() => setPendingDelete(null)}>Cancelar</button>
             </div>
           </div>
         ) : null}

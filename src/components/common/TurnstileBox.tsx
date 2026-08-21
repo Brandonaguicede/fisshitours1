@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { MOCK_TURNSTILE_TOKEN, TURNSTILE_SITE_KEY, USE_LOCAL_TURNSTILE_MOCK } from '../../lib/turnstile';
 import { cn } from '../../utils/cn';
@@ -24,13 +24,17 @@ interface TurnstileBoxProps {
 export function TurnstileBox({ token, resetKey, action = 'booking', className, onTokenChange }: TurnstileBoxProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const widgetIdRef = useRef<string | undefined>();
+  const [loadState, setLoadState] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
+  const [retryKey, setRetryKey] = useState(0);
 
   useEffect(() => {
     if (USE_LOCAL_TURNSTILE_MOCK) {
+      setLoadState('ready');
       onTokenChange(MOCK_TURNSTILE_TOKEN);
       return;
     }
     if (!TURNSTILE_SITE_KEY) {
+      setLoadState('error');
       onTokenChange('');
       return;
     }
@@ -39,25 +43,37 @@ export function TurnstileBox({ token, resetKey, action = 'booking', className, o
     const renderWidget = () => {
       if (cancelled || !containerRef.current || !window.turnstile) return;
       containerRef.current.innerHTML = '';
+      setLoadState('ready');
       widgetIdRef.current = window.turnstile.render(containerRef.current, {
         sitekey: TURNSTILE_SITE_KEY,
         action,
         callback: onTokenChange,
         'expired-callback': () => onTokenChange(''),
-        'error-callback': () => onTokenChange(''),
+        'error-callback': () => {
+          setLoadState('error');
+          onTokenChange('');
+        },
       });
     };
 
     const existing = document.querySelector<HTMLScriptElement>('script[data-turnstile-script="true"]');
-    if (existing) {
+    if (window.turnstile) {
       renderWidget();
+    } else if (existing) {
+      setLoadState('loading');
+      existing.addEventListener('load', renderWidget, { once: true });
+      existing.addEventListener('error', () => setLoadState('error'), { once: true });
     } else {
+      setLoadState('loading');
       const script = document.createElement('script');
       script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
       script.async = true;
       script.defer = true;
       script.dataset.turnstileScript = 'true';
       script.onload = renderWidget;
+      script.onerror = () => {
+        if (!cancelled) setLoadState('error');
+      };
       document.head.appendChild(script);
     }
 
@@ -65,7 +81,7 @@ export function TurnstileBox({ token, resetKey, action = 'booking', className, o
       cancelled = true;
       if (widgetIdRef.current) window.turnstile?.remove(widgetIdRef.current);
     };
-  }, [resetKey, action]);
+  }, [resetKey, retryKey, action, onTokenChange]);
 
   return (
     <div className={cn('rounded-xl border border-white/10 bg-ocean-950/30 p-3 sm:p-4', className)}>
@@ -79,6 +95,19 @@ export function TurnstileBox({ token, resetKey, action = 'booking', className, o
       ) : (
         <p className="mt-2 text-sm font-semibold text-red-200">Human verification is not configured.</p>
       )}
+      {!USE_LOCAL_TURNSTILE_MOCK && TURNSTILE_SITE_KEY && loadState === 'loading' ? <p className="mt-2 text-xs font-semibold text-ocean-300">Loading verification...</p> : null}
+      {!USE_LOCAL_TURNSTILE_MOCK && TURNSTILE_SITE_KEY && loadState === 'error' ? (
+        <button
+          className="mt-2 text-xs font-extrabold text-red-100 underline"
+          type="button"
+          onClick={() => {
+            document.querySelector<HTMLScriptElement>('script[data-turnstile-script="true"]')?.remove();
+            setRetryKey((value) => value + 1);
+          }}
+        >
+          Retry human verification
+        </button>
+      ) : null}
       {!USE_LOCAL_TURNSTILE_MOCK && TURNSTILE_SITE_KEY && !token ? <p className="mt-2 text-xs font-semibold text-ocean-300">Complete verification to continue.</p> : null}
     </div>
   );

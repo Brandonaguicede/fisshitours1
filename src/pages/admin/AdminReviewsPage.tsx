@@ -1,7 +1,8 @@
-import { Check, Star, X } from 'lucide-react';
+import { Check, EyeOff, Search, Star, Trash2, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import { AdminBadge, AdminPageHeader, AdminTable, AdminToolbar } from '../../components/admin/AdminPrimitives';
+import { Modal } from '../../components/common/Modal';
 import { supabase } from '../../lib/supabase';
 
 interface AdminReview {
@@ -12,6 +13,10 @@ interface AdminReview {
   rating: number;
   status: string;
   featured: boolean;
+  active: boolean;
+  sort_order: number;
+  image_url: string | null;
+  image_public_id: string | null;
   created_at: string;
 }
 
@@ -27,8 +32,11 @@ function needsEditorNotice(message: string) {
 }
 
 export default function AdminReviewsPage() {
+  const db = supabase as any;
   const [reviews, setReviews] = useState<AdminReview[] | null>(null);
   const [filter, setFilter] = useState('all');
+  const [search, setSearch] = useState('');
+  const [pendingDelete, setPendingDelete] = useState<AdminReview | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -36,9 +44,11 @@ export default function AdminReviewsPage() {
   async function loadReviews() {
     setLoading(true);
     setError('');
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('reviews')
-      .select('id, name, country, quote, rating, status, featured, created_at')
+      .select('id, name, country, quote, rating, status, featured, active, sort_order, image_url, image_public_id, created_at')
+      .order('featured', { ascending: false })
+      .order('sort_order', { ascending: true })
       .order('created_at', { ascending: false });
 
     setLoading(false);
@@ -47,7 +57,7 @@ export default function AdminReviewsPage() {
       setError(error.message);
       return;
     }
-    setReviews((data ?? []) as AdminReview[]);
+    setReviews((data ?? []) as unknown as AdminReview[]);
   }
 
   useEffect(() => {
@@ -57,22 +67,67 @@ export default function AdminReviewsPage() {
   async function setStatus(id: string, status: 'approved' | 'rejected') {
     setNotice('');
     setError('');
-    const { error } = await supabase.from('reviews').update({ status }).eq('id', id);
+    const { error } = await db.from('reviews').update({ status }).eq('id', id);
     if (error) {
       setError(error.message);
       return;
     }
-    setNotice(status === 'approved' ? 'Comentario aprobado. Ya se muestra en el sitio.' : 'Comentario rechazado. Ya no se muestra en el sitio.');
+    setNotice(status === 'approved' ? 'Comentario aprobado. Ya se muestra en el sitio.' : 'Comentario oculto del sitio.');
     await loadReviews();
   }
 
-  const visibleReviews = (reviews ?? []).filter((review) => filter === 'all' || review.status === filter);
+  async function setFeatured(id: string, featured: boolean) {
+    setNotice('');
+    setError('');
+    const { error } = await db.from('reviews').update({ featured }).eq('id', id);
+    if (error) {
+      setError(error.message);
+      return;
+    }
+    setNotice(featured ? 'Comentario marcado como destacado.' : 'Comentario quitado de destacados.');
+    await loadReviews();
+  }
+
+  async function setActive(id: string, active: boolean) {
+    setNotice('');
+    setError('');
+    const { error } = await db.from('reviews').update({ active }).eq('id', id);
+    if (error) {
+      setError(error.message);
+      return;
+    }
+    setNotice(active ? 'Comentario visible nuevamente.' : 'Comentario oculto sin eliminar.');
+    await loadReviews();
+  }
+
+  async function deleteReview(review: AdminReview) {
+    setNotice('');
+    setError('');
+    const { error } = await db.from('reviews').delete().eq('id', review.id);
+    if (error) {
+      setError(error.message);
+      return;
+    }
+    setPendingDelete(null);
+    setNotice('Comentario eliminado.');
+    await loadReviews();
+  }
+
+  const visibleReviews = (reviews ?? []).filter((review) => {
+    const matchesStatus = filter === 'all' || review.status === filter;
+    const text = `${review.name} ${review.country ?? ''} ${review.quote}`.toLowerCase();
+    return matchesStatus && (!search || text.includes(search.toLowerCase()));
+  });
 
   return (
     <div className="admin-page">
-      <AdminPageHeader title="Comentarios" description="Aprobar publica el comentario en el sitio; rechazar lo oculta." />
+      <AdminPageHeader title="Comentarios" description="Modera reseñas pendientes, aprobadas, destacadas y ocultas." />
 
       <AdminToolbar>
+        <div className="relative min-w-[220px] flex-1">
+          <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ocean-400" size={15} />
+          <input className="admin-input pl-9" placeholder="Buscar comentarios" value={search} onChange={(event) => setSearch(event.target.value)} />
+        </div>
         <select className="admin-select" value={filter} onChange={(event) => setFilter(event.target.value)}>
           {statusOptions.map((option) => (
             <option key={option.value} value={option.value}>{option.label}</option>
@@ -83,7 +138,7 @@ export default function AdminReviewsPage() {
       {error ? (
         <div className="admin-alert admin-alert--danger">
           {needsEditorNotice(error)
-            ? 'No se pudo acceder a los comentarios: se requiere una sesión de admin/editor en Supabase. Inicia sesión como admin o editor para aprobar o rechazar comentarios.'
+            ? 'No se pudo acceder a los comentarios: se requiere una sesion de admin/editor en Supabase.'
             : error}
         </div>
       ) : null}
@@ -93,10 +148,21 @@ export default function AdminReviewsPage() {
       {loading ? (
         <p className="admin-muted">Cargando comentarios...</p>
       ) : (
-        <AdminTable headers={['Cliente', 'País', 'Comentario', 'Rating', 'Estado', 'Acciones']}>
+        <AdminTable headers={['Cliente', 'Pais', 'Comentario', 'Rating', 'Estado', 'Acciones']}>
           {visibleReviews.map((review) => (
             <tr key={review.id}>
-              <td>{review.name}</td>
+              <td>
+                <div className="flex items-center gap-3">
+                  {review.image_url ? (
+                    <img className="h-10 w-10 rounded-full object-cover" src={review.image_url} alt="" loading="lazy" decoding="async" />
+                  ) : (
+                    <span className="grid h-10 w-10 place-items-center rounded-full bg-ocean-100 font-bold text-ocean-700" aria-hidden="true">
+                      {review.name.charAt(0).toUpperCase()}
+                    </span>
+                  )}
+                  <span>{review.name}</span>
+                </div>
+              </td>
               <td>{review.country ?? '-'}</td>
               <td className="admin-table__quote">"{review.quote}"</td>
               <td>
@@ -106,22 +172,21 @@ export default function AdminReviewsPage() {
               </td>
               <td><AdminBadge value={review.status} /></td>
               <td>
-                <div className="flex gap-2">
-                  <button
-                    className="admin-btn admin-btn--success"
-                    type="button"
-                    disabled={review.status === 'approved'}
-                    onClick={() => setStatus(review.id, 'approved')}
-                  >
+                <div className="flex flex-wrap gap-2">
+                  <button className="admin-btn admin-btn--success" type="button" disabled={review.status === 'approved'} onClick={() => void setStatus(review.id, 'approved')}>
                     <Check size={14} /> Aprobar
                   </button>
-                  <button
-                    className="admin-btn admin-btn--danger"
-                    type="button"
-                    disabled={review.status === 'rejected'}
-                    onClick={() => setStatus(review.id, 'rejected')}
-                  >
+                  <button className="admin-btn admin-btn--danger" type="button" disabled={review.status === 'rejected'} onClick={() => void setStatus(review.id, 'rejected')}>
                     <X size={14} /> Rechazar
+                  </button>
+                  <button className="admin-btn admin-btn--ghost" type="button" onClick={() => void setActive(review.id, !review.active)}>
+                    <EyeOff size={14} /> Ocultar
+                  </button>
+                  <button className="admin-btn admin-btn--ghost" type="button" onClick={() => void setFeatured(review.id, !review.featured)}>
+                    <Star size={14} /> {review.featured ? 'Quitar' : 'Destacar'}
+                  </button>
+                  <button className="admin-btn admin-btn--ghost" type="button" onClick={() => setPendingDelete(review)}>
+                    <Trash2 size={14} />
                   </button>
                 </div>
               </td>
@@ -129,11 +194,25 @@ export default function AdminReviewsPage() {
           ))}
           {visibleReviews.length === 0 ? (
             <tr>
-              <td colSpan={6} className="admin-muted">No hay comentarios en este estado.</td>
+              <td colSpan={6} className="admin-muted">No hay comentarios para este filtro.</td>
             </tr>
           ) : null}
         </AdminTable>
       )}
+
+      <Modal open={Boolean(pendingDelete)} onClose={() => setPendingDelete(null)} titleId="review-delete-title" className="max-w-md">
+        {pendingDelete ? (
+          <div className="rounded-2xl border border-white/60 bg-white p-5 shadow-2xl">
+            <h2 id="review-delete-title" className="admin-card__title"><Trash2 size={18} /> Eliminar comentario</h2>
+            <p className="admin-muted mt-2">El comentario se quitara del panel y de la pagina publica.</p>
+            <p className="mt-3 font-semibold text-ocean-950">{pendingDelete.name}</p>
+            <div className="admin-image-manager__actions mt-5">
+              <button className="admin-btn admin-btn--danger" type="button" onClick={() => void deleteReview(pendingDelete)}>Eliminar</button>
+              <button className="admin-btn admin-btn--ghost" type="button" onClick={() => setPendingDelete(null)}>Cancelar</button>
+            </div>
+          </div>
+        ) : null}
+      </Modal>
     </div>
   );
 }

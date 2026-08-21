@@ -69,7 +69,8 @@ export default function AdminBoatToursPage() {
   async function createPackage() {
     const firstBoatTour = boatTours[0];
     if (!firstBoatTour) {
-      setError('Crea primero una asociacion bote-tour activa.');
+      setError('');
+      setNotice('Crea primero un tour y una asociacion bote-tour activa antes de crear paquetes.');
       return;
     }
     const id = `package-${crypto.randomUUID().slice(0, 8)}`;
@@ -165,9 +166,19 @@ export default function AdminBoatToursPage() {
       </AdminToolbar>
       {error ? <div className="admin-alert admin-alert--danger">{error}</div> : null}
       {notice ? <div className="admin-alert admin-alert--success">{notice}</div> : null}
+      {!loading && boatTours.length === 0 ? (
+        <section className="admin-card">
+          <h2 className="admin-card__title">No hay asociaciones bote-tour activas</h2>
+          <p className="admin-muted">Primero crea el tour base. Luego asocialo con un bote y vuelve para crear paquetes reservables.</p>
+          <div className="admin-image-manager__actions mt-4">
+            <a className="admin-btn" href="/admin/tours"><Plus size={16} /> Crear tour</a>
+            <a className="admin-btn admin-btn--secondary" href="/admin/boat-tours"><Plus size={16} /> Asociar tour con barco</a>
+          </div>
+        </section>
+      ) : null}
       {loading ? (
         <p className="admin-muted">Cargando paquetes...</p>
-      ) : (
+      ) : boatTours.length > 0 ? (
         <AdminTable headers={['Paquete', 'Bote', 'Tour', 'Precio base', 'Capacidad', 'Orden', 'Estado', 'Acciones']}>
           {visiblePackages.map((item) => (
             <tr key={item.id}>
@@ -183,7 +194,7 @@ export default function AdminBoatToursPage() {
           ))}
           {visiblePackages.length === 0 ? <tr><td colSpan={8} className="admin-muted">No hay paquetes.</td></tr> : null}
         </AdminTable>
-      )}
+      ) : null}
 
       <Modal open={Boolean(editing)} onClose={() => setEditing(null)} titleId="package-edit-title" className="max-w-2xl">
         {editing ? (
