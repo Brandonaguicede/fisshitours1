@@ -28,7 +28,7 @@ async function expectToursFallback(page: Page) {
 test.describe('public content fallbacks', () => {
   test('home keeps local content when Supabase returns empty arrays', async ({ page }) => {
     await mockSupabaseRest(page, 200, []);
-    await page.goto('/');
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
 
     await expectHomeFallback(page);
   });
@@ -66,7 +66,7 @@ test.describe('public content fallbacks', () => {
 
   test('tours page keeps local catalog when Supabase is empty', async ({ page }) => {
     await mockSupabaseRest(page, 200, []);
-    await page.goto('/tours');
+    await page.goto('/tours', { waitUntil: 'domcontentloaded' });
 
     await expectToursFallback(page);
   });

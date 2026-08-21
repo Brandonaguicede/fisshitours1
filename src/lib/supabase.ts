@@ -5,21 +5,28 @@ import type { Database } from '../types/supabase';
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error('Missing Supabase public environment variables. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.');
-}
-
-try {
-  const parsedUrl = new URL(supabaseUrl);
-  if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
-    throw new Error('Invalid protocol');
+function isValidPublicSupabaseUrl(value: string | undefined) {
+  if (!value) return false;
+  try {
+    const parsedUrl = new URL(value);
+    return ['http:', 'https:'].includes(parsedUrl.protocol);
+  } catch {
+    return false;
   }
-} catch {
-  throw new Error('Invalid VITE_SUPABASE_URL configuration.');
 }
 
-export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
+export const isSupabaseConfigured = Boolean(isValidPublicSupabaseUrl(supabaseUrl) && supabaseAnonKey);
+export const supabaseConfigurationError = !supabaseUrl || !supabaseAnonKey
+  ? 'Missing Supabase public environment variables. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.'
+  : !isValidPublicSupabaseUrl(supabaseUrl)
+    ? 'Invalid VITE_SUPABASE_URL configuration.'
+    : '';
+
+const publicSupabaseUrl = isSupabaseConfigured ? supabaseUrl : 'https://example.invalid';
+const publicSupabaseAnonKey = isSupabaseConfigured ? supabaseAnonKey : 'missing-public-supabase-key';
+
+export const supabase = createClient<Database>(publicSupabaseUrl, publicSupabaseAnonKey, {
   auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
 });
 
-export const functionsUrl = `${supabaseUrl.replace(/\/$/, '')}/functions/v1`;
+export const functionsUrl = `${publicSupabaseUrl.replace(/\/$/, '')}/functions/v1`;

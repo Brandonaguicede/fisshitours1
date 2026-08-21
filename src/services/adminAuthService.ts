@@ -1,4 +1,4 @@
-import { supabase } from '../lib/supabase';
+import { isSupabaseConfigured, supabase } from '../lib/supabase';
 
 export type AdminRole = 'admin' | 'editor' | 'viewer';
 
@@ -17,6 +17,8 @@ export function isAllowedAdminRole(role: string | null | undefined): role is Adm
 }
 
 export async function getCurrentAdminProfile(): Promise<AdminProfile | null> {
+  if (!isSupabaseConfigured) return null;
+
   const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
   if (sessionError) throw new Error('No se pudo validar la sesion.');
   const user = sessionData.session?.user;
@@ -38,6 +40,10 @@ export async function getCurrentAdminProfile(): Promise<AdminProfile | null> {
 }
 
 export async function signInAdmin(email: string, password: string): Promise<AdminProfile> {
+  if (!isSupabaseConfigured) {
+    throw new Error('El panel administrativo no esta configurado para iniciar sesion en este entorno.');
+  }
+
   const { error } = await supabase.auth.signInWithPassword({ email, password });
   if (error) throw new Error('Credenciales incorrectas o usuario no autorizado.');
 
@@ -47,5 +53,6 @@ export async function signInAdmin(email: string, password: string): Promise<Admi
 }
 
 export async function signOutAdmin() {
+  if (!isSupabaseConfigured) return;
   await supabase.auth.signOut();
 }
