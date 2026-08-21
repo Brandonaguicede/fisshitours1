@@ -32,7 +32,6 @@ export default function HomePage() {
   const selectedBoat = useMemo(() => catalogBoats.find((boat) => boat.id === selectedBoatId) ?? catalogBoats[0], [catalogBoats, selectedBoatId]);
   const selectedTour = useMemo(() => catalogTours.find((tour) => tour.id === selectedTourId && tour.boatId === selectedBoat?.id), [catalogTours, selectedBoat?.id, selectedTourId]);
   const toursWithKnownBoats = useMemo(() => catalogTours.filter((tour) => catalogBoats.some((boat) => boat.id === tour.boatId)), [catalogBoats, catalogTours]);
-  const catalogError = boatsQuery.isError || toursQuery.isError;
   const catalogLoading = boatsQuery.isLoading || toursQuery.isLoading;
 
   function selectBoat(boat: Boat, shouldScrollToTours = true) {
@@ -89,19 +88,15 @@ export default function HomePage() {
             </div>
           </div>
           <div className="mx-auto mt-6 max-w-4xl lg:mt-7">
-            {catalogError ? (
-              <div className="rounded-2xl border border-red-300/30 bg-red-500/10 p-5 text-sm font-semibold text-red-100">We couldn’t load the booking information. Please try again.</div>
-            ) : (
-              <BookingPanel
-                selectedBoat={selectedBoat}
-                selectedTour={selectedTour}
-                boats={catalogBoats}
-                tours={catalogTours}
-                catalogLoading={catalogLoading}
-                onBoatChange={changeBoatFromBooking}
-                onTourChange={changeTourFromBooking}
-              />
-            )}
+            <BookingPanel
+              selectedBoat={selectedBoat}
+              selectedTour={selectedTour}
+              boats={catalogBoats}
+              tours={catalogTours}
+              catalogLoading={catalogLoading}
+              onBoatChange={changeBoatFromBooking}
+              onTourChange={changeTourFromBooking}
+            />
           </div>
         </Container>
       </section>

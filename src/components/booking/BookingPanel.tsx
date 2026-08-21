@@ -98,14 +98,15 @@ export function BookingPanel({ selectedBoat, selectedTour, boats, tours, catalog
     enabled: Boolean(selectedBoat.id && date),
   });
   const paymentMethodsQuery = useQuery({ queryKey: ['paymentMethods', 'active'], queryFn: getActivePaymentMethods });
-  const backendPaymentMethods = paymentMethodsQuery.data?.map((method) => ({
+  const remotePaymentMethods = paymentMethodsQuery.data?.map((method) => ({
     id: method.key as BookingPaymentMethod,
     title: method.name,
     description: method.description ?? '',
     icon: method.key === 'paypal' ? CreditCard : method.key === 'whatsapp-link' ? MessageCircle : WalletCards,
     logo: method.logo_url ?? undefined,
     logoAlt: method.name,
-  })) ?? paymentMethods;
+  }));
+  const backendPaymentMethods = remotePaymentMethods?.length ? remotePaymentMethods : paymentMethods;
   const priceQuery = useQuery({
     queryKey: ['bookingPrice', selectedBoat.id, selectedTour?.tourId, selectedTour?.id, guests],
     queryFn: () => calculateBookingPrice({

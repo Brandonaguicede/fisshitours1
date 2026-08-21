@@ -1,0 +1,53 @@
+import { expect, test, type Page } from '@playwright/test';
+
+const REST_RE = /\/rest\/v1\//;
+
+async function mockSupabaseRest(page: Page, status: number, body: unknown) {
+  await page.route(REST_RE, async (route) => {
+    await route.fulfill({
+      status,
+      contentType: 'application/json',
+      body: JSON.stringify(body),
+    });
+  });
+}
+
+test.describe('public content fallbacks', () => {
+  test('home keeps local content when Supabase returns empty arrays', async ({ page }) => {
+    await mockSupabaseRest(page, 200, []);
+    await page.goto('/');
+
+    await expect(page.getByRole('heading', { name: /Experience the Ocean|Experimenta el/i })).toBeVisible();
+    await expect(page.getByText('Second Wind').first()).toBeVisible();
+    await expect(page.getByText(/Beach & Snorkeling|Snorkeling & Beach/i).first()).toBeVisible();
+    await expect(page.getByText('404 Page not found')).toHaveCount(0);
+  });
+
+  test('home keeps local content when Supabase returns errors', async ({ page }) => {
+    await mockSupabaseRest(page, 500, { message: 'mock supabase error' });
+    await page.goto('/');
+
+    await expect(page.getByRole('heading', { name: /Experience the Ocean|Experimenta el/i })).toBeVisible();
+    await expect(page.getByText('Second Wind').first()).toBeVisible();
+    await expect(page.getByText(/Beach & Snorkeling|Snorkeling & Beach/i).first()).toBeVisible();
+    await expect(page.getByText('404 Page not found')).toHaveCount(0);
+  });
+
+  test('tours page keeps local catalog when Supabase is empty', async ({ page }) => {
+    await mockSupabaseRest(page, 200, []);
+    await page.goto('/tours');
+
+    await expect(page.getByRole('heading', { name: /Explore Second Wind|Explora Second Wind/i })).toBeVisible();
+    await expect(page.getByText(/Fishing Tour|Fishing/i).first()).toBeVisible();
+    await expect(page.getByText('404 Page not found')).toHaveCount(0);
+  });
+
+  test('tours page keeps local catalog when Supabase errors', async ({ page }) => {
+    await mockSupabaseRest(page, 500, { message: 'mock supabase error' });
+    await page.goto('/tours');
+
+    await expect(page.getByRole('heading', { name: /Explore Second Wind|Explora Second Wind/i })).toBeVisible();
+    await expect(page.getByText(/Fishing Tour|Fishing/i).first()).toBeVisible();
+    await expect(page.getByText('404 Page not found')).toHaveCount(0);
+  });
+});

@@ -6,6 +6,8 @@ import { BookingPanel } from '../components/booking/BookingPanel';
 import { Container } from '../components/common/Container';
 import { SectionTitle } from '../components/common/SectionTitle';
 import { BoatTourCard } from '../components/tours/BoatTourCard';
+import { boatTours } from '../data/boatTours';
+import { boats } from '../data/boats';
 import { useLanguage } from '../i18n/LanguageContext';
 import { getActiveBoats } from '../services/boatService';
 import { getActiveBoatTours } from '../services/boatTourService';
@@ -16,19 +18,18 @@ export default function ToursPage() {
   const { language } = useLanguage();
   const boatsQuery = useQuery({ queryKey: ['boats', 'active'], queryFn: getActiveBoats });
   const toursQuery = useQuery({ queryKey: ['boatTours', 'active'], queryFn: getActiveBoatTours });
-  const catalogBoats = boatsQuery.data ?? [];
-  const catalogTours = toursQuery.data ?? [];
-  const [selectedBoatId, setSelectedBoatId] = useState('segundo-viento');
-  const [selectedTourId, setSelectedTourId] = useState<string | undefined>();
+  const catalogBoats = boatsQuery.data?.length ? boatsQuery.data : boats;
+  const catalogTours = toursQuery.data?.length ? toursQuery.data : boatTours;
+  const [selectedBoatId, setSelectedBoatId] = useState(boats[0].id);
+  const [selectedTourId, setSelectedTourId] = useState<string | undefined>(boatTours.find((tour) => tour.boatId === boats[0].id)?.id);
   const toursRef = useRef<HTMLElement | null>(null);
   const bookingRef = useRef<HTMLElement | null>(null);
 
   const selectedBoat = useMemo(() => catalogBoats.find((boat) => boat.id === selectedBoatId) ?? catalogBoats[0], [catalogBoats, selectedBoatId]);
-  const availableTours = useMemo(() => selectedBoat ? catalogTours.filter((tour) => tour.boatId === selectedBoat.id) : [], [catalogTours, selectedBoat]);
+  const availableTours = useMemo(() => (selectedBoat ? catalogTours.filter((tour) => tour.boatId === selectedBoat.id) : []), [catalogTours, selectedBoat]);
   const selectedTour = useMemo(() => availableTours.find((tour) => tour.id === selectedTourId), [availableTours, selectedTourId]);
   const groupedTours = useMemo(() => groupToursForCards(availableTours), [availableTours]);
-  const isLoading = boatsQuery.isLoading || toursQuery.isLoading;
-  const isError = boatsQuery.isError || toursQuery.isError;
+  const catalogLoading = boatsQuery.isLoading || toursQuery.isLoading;
 
   function selectBoat(boat: Boat) {
     setSelectedBoatId(boat.id);
@@ -46,22 +47,7 @@ export default function ToursPage() {
     setSelectedTourId(undefined);
   }
 
-  if (isError) {
-    return (
-      <section className="section-y pt-28">
-        <Container>
-          <div className="rounded-2xl border border-red-300/30 bg-red-500/10 p-6 text-white">
-            <p className="font-bold">We couldn’t load the booking information. Please try again.</p>
-            <button className="mt-4 rounded-xl bg-ocean-500 px-4 py-2 font-bold text-ocean-950" type="button" onClick={() => { boatsQuery.refetch(); toursQuery.refetch(); }}>Retry</button>
-          </div>
-        </Container>
-      </section>
-    );
-  }
-
-  if (isLoading || !selectedBoat) {
-    return <section className="section-y pt-28 text-center text-white">Loading booking information...</section>;
-  }
+  if (!selectedBoat) return null;
 
   return (
     <>
@@ -144,7 +130,15 @@ export default function ToursPage() {
               : 'Choose tour type, package by price, date, guests and optional meal when the package is Full Day.'}
           />
           <div className="mt-10">
-            <BookingPanel selectedBoat={selectedBoat} selectedTour={selectedTour} boats={catalogBoats} tours={catalogTours} onBoatChange={changeBoatFromBooking} onTourChange={(tour) => setSelectedTourId(tour?.id)} />
+            <BookingPanel
+              selectedBoat={selectedBoat}
+              selectedTour={selectedTour}
+              boats={catalogBoats}
+              tours={catalogTours}
+              catalogLoading={catalogLoading}
+              onBoatChange={changeBoatFromBooking}
+              onTourChange={(tour) => setSelectedTourId(tour?.id)}
+            />
           </div>
         </Container>
       </section>
