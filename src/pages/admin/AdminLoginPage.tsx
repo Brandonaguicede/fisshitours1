@@ -8,7 +8,7 @@ import '../../styles/admin.css';
 export default function AdminLoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [checking, setChecking] = useState(true);
+  const [checking, setChecking] = useState(false);
   const [authenticated, setAuthenticated] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -23,6 +23,11 @@ export default function AdminLoginPage() {
       sessionStorage.removeItem('admin_auth_error');
     }
 
+    const timeout = window.setTimeout(() => {
+      if (mounted) setChecking(false);
+    }, 3000);
+
+    setChecking(true);
     getCurrentAdminProfile()
       .then((profile) => {
         if (mounted && profile) setAuthenticated(true);
@@ -31,11 +36,13 @@ export default function AdminLoginPage() {
         if (mounted && !storedError) setError('');
       })
       .finally(() => {
+        window.clearTimeout(timeout);
         if (mounted) setChecking(false);
       });
 
     return () => {
       mounted = false;
+      window.clearTimeout(timeout);
     };
   }, []);
 
@@ -54,10 +61,6 @@ export default function AdminLoginPage() {
     }
   }
 
-  if (checking) {
-    return <main className="admin-login"><p className="admin-muted">Validando sesion...</p></main>;
-  }
-
   if (authenticated) {
     return <Navigate to="/admin" replace />;
   }
@@ -68,6 +71,7 @@ export default function AdminLoginPage() {
         <span className="admin-sidebar__mark"><Anchor size={18} /></span>
         <h1 className="mt-4">Admin Fishing Tours</h1>
         <p className="admin-muted mt-2">Inicia sesion con tu usuario administrativo.</p>
+        {checking ? <p className="admin-muted mt-2">Validando sesion existente...</p> : null}
         <form className="admin-login__form" onSubmit={handleSubmit}>
           <label className="grid gap-1 text-left">
             <span className="admin-muted">Email</span>
