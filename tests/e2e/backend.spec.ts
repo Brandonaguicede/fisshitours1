@@ -942,8 +942,10 @@ test.describe('backend flows', () => {
     expect(corsSource).toContain('status: 204');
     expect(corsSource).toContain('Vary');
     expect(corsSource).toContain('VERCEL_PREVIEW_PATTERN');
+    expect(corsSource).toContain('fishshitours1');
+    expect(corsSource.indexOf('VERCEL_PREVIEW_PATTERN.test(origin)')).toBeLessThan(corsSource.indexOf("Deno.env.get('ALLOWED_ORIGIN')"));
 
-    const previewOrigin = 'https://fishitours1-p65rmm29s-papagayo-fishingtour.vercel.app';
+    const previewOrigin = 'https://fishshitours1-8yvz5sq2p-papagayo-fishingtour.vercel.app';
     const uploadPreview = await request.post(`${FUNCTIONS_URL}/storage-upload-image`, {
       headers: { origin: previewOrigin, apikey: anonKey },
       multipart: {},

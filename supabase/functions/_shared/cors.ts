@@ -1,5 +1,5 @@
 const LOCAL_ORIGIN_PATTERN = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
-const VERCEL_PREVIEW_PATTERN = /^https:\/\/fishitours1(?:-[a-z0-9]+|-git-[a-z0-9-]+)-papagayo-fishingtour\.vercel\.app$/;
+const VERCEL_PREVIEW_PATTERN = /^https:\/\/fishshitours1(?:-[a-z0-9]+|-git-[a-z0-9-]+)-papagayo-fishingtour\.vercel\.app$/;
 
 const PRODUCTION_ORIGINS = new Set([
   'https://papagayofishingtours.com',
@@ -14,6 +14,7 @@ export function getAllowedOrigin(req: Request): string | null {
   if (LOCAL_ORIGIN_PATTERN.test(origin)) return origin;
   if (PRODUCTION_ORIGINS.has(origin)) return origin;
   if (VERCEL_PREVIEW_PATTERN.test(origin)) return origin;
+  if (origin === Deno.env.get('ALLOWED_ORIGIN')) return origin;
   return null;
 }
 
