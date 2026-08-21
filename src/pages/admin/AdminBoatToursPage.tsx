@@ -79,11 +79,11 @@ export default function AdminBoatToursPage() {
         id,
         boat_tour_id: firstBoatTour.id,
         name: 'Nuevo paquete',
-        package_type: 'standard',
+        package_type: 'half_day',
         base_price: 0,
-        included_guests: 1,
-        max_guests: 6,
-        extra_guest_price: 0,
+        included_guests: 5,
+        max_guests: 10,
+        extra_guest_price: 65,
         custom_quote: false,
         active: true,
         sort_order: packages.length + 1,
@@ -100,6 +100,14 @@ export default function AdminBoatToursPage() {
 
   async function savePackage() {
     if (!editing) return;
+    if (editing.base_price < 0 || editing.included_guests < 1 || editing.max_guests < editing.included_guests || editing.extra_guest_price < 0) {
+      setError('Revisa los valores: precio base >= 0, incluidos >= 1, maximo >= incluidos y precio adicional >= 0.');
+      return;
+    }
+    if (editing.boat_tours?.boat_id === 'segundo-viento' && editing.max_guests > 10) {
+      setError('Second Wind no puede superar 10 pasajeros.');
+      return;
+    }
     setSaving(true);
     setError('');
     setNotice('');
@@ -200,14 +208,14 @@ export default function AdminBoatToursPage() {
                 onImageSaved={onImageSaved}
               />
               <div className="grid gap-3 sm:grid-cols-2">
-                <label className="grid gap-1"><span className="admin-muted">Asociacion bote-tour</span><select className="admin-select" value={editing.boat_tour_id} onChange={(event) => setEditing({ ...editing, boat_tour_id: event.target.value })}>{boatTours.map((item) => <option key={item.id} value={item.id}>{item.boat_id} / {item.tour_id}</option>)}</select></label>
+                <label className="grid gap-1"><span className="admin-muted">Bote y tour asociados</span><select className="admin-select" value={editing.boat_tour_id} onChange={(event) => setEditing({ ...editing, boat_tour_id: event.target.value })}>{boatTours.map((item) => <option key={item.id} value={item.id}>{item.boat_id} / {item.tour_id}</option>)}</select></label>
                 <label className="grid gap-1"><span className="admin-muted">Nombre</span><input className="admin-input" value={editing.name} onChange={(event) => setEditing({ ...editing, name: event.target.value })} /></label>
-                <label className="grid gap-1"><span className="admin-muted">Tipo</span><input className="admin-input" value={editing.package_type} onChange={(event) => setEditing({ ...editing, package_type: event.target.value })} /></label>
-                <label className="grid gap-1"><span className="admin-muted">Duracion minutos</span><input className="admin-input" type="number" value={editing.duration_minutes ?? ''} onChange={(event) => setEditing({ ...editing, duration_minutes: event.target.value ? Number(event.target.value) : null })} /></label>
-                <label className="grid gap-1"><span className="admin-muted">Precio base</span><input className="admin-input" type="number" min={0} value={editing.base_price} onChange={(event) => setEditing({ ...editing, base_price: Number(event.target.value) })} /></label>
-                <label className="grid gap-1"><span className="admin-muted">Precio extra</span><input className="admin-input" type="number" min={0} value={editing.extra_guest_price} onChange={(event) => setEditing({ ...editing, extra_guest_price: Number(event.target.value) })} /></label>
-                <label className="grid gap-1"><span className="admin-muted">Incluidos</span><input className="admin-input" type="number" min={0} value={editing.included_guests} onChange={(event) => setEditing({ ...editing, included_guests: Number(event.target.value) })} /></label>
-                <label className="grid gap-1"><span className="admin-muted">Maximo</span><input className="admin-input" type="number" min={1} value={editing.max_guests} onChange={(event) => setEditing({ ...editing, max_guests: Number(event.target.value) })} /></label>
+                <label className="grid gap-1"><span className="admin-muted">Half Day, 3/4 Day, Full Day, Classic o Deluxe</span><input className="admin-input" value={editing.package_type} onChange={(event) => setEditing({ ...editing, package_type: event.target.value })} /></label>
+                <label className="grid gap-1"><span className="admin-muted">Duracion en minutos (vacío si pendiente)</span><input className="admin-input" type="number" min={1} value={editing.duration_minutes ?? ''} onChange={(event) => setEditing({ ...editing, duration_minutes: event.target.value ? Number(event.target.value) : null })} /></label>
+                <label className="grid gap-1"><span className="admin-muted">Precio base del bote</span><input className="admin-input" type="number" min={0} value={editing.base_price} onChange={(event) => setEditing({ ...editing, base_price: Number(event.target.value) })} /></label>
+                <label className="grid gap-1"><span className="admin-muted">Precio por persona adicional</span><input className="admin-input" type="number" min={0} value={editing.extra_guest_price} onChange={(event) => setEditing({ ...editing, extra_guest_price: Number(event.target.value) })} /></label>
+                <label className="grid gap-1"><span className="admin-muted">Incluye hasta 5 personas</span><input className="admin-input" type="number" min={1} value={editing.included_guests} onChange={(event) => setEditing({ ...editing, included_guests: Number(event.target.value) })} /></label>
+                <label className="grid gap-1"><span className="admin-muted">Capacidad máxima</span><input className="admin-input" type="number" min={1} max={10} value={editing.max_guests} onChange={(event) => setEditing({ ...editing, max_guests: Number(event.target.value) })} /></label>
                 <label className="grid gap-1"><span className="admin-muted">Orden</span><input className="admin-input" type="number" value={editing.sort_order} onChange={(event) => setEditing({ ...editing, sort_order: Number(event.target.value) })} /></label>
               </div>
               <label className="grid gap-1"><span className="admin-muted">Descripcion</span><textarea className="admin-input" value={editing.description ?? ''} onChange={(event) => setEditing({ ...editing, description: event.target.value || null })} /></label>

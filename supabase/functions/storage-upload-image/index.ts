@@ -55,6 +55,9 @@ serve(async (req) => {
   const detected = detectImageType(bytes);
   if (!detected) return Response.json({ message: 'Invalid image content' }, { status: 400, headers });
   if (detected.mime !== file.type) return Response.json({ message: 'Image content does not match declared type' }, { status: 400, headers });
+  if (!filenameMatchesType(file.name, detected.extension)) {
+    return Response.json({ message: 'Image extension does not match detected type' }, { status: 400, headers });
+  }
 
   const supabase = getServiceClient();
   const resourceExists = await checkResourceExists(supabase, resourceTable, resourceId);
@@ -70,7 +73,7 @@ serve(async (req) => {
     .upload(storagePath, file, { contentType: detected.mime, cacheControl: '31536000', upsert: false });
   if (uploadError) return Response.json({ message: 'Storage upload failed' }, { status: 400, headers });
 
-  const publicUrl = supabase.storage.from('site-images').getPublicUrl(storagePath).data.publicUrl;
+  const publicUrl = normalizePublicUrl(req, supabase.storage.from('site-images').getPublicUrl(storagePath).data.publicUrl);
 
   const { error: insertError } = await supabase.from('media_assets').insert({
     provider: 'supabase_storage',
@@ -144,6 +147,25 @@ function detectImageType(bytes: Uint8Array): { mime: string; extension: string }
     return { mime: 'image/webp', extension: 'webp' };
   }
   return null;
+}
+
+function filenameMatchesType(name: string, extension: string): boolean {
+  const lower = name.toLowerCase();
+  if (extension === 'jpg') return lower.endsWith('.jpg') || lower.endsWith('.jpeg');
+  return lower.endsWith(`.${extension}`);
+}
+
+function normalizePublicUrl(req: Request, publicUrl: string): string {
+  const url = new URL(publicUrl);
+  if (!['kong', 'supabase_kong_propuesta1'].includes(url.hostname)) return publicUrl;
+  const forwardedProto = req.headers.get('x-forwarded-proto') ?? 'http';
+  const forwardedHost = req.headers.get('x-forwarded-host') ?? req.headers.get('host');
+  if (!forwardedHost) return publicUrl;
+  const forwardedPort = req.headers.get('x-forwarded-port');
+  const host = forwardedPort && !forwardedHost.includes(':')
+    ? `${forwardedHost}:${forwardedPort}`
+    : forwardedHost;
+  return `${forwardedProto}://${host}${url.pathname}${url.search}`;
 }
 
 async function checkResourceExists(supabase: ReturnType<typeof getServiceClient>, table: string, id: string) {

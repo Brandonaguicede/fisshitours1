@@ -31,6 +31,9 @@ serve(async (req) => {
   if (!auth.ok) return Response.json({ message: auth.message }, { status: auth.status, headers });
 
   const supabase = getServiceClient();
+  if (parsed.data.storagePath && !SAFE_PATH_PATTERN.test(parsed.data.storagePath)) {
+    return Response.json({ message: 'Invalid storage path' }, { status: 400, headers });
+  }
 
   let asset: { id: string; provider: string; storage_bucket: string | null; storage_path: string | null; public_url: string | null } | null = null;
   if (parsed.data.mediaAssetId) {

@@ -5,7 +5,7 @@ import { z } from 'npm:zod@3.23.8';
 const schema = z.object({
   tourPackageId: z.string().min(1),
   guests: z.number().int().positive(),
-  boatId: z.string().min(1).optional(),
+  boatId: z.string().min(1),
   tourId: z.string().min(1).optional(),
   extras: z.array(z.object({ key: z.string().min(1).max(80), quantity: z.number().int().positive() })).default([]),
 });
@@ -30,15 +30,19 @@ serve(async (req) => {
   const supabase = createClient(supabaseUrl, serviceRole, { auth: { persistSession: false } });
   const { data: pkg, error } = await supabase
     .from('tour_packages')
-    .select('id, boat_tour_id, base_price, included_guests, max_guests, extra_guest_price, custom_quote, boat_tours!inner(boat_id, tour_id, active)')
+    .select('id, boat_tour_id, base_price, included_guests, max_guests, extra_guest_price, custom_quote, boat_tours!inner(boat_id, tour_id, active, boats!inner(active), tours!inner(active))')
     .eq('id', parsed.data.tourPackageId)
     .eq('active', true)
+    .eq('boat_tours.boat_id', parsed.data.boatId)
+    .eq('boat_tours.active', true)
+    .eq('boat_tours.boats.active', true)
+    .eq('boat_tours.tours.active', true)
     .single();
 
   if (error || !pkg) return Response.json({ message: 'Tour package not found' }, { status: 404, headers });
   const boatTour = Array.isArray(pkg.boat_tours) ? pkg.boat_tours[0] : pkg.boat_tours;
   if (!boatTour?.active) return Response.json({ message: 'Tour package is not available' }, { status: 404, headers });
-  if (parsed.data.boatId && boatTour.boat_id !== parsed.data.boatId) return Response.json({ message: 'Tour package does not belong to boat' }, { status: 400, headers });
+  if (boatTour.boat_id !== parsed.data.boatId) return Response.json({ message: 'Tour package does not belong to boat' }, { status: 400, headers });
   if (parsed.data.tourId && boatTour.tour_id !== parsed.data.tourId) return Response.json({ message: 'Tour package does not belong to tour' }, { status: 400, headers });
   if (parsed.data.guests > pkg.max_guests) return Response.json({ message: 'Guest quantity exceeds capacity' }, { status: 400, headers });
   if (pkg.custom_quote) return Response.json({ custom_quote: true, total: null, currency: 'USD' }, { headers });

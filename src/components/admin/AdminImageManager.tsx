@@ -5,7 +5,7 @@ import Cropper, { type Area } from 'react-easy-crop';
 
 import { Modal } from '../common/Modal';
 import { deleteStorageImage, type StorageImage } from '../../services/imageService';
-import { supabase } from '../../lib/supabase';
+import { functionsUrl, isSupabaseConfigured, supabase } from '../../lib/supabase';
 import { formatBytes } from '../../utils/format';
 
 interface AdminImageManagerProps {
@@ -59,6 +59,11 @@ export default function AdminImageManager({
   const [progress, setProgress] = useState(0);
   const [message, setMessage] = useState<{ kind: 'error' | 'success' | 'warning'; text: string } | null>(null);
   const [dragOver, setDragOver] = useState(false);
+
+  useEffect(() => {
+    setImageUrl(currentImageUrl ?? null);
+    setStoragePath(currentStoragePath ?? null);
+  }, [currentImageUrl, currentStoragePath]);
 
   useEffect(() => {
     return () => {
@@ -147,6 +152,10 @@ export default function AdminImageManager({
     setMessage(null);
     const previousStoragePath = storagePath;
     try {
+      if (!isSupabaseConfigured) {
+        throw new Error('Supabase no esta configurado para gestionar imagenes en este entorno.');
+      }
+
       const { data } = await supabase.auth.getSession();
       const token = data.session?.access_token;
       if (!token) throw new Error('Se requiere una sesión de admin o editor.');
@@ -333,7 +342,7 @@ function uploadWithProgress(
 ): Promise<StorageImage> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
-    xhr.open('POST', `${import.meta.env.VITE_SUPABASE_URL?.replace(/\/$/, '')}/functions/v1/storage-upload-image`);
+    xhr.open('POST', `${functionsUrl}/storage-upload-image`);
     xhr.setRequestHeader('Authorization', `Bearer ${token}`);
     xhr.upload.onprogress = (event) => {
       if (event.lengthComputable) onProgress(Math.round((event.loaded / event.total) * 100));

@@ -601,7 +601,7 @@ function TourDetailsStep(props: {
 
       {activeGroupData ? (
         <fieldset>
-          <legend className="text-sm font-bold text-ocean-100">{language === 'es' ? 'Escoge por precio' : 'Choose by price'}</legend>
+          <legend className="text-sm font-bold text-ocean-100">{language === 'es' ? 'Escoge paquete o duracion' : 'Choose package or duration'}</legend>
           <div className="mt-3 grid gap-2 min-[420px]:grid-cols-2 min-[640px]:grid-cols-3">
             {activeGroupData.tours.map((tour) => (
               <label key={tour.id} className={cn('pressable min-w-0 rounded-xl border border-white/10 bg-white/[0.035] p-2.5 transition-[background-color,border-color,box-shadow] duration-200 hover:border-ocean-400/45 hover:bg-ocean-500/8 sm:p-3', props.selectedTour?.id === tour.id && 'border-ocean-400/70 bg-ocean-500/10 ring-4 ring-ocean-500/8')}>
@@ -671,8 +671,8 @@ function TourDetailsStep(props: {
               <p className="font-extrabold text-ocean-300">Custom quote required</p>
             ) : (
               <>
-                <SummaryLine label="Base price" value={formatCurrency(props.pricing.basePrice)} />
-                <SummaryLine label="Included guests" value={String(props.includedGuests)} />
+                <SummaryLine label={language === 'es' ? 'Precio base del bote' : 'Boat base price'} value={formatCurrency(props.pricing.basePrice)} />
+                <SummaryLine label={language === 'es' ? 'Incluye hasta' : 'Includes up to'} value={`${props.includedGuests} ${language === 'es' ? 'personas' : 'guests'}`} />
                 <SummaryLine label="Additional guests" value={`${props.pricing.extraGuests} x ${formatCurrency(props.extraGuestPrice)}`} />
                 <SummaryLine label="Additional guest charge" value={formatCurrency(props.pricing.extraGuestsTotal)} />
                 <SummaryLine label="Extras" value={formatCurrency(props.pricing.extrasTotal ?? 0)} />
@@ -725,6 +725,7 @@ function mapBackendPricing(boat: Boat, tour: BoatTour | undefined, guests: numbe
     return {
       isCustomQuote: true,
       basePrice: 0,
+      includedGuests: Number(price.included_guests ?? tour?.includedGuests ?? boat.includedGuests),
       extraGuests: 0,
       extraGuestPrice: Number(price.extra_guest_price ?? tour?.extraGuestPrice ?? boat.extraGuestPrice),
       extraGuestsTotal: 0,
@@ -735,6 +736,7 @@ function mapBackendPricing(boat: Boat, tour: BoatTour | undefined, guests: numbe
   return {
     isCustomQuote: false,
     basePrice: Number(price.base_price ?? 0),
+    includedGuests: Number(price.included_guests ?? tour?.includedGuests ?? boat.includedGuests),
     extraGuests: Number(price.extra_guests ?? 0),
     extraGuestPrice: Number(price.extra_guest_price ?? 0),
     extraGuestsTotal: Number(price.extra_guests_total ?? 0),
@@ -959,7 +961,7 @@ function BookingPaymentSummary({ booking }: { booking: BookingPaymentPayload | n
         <SummaryLine label="Date" value={formatDisplayDate(booking.date)} />
         <SummaryLine label="Time" value={booking.time || 'Required'} />
         <SummaryLine label="Number of guests" value={String(booking.guests)} />
-        <SummaryLine label="Base price" value={formatCurrency(booking.basePrice)} />
+        <SummaryLine label="Boat base price" value={formatCurrency(booking.basePrice)} />
         <SummaryLine label="Additional guests" value={String(booking.additionalGuests)} />
         <SummaryLine label="Additional guest charge" value={formatCurrency(booking.additionalGuestCharge)} />
         <SummaryLine label="Total price" value={formatCurrency(booking.total)} />
@@ -1045,7 +1047,7 @@ function BookingSummary(props: {
   const coverImage = props.selectedBoat.image;
   const selectedTourName = props.selectedTour ? `${getTourText(props.selectedTour, language).title} - ${getPackageLabel(props.selectedTour, language)}` : tr(text.booking.selectTour, language);
   const subtotal = props.selectedTour?.customQuote ? 'Custom quote' : formatCurrency(props.pricing.basePrice);
-  const taxes = props.selectedTour?.customQuote ? '-' : formatCurrency(Math.max(props.pricing.total - props.pricing.basePrice - props.pricing.extraGuestsTotal, 0));
+  const extrasTotal = props.selectedTour?.customQuote ? '-' : formatCurrency(Math.max(props.pricing.total - props.pricing.basePrice - props.pricing.extraGuestsTotal, 0));
 
   return (
     <aside className="h-fit rounded-2xl border border-white/10 bg-white/[0.045] p-3 text-white shadow-[0_12px_30px_rgba(0,0,0,0.12)] backdrop-blur-xl min-[420px]:p-4 sm:p-4">
@@ -1063,9 +1065,10 @@ function BookingSummary(props: {
         {isFullDayTour(props.selectedTour) ? <SummaryRow label={language === 'es' ? 'Comida' : 'Meal option'} value={props.mealOption || (language === 'es' ? 'No seleccionada' : 'Not selected')} /> : null}
       </div>
       <div className="mt-4 rounded-xl border border-white/10 bg-ocean-900/55 p-3 sm:mt-5 sm:p-4">
-        <SummaryRow label="Subtotal" value={subtotal} />
+        <SummaryRow label={language === 'es' ? 'Precio base del bote' : 'Boat base price'} value={subtotal} />
+        <SummaryRow label={language === 'es' ? 'Incluye hasta' : 'Includes up to'} value={`${props.selectedTour ? getTourIncludedGuests(props.selectedBoat, props.selectedTour) : props.selectedBoat.includedGuests} ${language === 'es' ? 'personas' : 'guests'}`} />
         {props.pricing.extraGuests > 0 ? <SummaryRow label={tr(text.booking.extraPeople, language)} value={`${props.pricing.extraGuests} x ${formatCurrency(props.pricing.extraGuestPrice)}`} /> : null}
-        <SummaryRow label={tr(text.booking.taxes, language)} value={taxes} />
+        <SummaryRow label={tr(text.booking.taxes, language)} value={extrasTotal} />
         <div className="mt-4 flex flex-wrap items-end justify-between gap-3 border-t border-white/10 pt-4">
           <span className="font-extrabold text-white">Total</span>
           <span className="text-2xl font-extrabold text-ocean-400">{props.selectedTour?.customQuote ? 'Cotizar' : formatCurrency(props.pricing.total)}</span>

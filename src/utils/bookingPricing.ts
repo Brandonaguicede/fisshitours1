@@ -18,6 +18,7 @@ export function calculateBookingTotal(boat: Boat, tour: BoatTour | undefined, gu
     return {
       isCustomQuote: true,
       basePrice: 0,
+      includedGuests: getTourIncludedGuests(boat, tour),
       extraGuests: 0,
       extraGuestPrice: getExtraGuestPrice(boat, tour),
       extraGuestsTotal: 0,
@@ -34,6 +35,7 @@ export function calculateBookingTotal(boat: Boat, tour: BoatTour | undefined, gu
   return {
     isCustomQuote: false,
     basePrice: tour.basePrice,
+    includedGuests,
     extraGuests,
     extraGuestPrice,
     extraGuestsTotal,

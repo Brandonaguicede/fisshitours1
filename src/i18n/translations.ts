@@ -21,7 +21,7 @@ export const text = {
     galleryDescription: { es: 'Usa los filtros para ver imágenes específicas sin hacer la página demasiado larga.', en: 'Use filters to browse a focused set of images without making the page too long.' },
     bookingEyebrow: { es: 'Reserva', en: 'Booking' },
     bookingTitle: { es: 'Reserva tu experiencia', en: 'Reserve Your Experience' },
-    bookingDescription: { es: 'Tu barco y tour seleccionados mantienen conectados capacidad, horarios, precio por persona y resumen.', en: 'Your selected boat and tour stay connected through capacity, time slots, guest pricing and summary.' },
+    bookingDescription: { es: 'Tu barco y tour seleccionados mantienen conectados capacidad, horarios, precio base del bote y resumen.', en: 'Your selected boat and tour stay connected through capacity, time slots, boat pricing and summary.' },
     aboutEyebrow: { es: 'Sobre nosotros', en: 'About us' },
     aboutTitle: { es: 'Creamos rutas con alma local y ejecución profesional', en: 'Local routes, professionally operated' },
     aboutDescription: { es: 'Papagayo Fishing Tours conecta viajeros con el Pacífico costarricense: navegación privada, pesca deportiva, playas claras y experiencias bien coordinadas desde el primer contacto.', en: 'Papagayo Fishing Tours connects travelers with Costa Rica’s Pacific coast: private navigation, sport fishing, clear beaches and well-coordinated experiences from the first message.' },
@@ -59,7 +59,7 @@ export const text = {
     tourType: { es: 'Tipo de tour', en: 'Tour type' },
     selectTime: { es: 'Selecciona hora', en: 'Select time' },
     extraPeople: { es: 'Personas extra', en: 'Extra guests' },
-    taxes: { es: 'Impuestos', en: 'Taxes' },
+    taxes: { es: 'Extras', en: 'Extras' },
     secure: { es: 'La reserva queda pendiente de confirmacion del equipo.', en: 'Your booking request remains pending confirmation by the team.' },
   },
 } as const;

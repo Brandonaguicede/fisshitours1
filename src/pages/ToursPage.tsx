@@ -30,6 +30,7 @@ export default function ToursPage() {
   const selectedTour = useMemo(() => availableTours.find((tour) => tour.id === selectedTourId), [availableTours, selectedTourId]);
   const groupedTours = useMemo(() => groupToursForCards(availableTours), [availableTours]);
   const catalogLoading = boatsQuery.isLoading || toursQuery.isLoading;
+  const catalogError = boatsQuery.isError || toursQuery.isError;
 
   function selectBoat(boat: Boat) {
     setSelectedBoatId(boat.id);
@@ -53,6 +54,23 @@ export default function ToursPage() {
     <>
       <section className="section-y pt-28">
         <Container>
+          {catalogError ? (
+            <div className="mb-6 rounded-2xl border border-amber-300/30 bg-amber-100 px-4 py-3 text-sm font-semibold text-amber-950 shadow-sm">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <p>We couldn’t load the booking information. Please try again.</p>
+                <button
+                  className="rounded-xl bg-amber-950 px-4 py-2 text-sm font-extrabold text-white transition hover:bg-ocean-900 focus:outline-none focus:ring-2 focus:ring-amber-700 focus:ring-offset-2"
+                  type="button"
+                  onClick={() => {
+                    void boatsQuery.refetch();
+                    void toursQuery.refetch();
+                  }}
+                >
+                  Retry
+                </button>
+              </div>
+            </div>
+          ) : null}
           <div className="rounded-[2rem] bg-ocean-900 px-6 py-12 text-white shadow-lifted sm:px-10">
             <p className="text-sm font-bold uppercase tracking-[0.14em] text-ocean-200">{language === 'es' ? 'Reserva por flota' : 'Fleet first booking'}</p>
             <h1 className="mt-3 max-w-4xl font-display text-4xl font-extrabold leading-tight sm:text-6xl">

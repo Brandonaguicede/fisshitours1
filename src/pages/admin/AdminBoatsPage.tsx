@@ -68,9 +68,9 @@ export default function AdminBoatsPage() {
         id: slug,
         slug,
         name: 'Nuevo bote',
-        included_guests: 1,
-        max_guests: 6,
-        extra_guest_price: 0,
+        included_guests: 5,
+        max_guests: 10,
+        extra_guest_price: 65,
         active: true,
         sort_order: (boats?.length ?? 0) + 1,
       })
@@ -90,6 +90,14 @@ export default function AdminBoatsPage() {
 
   async function saveEditor() {
     if (!editing) return;
+    if (editing.included_guests < 1 || editing.max_guests < editing.included_guests || editing.extra_guest_price < 0) {
+      setError('Revisa la capacidad: incluidos >= 1, maximo >= incluidos y precio adicional >= 0.');
+      return;
+    }
+    if (editing.id === 'segundo-viento' && editing.max_guests > 10) {
+      setError('Second Wind no puede superar 10 pasajeros.');
+      return;
+    }
     setSaving(true);
     setError('');
     setNotice('');
@@ -295,7 +303,7 @@ export default function AdminBoatsPage() {
                   <input className="admin-input" value={editing.slug} onChange={(event) => setEditing({ ...editing, slug: event.target.value })} />
                 </label>
                 <label className="grid gap-1">
-                  <span className="admin-muted">Dimensiones</span>
+                  <span className="admin-muted">Eslora</span>
                   <input className="admin-input" value={editing.length ?? ''} onChange={(event) => setEditing({ ...editing, length: event.target.value || null })} />
                 </label>
                 <label className="grid gap-1">
@@ -303,15 +311,15 @@ export default function AdminBoatsPage() {
                   <input className="admin-input" value={editing.engine ?? ''} onChange={(event) => setEditing({ ...editing, engine: event.target.value || null })} />
                 </label>
                 <label className="grid gap-1">
-                  <span className="admin-muted">Incluidos</span>
-                  <input className="admin-input" type="number" min={0} value={editing.included_guests} onChange={(event) => setEditing({ ...editing, included_guests: Number(event.target.value) })} />
+                  <span className="admin-muted">Incluye hasta 5 personas</span>
+                  <input className="admin-input" type="number" min={1} value={editing.included_guests} onChange={(event) => setEditing({ ...editing, included_guests: Number(event.target.value) })} />
                 </label>
                 <label className="grid gap-1">
-                  <span className="admin-muted">Maximo</span>
-                  <input className="admin-input" type="number" min={1} value={editing.max_guests} onChange={(event) => setEditing({ ...editing, max_guests: Number(event.target.value) })} />
+                  <span className="admin-muted">Capacidad máxima</span>
+                  <input className="admin-input" type="number" min={1} max={editing.id === 'segundo-viento' ? 10 : undefined} value={editing.max_guests} onChange={(event) => setEditing({ ...editing, max_guests: Number(event.target.value) })} />
                 </label>
                 <label className="grid gap-1">
-                  <span className="admin-muted">Precio extra (USD)</span>
+                  <span className="admin-muted">Precio por persona adicional (USD)</span>
                   <input className="admin-input" type="number" min={0} value={editing.extra_guest_price} onChange={(event) => setEditing({ ...editing, extra_guest_price: Number(event.target.value) })} />
                 </label>
                 <label className="grid gap-1">

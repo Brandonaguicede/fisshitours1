@@ -43,9 +43,11 @@ export function TourCard({ tour }: TourCardProps) {
           </span>
         ) : null}
         <div className="mt-5 flex items-center justify-between gap-4">
-          <span className="text-lg font-extrabold text-ocean-400">{formatCurrency(tour.price)}</span>
+          <span className="text-lg font-extrabold text-ocean-400">
+            {language === 'es' ? 'Desde' : 'From'} {formatCurrency(tour.price)} {language === 'es' ? 'por bote' : 'per boat'}
+          </span>
           <Button className="gap-2 px-4" to={`/tours/${tour.slug}`}>
-            {language === 'es' ? 'Ver' : 'View'} <ArrowUpRight size={16} />
+            {language === 'es' ? 'Ver opciones' : 'View options'} <ArrowUpRight size={16} />
           </Button>
         </div>
       </div>

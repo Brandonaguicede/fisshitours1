@@ -205,6 +205,34 @@ test.describe('backend flows', () => {
     }
   });
 
+  test('pricing: official 2026 boat package matrix examples', async ({ request }) => {
+    const cases: Array<{ packageId: string; tourId: string; guests: number; total: number }> = [
+      { packageId: 'second-wind-beach-snorkeling-half', tourId: 'beach-snorkeling', guests: 5, total: 650 },
+      { packageId: 'second-wind-beach-snorkeling-half', tourId: 'beach-snorkeling', guests: 6, total: 715 },
+      { packageId: 'second-wind-fishing-half', tourId: 'fishing', guests: 10, total: 1025 },
+      { packageId: 'second-wind-surfing-three-quarter', tourId: 'surfing', guests: 7, total: 880 },
+      { packageId: 'second-wind-water-toys-full', tourId: 'water-toys', guests: 10, total: 1475 },
+      { packageId: 'second-wind-bioluminescence-classic', tourId: 'bioluminescence', guests: 5, total: 650 },
+      { packageId: 'second-wind-bioluminescence-deluxe', tourId: 'bioluminescence', guests: 6, total: 815 },
+    ];
+
+    for (const item of cases) {
+      const res = await fn(request, 'calculate-booking-price', {
+        tourPackageId: item.packageId,
+        guests: item.guests,
+        boatId: BOAT_ID,
+        tourId: item.tourId,
+      });
+      expect(res.status).toBe(200);
+      expect(res.body.base_price).toBeLessThanOrEqual(item.total);
+      expect(res.body.included_guests).toBe(5);
+      expect(res.body.max_guests).toBe(10);
+      expect(res.body.extra_guest_price).toBe(65);
+      expect(res.body.total).toBe(item.total);
+      expect(res.body.currency).toBe('USD');
+    }
+  });
+
   test('pricing: zero, negative and over-capacity guests are rejected', async ({ request }) => {
     for (const guests of [0, -1, 11]) {
       const res = await fn(request, 'calculate-booking-price', {
@@ -227,7 +255,7 @@ test.describe('backend flows', () => {
     const noBoat = await fn(request, 'calculate-booking-price', {
       tourPackageId: HALF_DAY_PACKAGE, guests: 5, boatId: 'no-such-boat',
     });
-    expect(noBoat.status).toBe(400);
+    expect(noBoat.status).toBe(404);
 
     const noPackage = await fn(request, 'calculate-booking-price', {
       tourPackageId: 'no-such-package', guests: 5, boatId: BOAT_ID,
@@ -645,6 +673,20 @@ test.describe('backend flows', () => {
     }, headers);
     expect(res.status).toBe(400);
     expect(res.body.message).toContain('Invalid image content');
+  });
+
+  test('storage: mismatched filename extension is rejected', async ({ request }) => {
+    const editor = await signupUser(request, uniqueEmail());
+    await setProfileRole(request, editor.user.id, editor.user.email, 'editor');
+    const headers = anonHeaders({ Authorization: `Bearer ${editor.access_token}` });
+
+    const res = await fnUpload(request, 'storage-upload-image', {
+      file: { name: 'fake.jpg', mimeType: 'image/png', buffer: pngBuffer(1024) },
+      resourceTable: 'boats',
+      resourceId: BOAT_ID,
+    }, headers);
+    expect(res.status).toBe(400);
+    expect(res.body.message).toContain('extension');
   });
 
   test('storage: oversized image is rejected', async ({ request }) => {

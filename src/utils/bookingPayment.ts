@@ -33,6 +33,7 @@ export interface BookingPaymentPayload {
   time: string;
   guests: number;
   basePrice: number;
+  includedGuests: number;
   additionalGuests: number;
   additionalGuestPrice: number;
   additionalGuestCharge: number;
@@ -60,8 +61,6 @@ export function buildBookingPaymentPayload(input: {
   extras?: Array<{ key: string; label: string; quantity: number; unit_price: number; total: number }>;
   specialRequests: string;
 }): BookingPaymentPayload {
-  const tourText = getTourText(input.tour, 'en');
-
   return {
     bookingReference: input.bookingReference,
     customerName: cleanText(input.customerName),
@@ -74,6 +73,7 @@ export function buildBookingPaymentPayload(input: {
     time: cleanText(input.timeSlot?.time ?? ''),
     guests: input.guests,
     basePrice: input.pricing.basePrice,
+    includedGuests: input.pricing.includedGuests,
     additionalGuests: input.pricing.extraGuests,
     additionalGuestPrice: input.pricing.extraGuestPrice,
     additionalGuestCharge: input.pricing.extraGuestsTotal,
@@ -110,7 +110,8 @@ export function createWhatsAppBookingMessage(booking: BookingPaymentPayload, var
     `Guests: ${booking.guests}`,
     '',
     'PRICE SUMMARY',
-    `Base price: ${formatMessageCurrency(booking.basePrice)}`,
+    `Boat base price: ${formatMessageCurrency(booking.basePrice)}`,
+    `Includes up to: ${booking.includedGuests} guests`,
     `Additional guests: ${booking.additionalGuests} x ${formatMessageCurrency(booking.additionalGuestPrice)}`,
     `Additional guest charge: ${formatMessageCurrency(booking.additionalGuestCharge)}`,
     `Extras: ${booking.extras.length ? booking.extras.map((extra) => `${extra.label} x${extra.quantity}`).join(', ') : 'None'}`,

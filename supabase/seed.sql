@@ -6,9 +6,9 @@ values (
   '/botes/IMG_4792.jpeg',
   '["/botes/IMG_4792.jpeg","/botes/cffc9ef1-c305-40ad-9cd4-e5fe431e0dea.jpeg","/botes/D8EAD874-70EB-444D-ACED-E66D32B684A0.jpeg","/botes/bc8a597a-e04d-40c7-999d-b1117052eff6.jpeg","/botes/39188b9b-2a17-4296-a7dc-17bfca5cb618.jpeg","/botes/33408243-8c66-40a2-bcea-27272519d847.jpeg"]'::jsonb,
   'Luxury meets nature',
-  'From $600',
-  '32 ft Cigarette boat',
-  'Yamaha 250 HP',
+  'From $600 per boat',
+  '32 ft',
+  'Yamaha 250HP',
   5,
   10,
   65,
@@ -18,6 +18,15 @@ values (
   name = excluded.name,
   image_url = excluded.image_url,
   images = excluded.images,
+  badge = excluded.badge,
+  base_price_label = excluded.base_price_label,
+  length = excluded.length,
+  engine = excluded.engine,
+  included_guests = excluded.included_guests,
+  max_guests = excluded.max_guests,
+  extra_guest_price = excluded.extra_guest_price,
+  featured_spec = excluded.featured_spec,
+  sort_order = excluded.sort_order,
   updated_at = now();
 
 insert into public.tours (id, title, slug, location, description, long_description, image_url, category, rating, highlights, included, sort_order)
@@ -62,7 +71,20 @@ values
 ('second-wind-water-toys-full', '44444444-4444-4444-8444-444444444444', 'Water Toys Tour - Full Day', 'full_day', 'Full-day water toys adventure with wakeboarding, paddleboarding, snorkeling, subwing, tubing and lunch included.', 480, 1150, 5, 10, 65, false, '/galeria/IMG_0007.jpeg', 12),
 ('second-wind-bioluminescence-classic', '55555555-5555-4555-8555-555555555555', 'Bioluminescence Tour - Classic Experience', 'classic', 'Discover the magical phenomenon of bioluminescence in the Gulf of Papagayo as every movement creates shimmering blue sparks across the ocean.', null, 650, 5, 10, 65, false, '/images/placeholder-image.jpg', 13),
 ('second-wind-bioluminescence-deluxe', '55555555-5555-4555-8555-555555555555', 'Bioluminescence Tour - Deluxe Experience', 'deluxe', 'A deluxe bioluminescence night experience with cheese board, ceviche, sparkling wine and beverages aboard Second Wind.', null, 750, 5, 10, 65, false, '/images/placeholder-image.jpg', 14)
-on conflict (id) do update set name = excluded.name, base_price = excluded.base_price, updated_at = now();
+on conflict (id) do update set
+  boat_tour_id = excluded.boat_tour_id,
+  name = excluded.name,
+  package_type = excluded.package_type,
+  description = excluded.description,
+  duration_minutes = excluded.duration_minutes,
+  base_price = excluded.base_price,
+  included_guests = excluded.included_guests,
+  max_guests = excluded.max_guests,
+  extra_guest_price = excluded.extra_guest_price,
+  custom_quote = excluded.custom_quote,
+  image_url = excluded.image_url,
+  sort_order = excluded.sort_order,
+  updated_at = now();
 
 insert into public.extras (id, key, label, description, unit_price, active, sort_order)
 values
