@@ -1,11 +1,13 @@
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2';
+import { corsHeaders, corsPreflight } from '../_shared/cors.ts';
 
 const ALLOWED_FOLDERS = new Set(['boats', 'tours', 'gallery', 'destinations', 'reviews', 'general']);
-const ALLOWED_TABLES = new Set(['boats', 'tours', 'tour_packages', 'gallery_images', 'reviews', 'destinations', 'editable_content', 'site_settings']);
+const ALLOWED_TABLES = new Set(['boats', 'boat_images', 'tours', 'tour_packages', 'gallery_images', 'reviews', 'destinations', 'editable_content', 'site_settings']);
 const ALLOWED_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 const FOLDER_BY_TABLE: Record<string, string> = {
   boats: 'boats',
+  boat_images: 'boats',
   tours: 'tours',
   tour_packages: 'tours',
   gallery_images: 'gallery',
@@ -17,14 +19,9 @@ const FOLDER_BY_TABLE: Record<string, string> = {
 const MAX_BYTES = 10 * 1024 * 1024;
 const RESOURCE_ID_PATTERN = /^[A-Za-z0-9_.-]+$/;
 
-const headers = {
-  'Access-Control-Allow-Origin': Deno.env.get('ALLOWED_ORIGIN') ?? '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-};
-
 serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers });
+  const headers = corsHeaders(req, 'POST, OPTIONS');
+  if (req.method === 'OPTIONS') return corsPreflight(req, 'POST, OPTIONS');
   if (req.method !== 'POST') return Response.json({ message: 'Method not allowed' }, { status: 405, headers });
 
   const auth = await requireEditor(req);

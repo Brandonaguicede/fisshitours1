@@ -937,6 +937,39 @@ test.describe('backend flows', () => {
     expect(source).toContain('supabase.auth.signOut()');
   });
 
+  test('storage: CORS allows strict Vercel previews and rejects external origins', async ({ request }) => {
+    const corsSource = fs.readFileSync(path.join(PROJECT_ROOT, 'supabase/functions/_shared/cors.ts'), 'utf8');
+    expect(corsSource).toContain('status: 204');
+    expect(corsSource).toContain('Vary');
+    expect(corsSource).toContain('VERCEL_PREVIEW_PATTERN');
+
+    const previewOrigin = 'https://fishitours1-p65rmm29s-papagayo-fishingtour.vercel.app';
+    const uploadPreview = await request.post(`${FUNCTIONS_URL}/storage-upload-image`, {
+      headers: { origin: previewOrigin, apikey: anonKey },
+      multipart: {},
+    });
+    expect(uploadPreview.status()).toBe(401);
+    expect(uploadPreview.headers()['access-control-allow-origin']).toBe(previewOrigin);
+    expect(uploadPreview.headers().vary).toContain('Origin');
+    expect(uploadPreview.headers()['access-control-allow-headers']).toContain('authorization');
+    expect(uploadPreview.headers()['access-control-allow-headers']).toContain('apikey');
+
+    const deletePreview = await request.post(`${FUNCTIONS_URL}/storage-delete-image`, {
+      headers: { origin: previewOrigin, apikey: anonKey, 'Content-Type': 'application/json' },
+      data: {},
+    });
+    expect(deletePreview.status()).toBe(400);
+    expect(deletePreview.headers()['access-control-allow-origin']).toBe(previewOrigin);
+    expect(deletePreview.headers()['access-control-allow-methods']).toContain('DELETE');
+
+    const external = await request.post(`${FUNCTIONS_URL}/storage-upload-image`, {
+      headers: { origin: 'https://evil.example', apikey: anonKey },
+      multipart: {},
+    });
+    expect(external.status()).toBe(401);
+    expect(external.headers()['access-control-allow-origin']).toBeUndefined();
+  });
+
   test('paypal: create order for a nonexistent booking returns 404', async ({ request }) => {
     const res = await fn(request, 'paypal-create-order', { bookingId: '00000000-0000-4000-8000-000000000000' });
     expect(res.status).toBe(404);

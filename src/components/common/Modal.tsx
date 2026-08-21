@@ -1,5 +1,6 @@
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { useEffect, useRef, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 
 import { cn } from '../../utils/cn';
 
@@ -53,12 +54,12 @@ export function Modal({ open, onClose, titleId, children, className }: ModalProp
     };
   }, [open, onClose]);
 
-  return (
+  const modal = (
     <AnimatePresence>
       {open ? (
-        <div className="fixed inset-0 z-[90] overflow-y-auto">
+        <div className="app-modal-root">
           <motion.div
-            className="fixed inset-0 bg-ocean-950/70 backdrop-blur-sm"
+            className="app-modal-backdrop"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -68,14 +69,14 @@ export function Modal({ open, onClose, titleId, children, className }: ModalProp
             }}
             aria-hidden="true"
           />
-          <div className="relative grid min-h-full place-items-center p-4 sm:p-6">
+          <div className="app-modal-stage">
             <motion.div
               ref={panelRef}
               role="dialog"
               aria-modal="true"
               aria-labelledby={titleId}
               tabIndex={-1}
-              className={cn('relative w-full outline-none', className)}
+              className={cn('app-modal-panel outline-none', className)}
               initial={{ opacity: 0, scale: reduceMotion ? 1 : 0.95, y: reduceMotion ? 0 : 14 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: reduceMotion ? 1 : 0.97, y: reduceMotion ? 0 : 8 }}
@@ -88,4 +89,6 @@ export function Modal({ open, onClose, titleId, children, className }: ModalProp
       ) : null}
     </AnimatePresence>
   );
+
+  return createPortal(modal, document.body);
 }

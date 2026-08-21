@@ -721,6 +721,229 @@
   font-weight: 800;
 }
 
+.app-modal-root {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100dvh;
+  padding: 1rem;
+  overflow: hidden;
+}
+
+.app-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(6, 27, 47, 0.76);
+  backdrop-filter: blur(4px);
+}
+
+.app-modal-stage {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+}
+
+.app-modal-panel {
+  position: relative;
+  display: flex;
+  width: calc(100% - 0rem);
+  max-width: 1100px;
+  max-height: calc(100dvh - 2rem);
+  min-width: 0;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 28px 80px rgba(6, 27, 47, 0.34);
+}
+
+.app-modal-panel > * {
+  min-width: 0;
+}
+
+.admin-modal-header,
+.admin-modal-footer {
+  position: sticky;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem;
+  background: #fff;
+}
+
+.admin-modal-header {
+  top: 0;
+  border-bottom: 1px solid var(--admin-line-soft);
+}
+
+.admin-modal-footer {
+  bottom: 0;
+  border-top: 1px solid var(--admin-line-soft);
+}
+
+.admin-modal-body {
+  display: grid;
+  gap: 1rem;
+  width: 100%;
+  min-width: 0;
+  padding: 1rem;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.admin-boat-modal {
+  max-width: 1100px;
+}
+
+.admin-boat-images {
+  display: grid;
+  gap: 0.9rem;
+  min-width: 0;
+}
+
+.admin-boat-images__main {
+  position: relative;
+  min-width: 0;
+  height: 260px;
+  overflow: hidden;
+  border: 1px solid var(--admin-line-soft);
+  border-radius: var(--admin-radius-md);
+  background: #f8fbfc;
+}
+
+.admin-boat-images__main img {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+}
+
+.admin-boat-images__empty {
+  display: grid;
+  height: 100%;
+  place-items: center;
+  gap: 0.5rem;
+  color: var(--admin-muted);
+  font-size: 0.9rem;
+  font-weight: 800;
+}
+
+.admin-boat-images__badge,
+.admin-boat-images__primary {
+  position: absolute;
+  left: 0.75rem;
+  z-index: 1;
+}
+
+.admin-boat-images__badge {
+  top: 0.75rem;
+  border-radius: 999px;
+  background: rgba(11, 37, 51, 0.76);
+  color: white;
+  padding: 0.35rem 0.65rem;
+  font-size: 0.72rem;
+  font-weight: 900;
+}
+
+.admin-boat-images__primary {
+  bottom: 0.75rem;
+}
+
+.admin-boat-images__arrow {
+  position: absolute;
+  top: 50%;
+  z-index: 1;
+  display: grid;
+  width: 44px;
+  height: 44px;
+  transform: translateY(-50%);
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 999px;
+  background: rgba(11, 37, 51, 0.68);
+  color: white;
+}
+
+.admin-boat-images__arrow--prev {
+  left: 0.75rem;
+}
+
+.admin-boat-images__arrow--next {
+  right: 0.75rem;
+}
+
+.admin-boat-images__thumbs {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  gap: 0.65rem;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 0.25rem;
+  scroll-snap-type: x mandatory;
+}
+
+.admin-boat-thumb {
+  display: grid;
+  flex: 0 0 120px;
+  width: 120px;
+  min-width: 0;
+  gap: 0.4rem;
+  scroll-snap-align: start;
+}
+
+.admin-boat-thumb > button:first-child {
+  width: 120px;
+  height: 80px;
+  overflow: hidden;
+  border: 2px solid var(--admin-line);
+  border-radius: var(--admin-radius-sm);
+  background: #f8fbfc;
+}
+
+.admin-boat-thumb--selected > button:first-child {
+  border-color: var(--admin-primary);
+  box-shadow: 0 0 0 3px rgba(14, 116, 144, 0.14);
+}
+
+.admin-boat-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.admin-boat-thumb__actions {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 0.2rem;
+}
+
+.admin-boat-thumb__actions button {
+  display: grid;
+  min-width: 0;
+  min-height: 44px;
+  place-items: center;
+  border: 0;
+  border-radius: 8px;
+  background: var(--admin-primary-soft);
+  color: var(--admin-primary-dark);
+}
+
+.admin-boat-modal .admin-image-manager__preview img {
+  max-height: 180px;
+}
+
 @media (max-width: 640px) {
   .admin-content {
     padding-inline: 0.75rem;
@@ -742,5 +965,31 @@
   .admin-image-crop__meta {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .app-modal-root {
+    padding: 0.75rem;
+  }
+
+  .app-modal-panel {
+    width: calc(100% - 0rem);
+    max-height: calc(100dvh - 1.5rem);
+    border-radius: 14px;
+  }
+
+  .admin-modal-header,
+  .admin-modal-footer,
+  .admin-modal-body {
+    padding: 0.85rem;
+  }
+
+  .admin-boat-images__main {
+    height: 170px;
+  }
+}
+
+@media (min-width: 641px) and (max-width: 1023px) {
+  .admin-boat-images__main {
+    height: 200px;
   }
 }

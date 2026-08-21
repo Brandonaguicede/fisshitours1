@@ -2,6 +2,7 @@ import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { z } from 'npm:zod@3.23.8';
 import { areExternalProviderMocksAllowed } from '../_shared/environment.ts';
+import { corsHeaders, corsPreflight } from '../_shared/cors.ts';
 
 const schema = z.object({
   customer: z.object({
@@ -23,24 +24,17 @@ const schema = z.object({
   turnstileToken: z.string().optional(),
 });
 
-function cors() {
-  return {
-    'Access-Control-Allow-Origin': Deno.env.get('ALLOWED_ORIGIN') ?? '*',
-    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  };
-}
-
 serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: cors() });
-  if (req.method !== 'POST') return Response.json({ message: 'Method not allowed' }, { status: 405, headers: cors() });
+  const headers = corsHeaders(req, 'POST, OPTIONS');
+  if (req.method === 'OPTIONS') return corsPreflight(req, 'POST, OPTIONS');
+  if (req.method !== 'POST') return Response.json({ message: 'Method not allowed' }, { status: 405, headers });
 
   const parsed = schema.safeParse(await req.json().catch(() => null));
-  if (!parsed.success) return Response.json({ message: 'Invalid booking payload', issues: parsed.error.issues }, { status: 400, headers: cors() });
+  if (!parsed.success) return Response.json({ message: 'Invalid booking payload', issues: parsed.error.issues }, { status: 400, headers });
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL');
   const serviceRole = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-  if (!supabaseUrl || !serviceRole) return Response.json({ message: 'Supabase secrets are not configured' }, { status: 500, headers: cors() });
+  if (!supabaseUrl || !serviceRole) return Response.json({ message: 'Supabase secrets are not configured' }, { status: 500, headers });
 
   const supabase = createClient(supabaseUrl, serviceRole, { auth: { persistSession: false } });
 
@@ -55,21 +49,21 @@ serve(async (req) => {
     p_limit: Number.isFinite(rateLimit.maxRequests) ? rateLimit.maxRequests : 8,
     p_window_minutes: Number.isFinite(rateLimit.windowMinutes) ? rateLimit.windowMinutes : 15,
   });
-  if (rateError) return Response.json({ message: 'Rate limit check failed' }, { status: 400, headers: cors() });
-  if (!allowed) return Response.json({ message: 'Too many booking requests. Try again later.' }, { status: 429, headers: cors() });
+  if (rateError) return Response.json({ message: 'Rate limit check failed' }, { status: 400, headers });
+  if (!allowed) return Response.json({ message: 'Too many booking requests. Try again later.' }, { status: 429, headers });
 
   const turnstileOk = await verifyTurnstile(parsed.data.turnstileToken, req);
-  if (!turnstileOk) return Response.json({ message: 'Human verification failed' }, { status: 403, headers: cors() });
+  if (!turnstileOk) return Response.json({ message: 'Human verification failed' }, { status: 403, headers });
 
   const { data, error } = await supabase.rpc('create_booking_transaction', { payload });
 
   if (error) {
     const message = error.message || 'Booking could not be created';
     const status = message.includes('already reserved') ? 409 : 400;
-    return Response.json({ message }, { status, headers: cors() });
+    return Response.json({ message }, { status, headers });
   }
 
-  return Response.json(data, { status: 201, headers: cors() });
+  return Response.json(data, { status: 201, headers });
 });
 
 function clean(value?: string) {

@@ -4,6 +4,8 @@ const AUTH_TOKEN_RE = /\/auth\/v1\/token\?grant_type=password/;
 const AUTH_USER_RE = /\/auth\/v1\/user/;
 const AUTH_LOGOUT_RE = /\/auth\/v1\/logout/;
 const PROFILES_RE = /\/rest\/v1\/profiles/;
+const BOATS_RE = /\/rest\/v1\/boats/;
+const BOAT_IMAGES_RE = /\/rest\/v1\/boat_images/;
 
 function user(role = 'admin', active = true) {
   return {
@@ -37,6 +39,64 @@ async function mockAuthorizedAdmin(page: Page, role = 'admin', active = true) {
     contentType: 'application/json',
     body: JSON.stringify({ id: user(role).id, email: user(role).email, full_name: 'Admin Tester', role, active }),
   }));
+}
+
+async function mockBoatAdminData(page: Page) {
+  await page.route(BOATS_RE, async (route) => {
+    const method = route.request().method();
+    if (method === 'PATCH') return route.fulfill({ status: 204, body: '' });
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify([{
+        id: 'segundo-viento',
+        slug: 'second-wind',
+        name: 'Second Wind',
+        images: [],
+        length: '32 ft',
+        engine: 'Yamaha 250HP',
+        included_guests: 5,
+        max_guests: 10,
+        extra_guest_price: 65,
+        image_url: '/images/placeholder-image.jpg',
+        image_public_id: null,
+        active: true,
+        sort_order: 1,
+      }]),
+    });
+  });
+  await page.route(BOAT_IMAGES_RE, async (route) => {
+    const method = route.request().method();
+    if (method === 'PATCH' || method === 'POST') return route.fulfill({ status: 204, body: '' });
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify([
+        {
+          id: '00000000-0000-4000-8000-000000000101',
+          boat_id: 'segundo-viento',
+          image_url: '/images/placeholder-image.jpg',
+          storage_path: null,
+          alt_text: 'Second Wind main image',
+          is_primary: true,
+          sort_order: 0,
+          active: true,
+          pending_deletion: false,
+        },
+        {
+          id: '00000000-0000-4000-8000-000000000102',
+          boat_id: 'segundo-viento',
+          image_url: '/galeria/IMG_1088.jpeg',
+          storage_path: null,
+          alt_text: 'Second Wind gallery image',
+          is_primary: false,
+          sort_order: 1,
+          active: true,
+          pending_deletion: false,
+        },
+      ]),
+    });
+  });
 }
 
 test.describe('admin auth routing', () => {
@@ -91,5 +151,40 @@ test.describe('admin auth routing', () => {
     await expect(page).toHaveURL(/\/admin\/boats$/);
     await expect(page.locator('.admin-main')).toContainText('Botes');
     await expect(page.getByText('404 Page not found')).toHaveCount(0);
+  });
+
+  test('admin boat edit modal keeps images and form inside the panel', async ({ page }) => {
+    await mockAuthorizedAdmin(page, 'editor', true);
+    await mockBoatAdminData(page);
+    await page.goto('/admin/login');
+    await page.getByPlaceholder('admin@example.com').fill('editor@example.com');
+    await page.getByPlaceholder('Password').fill('test-password');
+    await page.getByRole('button', { name: 'Entrar al panel' }).click();
+    await page.goto('/admin/boats');
+    await page.getByRole('button', { name: /Editar/i }).first().click();
+
+    const dialog = page.getByRole('dialog', { name: /Editar bote/i });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.locator('.admin-boat-images__main img')).toBeVisible();
+    await expect(dialog.locator('.admin-boat-thumb')).toHaveCount(2);
+
+    const dimensions = await page.evaluate(() => {
+      const panel = document.querySelector('.app-modal-panel') as HTMLElement;
+      const main = document.querySelector('.admin-boat-images__main') as HTMLElement;
+      const body = document.body;
+      return {
+        bodyScrollWidth: body.scrollWidth,
+        bodyClientWidth: body.clientWidth,
+        panelWidth: panel.getBoundingClientRect().width,
+        viewportWidth: window.innerWidth,
+        mainHeight: main.getBoundingClientRect().height,
+      };
+    });
+    expect(dimensions.bodyScrollWidth).toBeLessThanOrEqual(dimensions.bodyClientWidth + 1);
+    expect(dimensions.panelWidth).toBeLessThanOrEqual(dimensions.viewportWidth);
+    expect(dimensions.mainHeight).toBeLessThanOrEqual(260);
+
+    await dialog.getByRole('button', { name: /Ver imagen 2/i }).click();
+    await expect(dialog.locator('.admin-boat-thumb--selected')).toHaveCount(1);
   });
 });

@@ -1,6 +1,7 @@
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { z } from 'npm:zod@3.23.8';
+import { corsHeaders, corsPreflight } from '../_shared/cors.ts';
 
 const ALLOWED_FOLDERS = new Set(['boats', 'tours', 'gallery', 'destinations', 'reviews', 'general']);
 const SAFE_PATH_PATTERN = /^[a-z]+\/[A-Za-z0-9_-]+\/[A-Za-z0-9_-]+\.[a-z0-9]+$/;
@@ -14,14 +15,9 @@ const schema = z
   })
   .refine((value) => value.storagePath || value.mediaAssetId, { message: 'storagePath or mediaAssetId is required' });
 
-const headers = {
-  'Access-Control-Allow-Origin': Deno.env.get('ALLOWED_ORIGIN') ?? '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-};
-
 serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers });
+  const headers = corsHeaders(req, 'POST, DELETE, OPTIONS');
+  if (req.method === 'OPTIONS') return corsPreflight(req, 'POST, DELETE, OPTIONS');
   if (req.method !== 'POST') return Response.json({ message: 'Method not allowed' }, { status: 405, headers });
 
   const parsed = schema.safeParse(await req.json().catch(() => null));
@@ -127,6 +123,7 @@ async function imageIsInUse(
   };
   const checks = [
     withoutIgnored(supabase.from('boats').select('id').or(`image_public_id.in.(${refs.join(',')}),image_url.in.(${refs.join(',')})`), 'boats').limit(1),
+    withoutIgnored(supabase.from('boat_images').select('id').or(`storage_path.in.(${refs.join(',')}),image_url.in.(${refs.join(',')})`).eq('active', true), 'boat_images').limit(1),
     withoutIgnored(supabase.from('tours').select('id').or(`image_public_id.in.(${refs.join(',')}),image_url.in.(${refs.join(',')})`), 'tours').limit(1),
     withoutIgnored(supabase.from('tour_packages').select('id').or(`image_public_id.in.(${refs.join(',')}),image_url.in.(${refs.join(',')})`), 'tour_packages').limit(1),
     withoutIgnored(supabase.from('gallery_images').select('id').or(`src.in.(${refs.join(',')}),image_public_id.in.(${refs.join(',')}),image_url.in.(${refs.join(',')})`), 'gallery_images').limit(1),

@@ -1,4 +1,4 @@
-import { X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
 import type { Boat } from '../../types/boat';
@@ -24,12 +24,15 @@ interface FleetSectionProps {
 export function FleetSection({ boats, tours, selectedBoat, onSelectBoat, onViewTourType }: FleetSectionProps) {
   const { language } = useLanguage();
   const [modalBoat, setModalBoat] = useState<Boat | null>(null);
+  const [activeImageIndex, setActiveImageIndex] = useState(0);
+  const [failedImages, setFailedImages] = useState<Set<string>>(new Set());
   const openerRef = useRef<HTMLElement | null>(null);
   const modalBoatText = modalBoat ? getBoatText(modalBoat, language) : null;
 
   function openBoatDetails(boat: Boat) {
     openerRef.current = document.activeElement as HTMLElement | null;
     onSelectBoat(boat);
+    setActiveImageIndex(0);
     setModalBoat(boat);
   }
 
@@ -44,6 +47,8 @@ export function FleetSection({ boats, tours, selectedBoat, onSelectBoat, onViewT
     document.body.style.overflow = 'hidden';
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') closeBoatDetails();
+      if (event.key === 'ArrowRight') setActiveImageIndex((index) => nextBoatImageIndex(modalBoat, index, 1));
+      if (event.key === 'ArrowLeft') setActiveImageIndex((index) => nextBoatImageIndex(modalBoat, index, -1));
     };
     window.addEventListener('keydown', onKeyDown);
     return () => {
@@ -53,6 +58,8 @@ export function FleetSection({ boats, tours, selectedBoat, onSelectBoat, onViewT
   }, [modalBoat]);
 
   const modalTourTypes = getModalTourTypes(modalBoat, tours, language);
+  const modalImages = getBoatImages(modalBoat);
+  const activeImage = modalImages[activeImageIndex] ?? modalBoat?.image;
 
   function handleViewTourType(tour: BoatTour) {
     onViewTourType(tour);
@@ -79,8 +86,44 @@ export function FleetSection({ boats, tours, selectedBoat, onSelectBoat, onViewT
         <div className="fixed inset-0 z-[90] grid place-items-start bg-ocean-950/75 px-3 py-4 backdrop-blur-sm sm:place-items-center sm:px-4 sm:py-8" role="dialog" aria-modal="true" aria-label={`${modalBoat.name} details`}>
           <div className="max-h-[94dvh] w-full max-w-5xl overflow-y-auto rounded-2xl border border-white/10 bg-ocean-950 shadow-lifted sm:max-h-[90dvh] sm:rounded-[2rem]">
             <div className="relative">
-              <img className="h-48 w-full rounded-t-2xl object-cover sm:h-72 sm:rounded-t-[2rem]" src={modalBoat.image} alt={modalBoat.name} />
+              {activeImage && !failedImages.has(activeImage) ? (
+                <img
+                  className="h-48 w-full rounded-t-2xl object-cover sm:h-72 sm:rounded-t-[2rem]"
+                  src={activeImage}
+                  alt={modalBoat.name}
+                  loading="eager"
+                  decoding="async"
+                  onError={() => setFailedImages((current) => new Set(current).add(activeImage))}
+                />
+              ) : (
+                <div className="grid h-48 w-full place-items-center rounded-t-2xl bg-ocean-900 text-sm font-bold text-ocean-200 sm:h-72 sm:rounded-t-[2rem]">
+                  {language === 'es' ? 'Imagen no disponible' : 'Image unavailable'}
+                </div>
+              )}
               <div className="absolute inset-0 rounded-t-2xl bg-gradient-to-t from-ocean-950/80 to-transparent sm:rounded-t-[2rem]" />
+              {modalImages.length > 1 ? (
+                <>
+                  <button
+                    className="focus-ring pressable absolute left-4 top-1/2 grid h-11 w-11 -translate-y-1/2 place-items-center rounded-full bg-white/10 text-white backdrop-blur-xl"
+                    type="button"
+                    aria-label={language === 'es' ? 'Imagen anterior' : 'Previous image'}
+                    onClick={() => setActiveImageIndex((index) => nextBoatImageIndex(modalBoat, index, -1))}
+                  >
+                    <ChevronLeft size={20} />
+                  </button>
+                  <button
+                    className="focus-ring pressable absolute right-16 top-1/2 grid h-11 w-11 -translate-y-1/2 place-items-center rounded-full bg-white/10 text-white backdrop-blur-xl"
+                    type="button"
+                    aria-label={language === 'es' ? 'Imagen siguiente' : 'Next image'}
+                    onClick={() => setActiveImageIndex((index) => nextBoatImageIndex(modalBoat, index, 1))}
+                  >
+                    <ChevronRight size={20} />
+                  </button>
+                  <span className="absolute bottom-4 right-4 rounded-full bg-ocean-950/70 px-3 py-1 text-xs font-extrabold text-white backdrop-blur-xl">
+                    {activeImageIndex + 1} / {modalImages.length}
+                  </span>
+                </>
+              ) : null}
               <button
                 className="focus-ring pressable absolute right-5 top-5 grid h-11 w-11 place-items-center rounded-full bg-white/10 text-white backdrop-blur-xl"
                 type="button"
@@ -94,6 +137,22 @@ export function FleetSection({ boats, tours, selectedBoat, onSelectBoat, onViewT
                 <h3 className="mt-1 text-3xl font-extrabold sm:mt-2 sm:text-4xl">{modalBoat.name}</h3>
               </div>
             </div>
+
+            {modalImages.length > 1 ? (
+              <div className="scrollbar-thin flex snap-x gap-2 overflow-x-auto border-b border-white/10 bg-ocean-900/60 px-4 py-3 sm:px-6">
+                {modalImages.map((image, index) => (
+                  <button
+                    key={`${image}-${index}`}
+                    className={`focus-ring h-20 w-[120px] shrink-0 snap-start overflow-hidden rounded-xl border-2 ${index === activeImageIndex ? 'border-seafoam-400' : 'border-white/10'}`}
+                    type="button"
+                    aria-label={`${language === 'es' ? 'Ver imagen' : 'View image'} ${index + 1}`}
+                    onClick={() => setActiveImageIndex(index)}
+                  >
+                    <img className="h-full w-full object-cover" src={image} alt="" loading={index === activeImageIndex ? 'eager' : 'lazy'} decoding="async" />
+                  </button>
+                ))}
+              </div>
+            ) : null}
 
             <div className="grid gap-5 p-4 sm:p-6 lg:grid-cols-[0.8fr_1.2fr] lg:gap-8 lg:p-8">
               <aside>
@@ -138,6 +197,18 @@ export function FleetSection({ boats, tours, selectedBoat, onSelectBoat, onViewT
       ) : null}
     </section>
   );
+}
+
+function getBoatImages(boat: Boat | null) {
+  if (!boat) return [];
+  const images = boat.images?.length ? boat.images : [boat.image];
+  return Array.from(new Set(images.filter(Boolean)));
+}
+
+function nextBoatImageIndex(boat: Boat | null, current: number, direction: -1 | 1) {
+  const images = getBoatImages(boat);
+  if (images.length <= 1) return 0;
+  return (current + direction + images.length) % images.length;
 }
 
 function getModalTourTypes(boat: Boat | null, tours: BoatTour[], language: Language) {

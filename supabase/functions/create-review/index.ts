@@ -2,6 +2,7 @@ import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { z } from 'npm:zod@3.23.8';
 import { areExternalProviderMocksAllowed } from '../_shared/environment.ts';
+import { corsHeaders, corsPreflight } from '../_shared/cors.ts';
 
 const schema = z.object({
   name: z.string().min(2).max(100),
@@ -13,14 +14,9 @@ const schema = z.object({
   turnstileToken: z.string().optional(),
 });
 
-const headers = {
-  'Access-Control-Allow-Origin': Deno.env.get('ALLOWED_ORIGIN') ?? '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-};
-
 serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers });
+  const headers = corsHeaders(req, 'POST, OPTIONS');
+  if (req.method === 'OPTIONS') return corsPreflight(req, 'POST, OPTIONS');
   if (req.method !== 'POST') return Response.json({ message: 'Method not allowed' }, { status: 405, headers });
   const parsed = schema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return Response.json({ message: 'Invalid review payload', issues: parsed.error.issues }, { status: 400, headers });
