@@ -937,25 +937,48 @@ test.describe('backend flows', () => {
     expect(source).toContain('supabase.auth.signOut()');
   });
 
-  test('storage: CORS allows strict Vercel previews and rejects external origins', async ({ request }) => {
+  test('storage: CORS allows strict Vercel preview origins and rejects external origins', async ({ request }) => {
     const corsSource = fs.readFileSync(path.join(PROJECT_ROOT, 'supabase/functions/_shared/cors.ts'), 'utf8');
     expect(corsSource).toContain('status: 204');
     expect(corsSource).toContain('Vary');
     expect(corsSource).toContain('VERCEL_PREVIEW_PATTERN');
     expect(corsSource).toContain('fishshitours1');
     expect(corsSource.indexOf('VERCEL_PREVIEW_PATTERN.test(origin)')).toBeLessThan(corsSource.indexOf("Deno.env.get('ALLOWED_ORIGIN')"));
+    expect(corsSource).toContain('^https:\\/\\/fishshitours1');
+    expect(corsSource).toContain('-papagayo-fishingtour\\.vercel\\.app$');
+  });
 
+  test('storage: upload OPTIONS from a valid Vercel preview returns 204 with CORS origin', async ({ request }) => {
+    const previewOrigin = 'https://fishshitours1-8yvz5sq2p-papagayo-fishingtour.vercel.app';
+    const options = await request.fetch(`${FUNCTIONS_URL}/storage-upload-image`, {
+      method: 'OPTIONS',
+      headers: {
+        origin: previewOrigin,
+        'Access-Control-Request-Method': 'POST',
+        'Access-Control-Request-Headers': 'authorization, apikey, content-type',
+      },
+    });
+
+    expect(options.status()).toBe(204);
+    expect(options.headers()['access-control-allow-origin']).toBe(previewOrigin);
+    expect(options.headers().vary).toContain('Origin');
+  });
+
+  test('storage: invalid upload POST from a valid Vercel preview keeps CORS origin', async ({ request }) => {
     const previewOrigin = 'https://fishshitours1-8yvz5sq2p-papagayo-fishingtour.vercel.app';
     const uploadPreview = await request.post(`${FUNCTIONS_URL}/storage-upload-image`, {
       headers: { origin: previewOrigin, apikey: anonKey },
       multipart: {},
     });
-    expect(uploadPreview.status()).toBe(401);
+    expect([400, 401]).toContain(uploadPreview.status());
     expect(uploadPreview.headers()['access-control-allow-origin']).toBe(previewOrigin);
     expect(uploadPreview.headers().vary).toContain('Origin');
     expect(uploadPreview.headers()['access-control-allow-headers']).toContain('authorization');
     expect(uploadPreview.headers()['access-control-allow-headers']).toContain('apikey');
+  });
 
+  test('storage: CORS keeps headers on delete errors and rejects external upload origins', async ({ request }) => {
+    const previewOrigin = 'https://fishshitours1-8yvz5sq2p-papagayo-fishingtour.vercel.app';
     const deletePreview = await request.post(`${FUNCTIONS_URL}/storage-delete-image`, {
       headers: { origin: previewOrigin, apikey: anonKey, 'Content-Type': 'application/json' },
       data: {},

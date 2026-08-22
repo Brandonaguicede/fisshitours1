@@ -1,6 +1,6 @@
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2';
-import { corsHeaders, corsPreflight } from '../_shared/cors.ts';
+import { corsHeaders as getCorsHeaders } from '../_shared/cors.ts';
 
 const ALLOWED_FOLDERS = new Set(['boats', 'tours', 'gallery', 'destinations', 'reviews', 'general']);
 const ALLOWED_TABLES = new Set(['boats', 'boat_images', 'tours', 'tour_packages', 'gallery_images', 'reviews', 'destinations', 'editable_content', 'site_settings']);
@@ -20,102 +20,118 @@ const MAX_BYTES = 10 * 1024 * 1024;
 const RESOURCE_ID_PATTERN = /^[A-Za-z0-9_.-]+$/;
 
 serve(async (req) => {
-  const headers = corsHeaders(req, 'POST, OPTIONS');
-  if (req.method === 'OPTIONS') return corsPreflight(req, 'POST, OPTIONS');
-  if (req.method !== 'POST') return Response.json({ message: 'Method not allowed' }, { status: 405, headers });
+  const corsHeaders = getCorsHeaders(req, 'POST, OPTIONS');
+  const json = (body: unknown, status = 200) => jsonResponse(body, status, corsHeaders);
+  if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: corsHeaders });
+  try {
+    if (req.method !== 'POST') return json({ message: 'Method not allowed' }, 405);
 
-  const auth = await requireEditor(req);
-  if (!auth.ok) return Response.json({ message: auth.message }, { status: auth.status, headers });
+    const auth = await requireEditor(req);
+    if (!auth.ok) return json({ message: auth.message }, auth.status);
 
-  const form = await req.formData();
-  const file = form.get('file');
-  const resourceTable = String(form.get('resourceTable') ?? '');
-  const resourceId = String(form.get('resourceId') ?? '');
-  const requestedFolder = String(form.get('folder') ?? '');
-  const width = parseDimension(form.get('width'));
-  const height = parseDimension(form.get('height'));
+    const form = await req.formData();
+    const file = form.get('file');
+    const resourceTable = String(form.get('resourceTable') ?? '');
+    const resourceId = String(form.get('resourceId') ?? '');
+    const requestedFolder = String(form.get('folder') ?? '');
+    const width = parseDimension(form.get('width'));
+    const height = parseDimension(form.get('height'));
 
-  if (!(file instanceof File)) return Response.json({ message: 'Image file is required' }, { status: 400, headers });
-  if (!ALLOWED_TABLES.has(resourceTable)) return Response.json({ message: 'Invalid resource association' }, { status: 400, headers });
-  if (!resourceId || !RESOURCE_ID_PATTERN.test(resourceId)) return Response.json({ message: 'Invalid resourceId' }, { status: 400, headers });
+    if (!(file instanceof File)) return json({ message: 'Image file is required' }, 400);
+    if (!ALLOWED_TABLES.has(resourceTable)) return json({ message: 'Invalid resource association' }, 400);
+    if (!resourceId || !RESOURCE_ID_PATTERN.test(resourceId)) return json({ message: 'Invalid resourceId' }, 400);
 
-  const folder = requestedFolder
-    ? (ALLOWED_FOLDERS.has(requestedFolder) ? requestedFolder : null)
-    : FOLDER_BY_TABLE[resourceTable];
-  if (!folder) return Response.json({ message: 'Invalid destination folder' }, { status: 400, headers });
+    const folder = requestedFolder
+      ? (ALLOWED_FOLDERS.has(requestedFolder) ? requestedFolder : null)
+      : FOLDER_BY_TABLE[resourceTable];
+    if (!folder) return json({ message: 'Invalid destination folder' }, 400);
 
-  if (file.size === 0) return Response.json({ message: 'Image file is empty' }, { status: 400, headers });
-  if (file.size > MAX_BYTES) return Response.json({ message: 'Image is too large' }, { status: 400, headers });
-  if (!ALLOWED_MIME_TYPES.has(file.type)) return Response.json({ message: 'Unsupported image MIME type' }, { status: 400, headers });
+    if (file.size === 0) return json({ message: 'Image file is empty' }, 400);
+    if (file.size > MAX_BYTES) return json({ message: 'Image is too large' }, 413);
+    if (!ALLOWED_MIME_TYPES.has(file.type)) return json({ message: 'Unsupported image MIME type' }, 415);
 
-  const bytes = new Uint8Array(await file.slice(0, 16).arrayBuffer());
-  const detected = detectImageType(bytes);
-  if (!detected) return Response.json({ message: 'Invalid image content' }, { status: 400, headers });
-  if (detected.mime !== file.type) return Response.json({ message: 'Image content does not match declared type' }, { status: 400, headers });
-  if (!filenameMatchesType(file.name, detected.extension)) {
-    return Response.json({ message: 'Image extension does not match detected type' }, { status: 400, headers });
+    const bytes = new Uint8Array(await file.slice(0, 16).arrayBuffer());
+    const detected = detectImageType(bytes);
+    if (!detected) return json({ message: 'Invalid image content' }, 400);
+    if (detected.mime !== file.type) return json({ message: 'Image content does not match declared type' }, 415);
+    if (!filenameMatchesType(file.name, detected.extension)) {
+      return json({ message: 'Image extension does not match detected type' }, 400);
+    }
+
+    const supabase = getServiceClient();
+    const resourceExists = await checkResourceExists(supabase, resourceTable, resourceId);
+    if (!resourceExists) return json({ message: 'Associated resource was not found' }, 400);
+
+    const resourceSegment = resourceId.replace(/[^A-Za-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '') || 'resource';
+    const objectName = `${crypto.randomUUID()}.${detected.extension}`;
+    const storagePath = `${folder}/${resourceSegment}/${objectName}`;
+    const originalFilename = sanitizeFilename(file.name);
+
+    const { error: uploadError } = await supabase.storage
+      .from('site-images')
+      .upload(storagePath, file, { contentType: detected.mime, cacheControl: '31536000', upsert: false });
+    if (uploadError) return json({ message: 'Storage upload failed' }, 500);
+
+    const publicUrl = normalizePublicUrl(req, supabase.storage.from('site-images').getPublicUrl(storagePath).data.publicUrl);
+
+    const { error: insertError } = await supabase.from('media_assets').insert({
+      provider: 'supabase_storage',
+      provider_id: storagePath,
+      url: publicUrl,
+      mime_type: detected.mime,
+      byte_size: file.size,
+      size_bytes: file.size,
+      width,
+      height,
+      storage_bucket: 'site-images',
+      storage_path: storagePath,
+      public_url: publicUrl,
+      original_filename: originalFilename,
+      resource_table: resourceTable,
+      resource_id: resourceId,
+      created_by: auth.profile.id,
+      uploaded_by: auth.profile.id,
+    });
+
+    if (insertError) {
+      await supabase.storage.from('site-images').remove([storagePath]);
+      return json({ message: 'Failed to register image metadata' }, 500);
+    }
+
+    await supabase.from('audit_log').insert({
+      actor_id: auth.profile.id,
+      action: 'storage_image_uploaded',
+      entity_table: resourceTable,
+      entity_id: resourceId,
+      metadata: { storage_path: storagePath, public_url: publicUrl, mime_type: detected.mime, size_bytes: file.size },
+    });
+
+    return json({
+      image_url: publicUrl,
+      public_url: publicUrl,
+      image_public_id: storagePath,
+      storage_bucket: 'site-images',
+      storage_path: storagePath,
+      mime_type: detected.mime,
+      size_bytes: file.size,
+      width,
+      height,
+    }, 201);
+  } catch (error) {
+    console.error('storage-upload-image failed', error);
+    return jsonResponse({ message: 'Internal server error' }, 500, corsHeaders);
   }
-
-  const supabase = getServiceClient();
-  const resourceExists = await checkResourceExists(supabase, resourceTable, resourceId);
-  if (!resourceExists) return Response.json({ message: 'Associated resource was not found' }, { status: 400, headers });
-
-  const resourceSegment = resourceId.replace(/[^A-Za-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '') || 'resource';
-  const objectName = `${crypto.randomUUID()}.${detected.extension}`;
-  const storagePath = `${folder}/${resourceSegment}/${objectName}`;
-  const originalFilename = sanitizeFilename(file.name);
-
-  const { error: uploadError } = await supabase.storage
-    .from('site-images')
-    .upload(storagePath, file, { contentType: detected.mime, cacheControl: '31536000', upsert: false });
-  if (uploadError) return Response.json({ message: 'Storage upload failed' }, { status: 400, headers });
-
-  const publicUrl = normalizePublicUrl(req, supabase.storage.from('site-images').getPublicUrl(storagePath).data.publicUrl);
-
-  const { error: insertError } = await supabase.from('media_assets').insert({
-    provider: 'supabase_storage',
-    provider_id: storagePath,
-    url: publicUrl,
-    mime_type: detected.mime,
-    byte_size: file.size,
-    size_bytes: file.size,
-    width,
-    height,
-    storage_bucket: 'site-images',
-    storage_path: storagePath,
-    public_url: publicUrl,
-    original_filename: originalFilename,
-    resource_table: resourceTable,
-    resource_id: resourceId,
-    created_by: auth.profile.id,
-    uploaded_by: auth.profile.id,
-  });
-
-  if (insertError) {
-    await supabase.storage.from('site-images').remove([storagePath]);
-    return Response.json({ message: 'Failed to register image metadata' }, { status: 500, headers });
-  }
-
-  await supabase.from('audit_log').insert({
-    actor_id: auth.profile.id,
-    action: 'storage_image_uploaded',
-    entity_table: resourceTable,
-    entity_id: resourceId,
-    metadata: { storage_path: storagePath, public_url: publicUrl, mime_type: detected.mime, size_bytes: file.size },
-  });
-
-  return Response.json({
-    image_url: publicUrl,
-    public_url: publicUrl,
-    image_public_id: storagePath,
-    storage_bucket: 'site-images',
-    storage_path: storagePath,
-    mime_type: detected.mime,
-    size_bytes: file.size,
-    width,
-    height,
-  }, { status: 201, headers });
 });
+
+function jsonResponse(body: unknown, status: number, headers: HeadersInit) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: {
+      ...headers,
+      'Content-Type': 'application/json',
+    },
+  });
+}
 
 function getServiceClient() {
   const url = Deno.env.get('SUPABASE_URL');

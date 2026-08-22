@@ -1,7 +1,7 @@
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { z } from 'npm:zod@3.23.8';
-import { corsHeaders, corsPreflight } from '../_shared/cors.ts';
+import { corsHeaders as getCorsHeaders, corsPreflight } from '../_shared/cors.ts';
 
 const ALLOWED_FOLDERS = new Set(['boats', 'tours', 'gallery', 'destinations', 'reviews', 'general']);
 const SAFE_PATH_PATTERN = /^[a-z]+\/[A-Za-z0-9_-]+\/[A-Za-z0-9_-]+\.[a-z0-9]+$/;
@@ -16,89 +16,105 @@ const schema = z
   .refine((value) => value.storagePath || value.mediaAssetId, { message: 'storagePath or mediaAssetId is required' });
 
 serve(async (req) => {
-  const headers = corsHeaders(req, 'POST, DELETE, OPTIONS');
+  const corsHeaders = getCorsHeaders(req, 'POST, DELETE, OPTIONS');
+  const json = (body: unknown, status = 200) => jsonResponse(req, body, status, corsHeaders);
   if (req.method === 'OPTIONS') return corsPreflight(req, 'POST, DELETE, OPTIONS');
-  if (req.method !== 'POST') return Response.json({ message: 'Method not allowed' }, { status: 405, headers });
+  try {
+    if (req.method !== 'POST') return json({ message: 'Method not allowed' }, 405);
 
-  const parsed = schema.safeParse(await req.json().catch(() => null));
-  if (!parsed.success) return Response.json({ message: 'Invalid delete payload', issues: parsed.error.issues }, { status: 400, headers });
+    const parsed = schema.safeParse(await req.json().catch(() => null));
+    if (!parsed.success) return json({ message: 'Invalid delete payload', issues: parsed.error.issues }, 400);
 
-  const auth = await requireEditor(req);
-  if (!auth.ok) return Response.json({ message: auth.message }, { status: auth.status, headers });
+    const auth = await requireEditor(req);
+    if (!auth.ok) return json({ message: auth.message }, auth.status);
 
-  const supabase = getServiceClient();
-  if (parsed.data.storagePath && !SAFE_PATH_PATTERN.test(parsed.data.storagePath)) {
-    return Response.json({ message: 'Invalid storage path' }, { status: 400, headers });
-  }
+    const supabase = getServiceClient();
+    if (parsed.data.storagePath && !SAFE_PATH_PATTERN.test(parsed.data.storagePath)) {
+      return json({ message: 'Invalid storage path' }, 400);
+    }
 
-  let asset: { id: string; provider: string; storage_bucket: string | null; storage_path: string | null; public_url: string | null } | null = null;
-  if (parsed.data.mediaAssetId) {
-    const { data } = await supabase
+    let asset: { id: string; provider: string; storage_bucket: string | null; storage_path: string | null; public_url: string | null } | null = null;
+    if (parsed.data.mediaAssetId) {
+      const { data } = await supabase
+        .from('media_assets')
+        .select('id, provider, storage_bucket, storage_path, public_url')
+        .eq('id', parsed.data.mediaAssetId)
+        .single();
+      asset = data;
+    } else if (parsed.data.storagePath) {
+      const { data } = await supabase
+        .from('media_assets')
+        .select('id, provider, storage_bucket, storage_path, public_url')
+        .eq('storage_path', parsed.data.storagePath)
+        .single();
+      asset = data;
+    }
+    if (!asset) return json({ message: 'Image asset not found' }, 404);
+
+    if (asset.provider !== 'supabase_storage' || asset.storage_bucket !== 'site-images') {
+      return json({ message: 'Image is not managed by Supabase Storage' }, 400);
+    }
+    const storagePath = asset.storage_path;
+    if (!storagePath || !SAFE_PATH_PATTERN.test(storagePath)) {
+      return json({ message: 'Invalid storage path' }, 400);
+    }
+    const folder = storagePath.split('/')[0];
+    if (!ALLOWED_FOLDERS.has(folder)) return json({ message: 'Invalid storage path' }, 400);
+
+    const inUse = await imageIsInUse(supabase, storagePath, asset.public_url, parsed.data.resourceTable, parsed.data.resourceId);
+    if (inUse) return json({ message: 'Image is still referenced by one or more resources' }, 409);
+
+    const { error: removeError } = await supabase.storage.from('site-images').remove([storagePath]);
+    if (removeError) {
+      await markPendingDeletion(supabase, asset.id, auth.profile.id, storagePath, 'Storage delete failed');
+      return json({ message: 'Storage delete failed. The image was left pending cleanup.' }, 500);
+    }
+
+    const { error: assetUpdateError } = await supabase
       .from('media_assets')
-      .select('id, provider, storage_bucket, storage_path, public_url')
-      .eq('id', parsed.data.mediaAssetId)
-      .single();
-    asset = data;
-  } else if (parsed.data.storagePath) {
-    const { data } = await supabase
-      .from('media_assets')
-      .select('id, provider, storage_bucket, storage_path, public_url')
-      .eq('storage_path', parsed.data.storagePath)
-      .single();
-    asset = data;
-  }
-  if (!asset) return Response.json({ message: 'Image asset not found' }, { status: 404, headers });
+      .update({
+        active: false,
+        pending_deletion: false,
+        deletion_error: null,
+        deleted_at: new Date().toISOString(),
+      })
+      .eq('id', asset.id);
 
-  if (asset.provider !== 'supabase_storage' || asset.storage_bucket !== 'site-images') {
-    return Response.json({ message: 'Image is not managed by Supabase Storage' }, { status: 400, headers });
-  }
-  const storagePath = asset.storage_path;
-  if (!storagePath || !SAFE_PATH_PATTERN.test(storagePath)) {
-    return Response.json({ message: 'Invalid storage path' }, { status: 400, headers });
-  }
-  const folder = storagePath.split('/')[0];
-  if (!ALLOWED_FOLDERS.has(folder)) return Response.json({ message: 'Invalid storage path' }, { status: 400, headers });
+    if (assetUpdateError) {
+      await supabase.from('audit_log').insert({
+        actor_id: auth.profile.id,
+        action: 'storage_image_metadata_delete_failed',
+        entity_table: 'media_assets',
+        entity_id: asset.id,
+        metadata: { storage_path: storagePath },
+      });
+      return json({ message: 'Storage object was deleted, but metadata cleanup failed' }, 500);
+    }
 
-  const inUse = await imageIsInUse(supabase, storagePath, asset.public_url, parsed.data.resourceTable, parsed.data.resourceId);
-  if (inUse) return Response.json({ message: 'Image is still referenced by one or more resources' }, { status: 409, headers });
-
-  const { error: removeError } = await supabase.storage.from('site-images').remove([storagePath]);
-  if (removeError) {
-    await markPendingDeletion(supabase, asset.id, auth.profile.id, storagePath, 'Storage delete failed');
-    return Response.json({ message: 'Storage delete failed. The image was left pending cleanup.' }, { status: 400, headers });
-  }
-
-  const { error: assetUpdateError } = await supabase
-    .from('media_assets')
-    .update({
-      active: false,
-      pending_deletion: false,
-      deletion_error: null,
-      deleted_at: new Date().toISOString(),
-    })
-    .eq('id', asset.id);
-
-  if (assetUpdateError) {
     await supabase.from('audit_log').insert({
       actor_id: auth.profile.id,
-      action: 'storage_image_metadata_delete_failed',
+      action: 'storage_image_deleted',
       entity_table: 'media_assets',
       entity_id: asset.id,
       metadata: { storage_path: storagePath },
     });
-    return Response.json({ message: 'Storage object was deleted, but metadata cleanup failed' }, { status: 500, headers });
+
+    return json({ ok: true, storage_path: storagePath });
+  } catch (error) {
+    console.error('storage-delete-image failed', error);
+    return jsonResponse(req, { message: 'Internal server error' }, 500, corsHeaders);
   }
-
-  await supabase.from('audit_log').insert({
-    actor_id: auth.profile.id,
-    action: 'storage_image_deleted',
-    entity_table: 'media_assets',
-    entity_id: asset.id,
-    metadata: { storage_path: storagePath },
-  });
-
-  return Response.json({ ok: true, storage_path: storagePath }, { headers });
 });
+
+function jsonResponse(request: Request, body: unknown, status = 200, headers = getCorsHeaders(request, 'POST, DELETE, OPTIONS')) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: {
+      ...headers,
+      'Content-Type': 'application/json',
+    },
+  });
+}
 
 function getServiceClient() {
   const url = Deno.env.get('SUPABASE_URL');
