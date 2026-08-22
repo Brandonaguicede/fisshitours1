@@ -102,6 +102,66 @@
   }
 }
 
+/* Shared Modal (portal) styles. These live here because public pages never
+   import admin.css, and Modal is rendered on both public site and admin. */
+.app-modal-root {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100dvh;
+  padding: 1rem;
+  overflow: hidden;
+}
+
+.app-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(6, 27, 47, 0.76);
+  backdrop-filter: blur(4px);
+}
+
+.app-modal-stage {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+}
+
+.app-modal-panel {
+  position: relative;
+  display: flex;
+  width: calc(100% - 0rem);
+  max-width: 1100px;
+  max-height: calc(100dvh - 2rem);
+  min-width: 0;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 28px 80px rgba(6, 27, 47, 0.34);
+}
+
+.app-modal-panel > * {
+  min-width: 0;
+}
+
+@media (max-width: 640px) {
+  .app-modal-root {
+    padding: 0.75rem;
+  }
+
+  .app-modal-panel {
+    max-height: calc(100dvh - 1.5rem);
+    border-radius: 14px;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

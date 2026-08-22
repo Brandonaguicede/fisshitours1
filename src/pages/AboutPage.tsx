@@ -1,9 +1,11 @@
 import { Anchor, HeartHandshake, ShieldCheck, SlidersHorizontal, Users, Waves } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 
 import { Button } from '../components/common/Button';
 import { Container } from '../components/common/Container';
 import { useLanguage } from '../i18n/LanguageContext';
+import { DEFAULT_ABOUT_SETTINGS, getAboutSettings, splitParagraphs, type AboutSettings } from '../services/aboutSettings';
 
 const values = [
   {
@@ -53,24 +55,36 @@ const teamPhotos = [
   },
 ];
 
-const aboutHeroImages = [
+const FALLBACK_ABOUT_IMAGES = [
   '/about/8809f2f5-0a3b-45bd-9771-1ac3505181bc.jpeg',
   '/about/IMG_1020 (1).jpeg',
   '/galeria/fec8db08-1bbc-435a-8ac6-03e31aadc685.jpeg',
   '/galeria/IMG_9407.jpeg',
 ];
 
+function buildCarouselImages(settings: AboutSettings): string[] {
+  const managed = settings['about.image'];
+  return Array.from(new Set([managed, ...FALLBACK_ABOUT_IMAGES].filter(Boolean)));
+}
+
 export default function AboutPage() {
   const { language } = useLanguage();
+  const locale = language === 'es' ? 'es' : 'en';
+  const aboutQuery = useQuery({ queryKey: ['site-settings', 'about'], queryFn: getAboutSettings, staleTime: 60_000 });
+  const about = aboutQuery.data ?? DEFAULT_ABOUT_SETTINGS;
+
+  const images = useMemo(() => buildCarouselImages(about), [about]);
   const [activeHeroImage, setActiveHeroImage] = useState(0);
 
   useEffect(() => {
     const interval = window.setInterval(() => {
-      setActiveHeroImage((index) => (index + 1) % aboutHeroImages.length);
+      setActiveHeroImage((index) => (index + 1) % images.length);
     }, 3400);
 
     return () => window.clearInterval(interval);
-  }, []);
+  }, [images.length]);
+
+  const storyParagraphs = splitParagraphs(about[`about.story.${locale}` as keyof AboutSettings]);
 
   return (
     <main className="bg-ocean-950 text-white">
@@ -79,34 +93,30 @@ export default function AboutPage() {
         <Container className="relative grid gap-10 lg:grid-cols-[minmax(0,1fr)_440px] lg:items-end">
           <div>
             <p className="text-sm font-bold uppercase tracking-[0.16em] text-ocean-200">
-              {language === 'es' ? 'Sobre nosotros' : 'About us'}
+              {about[`about.eyebrow.${locale}` as keyof AboutSettings]}
             </p>
             <h1 className="mt-4 max-w-4xl font-display text-5xl font-extrabold leading-[0.95] sm:text-6xl lg:text-7xl">
-              {language === 'es'
-                ? 'Pasion local y excelencia en el Pacifico de Costa Rica'
-                : 'Local passion and excellence on Costa Rica Pacific'}
+              {about[`about.title.${locale}` as keyof AboutSettings]}
             </h1>
             <p className="mt-6 max-w-2xl text-lg font-semibold leading-8 text-ocean-100">
-              {language === 'es'
-                ? 'Sube a bordo de Second Wind y descubre una experiencia sofisticada donde el lujo se encuentra con la naturaleza.'
-                : 'Step aboard Second Wind and discover a sophisticated ocean experience where luxury meets nature.'}
+              {about[`about.description.${locale}` as keyof AboutSettings]}
             </p>
           </div>
 
           <div className="rounded-[2rem] border border-white/10 bg-white/[0.06] p-3 shadow-lifted backdrop-blur-xl">
             <div className="relative aspect-[4/3] overflow-hidden rounded-[1.4rem]">
-              {aboutHeroImages.map((image, index) => (
+              {images.map((image, index) => (
                 <img
                   key={image}
                   className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-700 ${index === activeHeroImage ? 'opacity-100' : 'opacity-0'}`}
                   src={image}
-                  alt={index === 0 ? (language === 'es' ? 'Tripulacion con pesca en aguas de Guanacaste' : 'Crew with a catch in Guanacaste waters') : ''}
+                  alt={index === 0 ? about[`about.image_alt.${locale}` as keyof AboutSettings] : ''}
                   aria-hidden={index === 0 ? undefined : true}
                   loading={index === 0 ? 'lazy' : 'eager'}
                 />
               ))}
               <div className="absolute bottom-4 left-4 flex gap-1.5" aria-hidden="true">
-                {aboutHeroImages.map((image, index) => (
+                {images.map((image, index) => (
                   <span key={image} className={`h-1.5 rounded-full transition-all duration-300 ${index === activeHeroImage ? 'w-5 bg-white' : 'w-1.5 bg-white/45'}`} />
                 ))}
               </div>
@@ -122,16 +132,9 @@ export default function AboutPage() {
               {language === 'es' ? 'Nuestra forma de navegar' : 'How we operate'}
             </p>
             <div className="mt-5 grid gap-5 text-base leading-8 text-ocean-100">
-              <p>
-                {language === 'es'
-                  ? 'Papagayo Fishing Tour es una empresa familiar fundada por los jovenes emprendedores locales Gabriel y Joshua, orgullosamente de Playas del Coco. Su conexion profunda con el oceano redefine las experiencias de pesca en las aguas de la Peninsula de Papagayo.'
-                  : 'Papagayo Fishing Tour is a family-owned company founded by young local entrepreneurs Gabriel and Joshua, proudly from Playas del Coco. Driven by a deep connection to the ocean, they have redefined fishing experiences in the waters of the Papagayo Peninsula.'}
-              </p>
-              <p>
-                {language === 'es'
-                  ? 'Navega por mares cristalinos reconocidos por pesca, surf y snorkeling de clase mundial. Cada viaje esta disenado para ofrecer exclusividad, comodidad y autenticidad.'
-                  : 'Sail across crystal-clear seas renowned for world-class fishing, surfing and snorkeling. Every journey is thoughtfully designed to deliver exclusivity, comfort and authenticity.'}
-              </p>
+              {storyParagraphs.map((paragraph) => (
+                <p key={paragraph.slice(0, 32)}>{paragraph}</p>
+              ))}
             </div>
           </div>
 
@@ -212,15 +215,13 @@ export default function AboutPage() {
 
           <div className="mt-12 rounded-[2rem] border border-white/10 bg-ocean-900 p-6 text-center shadow-lifted sm:p-10">
             <h2 className="font-display text-4xl font-extrabold leading-tight text-white">
-              {language === 'es' ? 'Listo para planear tu salida?' : 'Ready to plan your trip?'}
+              {about[`about.cta_title.${locale}` as keyof AboutSettings]}
             </h2>
             <p className="mx-auto mt-4 max-w-2xl text-base leading-7 text-ocean-200">
-              {language === 'es'
-                ? 'Elige tu barco, horario y tipo de experiencia. Nosotros nos encargamos del resto.'
-                : 'Choose your boat, time and experience. We handle the rest.'}
+              {about[`about.cta_text.${locale}` as keyof AboutSettings]}
             </p>
             <Button className="mt-7" to="/#booking">
-              {language === 'es' ? 'Reservar ahora' : 'Book now'}
+              {about[`about.cta_button_label.${locale}` as keyof AboutSettings]}
             </Button>
           </div>
         </Container>

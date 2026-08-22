@@ -1,4 +1,4 @@
-import { Eye, Image as ImageIcon, Save } from 'lucide-react';
+import { Eye, FileText, Image as ImageIcon, Save } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 
 import AdminImageManager from '../../components/admin/AdminImageManager';
@@ -13,9 +13,18 @@ interface SiteSettingRow {
   active: boolean;
 }
 
+interface ContentField {
+  key: string;
+  label: string;
+  type: 'text' | 'textarea' | 'url' | 'boolean' | 'image';
+  fallback: string;
+}
+
+type Draft = Record<string, string>;
+
 const FALLBACK_HERO_IMAGE = '/images/placeholder-image.jpg';
 
-const HERO_SETTINGS = [
+const HERO_FIELDS: ContentField[] = [
   { key: 'home.hero.title.es', label: 'Titulo principal ES', type: 'text', fallback: 'Experimenta el oceano' },
   { key: 'home.hero.title.en', label: 'Titulo principal EN', type: 'text', fallback: 'Experience the Ocean' },
   { key: 'home.hero.eyebrow.es', label: 'Etiqueta ES', type: 'text', fallback: 'Charters privados - Costa Rica' },
@@ -33,36 +42,68 @@ const HERO_SETTINGS = [
   { key: 'home.hero.image', label: 'Imagen principal', type: 'image', fallback: FALLBACK_HERO_IMAGE },
   { key: 'home.hero.primary_enabled', label: 'Activar boton principal', type: 'boolean', fallback: 'true' },
   { key: 'home.hero.secondary_enabled', label: 'Activar boton secundario', type: 'boolean', fallback: 'true' },
-] as const;
+];
 
-type HeroKey = (typeof HERO_SETTINGS)[number]['key'];
+const ABOUT_FIELDS: ContentField[] = [
+  { key: 'about.eyebrow.es', label: 'Etiqueta ES', type: 'text', fallback: 'Sobre nosotros' },
+  { key: 'about.eyebrow.en', label: 'Etiqueta EN', type: 'text', fallback: 'About us' },
+  { key: 'about.title.es', label: 'Titulo ES', type: 'text', fallback: 'Pasion local y excelencia en el Pacifico de Costa Rica' },
+  { key: 'about.title.en', label: 'Titulo EN', type: 'text', fallback: 'Local passion and excellence on Costa Rica Pacific' },
+  { key: 'about.description.es', label: 'Descripcion del hero ES', type: 'textarea', fallback: 'Sube a bordo de Second Wind y descubre una experiencia sofisticada donde el lujo se encuentra con la naturaleza.' },
+  { key: 'about.description.en', label: 'Descripcion del hero EN', type: 'textarea', fallback: 'Step aboard Second Wind and discover a sophisticated ocean experience where luxury meets nature.' },
+  { key: 'about.preview_text.es', label: 'Texto de inicio (home) ES - parrafos separados por linea vacia', type: 'textarea', fallback: 'Papagayo Fishing Tour es una empresa familiar fundada por los jovenes emprendedores locales Gabriel y Joshua, orgullosamente de Playas del Coco.\n\nCada salida esta disenada con cuidado para ofrecer exclusividad, comodidad y autenticidad en las aguas de la Peninsula de Papagayo.' },
+  { key: 'about.preview_text.en', label: 'Texto de inicio (home) EN - parrafos separados por linea vacia', type: 'textarea', fallback: 'Papagayo Fishing Tour is a family-owned company founded by young local entrepreneurs Gabriel and Joshua, proudly from Playas del Coco.\n\nEvery journey is thoughtfully designed to deliver exclusivity, comfort and authenticity across the waters of the Papagayo Peninsula.' },
+  { key: 'about.story.es', label: 'Historia (pagina Nosotros) ES - parrafos separados por linea vacia', type: 'textarea', fallback: 'Papagayo Fishing Tour es una empresa familiar fundada por los jovenes emprendedores locales Gabriel y Joshua, orgullosamente de Playas del Coco. Su conexion profunda con el oceano redefine las experiencias de pesca en las aguas de la Peninsula de Papagayo.\n\nNavega por mares cristalinos reconocidos por pesca, surf y snorkeling de clase mundial. Cada viaje esta disenado para ofrecer exclusividad, comodidad y autenticidad.' },
+  { key: 'about.story.en', label: 'Historia (pagina Nosotros) EN - parrafos separados por linea vacia', type: 'textarea', fallback: 'Papagayo Fishing Tour is a family-owned company founded by young local entrepreneurs Gabriel and Joshua, proudly from Playas del Coco. Driven by a deep connection to the ocean, they have redefined fishing experiences in the waters of the Papagayo Peninsula.\n\nSail across crystal-clear seas renowned for world-class fishing, surfing and snorkeling. Every journey is thoughtfully designed to deliver exclusivity, comfort and authenticity.' },
+  { key: 'about.cta_title.es', label: 'Titulo final ES', type: 'text', fallback: 'Listo para planear tu salida?' },
+  { key: 'about.cta_title.en', label: 'Titulo final EN', type: 'text', fallback: 'Ready to plan your trip?' },
+  { key: 'about.cta_text.es', label: 'Texto final ES', type: 'textarea', fallback: 'Elige tu barco, horario y tipo de experiencia. Nosotros nos encargamos del resto.' },
+  { key: 'about.cta_text.en', label: 'Texto final EN', type: 'textarea', fallback: 'Choose your boat, time and experience. We handle the rest.' },
+  { key: 'about.preview_button_label.es', label: 'Boton en inicio ES', type: 'text', fallback: 'Conocer la empresa' },
+  { key: 'about.preview_button_label.en', label: 'Boton en inicio EN', type: 'text', fallback: 'Meet the company' },
+  { key: 'about.cta_button_label.es', label: 'Boton final ES', type: 'text', fallback: 'Reservar ahora' },
+  { key: 'about.cta_button_label.en', label: 'Boton final EN', type: 'text', fallback: 'Book now' },
+  { key: 'about.image_alt.es', label: 'Texto alternativo imagen ES', type: 'text', fallback: 'Tripulacion con pesca en aguas de Guanacaste' },
+  { key: 'about.image_alt.en', label: 'Texto alternativo imagen EN', type: 'text', fallback: 'Crew with a catch in Guanacaste waters' },
+  { key: 'about.image', label: 'Imagen principal de Nosotros', type: 'image', fallback: '' },
+];
 
 function storagePathFromPublicUrl(value?: string | null) {
   if (!value?.includes('/site-images/')) return null;
   return value.split('/site-images/')[1] ?? null;
 }
 
-function defaultsMap() {
-  return HERO_SETTINGS.reduce<Record<HeroKey, string>>((acc, item) => {
-    acc[item.key] = item.fallback;
+function defaultsFrom(fields: ContentField[]): Draft {
+  return fields.reduce<Draft>((acc, field) => {
+    acc[field.key] = field.fallback;
     return acc;
-  }, {} as Record<HeroKey, string>);
+  }, {});
 }
 
-export default function AdminContentPage() {
+interface ContentSectionProps {
+  title: string;
+  description: string;
+  fields: ContentField[];
+  saveLabel: string;
+  imageRequireReplacement?: boolean;
+  preview?: (draft: Draft) => React.ReactNode;
+}
+
+function ContentSection({ title, description, fields, saveLabel, imageRequireReplacement = false, preview }: ContentSectionProps) {
+  const keys = useMemo(() => fields.map((field) => field.key), [fields]);
   const [settings, setSettings] = useState<SiteSettingRow[]>([]);
-  const [draft, setDraft] = useState<Record<HeroKey, string>>(defaultsMap());
+  const [draft, setDraft] = useState<Draft>(() => defaultsFrom(fields));
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
 
   const rowsByKey = useMemo(() => new Map(settings.map((setting) => [setting.key, setting])), [settings]);
+  const imageField = useMemo(() => fields.find((field) => field.type === 'image') ?? null, [fields]);
 
   async function loadSettings() {
     setLoading(true);
     setError('');
-    const keys = HERO_SETTINGS.map((setting) => setting.key);
     const { data, error } = await supabase
       .from('site_settings')
       .select('key, value, type, active')
@@ -73,14 +114,14 @@ export default function AdminContentPage() {
     if (error) {
       setError(error.message);
       setSettings([]);
-      setDraft(defaultsMap());
+      setDraft(defaultsFrom(fields));
       return;
     }
 
     const rows = (data ?? []) as SiteSettingRow[];
-    const nextDraft = defaultsMap();
+    const nextDraft = defaultsFrom(fields);
     rows.forEach((row) => {
-      if (row.key in nextDraft && row.value) nextDraft[row.key as HeroKey] = row.value;
+      if (row.key in nextDraft && row.value) nextDraft[row.key] = row.value;
     });
     setSettings(rows);
     setDraft(nextDraft);
@@ -88,142 +129,207 @@ export default function AdminContentPage() {
 
   useEffect(() => {
     void loadSettings();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  async function upsertKey(key: string, value: string, type: string) {
+    const { error } = await supabase.from('site_settings').upsert({
+      key,
+      value,
+      type,
+      active: true,
+      updated_at: new Date().toISOString(),
+    });
+    if (error) throw new Error(error.message);
+  }
 
   async function saveSettings() {
     setSaving(true);
     setError('');
     setNotice('');
-    const payload = HERO_SETTINGS.map((item) => ({
-      key: item.key,
-      value: draft[item.key].trim() || item.fallback,
-      type: item.type,
-      active: true,
-      updated_at: new Date().toISOString(),
-    }));
-    const { error } = await supabase.from('site_settings').upsert(payload);
-    setSaving(false);
-    if (error) {
-      setError(error.message);
-      return;
+    try {
+      for (const field of fields) {
+        const raw = draft[field.key];
+        const value = field.type === 'boolean'
+          ? (raw !== 'false' ? 'true' : 'false')
+          : ((raw ?? '').trim() || field.fallback);
+        await upsertKey(field.key, value, field.type);
+      }
+      setNotice(`${title} actualizado. La pagina publica usara estos valores sin redesplegar.`);
+      await loadSettings();
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : 'No se pudo guardar el contenido.');
+    } finally {
+      setSaving(false);
     }
-    setNotice('Hero actualizado. La pagina publica usara estos valores sin redesplegar.');
-    await loadSettings();
   }
 
-  async function saveHeroImage(image: StorageImage) {
-    const next = { ...draft, 'home.hero.image': image.public_url };
-    setDraft(next);
-    const { error } = await supabase
-      .from('site_settings')
-      .upsert({
-        key: 'home.hero.image',
-        value: image.public_url,
-        type: 'image',
-        active: true,
-        updated_at: new Date().toISOString(),
-      });
-    if (error) throw new Error(error.message);
-    setNotice('Imagen principal del inicio actualizada.');
-    await loadSettings();
+  async function handleImageSaved(image: StorageImage) {
+    if (!imageField) return;
+    try {
+      await upsertKey(imageField.key, image.public_url, 'image');
+      setNotice('Imagen actualizada.');
+      await loadSettings();
+    } catch (imageError) {
+      throw new Error(imageError instanceof Error ? imageError.message : 'No se pudo guardar la imagen.');
+    }
   }
 
-  function updateDraft(key: HeroKey, value: string) {
+  async function handleImageDeleted(storagePath: string) {
+    if (!imageField) return;
+    try {
+      await upsertKey(imageField.key, imageField.fallback, 'image');
+      setNotice('Imagen eliminada. El sitio vuelve al contenido por defecto.');
+      await loadSettings();
+    } catch {
+      setNotice(`No se pudo actualizar la referencia de la imagen eliminada: ${storagePath}`);
+    }
+  }
+
+  function updateDraft(key: string, value: string) {
     setDraft((current) => ({ ...current, [key]: value }));
   }
 
   return (
-    <div className="admin-page">
-      <AdminPageHeader
-        title="Contenido general"
-        description="Administra el hero y las imagenes editables del sitio sin cambiar codigo."
-        actions={<button className="admin-btn" type="button" onClick={() => void loadSettings()}><Save size={16} /> Recargar</button>}
-      />
-
+    <section className="admin-card">
+      <h2 className="admin-card__title"><FileText size={18} /> {title}</h2>
+      <p className="admin-muted mb-4">{description}</p>
       {error ? <div className="admin-alert admin-alert--danger">{error}</div> : null}
       {notice ? <div className="admin-alert admin-alert--success">{notice}</div> : null}
-
-      <section className="admin-card">
-        <h2 className="admin-card__title"><ImageIcon size={18} /> Hero / inicio</h2>
-        <p className="admin-muted mb-4">La imagen administrada es el fondo principal del hero. El archivo de video queda conservado, pero no bloquea el contenido editable.</p>
-        {loading ? (
-          <p className="admin-muted">Cargando contenido...</p>
-        ) : (
-          <div className="grid gap-5">
+      {loading ? (
+        <p className="admin-muted">Cargando contenido...</p>
+      ) : (
+        <div className="grid gap-5">
+          {imageField ? (
             <AdminImageManager
               resourceTable="site_settings"
-              resourceId="home.hero.image"
+              resourceId={imageField.key}
               folder="general"
-              currentImageUrl={draft['home.hero.image']}
-              currentStoragePath={storagePathFromPublicUrl(draft['home.hero.image'])}
-              label={draft['home.hero.image_alt.es']}
+              currentImageUrl={draft[imageField.key]}
+              currentStoragePath={storagePathFromPublicUrl(draft[imageField.key])}
+              label={draft[`${imageField.key.replace(/\.image$/, '')}.image_alt.es`] ?? imageField.label}
               aspect={16 / 9}
               maxWidth={1920}
               maxHeight={1080}
               maxSizeMB={0.9}
-              requireReplacementToDelete
-              onImageSaved={saveHeroImage}
+              requireReplacementToDelete={imageRequireReplacement}
+              onImageSaved={handleImageSaved}
+              onImageDeleted={handleImageDeleted}
             />
+          ) : null}
 
-            <div className="grid gap-3 lg:grid-cols-2">
-              {HERO_SETTINGS.filter((item) => item.type !== 'image' && item.type !== 'boolean').map((item) => (
-                <label className="grid gap-1" key={item.key}>
-                  <span className="admin-muted">{item.label}</span>
-                  {item.type === 'textarea' ? (
-                    <textarea className="admin-input min-h-24" value={draft[item.key]} onChange={(event) => updateDraft(item.key, event.target.value)} />
+          <div className="grid gap-3 lg:grid-cols-2">
+            {fields.filter((field) => field.type !== 'image').map((field) => (
+              field.type === 'boolean' ? (
+                <label className="flex items-center gap-2" key={field.key}>
+                  <input
+                    type="checkbox"
+                    checked={draft[field.key] !== 'false'}
+                    onChange={(event) => updateDraft(field.key, String(event.target.checked))}
+                  />
+                  <span className="admin-muted">{field.label}</span>
+                </label>
+              ) : (
+                <label className="grid gap-1" key={field.key}>
+                  <span className="admin-muted">{field.label}</span>
+                  {field.type === 'textarea' ? (
+                    <textarea className="admin-input min-h-24" value={draft[field.key]} onChange={(event) => updateDraft(field.key, event.target.value)} />
                   ) : (
-                    <input className="admin-input" value={draft[item.key]} onChange={(event) => updateDraft(item.key, event.target.value)} />
+                    <input className="admin-input" value={draft[field.key]} onChange={(event) => updateDraft(field.key, event.target.value)} />
                   )}
                 </label>
-              ))}
-            </div>
+              )
+            ))}
+          </div>
 
-            <div className="flex flex-wrap gap-4">
-              <label className="flex items-center gap-2">
-                <input type="checkbox" checked={draft['home.hero.primary_enabled'] !== 'false'} onChange={(event) => updateDraft('home.hero.primary_enabled', String(event.target.checked))} />
-                <span className="admin-muted">Activar boton principal</span>
-              </label>
-              <label className="flex items-center gap-2">
-                <input type="checkbox" checked={draft['home.hero.secondary_enabled'] !== 'false'} onChange={(event) => updateDraft('home.hero.secondary_enabled', String(event.target.checked))} />
-                <span className="admin-muted">Activar boton secundario</span>
-              </label>
-            </div>
-
+          {preview ? (
             <div className="rounded-2xl border border-white/70 bg-ocean-950 p-4 text-white shadow-soft">
               <p className="mb-3 inline-flex items-center gap-2 text-xs font-extrabold uppercase tracking-[0.12em] text-ocean-300"><Eye size={14} /> Vista previa</p>
-              <div className="relative overflow-hidden rounded-xl">
-                <img className="aspect-video w-full object-cover" src={draft['home.hero.image']} alt={draft['home.hero.image_alt.es']} />
-                <div className="absolute inset-0 bg-ocean-950/45" />
-                <div className="absolute inset-0 grid place-items-center p-5 text-center">
-                  <div>
-                    <p className="text-xs font-extrabold uppercase tracking-[0.16em] text-white/75">{draft['home.hero.eyebrow.es']}</p>
-                    <h3 className="mt-2 font-display text-3xl font-extrabold leading-tight sm:text-5xl">{draft['home.hero.title.es']}</h3>
-                    <p className="mx-auto mt-2 max-w-xl text-sm font-medium text-white/80 sm:text-base">{draft['home.hero.subtitle.es']}</p>
-                  </div>
-                </div>
-              </div>
+              {preview(draft)}
             </div>
+          ) : null}
 
-            <div className="admin-image-manager__actions">
-              <button className="admin-btn" type="button" disabled={saving} onClick={() => void saveSettings()}>{saving ? 'Guardando...' : 'Guardar hero'}</button>
+          <div className="admin-image-manager__actions">
+            <button className="admin-btn" type="button" disabled={saving} onClick={() => void saveSettings()}>
+              <Save size={16} /> {saving ? 'Guardando...' : saveLabel}
+            </button>
+            <button className="admin-btn admin-btn--ghost" type="button" onClick={() => void loadSettings()}>Descartar cambios</button>
+          </div>
+
+          <AdminTable headers={['Key', 'Tipo', 'Valor', 'Estado']}>
+            {fields.map((field) => {
+              const row = rowsByKey.get(field.key);
+              return (
+                <tr key={field.key}>
+                  <td>{field.key}</td>
+                  <td>{row?.type ?? field.type}</td>
+                  <td className="admin-muted max-w-[24rem] truncate" title={draft[field.key]}>{field.type === 'image' ? (draft[field.key] || '(por defecto)') : draft[field.key]}</td>
+                  <td><AdminBadge value={row?.active ?? true} /></td>
+                </tr>
+              );
+            })}
+          </AdminTable>
+        </div>
+      )}
+    </section>
+  );
+}
+
+export default function AdminContentPage() {
+  return (
+    <div className="admin-page">
+      <AdminPageHeader
+        title="Contenido general"
+        description="Administra el hero del inicio y la pagina Nosotros sin cambiar codigo."
+        actions={<span />}
+      />
+
+      <ContentSection
+        title="Hero / inicio"
+        description="La imagen administrada es el fondo principal del hero. El archivo de video queda conservado, pero no bloquea el contenido editable."
+        fields={HERO_FIELDS}
+        saveLabel="Guardar hero"
+        imageRequireReplacement
+        preview={(draft) => (
+          <div className="relative overflow-hidden rounded-xl">
+            <img className="aspect-video w-full object-cover" src={draft['home.hero.image']} alt={draft['home.hero.image_alt.es']} />
+            <div className="absolute inset-0 bg-ocean-950/45" />
+            <div className="absolute inset-0 grid place-items-center p-5 text-center">
+              <div>
+                <p className="text-xs font-extrabold uppercase tracking-[0.16em] text-white/75">{draft['home.hero.eyebrow.es']}</p>
+                <h3 className="mt-2 font-display text-3xl font-extrabold leading-tight sm:text-5xl">{draft['home.hero.title.es']}</h3>
+                <p className="mx-auto mt-2 max-w-xl text-sm font-medium text-white/80 sm:text-base">{draft['home.hero.subtitle.es']}</p>
+              </div>
             </div>
           </div>
         )}
-      </section>
+      />
 
-      <AdminTable headers={['Key', 'Tipo', 'Valor', 'Estado']}>
-        {HERO_SETTINGS.map((setting) => {
-          const row = rowsByKey.get(setting.key);
-          return (
-            <tr key={setting.key}>
-              <td>{setting.key}</td>
-              <td>{row?.type ?? setting.type}</td>
-              <td className="admin-muted">{draft[setting.key]}</td>
-              <td><AdminBadge value={row?.active ?? true} /></td>
-            </tr>
-          );
-        })}
-      </AdminTable>
+      <ContentSection
+        title="Nosotros / About"
+        description="Controla la pagina /nosotros y la seccion Sobre nosotros de la inicio. La imagen administrada aparece primero en los carruseles; sin imagen se muestran las fotos por defecto."
+        fields={ABOUT_FIELDS}
+        saveLabel="Guardar Nosotros"
+        preview={(draft) => (
+          <div className="grid items-center gap-4 sm:grid-cols-[minmax(0,1fr)_220px]">
+            <div>
+              <p className="text-xs font-extrabold uppercase tracking-[0.14em] text-ocean-400">{draft['about.eyebrow.es']}</p>
+              <h3 className="mt-2 font-display text-2xl font-extrabold leading-tight sm:text-3xl">{draft['about.title.es']}</h3>
+              <p className="mt-3 text-sm leading-6 text-white/80">{draft['about.preview_text.es'].split('\n')[0]}</p>
+              <p className="mt-4 inline-flex items-center gap-2 rounded-full border border-white/25 px-4 py-2 text-xs font-extrabold">
+                <ImageIcon size={13} /> {draft['about.preview_button_label.es']}
+              </p>
+            </div>
+            {draft['about.image'] ? (
+              <img className="aspect-[4/3] w-full rounded-xl object-cover" src={draft['about.image']} alt={draft['about.image_alt.es']} />
+            ) : (
+              <div className="grid aspect-[4/3] w-full place-items-center rounded-xl border border-dashed border-white/25 text-xs text-white/60">
+                Sin imagen gestionada (usa fotos por defecto)
+              </div>
+            )}
+          </div>
+        )}
+      />
     </div>
   );
 }
