@@ -1,5 +1,10 @@
 const LOCAL_ORIGIN_PATTERN = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
-const VERCEL_PREVIEW_PATTERN = /^https:\/\/fishshitours1(?:-[a-z0-9]+|-git-[a-z0-9-]+)-papagayo-fishingtour\.vercel\.app$/;
+// Accepts every Vercel domain variant of this project (repo is "fisshitours1",
+// but some links/aliases use "fishshitours1", so both spellings are allowed):
+//   fisshitours1-<hash>-papagayo-fishingtour.vercel.app        (deployment)
+//   fisshitours1-git-<branch>-...-papagayo-fishingtour.vercel.app (branch)
+//   fisshitours1-papagayo-fishingtour.vercel.app                (project root)
+const VERCEL_PREVIEW_PATTERN = /^https:\/\/(?:fishshitours1|fisshitours1)(?:-[a-z0-9]+|-git-[a-z0-9-]+)?-papagayo-fishingtour\.vercel\.app$/;
 
 const PRODUCTION_ORIGINS = new Set([
   'https://papagayofishingtours.com',
