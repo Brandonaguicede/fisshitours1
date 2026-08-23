@@ -53,7 +53,7 @@
   border-radius: var(--admin-radius-md);
   background: linear-gradient(140deg, var(--admin-primary), var(--admin-primary-dark));
   color: white;
-  font-weight: 800;
+  font-weight: 600;
 }
 
 .admin-sidebar__brand strong {
@@ -65,7 +65,7 @@
 .admin-sidebar__brand span {
   color: var(--admin-muted);
   font-size: 0.75rem;
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .admin-sidebar__scroll {
@@ -79,7 +79,7 @@
   padding: 0 0.6rem;
   color: #8297a2;
   font-size: 0.68rem;
-  font-weight: 800;
+  font-weight: 600;
   letter-spacing: 0.09em;
   text-transform: uppercase;
 }
@@ -100,7 +100,7 @@
   border-radius: var(--admin-radius-sm);
   color: var(--admin-muted);
   font-size: 0.92rem;
-  font-weight: 700;
+  font-weight: 600;
   text-decoration: none;
   transition: background 0.16s ease, color 0.16s ease, box-shadow 0.16s ease;
 }
@@ -176,13 +176,13 @@
   margin: 0;
   color: var(--admin-ink);
   font-size: 1.05rem;
-  font-weight: 800;
+  font-weight: 600;
 }
 
 .admin-topbar__crumb {
   color: #8297a2;
   font-size: 0.76rem;
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .admin-user-pill {
@@ -195,7 +195,7 @@
   background: white;
   color: var(--admin-ink);
   font-size: 0.8rem;
-  font-weight: 800;
+  font-weight: 600;
 }
 
 .admin-user-pill span {
@@ -236,7 +236,7 @@
   margin: 0;
   color: var(--admin-ink);
   font-size: 1.25rem;
-  font-weight: 800;
+  font-weight: 600;
 }
 
 .admin-page-header p,
@@ -264,7 +264,7 @@
   background: var(--admin-primary);
   color: white;
   font-size: 0.84rem;
-  font-weight: 800;
+  font-weight: 600;
 }
 
 .admin-btn--secondary {
@@ -348,7 +348,7 @@
   margin: 0;
   color: var(--admin-muted);
   font-size: 0.8rem;
-  font-weight: 800;
+  font-weight: 600;
 }
 
 .admin-stat-card__icon {
@@ -364,7 +364,7 @@
 .admin-stat-card__value {
   color: var(--admin-ink);
   font-size: 1.65rem;
-  font-weight: 900;
+  font-weight: 700;
   line-height: 1;
   font-variant-numeric: tabular-nums;
 }
@@ -437,7 +437,7 @@
 .admin-table th {
   color: #8297a2;
   font-size: 0.72rem;
-  font-weight: 900;
+  font-weight: 700;
   letter-spacing: 0.07em;
   text-transform: uppercase;
 }
@@ -445,7 +445,7 @@
 .admin-table td {
   color: var(--admin-ink);
   font-size: 0.86rem;
-  font-weight: 650;
+  font-weight: 600;
 }
 
 .admin-muted {
@@ -463,7 +463,7 @@
   background: var(--admin-primary-soft);
   color: var(--admin-primary-dark);
   font-size: 0.72rem;
-  font-weight: 900;
+  font-weight: 700;
   white-space: nowrap;
 }
 
@@ -556,7 +556,7 @@
   margin: 0;
   color: var(--admin-ink);
   font-size: 1.55rem;
-  font-weight: 900;
+  font-weight: 700;
 }
 
 .admin-login__form {
@@ -641,7 +641,7 @@
   gap: 0.45rem;
   color: var(--admin-muted);
   font-size: 0.84rem;
-  font-weight: 700;
+  font-weight: 600;
   text-align: center;
   padding: 1rem;
 }
@@ -656,7 +656,7 @@
   background: rgba(11, 37, 51, 0.6);
   color: white;
   font-size: 0.86rem;
-  font-weight: 800;
+  font-weight: 600;
 }
 
 .admin-image-manager__path {
@@ -697,7 +697,7 @@
   margin-top: 0.7rem;
   color: var(--admin-muted);
   font-size: 0.78rem;
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .admin-image-crop__zoom {
@@ -718,7 +718,7 @@
   margin: 0 0 0.25rem;
   color: var(--admin-ink);
   font-size: 1.05rem;
-  font-weight: 800;
+  font-weight: 600;
 }
 
 /* .app-modal-* base styles moved to src/index.css (Modal is shared with the public site). */
@@ -791,7 +791,7 @@
   gap: 0.5rem;
   color: var(--admin-muted);
   font-size: 0.9rem;
-  font-weight: 800;
+  font-weight: 600;
 }
 
 .admin-boat-images__badge,
@@ -808,7 +808,7 @@
   color: white;
   padding: 0.35rem 0.65rem;
   font-size: 0.72rem;
-  font-weight: 900;
+  font-weight: 700;
 }
 
 .admin-boat-images__primary {

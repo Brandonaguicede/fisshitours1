@@ -98,8 +98,8 @@ export function Hero() {
         <img className="h-full w-full object-contain transition duration-200 ease-out group-hover:brightness-110 group-hover:drop-shadow-[0_10px_18px_rgba(37,211,102,0.34)]" src="/images/whatsapp.png" alt="" aria-hidden="true" />
       </a>
 
-      <Container className="relative grid min-h-[100dvh] place-items-center px-4 pb-32 pt-24 text-center sm:px-6 sm:pb-20 sm:pt-28">
-        <div className="mx-auto max-w-[980px]">
+      <Container className="relative grid min-h-[100dvh] place-items-center px-6 pb-32 pt-24 text-center sm:px-8 sm:pb-20 sm:pt-28 lg:px-10">
+        <div className="mx-auto w-full max-w-[52rem]">
           <motion.p
             className="text-sm font-extrabold uppercase tracking-[0.18em] text-white/75"
             initial={{ opacity: 0, y: 14 }}
@@ -109,17 +109,17 @@ export function Hero() {
             {hero[`home.hero.eyebrow.${locale}` as keyof HeroSettings]}
           </motion.p>
           <motion.h1
-            className="mt-5 font-display text-[clamp(3rem,14vw,8rem)] font-extrabold leading-[0.92] text-white"
+            className="mx-auto mt-5 max-w-[48rem] font-display text-[clamp(2.75rem,6vw,5.25rem)] font-extrabold leading-[0.98] text-white"
             initial={{ opacity: 0, y: 18 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.7, ease: [0.23, 1, 0.32, 1] }}
           >
-            <span className="block font-serifDisplay text-[1.18em] font-normal italic leading-[0.82]">{title.lead}</span>
-            <span className="block">{title.tail}</span>
+            <span className="block font-display font-medium not-italic">{title.lead}</span>
+            <span className="block font-semibold">{title.tail}</span>
           </motion.h1>
 
           <motion.p
-            className="mx-auto mt-6 max-w-[660px] text-base font-medium leading-7 text-white/78 sm:text-xl sm:leading-8"
+            className="mx-auto mt-6 w-full max-w-[40rem] text-balance text-base font-medium leading-7 text-white/78 sm:text-xl sm:leading-8"
             initial={{ opacity: 0, y: 14 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.7, delay: 0.12, ease: [0.23, 1, 0.32, 1] }}

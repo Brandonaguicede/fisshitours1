@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Outfit:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,500;0,600;0,700;1,400&family=Manrope:wght@400..700&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -7,7 +7,7 @@
 @layer base {
   :root {
     color-scheme: dark;
-    font-family: Outfit, ui-sans-serif, system-ui, sans-serif;
+    font-family: Manrope, ui-sans-serif, system-ui, sans-serif;
     --background: #0B2842;
     --surface: #DDEFF6;
     --primary: #2B5F82;
@@ -40,6 +40,15 @@
     overflow-x: hidden;
     touch-action: manipulation;
     -webkit-tap-highlight-color: rgba(43, 95, 130, 0.18);
+  }
+
+  #main-content :where(h1, h2, h3, h4, h5, h6) {
+    font-family: 'EB Garamond', Georgia, serif;
+    font-weight: 600;
+  }
+
+  #main-content h1 {
+    font-weight: 700;
   }
 
   img {

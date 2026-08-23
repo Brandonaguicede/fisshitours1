@@ -49,9 +49,13 @@ const config: Config = {
         },
       },
       fontFamily: {
-        sans: ['Outfit', 'ui-sans-serif', 'system-ui', 'sans-serif'],
-        display: ['Outfit', 'ui-sans-serif', 'system-ui', 'sans-serif'],
-        serifDisplay: ['Instrument Serif', 'Georgia', 'serif'],
+        sans: ['Manrope', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        display: ['EB Garamond', 'Georgia', 'serif'],
+        serifDisplay: ['EB Garamond', 'Georgia', 'serif'],
+      },
+      fontWeight: {
+        bold: '600',
+        extrabold: '600',
       },
       boxShadow: {
         soft: '0 14px 36px rgba(17, 19, 15, 0.22)',
