@@ -21,7 +21,21 @@ export function Modal({ open, onClose, titleId, children, className }: ModalProp
     if (!open) return;
 
     previousFocusRef.current = document.activeElement as HTMLElement;
+    const scrollY = window.scrollY;
+    const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
+    const previousBodyStyles = {
+      overflow: document.body.style.overflow,
+      position: document.body.style.position,
+      top: document.body.style.top,
+      width: document.body.style.width,
+      paddingRight: document.body.style.paddingRight,
+    };
+
     document.body.style.overflow = 'hidden';
+    document.body.style.position = 'fixed';
+    document.body.style.top = `-${scrollY}px`;
+    document.body.style.width = '100%';
+    if (scrollbarWidth > 0) document.body.style.paddingRight = `${scrollbarWidth}px`;
     panelRef.current?.focus();
 
     function onKeyDown(event: KeyboardEvent) {
@@ -48,9 +62,14 @@ export function Modal({ open, onClose, titleId, children, className }: ModalProp
 
     document.addEventListener('keydown', onKeyDown);
     return () => {
-      document.body.style.overflow = '';
+      document.body.style.overflow = previousBodyStyles.overflow;
+      document.body.style.position = previousBodyStyles.position;
+      document.body.style.top = previousBodyStyles.top;
+      document.body.style.width = previousBodyStyles.width;
+      document.body.style.paddingRight = previousBodyStyles.paddingRight;
       document.removeEventListener('keydown', onKeyDown);
-      previousFocusRef.current?.focus();
+      previousFocusRef.current?.focus({ preventScroll: true });
+      window.scrollTo(0, scrollY);
     };
   }, [open, onClose]);
 

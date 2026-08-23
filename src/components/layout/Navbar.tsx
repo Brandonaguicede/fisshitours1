@@ -90,8 +90,8 @@ export function Navbar() {
 
         <nav
           className={cn(
-            'pointer-events-auto hidden items-center gap-0.5 rounded-full border border-white/15 bg-ocean-950/50 p-1.5 shadow-[0_20px_60px_rgba(0,0,0,0.22)] backdrop-blur-xl transition-all duration-300 md:absolute md:left-1/2 md:flex md:-translate-x-1/2 lg:gap-1',
-            isScrolled && 'bg-ocean-950/72 shadow-[0_20px_60px_rgba(0,0,0,0.3)]',
+            'glass-surface pointer-events-auto hidden items-center gap-0.5 rounded-full p-1.5 transition-all duration-300 md:absolute md:left-1/2 md:flex md:-translate-x-1/2 lg:gap-1',
+            isScrolled && 'brightness-110',
           )}
           aria-label="Navegacion principal"
         >
@@ -102,8 +102,8 @@ export function Navbar() {
               <Link
                 key={item.href}
                 className={cn(
-                  'focus-ring rounded-full px-2.5 py-2 text-xs font-semibold text-white/75 transition-all duration-200 hover:bg-white/10 hover:text-white lg:px-4 lg:text-sm',
-                  isActive && 'bg-white text-ocean-950 shadow-md hover:bg-white hover:text-ocean-950',
+                  'focus-ring glass-interactive rounded-full px-2.5 py-2 text-xs font-semibold text-white/75 hover:text-white lg:px-4 lg:text-sm',
+                  isActive && 'glass-active text-ocean-950 hover:text-ocean-950',
                 )}
                 to={item.href}
                 aria-current={isActive ? 'page' : undefined}
@@ -116,22 +116,22 @@ export function Navbar() {
 
         <div className="pointer-events-auto hidden shrink-0 items-center gap-2 md:flex lg:gap-3">
           <button
-            className="focus-ring pressable rounded-full border border-white/15 bg-ocean-950/45 px-3 py-2 text-xs font-extrabold uppercase tracking-[0.12em] text-white shadow-sm backdrop-blur-xl hover:bg-white/15"
+            className="focus-ring glass-control glass-interactive rounded-full px-3 py-2 text-xs font-extrabold uppercase tracking-[0.12em] text-white"
             type="button"
             aria-label={language === 'es' ? 'Cambiar a ingles' : 'Switch to Spanish'}
             onClick={toggleLanguage}
           >
             {language === 'es' ? 'EN' : 'ES'}
           </button>
-          <Button className="border-white/70 bg-white px-4 text-ocean-900 shadow-md hover:bg-ocean-100 lg:px-5" to="/#booking">
+          <Button variant="secondary" className="glass-primary px-4 text-ocean-900 hover:text-ocean-950 lg:px-5" to="/#booking">
             {language === 'es' ? 'Reservar' : 'Book Now'}
           </Button>
         </div>
 
         <button
           className={cn(
-            'focus-ring pressable pointer-events-auto relative z-10 inline-flex size-12 shrink-0 items-center justify-center rounded-full border text-white shadow-[0_12px_36px_rgba(0,0,0,0.2)] backdrop-blur-xl transition-all duration-200 md:hidden',
-            isOpen || isScrolled ? 'border-white/15 bg-ocean-950/75' : 'border-white/25 bg-ocean-950/35',
+            'focus-ring glass-control glass-interactive pointer-events-auto relative z-10 inline-flex size-12 shrink-0 items-center justify-center rounded-full text-white md:hidden',
+            (isOpen || isScrolled) && 'ring-1 ring-ocean-200/20',
           )}
           type="button"
           aria-label={isOpen ? 'Cerrar menu' : 'Abrir menu'}
@@ -143,14 +143,14 @@ export function Navbar() {
       </Container>
 
       {isOpen ? (
-        <div className="pointer-events-auto mx-4 mt-2 overflow-hidden rounded-[1.75rem] border border-white/15 bg-ocean-950/88 shadow-[0_20px_60px_rgba(0,0,0,0.28)] backdrop-blur-2xl md:hidden">
+        <div className="glass-surface pointer-events-auto mx-4 mt-2 overflow-hidden rounded-[1.75rem] md:hidden">
           <Container className="grid max-h-[calc(100dvh-5rem)] gap-2 overflow-y-auto py-3">
             {navigationItems.map((item) => (
               <Link
                 key={item.href}
                 className={cn(
-                  'focus-ring rounded-2xl px-4 py-3 text-sm font-semibold text-white/80 transition-all duration-200 hover:bg-white/10 hover:text-white',
-                  activeHref === item.href && 'bg-white text-ocean-950 shadow-md hover:bg-white hover:text-ocean-950',
+                  'focus-ring glass-interactive rounded-2xl px-4 py-3 text-sm font-semibold text-white/80 hover:text-white',
+                  activeHref === item.href && 'glass-active text-ocean-950 hover:text-ocean-950',
                 )}
                 to={item.href}
                 aria-current={activeHref === item.href ? 'page' : undefined}
@@ -160,14 +160,14 @@ export function Navbar() {
               </Link>
             ))}
             <button
-              className="focus-ring pressable rounded-2xl border border-white/15 bg-white/10 px-4 py-3 text-left text-sm font-semibold text-white hover:bg-white hover:text-ocean-900"
+              className="focus-ring glass-control glass-interactive rounded-2xl px-4 py-3 text-left text-sm font-semibold text-white"
               type="button"
               aria-label={language === 'es' ? 'Cambiar a ingles' : 'Switch to Spanish'}
               onClick={toggleLanguage}
             >
               {language === 'es' ? 'English' : 'Español'}
             </button>
-            <Button className="mt-2 border-white/70 bg-white text-ocean-900 hover:bg-ocean-100" to="/#booking">
+            <Button variant="secondary" className="glass-primary mt-2 text-ocean-900 hover:text-ocean-950" to="/#booking">
               {language === 'es' ? 'Reservar' : 'Book Now'}
             </Button>
           </Container>

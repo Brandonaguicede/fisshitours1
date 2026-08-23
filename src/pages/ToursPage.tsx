@@ -97,7 +97,7 @@ export default function ToursPage() {
           />
           <div className="mt-10 grid gap-6 lg:grid-cols-3">
             {catalogBoats.map((boat) => (
-              <BoatCard key={boat.id} boat={boat} isSelected={boat.id === selectedBoat.id} onSelect={selectBoat} />
+              <BoatCard key={boat.id} boat={boat} startingPrice={getBoatStartingPrice(boat.id, catalogTours)} isSelected={boat.id === selectedBoat.id} onSelect={selectBoat} />
             ))}
           </div>
         </Container>
@@ -167,6 +167,11 @@ export default function ToursPage() {
 function getTourGroupKey(tour: BoatTour) {
   if (tour.category === 'Bioluminescence Basic' || tour.category === 'Bioluminescence Deluxe') return `${tour.boatId}-Bioluminescence`;
   return `${tour.boatId}-${tour.category}`;
+}
+
+function getBoatStartingPrice(boatId: string, tours: BoatTour[]) {
+  const prices = tours.filter((tour) => tour.boatId === boatId).map((tour) => tour.basePrice);
+  return prices.length ? Math.min(...prices) : 0;
 }
 
 function groupToursForCards(tours: BoatTour[]) {

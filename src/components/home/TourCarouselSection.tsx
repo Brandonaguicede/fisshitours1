@@ -25,6 +25,7 @@ export function TourCarouselSection({ boats, tours, selectedTour, onSelectTour }
   const [activeBoatId, setActiveBoatId] = useState<string>('all');
   const visibleTours = activeBoatId === 'all' ? tours : tours.filter((tour) => tour.boatId === activeBoatId);
   const groupedTours = groupToursForCards(visibleTours);
+  const selectedTourIndex = selectedTour ? groupedTours.findIndex(({ relatedTours }) => relatedTours.some((tour) => tour.id === selectedTour.id)) : -1;
 
   useEffect(() => {
     const element = scrollerRef.current;
@@ -32,6 +33,16 @@ export function TourCarouselSection({ boats, tours, selectedTour, onSelectTour }
     element.scrollTo({ left: 0, behavior: 'smooth' });
     window.setTimeout(updateControls, 120);
   }, [groupedTours.length, activeBoatId]);
+
+  useEffect(() => {
+    const element = scrollerRef.current;
+    if (!element || selectedTourIndex < 0) return;
+    const selectedCard = element.children.item(selectedTourIndex) as HTMLElement | null;
+    if (!selectedCard) return;
+    const centeredLeft = selectedCard.offsetLeft - (element.clientWidth - selectedCard.clientWidth) / 2;
+    element.scrollTo({ left: Math.max(0, centeredLeft), behavior: 'smooth' });
+    window.setTimeout(updateControls, 320);
+  }, [selectedTour?.id, selectedTourIndex]);
 
   function updateControls() {
     const element = scrollerRef.current;
@@ -58,7 +69,7 @@ export function TourCarouselSection({ boats, tours, selectedTour, onSelectTour }
           <div className="flex items-center gap-3 self-end md:self-auto">
             <span className="hidden text-sm font-bold text-ocean-200 sm:inline">{groupedTours.length} {tr(text.home.toursAvailable, language)}</span>
             <button
-              className={cn('focus-ring pressable grid h-10 w-10 place-items-center rounded-full border border-white/10 bg-white/10 text-white shadow-sm transition-all duration-300 disabled:cursor-not-allowed disabled:opacity-35', canScrollLeft && 'hover:border-ocean-400 hover:bg-white/15 hover:text-ocean-300')}
+              className="focus-ring glass-control glass-interactive grid h-10 w-10 place-items-center rounded-full text-white disabled:cursor-not-allowed disabled:opacity-35"
               type="button"
               aria-label="Scroll tours left"
               disabled={!canScrollLeft}
@@ -67,7 +78,7 @@ export function TourCarouselSection({ boats, tours, selectedTour, onSelectTour }
               <ArrowLeft size={18} />
             </button>
             <button
-              className={cn('focus-ring pressable grid h-10 w-10 place-items-center rounded-full border border-white/10 bg-white/10 text-white shadow-sm transition-all duration-300 disabled:cursor-not-allowed disabled:opacity-35', canScrollRight && 'hover:border-ocean-400 hover:bg-white/15 hover:text-ocean-300')}
+              className="focus-ring glass-control glass-interactive grid h-10 w-10 place-items-center rounded-full text-white disabled:cursor-not-allowed disabled:opacity-35"
               type="button"
               aria-label="Scroll tours right"
               disabled={!canScrollRight}
@@ -81,8 +92,8 @@ export function TourCarouselSection({ boats, tours, selectedTour, onSelectTour }
         <div className="mt-6 flex snap-x gap-2 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" aria-label={language === 'es' ? 'Filtrar tours por barco' : 'Filter tours by boat'}>
           <button
             className={cn(
-              'focus-ring pressable shrink-0 snap-start rounded-full border px-4 py-2 text-sm font-extrabold transition-all duration-200',
-              activeBoatId === 'all' ? 'border-ocean-400 bg-ocean-500 text-ocean-950' : 'border-white/10 bg-white/[0.06] text-ocean-100 hover:border-ocean-400 hover:text-ocean-300',
+              'focus-ring glass-interactive shrink-0 snap-start rounded-full px-4 py-2 text-sm font-extrabold',
+              activeBoatId === 'all' ? 'glass-active text-ocean-950' : 'glass-control text-ocean-100 hover:text-white',
             )}
             type="button"
             onClick={() => setActiveBoatId('all')}
@@ -93,8 +104,8 @@ export function TourCarouselSection({ boats, tours, selectedTour, onSelectTour }
             <button
               key={boat.id}
               className={cn(
-                'focus-ring pressable shrink-0 snap-start rounded-full border px-4 py-2 text-sm font-extrabold transition-all duration-200',
-                activeBoatId === boat.id ? 'border-ocean-400 bg-ocean-500 text-ocean-950' : 'border-white/10 bg-white/[0.06] text-ocean-100 hover:border-ocean-400 hover:text-ocean-300',
+                'focus-ring glass-interactive shrink-0 snap-start rounded-full px-4 py-2 text-sm font-extrabold',
+                activeBoatId === boat.id ? 'glass-active text-ocean-950' : 'glass-control text-ocean-100 hover:text-white',
               )}
               type="button"
               onClick={() => setActiveBoatId(boat.id)}

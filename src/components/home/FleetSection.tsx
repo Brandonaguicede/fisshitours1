@@ -20,14 +20,14 @@ interface FleetSectionProps {
   selectedBoat: Boat;
   onSelectBoat: (boat: Boat) => void;
   onViewTourType: (tour: BoatTour) => void;
+  onViewAllTours: () => void;
 }
 
-export function FleetSection({ boats, tours, selectedBoat, onSelectBoat, onViewTourType }: FleetSectionProps) {
+export function FleetSection({ boats, tours, selectedBoat, onSelectBoat, onViewTourType, onViewAllTours }: FleetSectionProps) {
   const { language } = useLanguage();
   const [modalBoat, setModalBoat] = useState<Boat | null>(null);
   const [galleryPage, setGalleryPage] = useState(0);
   const [failedImages, setFailedImages] = useState<Set<string>>(new Set());
-  const [selectedTourKey, setSelectedTourKey] = useState<string | null>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
   const carouselRef = useRef<HTMLDivElement | null>(null);
@@ -38,7 +38,6 @@ export function FleetSection({ boats, tours, selectedBoat, onSelectBoat, onViewT
   const galleryPageCount = Math.max(1, Math.ceil(modalImages.length / galleryPageSize));
   const visibleImageStart = galleryPage * galleryPageSize;
   const visibleImages = modalImages.slice(visibleImageStart, visibleImageStart + galleryPageSize);
-  const selectedTour = modalTourTypes.find((tour) => tour.key === selectedTourKey) ?? modalTourTypes[0];
 
   const closeBoatDetails = useCallback(() => setModalBoat(null), []);
 
@@ -75,7 +74,6 @@ export function FleetSection({ boats, tours, selectedBoat, onSelectBoat, onViewT
   function openBoatDetails(boat: Boat) {
     onSelectBoat(boat);
     setGalleryPage(0);
-    setSelectedTourKey(getModalTourTypes(boat, tours, language)[0]?.key ?? null);
     setModalBoat(boat);
   }
 
@@ -86,8 +84,13 @@ export function FleetSection({ boats, tours, selectedBoat, onSelectBoat, onViewT
   }
 
   function handleViewTourType(tour: BoatTour) {
-    onViewTourType(tour);
     closeBoatDetails();
+    window.setTimeout(() => onViewTourType(tour), 0);
+  }
+
+  function handleViewAllTours() {
+    closeBoatDetails();
+    window.setTimeout(onViewAllTours, 0);
   }
 
   return (
@@ -124,17 +127,17 @@ export function FleetSection({ boats, tours, selectedBoat, onSelectBoat, onViewT
           onScroll={updateCarouselControls}
         >
           {boats.map((boat) => (
-            <BoatCard key={boat.id} boat={boat} isSelected={boat.id === selectedBoat.id} onSelect={openBoatDetails} />
+            <BoatCard key={boat.id} boat={boat} startingPrice={getBoatStartingPrice(boat.id, tours)} isSelected={boat.id === selectedBoat.id} onSelect={openBoatDetails} />
           ))}
         </div>
       </Container>
 
-      <Modal open={Boolean(modalBoat)} onClose={closeBoatDetails} titleId="boat-detail-title" className="!max-h-[calc(100dvh-1.5rem)] !max-w-5xl border border-white/10 !bg-ocean-950/90 text-white shadow-[0_24px_72px_rgba(0,0,0,0.42)] backdrop-blur-2xl sm:!max-h-[85dvh] sm:rounded-[2rem]">
+      <Modal open={Boolean(modalBoat)} onClose={closeBoatDetails} titleId="boat-detail-title" className="glass-surface !max-h-[calc(100dvh-1.5rem)] !max-w-5xl text-white sm:!max-h-[85dvh] sm:rounded-[2rem]">
         {modalBoat ? (
-          <div className="overflow-y-auto overscroll-contain">
+          <div className="min-h-0 overflow-y-auto overscroll-contain">
             <div className="relative isolate overflow-hidden bg-ocean-900/45 p-3 sm:p-4">
               <div className="flex justify-center pb-2.5">
-                <span className="rounded-full border border-white/10 bg-slate-950/35 px-3 py-1 text-xs font-semibold text-white/85 backdrop-blur-md">
+                <span className="glass-control rounded-full px-3 py-1 text-xs font-semibold text-white/85">
                   {formatGalleryProgress(galleryPage, galleryPageSize, modalImages.length)}
                 </span>
               </div>
@@ -161,12 +164,12 @@ export function FleetSection({ boats, tours, selectedBoat, onSelectBoat, onViewT
               </div>
 
               <button
-                className="focus-ring absolute right-3 top-3 z-10 grid size-10 place-items-center rounded-full border border-white/15 bg-slate-950/35 text-white shadow-soft backdrop-blur-md transition duration-200 hover:border-white/25 hover:bg-white/15 sm:right-4 sm:top-4"
+                className="focus-ring glass-control glass-interactive absolute right-4 top-4 z-20 grid size-8 place-items-center rounded-full text-white"
                 type="button"
                 aria-label={language === 'es' ? 'Cerrar detalles del barco' : 'Close boat details'}
                 onClick={closeBoatDetails}
               >
-                <X size={20} />
+                <X size={15} />
               </button>
 
               {galleryPageCount > 1 ? (
@@ -195,42 +198,40 @@ export function FleetSection({ boats, tours, selectedBoat, onSelectBoat, onViewT
                 </p>
               </div>
 
-              <div className="mt-4 grid grid-cols-3 gap-2.5">
-                <CompactSpec icon={<Users size={16} />} label={language === 'es' ? 'Capacidad' : 'Capacity'} value={`${language === 'es' ? 'Máx.' : 'Max'} ${modalBoat.maxGuests}`} />
-                <CompactSpec icon={<Ruler size={16} />} label={language === 'es' ? 'Tamaño' : 'Size'} value={modalBoatText?.length ?? modalBoat.length} />
-                <CompactSpec icon={<Gauge size={16} />} label={language === 'es' ? 'Motor' : 'Motor'} value={modalBoat.engine} />
-              </div>
-
               <div className="mt-5 grid gap-5 lg:grid-cols-[0.88fr_1.12fr] lg:gap-6">
-                <aside className="rounded-[1.5rem] border border-white/10 bg-white/[0.045] p-4 shadow-[0_12px_38px_rgba(0,0,0,0.16)] backdrop-blur-xl sm:p-5">
+                <aside className="glass-surface rounded-[1.5rem] p-4 sm:p-5">
                   <p className="text-xs font-semibold uppercase tracking-[0.16em] text-ocean-400">{language === 'es' ? 'Detalles del barco' : 'Boat details'}</p>
-                  <div className="mt-3 divide-y divide-white/10 text-sm">
-                    <DetailLine label={language === 'es' ? 'Pasajeros incluidos' : 'Guests included'} value={String(modalBoat.includedGuests)} />
+                  <div className="mt-3 grid grid-cols-2 gap-2.5">
+                    <CompactSpec icon={<Ruler size={16} />} label={language === 'es' ? 'Tamaño' : 'Size'} value={modalBoatText?.length ?? modalBoat.length} />
+                    <CompactSpec icon={<Gauge size={16} />} label={language === 'es' ? 'Motor' : 'Engine'} value={modalBoat.engine} />
+                    <CompactSpec icon={<Users size={16} />} label={language === 'es' ? 'Capacidad máxima' : 'Maximum capacity'} value={String(modalBoat.maxGuests)} />
+                    <CompactSpec icon={<Users size={16} />} label={language === 'es' ? 'Incluidos' : 'Guests included'} value={String(modalBoat.includedGuests)} />
+                  </div>
+                  <div className="glass-control mt-3 min-h-14 rounded-2xl px-4 sm:px-5">
                     <DetailLine label={language === 'es' ? 'Persona extra' : 'Additional guest'} value={`${formatCurrency(modalBoat.extraGuestPrice)} ${language === 'es' ? 'cada una' : 'each'}`} />
                   </div>
-                  <div className="mt-4 rounded-2xl border border-white/10 bg-ocean-900/25 p-3.5 backdrop-blur-xl">
+                  <div className="glass-control mt-4 rounded-2xl p-3.5">
                     <p className="text-[0.68rem] font-semibold uppercase tracking-[0.14em] text-ocean-400">{language === 'es' ? 'Equipamiento' : 'Equipment'}</p>
-                    <p className="mt-2 text-sm font-medium leading-5 text-ocean-100">{modalBoatText?.featuredSpec ?? modalBoat.featuredSpec}</p>
+                    <div className="mt-2.5 flex flex-wrap gap-2">
+                      {getEquipmentItems(modalBoatText?.featuredSpec ?? modalBoat.featuredSpec).map((item) => (
+                        <span key={item} className="glass-control rounded-full px-2.5 py-1 text-xs font-medium text-ocean-100">
+                          {item}
+                        </span>
+                      ))}
+                    </div>
                   </div>
                 </aside>
 
-                <div className="rounded-[1.5rem] border border-white/10 bg-white/[0.045] p-4 shadow-[0_12px_38px_rgba(0,0,0,0.16)] backdrop-blur-xl sm:p-5">
+                <div className="glass-surface rounded-[1.5rem] p-4 sm:p-5">
                   <p className="text-xs font-semibold uppercase tracking-[0.16em] text-ocean-400">{language === 'es' ? 'Tipos de tour' : 'Tour types'}</p>
                   <h4 className="mt-1.5 font-display text-xl font-semibold leading-tight text-white sm:text-2xl">{language === 'es' ? 'Elige la experiencia que quieres explorar' : 'Choose the experience you want to explore'}</h4>
                   <div className="mt-4 grid gap-2.5">
-                  {modalTourTypes.map((tour) => {
-                    const isTourSelected = tour.key === selectedTour?.key;
-                    return (
+                    {modalTourTypes.map((tour) => (
                       <button
                         key={tour.key}
-                        className={`focus-ring group flex min-w-0 items-center justify-between gap-4 rounded-2xl border px-4 py-3 text-left backdrop-blur-xl transition duration-200 hover:border-ocean-200/45 hover:bg-white/[0.075] ${
-                          isTourSelected
-                            ? 'border-ocean-200/80 bg-white/[0.1] shadow-[0_10px_28px_rgba(0,0,0,0.18)]'
-                            : 'border-white/10 bg-ocean-900/25'
-                        }`}
+                        className="focus-ring glass-control glass-interactive group flex min-w-0 items-center justify-between gap-4 rounded-2xl px-4 py-3 text-left"
                         type="button"
-                        aria-pressed={isTourSelected}
-                        onClick={() => setSelectedTourKey(tour.key)}
+                        onClick={() => handleViewTourType(tour.representativeTour)}
                       >
                         <span className="min-w-0">
                           <span className="block truncate font-display text-lg font-semibold leading-tight text-white">{tour.title}</span>
@@ -238,14 +239,13 @@ export function FleetSection({ boats, tours, selectedBoat, onSelectBoat, onViewT
                             {language === 'es' ? 'Desde' : 'From'} {formatCurrency(tour.price)} · {tour.category}
                           </span>
                         </span>
-                        <span className={`grid size-5 shrink-0 place-items-center rounded-full border transition ${isTourSelected ? 'border-white bg-white shadow-md' : 'border-white/35 bg-transparent'}`} aria-hidden="true">
-                          <span className={`size-2 rounded-full bg-ocean-800 transition ${isTourSelected ? 'scale-100' : 'scale-0'}`} />
+                        <span className={`${modalArrowClassName} transition-transform duration-200 group-hover:translate-x-0.5`} aria-hidden="true">
+                          <ChevronRight size={modalArrowIconSize} />
                         </span>
                       </button>
-                    );
-                  })}
-                </div>
-                  <Button className="mt-4 min-h-10 w-full py-2" type="button" disabled={!selectedTour} onClick={() => selectedTour && handleViewTourType(selectedTour.representativeTour)}>
+                    ))}
+                  </div>
+                  <Button variant="secondary" className="glass-primary mt-4 min-h-10 w-full py-2 text-ocean-950" type="button" onClick={handleViewAllTours}>
                     {language === 'es' ? 'Ver todos los tours' : 'View All Tours'}
                   </Button>
                 </div>
@@ -262,7 +262,7 @@ function CarouselButton({ direction, disabled, label, onClick }: { direction: 'p
   const Icon = direction === 'previous' ? ChevronLeft : ChevronRight;
   return (
     <button
-      className="focus-ring grid size-10 place-items-center rounded-full border border-white/15 bg-ocean-950/30 text-white shadow-[0_12px_30px_rgba(0,0,0,0.18)] backdrop-blur-xl transition duration-200 hover:border-white/25 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-35"
+      className="focus-ring glass-control glass-interactive grid size-10 place-items-center rounded-full text-white disabled:cursor-not-allowed disabled:opacity-35"
       type="button"
       disabled={disabled}
       aria-label={label}
@@ -277,20 +277,20 @@ function GalleryButton({ direction, disabled, label, onClick }: { direction: 'pr
   const Icon = direction === 'previous' ? ChevronLeft : ChevronRight;
   return (
     <button
-      className="focus-ring grid size-9 place-items-center rounded-full border border-white/10 bg-slate-950/35 text-white shadow-soft backdrop-blur-md transition duration-200 hover:border-white/20 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-35"
+      className={`focus-ring glass-interactive ${modalArrowClassName} disabled:cursor-not-allowed disabled:opacity-35`}
       type="button"
       disabled={disabled}
       aria-label={label}
       onClick={onClick}
     >
-      <Icon size={17} />
+      <Icon size={modalArrowIconSize} />
     </button>
   );
 }
 
 function CompactSpec({ icon, label, value }: { icon: ReactNode; label: string; value: string }) {
   return (
-    <div className="flex min-w-0 items-center gap-2.5 rounded-2xl border border-white/10 bg-white/[0.045] px-3 py-2.5 backdrop-blur-xl">
+    <div className="glass-control flex min-w-0 items-center gap-2.5 rounded-2xl px-3 py-2.5">
       <span className="shrink-0 text-ocean-400" aria-hidden="true">{icon}</span>
       <span className="min-w-0">
         <span className="block text-[0.65rem] font-medium text-ocean-300">{label}</span>
@@ -302,17 +302,32 @@ function CompactSpec({ icon, label, value }: { icon: ReactNode; label: string; v
 
 function DetailLine({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-center justify-between gap-4 py-2.5 first:pt-0 last:pb-0">
+    <div className="flex items-center justify-between gap-5 py-3">
       <span className="text-ocean-200">{label}</span>
       <span className="text-right font-semibold text-white">{value}</span>
     </div>
   );
 }
 
+const modalArrowClassName = 'glass-control grid size-9 shrink-0 place-items-center rounded-full text-white';
+const modalArrowIconSize = 17;
+
 function getBoatImages(boat: Boat | null) {
   if (!boat) return [];
   const images = boat.images?.length ? boat.images : [boat.image];
   return Array.from(new Set(images.filter(Boolean)));
+}
+
+function getBoatStartingPrice(boatId: string, tours: BoatTour[]) {
+  const prices = tours.filter((tour) => tour.boatId === boatId).map((tour) => tour.basePrice);
+  return prices.length ? Math.min(...prices) : 0;
+}
+
+function getEquipmentItems(equipment: string) {
+  return equipment
+    .split(',')
+    .map((item) => item.trim().replace(/\.$/, ''))
+    .filter(Boolean);
 }
 
 function useGalleryPageSize() {
@@ -349,15 +364,18 @@ function getModalTourTypes(boat: Boat | null, tours: BoatTour[], language: Langu
       groups.set(key, [...(groups.get(key) ?? []), tour]);
     });
 
-  return Array.from(groups.entries()).map(([key, relatedTours]) => {
-    const sortedTours = [...relatedTours].sort((a, b) => a.basePrice - b.basePrice);
-    const display = getTourText(sortedTours[0], language);
-    return {
-      key,
-      title: display.title,
-      category: display.category,
-      price: sortedTours[0].basePrice,
-      representativeTour: sortedTours[0],
-    };
-  });
+  return Array.from(groups.entries())
+    .map(([key, relatedTours], order) => {
+      const sortedTours = [...relatedTours].sort((a, b) => a.basePrice - b.basePrice);
+      const display = getTourText(sortedTours[0], language);
+      return {
+        key,
+        title: display.title,
+        category: display.category,
+        price: sortedTours[0].basePrice,
+        representativeTour: sortedTours[0],
+        order,
+      };
+    })
+    .sort((a, b) => a.price - b.price || a.order - b.order);
 }

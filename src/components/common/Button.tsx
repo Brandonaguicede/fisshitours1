@@ -12,7 +12,7 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement>, PropsWith
 
 const variants: Record<ButtonVariant, string> = {
   primary: 'bg-ocean-500 text-ocean-950 shadow-soft hover:-translate-y-0.5 hover:bg-[#7ED8F4] hover:shadow-lifted',
-  secondary: 'border border-white/15 bg-white/10 text-white shadow-soft hover:-translate-y-0.5 hover:border-ocean-300/60 hover:bg-white/15',
+  secondary: 'glass-control glass-interactive text-white',
   ghost: 'bg-transparent text-ocean-100 hover:bg-white/10',
 };
 

@@ -26,7 +26,6 @@ export default function HomePage() {
   const catalogTours = toursQuery.data?.length ? toursQuery.data : boatTours;
   const [selectedBoatId, setSelectedBoatId] = useState(boats[0].id);
   const [selectedTourId, setSelectedTourId] = useState<string | undefined>(boatTours.find((tour) => tour.boatId === boats[0].id)?.id);
-  const toursRef = useRef<HTMLDivElement | null>(null);
   const bookingRef = useRef<HTMLDivElement | null>(null);
 
   const selectedBoat = useMemo(() => catalogBoats.find((boat) => boat.id === selectedBoatId) ?? catalogBoats[0], [catalogBoats, selectedBoatId]);
@@ -34,11 +33,15 @@ export default function HomePage() {
   const toursWithKnownBoats = useMemo(() => catalogTours.filter((tour) => catalogBoats.some((boat) => boat.id === tour.boatId)), [catalogBoats, catalogTours]);
   const catalogLoading = boatsQuery.isLoading || toursQuery.isLoading;
 
+  function scrollToTours() {
+    document.getElementById('tours')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
   function selectBoat(boat: Boat, shouldScrollToTours = true) {
     setSelectedBoatId(boat.id);
     setSelectedTourId(catalogTours.find((tour) => tour.boatId === boat.id)?.id);
     if (shouldScrollToTours) {
-      window.setTimeout(() => toursRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80);
+      window.setTimeout(scrollToTours, 80);
     }
   }
 
@@ -57,7 +60,11 @@ export default function HomePage() {
       setSelectedBoatId(tourBoat.id);
     }
     setSelectedTourId(tour.id);
-    window.setTimeout(() => toursRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80);
+    window.setTimeout(scrollToTours, 80);
+  }
+
+  function viewAllToursOnHome() {
+    window.setTimeout(scrollToTours, 80);
   }
 
   function changeBoatFromBooking(boat: Boat) {
@@ -74,10 +81,8 @@ export default function HomePage() {
   return (
     <>
       <Hero />
-      <FleetSection boats={catalogBoats} tours={catalogTours} selectedBoat={selectedBoat} onSelectBoat={selectBoat} onViewTourType={viewTourOnHome} />
-      <div ref={toursRef}>
-        <TourCarouselSection boats={catalogBoats} tours={toursWithKnownBoats} selectedTour={selectedTour} onSelectTour={selectTour} />
-      </div>
+      <FleetSection boats={catalogBoats} tours={catalogTours} selectedBoat={selectedBoat} onSelectBoat={selectBoat} onViewTourType={viewTourOnHome} onViewAllTours={viewAllToursOnHome} />
+      <TourCarouselSection boats={catalogBoats} tours={toursWithKnownBoats} selectedTour={selectedTour} onSelectTour={selectTour} />
       <section className="scroll-mt-24 bg-ocean-950 py-10 sm:py-14 lg:py-16" id="booking" ref={bookingRef}>
         <Container>
           <div className="mx-auto max-w-4xl">
