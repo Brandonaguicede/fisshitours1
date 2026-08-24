@@ -1,14 +1,13 @@
-import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import type { Boat } from '../../types/boat';
 import type { BoatTour } from '../../types/boatTour';
 import { BoatTourCard } from '../tours/BoatTourCard';
 import { Container } from '../common/Container';
-import { SectionTitle } from '../common/SectionTitle';
 import { cn } from '../../utils/cn';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { text, tr } from '../../i18n/translations';
+import { CarouselArrow, FilterPill, SectionHeader } from '../ui';
 
 interface TourCarouselSectionProps {
   boats: Boat[];
@@ -81,7 +80,7 @@ export function TourCarouselSection({ boats, tours, selectedTour, onSelectTour }
     <section className="home-section tours-ocean-atmosphere pb-24 pt-0 sm:pb-28 sm:pt-8 lg:pb-36 lg:pt-10" data-home-section data-nav-href="/#tours" id="tours">
       <Container>
         <div className="flex flex-col gap-6 md:flex-row md:items-end md:justify-between" data-section-anchor>
-          <SectionTitle
+          <SectionHeader
             align="left"
             eyebrow="Tours"
             title={tr(text.home.toursTitle, language)}
@@ -89,41 +88,35 @@ export function TourCarouselSection({ boats, tours, selectedTour, onSelectTour }
           <div className="flex items-center gap-3 self-end md:self-auto">
             <span className="hidden text-sm font-bold text-ocean-200 sm:inline">{groupedTours.length} {tr(text.home.toursAvailable, language)}</span>
             <div className="flex gap-3 lg:hidden">
-              <CarouselButton direction="left" disabled={!canScrollLeft} onClick={() => scrollByCard('left')} />
-              <CarouselButton direction="right" disabled={!canScrollRight} onClick={() => scrollByCard('right')} />
+              <CarouselArrow direction="left" disabled={!canScrollLeft} label="Scroll tours left" onClick={() => scrollByCard('left')} />
+              <CarouselArrow direction="right" disabled={!canScrollRight} label="Scroll tours right" onClick={() => scrollByCard('right')} />
             </div>
           </div>
         </div>
 
         <div className="mt-6 flex snap-x gap-2 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" aria-label={language === 'es' ? 'Filtrar tours por barco' : 'Filter tours by boat'}>
-          <button
-            className={cn(
-              'focus-ring glass-interactive shrink-0 snap-start rounded-full px-4 py-2 text-sm font-extrabold',
-              activeBoatId === 'all' ? 'glass-active text-ocean-950' : 'glass-control text-ocean-100 hover:text-white',
-            )}
-            type="button"
+          <FilterPill
+            active={activeBoatId === 'all'}
+            className="snap-start"
             onClick={() => setActiveBoatId('all')}
           >
             {language === 'es' ? 'Todos' : 'All'}
-          </button>
+          </FilterPill>
           {boats.map((boat) => (
-            <button
+            <FilterPill
               key={boat.id}
-              className={cn(
-                'focus-ring glass-interactive shrink-0 snap-start rounded-full px-4 py-2 text-sm font-extrabold',
-                activeBoatId === boat.id ? 'glass-active text-ocean-950' : 'glass-control text-ocean-100 hover:text-white',
-              )}
-              type="button"
+              active={activeBoatId === boat.id}
+              className="snap-start"
               onClick={() => setActiveBoatId(boat.id)}
             >
               {boat.name}
-            </button>
+            </FilterPill>
           ))}
         </div>
 
         <div className="relative mt-8 lg:px-12">
           <div className="absolute inset-y-0 left-0 hidden items-center lg:flex">
-            <CarouselButton direction="left" disabled={!canScrollLeft} onClick={() => scrollByCard('left')} />
+            <CarouselArrow direction="left" disabled={!canScrollLeft} label="Scroll tours left" onClick={() => scrollByCard('left')} />
           </div>
           <div
             ref={scrollerRef}
@@ -152,32 +145,11 @@ export function TourCarouselSection({ boats, tours, selectedTour, onSelectTour }
             ))}
           </div>
           <div className="absolute inset-y-0 right-0 hidden items-center lg:flex">
-            <CarouselButton direction="right" disabled={!canScrollRight} onClick={() => scrollByCard('right')} />
+            <CarouselArrow direction="right" disabled={!canScrollRight} label="Scroll tours right" onClick={() => scrollByCard('right')} />
           </div>
         </div>
       </Container>
     </section>
-  );
-}
-
-interface CarouselButtonProps {
-  direction: 'left' | 'right';
-  disabled: boolean;
-  onClick: () => void;
-}
-
-function CarouselButton({ direction, disabled, onClick }: CarouselButtonProps) {
-  const Icon = direction === 'left' ? ChevronLeft : ChevronRight;
-  return (
-    <button
-      className="focus-ring glass-control glass-interactive grid size-10 place-items-center rounded-full text-white disabled:cursor-not-allowed disabled:opacity-35"
-      type="button"
-      aria-label={`Scroll tours ${direction}`}
-      disabled={disabled}
-      onClick={onClick}
-    >
-      <Icon size={20} />
-    </button>
   );
 }
 

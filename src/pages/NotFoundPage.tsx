@@ -1,4 +1,4 @@
-import { Button } from '../components/common/Button';
+import { Button } from '../components/ui';
 import { Container } from '../components/common/Container';
 import { useLanguage } from '../i18n/LanguageContext';
 

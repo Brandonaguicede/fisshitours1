@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 
 import { MOCK_TURNSTILE_TOKEN, TURNSTILE_SITE_KEY, USE_LOCAL_TURNSTILE_MOCK } from '../../lib/turnstile';
 import { cn } from '../../utils/cn';
+import { Button, GlassPanel } from '../ui';
 
 declare global {
   interface Window {
@@ -84,7 +85,7 @@ export function TurnstileBox({ token, resetKey, action = 'booking', className, o
   }, [resetKey, retryKey, action, onTokenChange]);
 
   return (
-    <div className={cn('rounded-xl border border-white/10 bg-ocean-950/30 p-3 sm:p-4', className)}>
+    <GlassPanel className={cn('rounded-xl p-3 sm:p-4', className)} variant="subtle">
       <p className="text-xs font-extrabold uppercase tracking-[0.12em] text-ocean-400">Human verification</p>
       {USE_LOCAL_TURNSTILE_MOCK ? (
         <p className="mt-2 text-sm font-semibold text-ocean-200">Local verification mock is active.</p>
@@ -97,8 +98,10 @@ export function TurnstileBox({ token, resetKey, action = 'booking', className, o
       )}
       {!USE_LOCAL_TURNSTILE_MOCK && TURNSTILE_SITE_KEY && loadState === 'loading' ? <p className="mt-2 text-xs font-semibold text-ocean-300">Loading verification...</p> : null}
       {!USE_LOCAL_TURNSTILE_MOCK && TURNSTILE_SITE_KEY && loadState === 'error' ? (
-        <button
-          className="mt-2 text-xs font-extrabold text-red-100 underline"
+        <Button
+          className="mt-2 min-h-0 px-0 py-0 text-xs font-extrabold text-red-100 underline"
+          size="sm"
+          variant="ghost"
           type="button"
           onClick={() => {
             document.querySelector<HTMLScriptElement>('script[data-turnstile-script="true"]')?.remove();
@@ -106,9 +109,9 @@ export function TurnstileBox({ token, resetKey, action = 'booking', className, o
           }}
         >
           Retry human verification
-        </button>
+        </Button>
       ) : null}
       {!USE_LOCAL_TURNSTILE_MOCK && TURNSTILE_SITE_KEY && !token ? <p className="mt-2 text-xs font-semibold text-ocean-300">Complete verification to continue.</p> : null}
-    </div>
+    </GlassPanel>
   );
 }

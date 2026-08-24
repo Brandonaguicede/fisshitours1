@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 
 import { BookingPanel } from '../components/booking/BookingPanel';
 import { Container } from '../components/common/Container';
+import { SectionHeader } from '../components/ui';
 import { AboutPreview } from '../components/home/AboutPreview';
 import { FleetSection } from '../components/home/FleetSection';
 import { GallerySection } from '../components/home/GallerySection';
@@ -86,11 +87,13 @@ export default function HomePage() {
       <section className="home-section bg-ocean-950 py-10 sm:py-14 lg:py-16" data-home-section id="booking" ref={bookingRef}>
         <Container>
           <div className="mx-auto max-w-4xl" data-section-anchor>
-            <div className="max-w-2xl">
-              <p className="text-xs font-bold uppercase tracking-[0.14em] text-ocean-400">{tr(text.home.bookingEyebrow, language)}</p>
-              <h2 className="mt-2 font-display text-2xl font-extrabold leading-tight text-white sm:text-3xl">{tr(text.home.bookingTitle, language)}</h2>
-              <p className="mt-3 text-sm leading-6 text-ocean-200">{tr(text.home.bookingDescription, language)}</p>
-            </div>
+            <SectionHeader
+              align="left"
+              description={tr(text.home.bookingDescription, language)}
+              eyebrow={tr(text.home.bookingEyebrow, language)}
+              title={tr(text.home.bookingTitle, language)}
+              variant="compact"
+            />
           </div>
           <div className="mx-auto mt-6 max-w-4xl lg:mt-7">
             <BookingPanel

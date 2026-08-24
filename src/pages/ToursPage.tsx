@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { BoatCard } from '../components/boats/BoatCard';
 import { BookingPanel } from '../components/booking/BookingPanel';
 import { Container } from '../components/common/Container';
-import { SectionTitle } from '../components/common/SectionTitle';
+import { Button, GlassPanel, SectionHeader } from '../components/ui';
 import { BoatTourCard } from '../components/tours/BoatTourCard';
 import { boatTours } from '../data/boatTours';
 import { boats } from '../data/boats';
@@ -58,8 +58,9 @@ export default function ToursPage() {
             <div className="mb-6 rounded-2xl border border-amber-300/30 bg-amber-100 px-4 py-3 text-sm font-semibold text-amber-950 shadow-sm">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <p>We couldn’t load the booking information. Please try again.</p>
-                <button
-                  className="rounded-xl bg-amber-950 px-4 py-2 text-sm font-extrabold text-white transition hover:bg-ocean-900 focus:outline-none focus:ring-2 focus:ring-amber-700 focus:ring-offset-2"
+                <Button
+                  size="sm"
+                  variant="secondary"
                   type="button"
                   onClick={() => {
                     void boatsQuery.refetch();
@@ -67,11 +68,11 @@ export default function ToursPage() {
                   }}
                 >
                   Retry
-                </button>
+                </Button>
               </div>
             </div>
           ) : null}
-          <div className="rounded-[2rem] bg-ocean-900 px-6 py-12 text-white shadow-lifted sm:px-10">
+          <GlassPanel className="px-6 py-12 text-white sm:px-10" variant="panel">
             <p className="text-sm font-bold uppercase tracking-[0.14em] text-ocean-200">{language === 'es' ? 'Reserva por flota' : 'Fleet first booking'}</p>
             <h1 className="mt-3 max-w-4xl font-display text-4xl font-extrabold leading-tight sm:text-6xl">
               {language === 'es' ? 'Explora Second Wind, elige tu tour y reserva con precio claro' : 'Explore Second Wind, choose your tour and book with clear pricing'}
@@ -81,13 +82,13 @@ export default function ToursPage() {
                 ? 'El precio base cubre hasta 5 personas. Desde la sexta persona se agregan $65 por persona, con capacidad maxima de 10.'
                 : 'The base price covers up to 5 people. From the sixth guest onward, $65 is added per person, with maximum capacity of 10.'}
             </p>
-          </div>
+          </GlassPanel>
         </Container>
       </section>
 
       <section className="scroll-mt-24 pb-16 sm:pb-20 lg:pb-24" id="fleet">
         <Container>
-          <SectionTitle
+          <SectionHeader
             align="left"
             eyebrow={language === 'es' ? 'Nuestra flota' : 'Our fleet'}
             title={language === 'es' ? 'Second Wind listo para pesca, playa, surf y aventura privada' : 'Second Wind ready for fishing, beach, surf and private adventure'}
@@ -107,7 +108,7 @@ export default function ToursPage() {
         <Container>
           <div className="grid gap-8 lg:grid-cols-[0.8fr_1.2fr] lg:items-end">
             <div>
-              <SectionTitle
+              <SectionHeader
                 align="left"
                 eyebrow={language === 'es' ? 'Explora tours' : 'Explore Tours'}
                 title={language === 'es' ? `Tours a bordo de ${selectedBoat.name}` : `Tours aboard ${selectedBoat.name}`}
@@ -116,7 +117,7 @@ export default function ToursPage() {
                   : `Showing only tours available on ${selectedBoat.name}. Change the boat above or in booking to reset dependent tour and time selections.`}
               />
             </div>
-            <div className="glass-card grid gap-4 rounded-2xl p-4 sm:grid-cols-[140px_1fr]">
+            <GlassPanel className="grid gap-4 p-4 sm:grid-cols-[140px_1fr]" variant="surface">
               <img className="aspect-[4/3] rounded-xl object-cover" src={selectedBoat.image} alt={selectedBoat.name} loading="lazy" />
               <div>
                 <p className="text-lg font-extrabold text-white">{selectedBoat.name}</p>
@@ -126,7 +127,7 @@ export default function ToursPage() {
                     : `Includes ${selectedBoat.includedGuests} guests, maximum ${selectedBoat.maxGuests}. Extra guest from $${selectedBoat.extraGuestPrice}.`}
                 </p>
               </div>
-            </div>
+            </GlassPanel>
           </div>
 
           <div className="mt-10 grid gap-6 lg:grid-cols-3">
@@ -139,7 +140,7 @@ export default function ToursPage() {
 
       <section className="section-y scroll-mt-24 bg-ocean-950" id="booking" ref={bookingRef}>
         <Container>
-          <SectionTitle
+          <SectionHeader
             align="left"
             eyebrow={language === 'es' ? 'Reserva tu experiencia' : 'Reserve Your Experience'}
             title={language === 'es' ? 'La reserva responde al barco, tour, personas y horario que elijas' : 'Booking reacts to the boat, tour, guests and time you choose'}

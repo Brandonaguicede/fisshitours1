@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { useQuery } from '@tanstack/react-query';
 
 import { Container } from '../common/Container';
+import { Button, IconButton } from '../ui';
 import { FACEBOOK_URL, INSTAGRAM_URL, WHATSAPP_NUMBER } from '../../constants/contact';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { supabase } from '../../lib/supabase';
@@ -85,22 +86,18 @@ export function Hero() {
       <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-black/80 to-transparent" />
 
       <div className="absolute bottom-24 left-1/2 z-10 flex -translate-x-1/2 gap-3 sm:left-auto sm:right-32 sm:translate-x-0 md:bottom-24 lg:right-40">
-        <a className="focus-ring pressable grid h-10 w-10 place-items-center rounded-full border border-white/30 bg-white/8 text-white backdrop-blur-xl hover:bg-white/15" href={INSTAGRAM_URL} target="_blank" rel="noreferrer" aria-label="Instagram">
-          <Instagram size={18} />
-        </a>
-        <a className="focus-ring pressable grid h-10 w-10 place-items-center rounded-full border border-white/30 bg-white/8 text-white backdrop-blur-xl hover:bg-white/15" href={FACEBOOK_URL} target="_blank" rel="noreferrer" aria-label="Facebook">
-          <Facebook size={18} />
-        </a>
+        <IconButton href={INSTAGRAM_URL} icon={Instagram} label="Instagram" size="md" target="_blank" />
+        <IconButton href={FACEBOOK_URL} icon={Facebook} label="Facebook" size="md" target="_blank" />
       </div>
 
       <a
-        className="focus-ring group fixed bottom-5 right-5 z-[70] grid h-14 w-14 place-items-center rounded-full transition-transform duration-200 ease-out hover:scale-110 active:scale-95 sm:bottom-6 sm:right-6"
+        className="glass-control glass-interactive glass-focus-ring fixed bottom-5 right-5 z-[70] grid h-14 w-14 place-items-center rounded-full sm:bottom-6 sm:right-6"
         href={`https://wa.me/${WHATSAPP_NUMBER}`}
         target="_blank"
         rel="noreferrer"
         aria-label="WhatsApp"
       >
-        <img className="h-full w-full object-contain transition duration-200 ease-out group-hover:brightness-110 group-hover:drop-shadow-[0_10px_18px_rgba(37,211,102,0.34)]" src="/images/whatsapp.png" alt="" aria-hidden="true" />
+        <img className="h-full w-full object-contain" src="/images/whatsapp.png" alt="" aria-hidden="true" />
       </a>
 
       <Container className="relative grid min-h-[100dvh] place-items-center px-6 pb-32 pt-24 text-center sm:px-8 sm:pb-20 sm:pt-28 lg:px-10">
@@ -139,24 +136,17 @@ export function Hero() {
             transition={{ duration: 0.7, delay: 0.24, ease: [0.23, 1, 0.32, 1] }}
           >
             {primaryEnabled ? (
-              <a className="focus-ring pressable inline-flex min-h-12 items-center rounded-full bg-seafoam-400 px-6 text-sm font-extrabold text-ocean-950 shadow-soft hover:bg-seafoam-300" href={hero['home.hero.primary_href']}>
+              <Button href={hero['home.hero.primary_href']} size="lg">
                 {hero[`home.hero.primary_label.${locale}` as keyof HeroSettings]}
-              </a>
+              </Button>
             ) : null}
             {secondaryEnabled ? (
-              <a className="focus-ring pressable inline-flex min-h-12 items-center rounded-full border border-white/35 bg-white/10 px-6 text-sm font-extrabold text-white shadow-soft hover:border-white/70" href={hero['home.hero.secondary_href']}>
+              <Button href={hero['home.hero.secondary_href']} size="lg" variant="glass">
                 {hero[`home.hero.secondary_label.${locale}` as keyof HeroSettings]}
-              </a>
+              </Button>
             ) : null}
             {!primaryEnabled && !secondaryEnabled ? (
-              <button
-                className="focus-ring pressable grid h-12 w-12 place-items-center rounded-full border border-white/35 bg-transparent text-white shadow-soft hover:border-white/70"
-                type="button"
-                aria-label="Bajar a la flota"
-                onClick={scrollToFleet}
-              >
-                <ArrowDown size={21} />
-              </button>
+              <IconButton icon={ArrowDown} label="Bajar a la flota" size="lg" variant="ghost" onClick={scrollToFleet} />
             ) : null}
           </motion.div>
         </div>

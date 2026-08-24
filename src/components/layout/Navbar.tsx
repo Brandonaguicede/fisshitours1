@@ -6,7 +6,7 @@ import { navigationItems } from '../../constants/navigation';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { scrollToHomeSection } from '../../utils/homeNavigation';
 import { cn } from '../../utils/cn';
-import { Button } from '../common/Button';
+import { Button, GlassPanel, IconButton } from '../ui';
 import { Container } from '../common/Container';
 
 export function Navbar() {
@@ -86,7 +86,7 @@ export function Navbar() {
     <header className="pointer-events-none fixed left-0 right-0 top-2 z-50 sm:top-3">
       <Container className="relative flex h-14 items-center justify-between gap-3 sm:h-20 sm:gap-4" data-navbar-bar>
         <NavLink
-          className="focus-ring pointer-events-auto flex shrink-0 items-center rounded-full text-white transition-all duration-200"
+          className="glass-focus-ring pointer-events-auto flex shrink-0 items-center rounded-full text-white transition-all duration-200"
           to="/"
           onClick={(event) => handleNavigationClick(event, '/')}
         >
@@ -95,11 +95,14 @@ export function Navbar() {
           </span>
         </NavLink>
 
-        <nav
+        <GlassPanel
+          as="nav"
           className={cn(
-            'glass-surface pointer-events-auto hidden items-center gap-0.5 rounded-full p-1.5 transition-all duration-300 md:absolute md:left-1/2 md:flex md:-translate-x-1/2 lg:gap-1',
+            'pointer-events-auto hidden items-center gap-0.5 p-1.5 transition-all duration-300 md:absolute md:left-1/2 md:flex md:-translate-x-1/2 lg:gap-1',
             isScrolled && 'brightness-110',
           )}
+          shape="pill"
+          variant="surface"
           aria-label="Navegacion principal"
         >
           {navigationItems.map((item) => {
@@ -109,8 +112,8 @@ export function Navbar() {
               <Link
                 key={item.href}
                 className={cn(
-                  'focus-ring glass-interactive rounded-full px-2.5 py-2 text-xs font-semibold text-white/75 hover:text-white lg:px-4 lg:text-sm',
-                  isActive && 'glass-active text-ocean-950 hover:text-ocean-950',
+                  'glass-focus-ring glass-interactive rounded-full px-2.5 py-2 text-xs font-semibold text-white/75 lg:px-4 lg:text-sm',
+                  isActive && 'text-white',
                 )}
                 to={item.href}
                 aria-current={isActive ? 'page' : undefined}
@@ -120,45 +123,44 @@ export function Navbar() {
               </Link>
             );
           })}
-        </nav>
+        </GlassPanel>
 
         <div className="pointer-events-auto hidden shrink-0 items-center gap-2 md:flex lg:gap-3">
-          <button
-            className="focus-ring glass-control glass-interactive rounded-full px-3 py-2 text-xs font-extrabold uppercase tracking-[0.12em] text-white"
+          <Button
+            size="sm"
+            variant="glass"
             type="button"
             aria-label={language === 'es' ? 'Cambiar a ingles' : 'Switch to Spanish'}
             onClick={toggleLanguage}
           >
             {language === 'es' ? 'EN' : 'ES'}
-          </button>
-          <Button variant="secondary" className="glass-primary px-4 text-ocean-900 hover:text-ocean-950 lg:px-5" to="/#booking">
+          </Button>
+          <Button to="/#booking">
             {language === 'es' ? 'Reservar' : 'Book Now'}
           </Button>
         </div>
 
-        <button
+        <IconButton
           className={cn(
-            'focus-ring glass-control glass-interactive pointer-events-auto relative z-10 inline-flex size-12 shrink-0 items-center justify-center rounded-full text-white md:hidden',
-            (isOpen || isScrolled) && 'ring-1 ring-ocean-200/20',
+            'pointer-events-auto relative z-10 md:hidden',
           )}
-          type="button"
-          aria-label={isOpen ? 'Cerrar menu' : 'Abrir menu'}
+          icon={isOpen ? X : Menu}
+          label={isOpen ? 'Cerrar menu' : 'Abrir menu'}
+          size="lg"
           aria-expanded={isOpen}
           onClick={() => setIsOpen((value) => !value)}
-        >
-          {isOpen ? <X size={23} strokeWidth={2.4} /> : <Menu size={24} strokeWidth={2.4} />}
-        </button>
+        />
       </Container>
 
       {isOpen ? (
-        <div className="glass-surface pointer-events-auto mx-4 mt-2 overflow-hidden rounded-[1.75rem] md:hidden">
+        <GlassPanel className="pointer-events-auto mx-4 mt-2 overflow-hidden md:hidden" variant="surface">
           <Container className="grid max-h-[calc(100dvh-5rem)] gap-2 overflow-y-auto py-3">
             {navigationItems.map((item) => (
               <Link
                 key={item.href}
                 className={cn(
-                  'focus-ring glass-interactive rounded-2xl px-4 py-3 text-sm font-semibold text-white/80 hover:text-white',
-                  activeHref === item.href && 'glass-active text-ocean-950 hover:text-ocean-950',
+                  'glass-focus-ring glass-interactive rounded-2xl px-4 py-3 text-sm font-semibold text-white/80',
+                  activeHref === item.href && 'text-white',
                 )}
                 to={item.href}
                 aria-current={activeHref === item.href ? 'page' : undefined}
@@ -167,19 +169,21 @@ export function Navbar() {
                 {navLabels[item.href]?.[language] ?? item.label}
               </Link>
             ))}
-            <button
-              className="focus-ring glass-control glass-interactive rounded-2xl px-4 py-3 text-left text-sm font-semibold text-white"
+            <Button
+              className="justify-start"
+              fullWidth
+              variant="glass"
               type="button"
               aria-label={language === 'es' ? 'Cambiar a ingles' : 'Switch to Spanish'}
               onClick={toggleLanguage}
             >
               {language === 'es' ? 'English' : 'Español'}
-            </button>
-            <Button variant="secondary" className="glass-primary mt-2 text-ocean-900 hover:text-ocean-950" to="/#booking">
+            </Button>
+            <Button className="mt-2" to="/#booking">
               {language === 'es' ? 'Reservar' : 'Book Now'}
             </Button>
           </Container>
-        </div>
+        </GlassPanel>
       ) : null}
     </header>
   );

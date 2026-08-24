@@ -2,10 +2,8 @@ import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 
 import type { GalleryCategory } from '../../types/gallery';
-import { cn } from '../../utils/cn';
-import { Button } from '../common/Button';
 import { Container } from '../common/Container';
-import { SectionTitle } from '../common/SectionTitle';
+import { Button, CardMedia, CardShell, FilterPill, GlassPanel, SectionHeader } from '../ui';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { text, tr } from '../../i18n/translations';
 import { supabase } from '../../lib/supabase';
@@ -60,7 +58,7 @@ export function GallerySection() {
     <section className="home-section bg-ocean-950 pb-16 pt-0 sm:pb-20 sm:pt-8 lg:pb-24 lg:pt-10" data-home-section data-nav-href="/#gallery" id="gallery">
       <Container>
         <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between" data-section-anchor>
-          <SectionTitle
+          <SectionHeader
             align="left"
             eyebrow={tr(text.home.galleryEyebrow, language)}
             title={tr(text.home.galleryTitle, language)}
@@ -68,38 +66,34 @@ export function GallerySection() {
           />
           <div className="flex flex-wrap gap-2">
             {filters.map((filter) => (
-              <button
+              <FilterPill
                 key={filter.value}
-                className={cn(
-                  'focus-ring pressable rounded-full border border-white/10 bg-white/[0.06] px-4 py-2 text-sm font-bold text-ocean-100 transition-all duration-300 hover:border-ocean-400 hover:text-ocean-300',
-                  activeFilter === filter.value && 'border-ocean-400 bg-ocean-500 text-ocean-950 hover:text-ocean-950',
-                )}
-                type="button"
+                active={activeFilter === filter.value}
                 onClick={() => changeFilter(filter.value)}
               >
               {filter.label[language]}
-              </button>
+              </FilterPill>
             ))}
           </div>
         </div>
 
         <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {visibleImages.map((image) => (
-            <figure key={image.id} className="group overflow-hidden rounded-2xl border border-white/10 bg-white/[0.06] shadow-soft">
-              <img className="aspect-[4/3] w-full object-cover transition duration-700 group-hover:scale-105" src={image.src} alt={image.alt} loading="lazy" />
-            </figure>
+            <CardShell as="figure" key={image.id} className="group rounded-2xl shadow-soft">
+              <CardMedia alt={image.alt} src={image.src} variant="gallery" />
+            </CardShell>
           ))}
         </div>
 
         {!galleryQuery.isLoading && visibleImages.length === 0 ? (
-          <div className="mt-10 rounded-3xl border border-white/10 bg-white/[0.06] p-8 text-center text-ocean-200">
+          <GlassPanel className="mt-10 rounded-3xl p-8 text-center text-ocean-200" variant="subtle">
             {language === 'es' ? 'La galeria se esta actualizando. Vuelve pronto para ver nuevas imagenes.' : 'The gallery is being updated. Check back soon for new images.'}
-          </div>
+          </GlassPanel>
         ) : null}
 
         {hasMore ? (
           <div className="mt-8 text-center">
-            <Button variant="secondary" type="button" onClick={() => setVisibleCount((count) => count + 4)}>
+            <Button variant="glass" type="button" onClick={() => setVisibleCount((count) => count + 4)}>
               {language === 'es' ? 'Ver más' : 'View More'}
             </Button>
           </div>

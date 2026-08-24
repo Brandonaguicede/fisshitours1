@@ -1,4 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
+import { Button, GlassPanel } from '../ui';
 
 interface AppErrorBoundaryProps {
   children: ReactNode;
@@ -26,13 +27,13 @@ export class AppErrorBoundary extends Component<AppErrorBoundaryProps, AppErrorB
     if (this.state.hasError) {
       return (
         <main className="grid min-h-screen place-items-center bg-ocean-950 px-6 text-center text-white">
-          <section className="max-w-md rounded-2xl border border-white/10 bg-white/[0.06] p-6">
+          <GlassPanel as="section" className="max-w-md rounded-2xl p-6" variant="surface">
             <h1 className="text-2xl font-extrabold">Something went wrong</h1>
             <p className="mt-3 text-sm leading-6 text-ocean-100">Please refresh the page or try again in a moment.</p>
-            <button className="mt-5 rounded-xl bg-ocean-400 px-4 py-2 text-sm font-extrabold text-ocean-950" type="button" onClick={() => window.location.reload()}>
+            <Button className="mt-5" type="button" onClick={() => window.location.reload()}>
               Reload
-            </button>
-          </section>
+            </Button>
+          </GlassPanel>
         </main>
       );
     }

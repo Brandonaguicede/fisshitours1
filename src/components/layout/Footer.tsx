@@ -7,6 +7,7 @@ import { tours } from '../../data/tours';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { text, tr } from '../../i18n/translations';
 import { Container } from '../common/Container';
+import { IconButton } from '../ui';
 
 function navLabel(href: string, language: 'es' | 'en') {
   if (href === '/') return tr(text.nav.home, language);
@@ -38,12 +39,8 @@ export function Footer() {
               : 'Fishing charters, private navigation, snorkeling, beach and bioluminescence in Costa Rica.'}
           </p>
           <div className="mt-5 flex gap-3">
-            <a className="focus-ring pressable rounded-full bg-white/10 p-2 hover:bg-white/15" href={INSTAGRAM_URL} target="_blank" rel="noreferrer" aria-label="Instagram">
-              <Instagram size={18} />
-            </a>
-            <a className="focus-ring pressable rounded-full bg-white/10 p-2 hover:bg-white/15" href={FACEBOOK_URL} target="_blank" rel="noreferrer" aria-label="Facebook">
-              <Facebook size={18} />
-            </a>
+            <IconButton href={INSTAGRAM_URL} icon={Instagram} label="Instagram" size="sm" target="_blank" variant="subtle" />
+            <IconButton href={FACEBOOK_URL} icon={Facebook} label="Facebook" size="sm" target="_blank" variant="subtle" />
           </div>
         </div>
 

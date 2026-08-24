@@ -2,8 +2,8 @@ import { Anchor, HeartHandshake, ShieldCheck, SlidersHorizontal, Users, Waves } 
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 
-import { Button } from '../components/common/Button';
 import { Container } from '../components/common/Container';
+import { Button, CardShell, Chip, GlassPanel, SectionHeader } from '../components/ui';
 import { useLanguage } from '../i18n/LanguageContext';
 import { DEFAULT_ABOUT_SETTINGS, getAboutSettings, splitParagraphs, type AboutSettings } from '../services/aboutSettings';
 
@@ -91,19 +91,9 @@ export default function AboutPage() {
       <section className="relative overflow-hidden pb-16 pt-24 sm:pt-28 lg:pb-24 lg:pt-32">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_12%_8%,rgba(110,172,201,0.28),transparent_28rem),linear-gradient(180deg,rgba(11,40,66,0.88),rgba(19,62,98,0.96))]" />
         <Container className="relative grid gap-10 lg:grid-cols-[minmax(0,1fr)_440px] lg:items-end">
-          <div>
-            <p className="text-sm font-bold uppercase tracking-[0.16em] text-ocean-200">
-              {about[`about.eyebrow.${locale}` as keyof AboutSettings]}
-            </p>
-            <h1 className="mt-4 max-w-4xl font-display text-5xl font-extrabold leading-[0.95] sm:text-6xl lg:text-7xl">
-              {about[`about.title.${locale}` as keyof AboutSettings]}
-            </h1>
-            <p className="mt-6 max-w-2xl text-lg font-semibold leading-8 text-ocean-100">
-              {about[`about.description.${locale}` as keyof AboutSettings]}
-            </p>
-          </div>
+          <SectionHeader align="left" description={about[`about.description.${locale}` as keyof AboutSettings]} eyebrow={about[`about.eyebrow.${locale}` as keyof AboutSettings]} level={1} title={about[`about.title.${locale}` as keyof AboutSettings]} variant="heroWide" />
 
-          <div className="rounded-[2rem] border border-white/10 bg-white/[0.06] p-3 shadow-lifted backdrop-blur-xl">
+          <GlassPanel className="p-3" variant="surface">
             <div className="relative aspect-[4/3] overflow-hidden rounded-[1.4rem]">
               {images.map((image, index) => (
                 <img
@@ -121,13 +111,13 @@ export default function AboutPage() {
                 ))}
               </div>
             </div>
-          </div>
+          </GlassPanel>
         </Container>
       </section>
 
       <section className="section-y bg-ocean-900">
         <Container className="grid gap-10 lg:grid-cols-[0.92fr_1.08fr] lg:items-start">
-          <div className="rounded-[2rem] border border-white/10 bg-white/[0.06] p-6 shadow-soft backdrop-blur-xl sm:p-8">
+          <GlassPanel className="p-6 sm:p-8" variant="surface">
             <p className="text-sm font-bold uppercase tracking-[0.14em] text-ocean-300">
               {language === 'es' ? 'Nuestra forma de navegar' : 'How we operate'}
             </p>
@@ -136,16 +126,16 @@ export default function AboutPage() {
                 <p key={paragraph.slice(0, 32)}>{paragraph}</p>
               ))}
             </div>
-          </div>
+          </GlassPanel>
 
           <div className="grid gap-4">
             {capabilities.map((item) => (
-              <div key={item.label.en} className="flex items-center gap-4 rounded-2xl border border-white/10 bg-white/[0.05] p-4 shadow-soft backdrop-blur-xl">
+              <GlassPanel key={item.label.en} className="flex items-center gap-4 rounded-2xl p-4 shadow-soft" variant="subtle">
                 <span className="grid h-12 w-12 place-items-center rounded-full bg-white text-ocean-600">
                   <item.icon size={22} />
                 </span>
                 <p className="text-lg font-extrabold text-white">{item.label[language]}</p>
-              </div>
+              </GlassPanel>
             ))}
           </div>
         </Container>
@@ -153,7 +143,7 @@ export default function AboutPage() {
 
       <section className="section-y bg-ocean-950">
         <Container>
-          <div className="overflow-hidden rounded-[2rem] border border-white/10 bg-white/[0.06] shadow-lifted backdrop-blur-xl">
+          <GlassPanel className="overflow-hidden" variant="surface">
             <div className="grid lg:grid-cols-[0.95fr_1.05fr]">
               <div className="p-6 sm:p-8 lg:p-10">
                 <p className="text-sm font-bold uppercase tracking-[0.14em] text-ocean-300">
@@ -174,9 +164,9 @@ export default function AboutPage() {
                     language === 'es' ? 'Asistencia a bordo' : 'Onboard support',
                     language === 'es' ? 'Coordinacion clara' : 'Clear coordination',
                   ].map((item) => (
-                    <div key={item} className="rounded-2xl border border-white/10 bg-white/[0.05] px-4 py-3 text-sm font-extrabold text-ocean-100">
+                    <Chip key={item} className="justify-center rounded-2xl px-4 py-3 text-sm font-extrabold">
                       {item}
-                    </div>
+                    </Chip>
                   ))}
                 </div>
               </div>
@@ -197,7 +187,7 @@ export default function AboutPage() {
                 <div className="pointer-events-none absolute inset-y-0 right-0 w-20 bg-gradient-to-l from-ocean-900/80 to-transparent" />
               </div>
             </div>
-          </div>
+          </GlassPanel>
         </Container>
       </section>
 
@@ -205,15 +195,15 @@ export default function AboutPage() {
         <Container>
           <div className="grid gap-4 md:grid-cols-3">
             {values.map((value) => (
-              <article key={value.title.en} className="group rounded-2xl border border-white/10 bg-white/[0.06] p-6 shadow-soft backdrop-blur-xl transition duration-300 hover:-translate-y-1 hover:border-ocean-300/60 hover:bg-white/[0.1] hover:shadow-lifted">
+              <CardShell as="article" interactive key={value.title.en} className="group rounded-2xl p-6 shadow-soft">
                 <value.icon className="text-ocean-300 transition duration-300 group-hover:scale-105" size={30} />
                 <h2 className="mt-5 text-xl font-extrabold text-white">{value.title[language]}</h2>
                 <p className="mt-3 text-sm leading-6 text-ocean-200">{value.description[language]}</p>
-              </article>
+              </CardShell>
             ))}
           </div>
 
-          <div className="mt-12 rounded-[2rem] border border-white/10 bg-ocean-900 p-6 text-center shadow-lifted sm:p-10">
+          <GlassPanel className="mt-12 p-6 text-center sm:p-10" variant="panel">
             <h2 className="font-display text-4xl font-extrabold leading-tight text-white">
               {about[`about.cta_title.${locale}` as keyof AboutSettings]}
             </h2>
@@ -223,7 +213,7 @@ export default function AboutPage() {
             <Button className="mt-7" to="/#booking">
               {about[`about.cta_button_label.${locale}` as keyof AboutSettings]}
             </Button>
-          </div>
+          </GlassPanel>
         </Container>
       </section>
     </main>

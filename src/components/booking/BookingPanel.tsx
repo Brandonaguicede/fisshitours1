@@ -16,8 +16,8 @@ import { buildBookingPaymentPayload, createWhatsAppBookingMessage, getWhatsAppBo
 import { calculateBookingTotal, getEffectiveMaxGuests, getExtraGuestPrice, getTourIncludedGuests } from '../../utils/bookingPricing';
 import { cn } from '../../utils/cn';
 import { formatCurrency } from '../../utils/formatCurrency';
-import { Button } from '../common/Button';
 import { TurnstileBox } from '../common/TurnstileBox';
+import { Badge, Button, ChoiceCard, Field, FieldError, GlassPanel, Input, ModalShell, TextArea } from '../ui';
 
 interface BookingPanelProps {
   selectedBoat: Boat;
@@ -331,37 +331,38 @@ const bookingPayload = selectedTour
   }
 
   return (
-    <div className="relative -mx-4 overflow-hidden rounded-none border-y border-ocean-500/15 bg-[#061B27] p-3 text-white shadow-[0_18px_55px_rgba(3,18,28,0.26)] sm:mx-0 sm:rounded-2xl sm:border sm:p-4 lg:p-5">
+    <GlassPanel className="relative -mx-4 overflow-hidden !rounded-none p-3 text-white sm:mx-0 sm:!rounded-[var(--radius-panel)] sm:p-4 lg:p-5" variant="panel">
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(135deg,rgba(110,172,201,0.10),transparent_32%),radial-gradient(circle_at_92%_12%,rgba(73,134,167,0.10),transparent_20rem)]" />
       <div className="relative mx-auto max-w-xl text-center">
-        <span className="inline-flex rounded-full border border-ocean-400/25 bg-white/[0.04] px-3 py-1 text-[0.6rem] font-extrabold uppercase tracking-[0.14em] text-ocean-300 sm:text-[0.66rem]">{tr(text.booking.badge, language)}</span>
+        <Badge className="text-[0.6rem] font-extrabold uppercase tracking-[0.14em] sm:text-[0.66rem]" variant="subtle">{tr(text.booking.badge, language)}</Badge>
         <h2 ref={headingRef} tabIndex={-1} className="mt-2 text-2xl font-extrabold leading-tight text-white outline-none min-[420px]:text-[1.75rem] sm:text-[1.9rem]">{tr(text.booking.title, language)}</h2>
         <p className="mx-auto mt-1.5 max-w-md text-xs font-medium leading-5 text-ocean-200/90 sm:text-sm">{tr(text.booking.subtitle, language)}</p>
       </div>
 
-      <div className="relative mx-auto mt-4 grid max-w-sm grid-cols-3 items-start gap-1 rounded-2xl border border-white/10 bg-white/[0.035] px-2 py-2 sm:mt-5 sm:gap-2">
+      <GlassPanel className="relative mx-auto mt-4 grid max-w-sm grid-cols-3 items-start gap-1 px-2 py-2 sm:mt-5 sm:gap-2" variant="subtle">
         {steps.map((step, index) => (
           <button
             key={step}
             className={cn(
-              'focus-ring group relative grid min-w-0 justify-items-center gap-1.5 rounded-xl px-1 py-1 text-center transition-colors duration-200 sm:px-2',
-              index < steps.length - 1 && 'after:absolute after:left-[calc(50%+1.15rem)] after:top-3.5 after:h-px after:w-[calc(100%-2.3rem)] after:bg-white/10',
+              'glass-focus-ring group relative grid min-w-0 justify-items-center gap-1.5 rounded-xl px-1 py-1 text-center transition-colors duration-200 sm:px-2',
+              index < steps.length - 1 && 'after:absolute after:left-[calc(50%+1.15rem)] after:top-3.5 after:h-px after:w-[calc(100%-2.3rem)]',
+              index < activeStep ? 'after:bg-[var(--glass-accent-border)]' : 'after:bg-[var(--surface-border)]',
             )}
             type="button"
             aria-current={activeStep === index ? 'step' : undefined}
             aria-disabled={!canVisitStep(index)}
             onClick={() => goToStep(index)}
           >
-            <span className={cn('grid h-6 w-6 place-items-center rounded-full border text-[0.68rem] font-extrabold transition-[background-color,border-color,color,box-shadow] duration-200 sm:h-7 sm:w-7 sm:text-xs', activeStep === index ? 'border-ocean-300 bg-ocean-400 text-ocean-950 shadow-[0_0_0_4px_rgba(110,172,201,0.10)]' : activeStep > index ? 'border-seafoam-400 bg-seafoam-500 text-ocean-950' : 'border-white/10 bg-white/[0.04] text-ocean-300')}>
+            <GlassPanel as="span" className={cn('grid h-6 w-6 place-items-center text-[0.68rem] font-extrabold transition-[background-color,border-color,color,box-shadow] duration-200 sm:h-7 sm:w-7 sm:text-xs', activeStep === index ? 'glass-selected text-white' : activeStep > index ? 'glass-accent text-ocean-100' : 'text-ocean-300')} shape="circle" variant="control">
               {index + 1}
-            </span>
+            </GlassPanel>
             <span className={cn('max-w-full text-[0.6rem] font-bold leading-tight sm:text-[0.66rem]', activeStep === index ? 'text-ocean-200' : 'text-ocean-500')}>{step}</span>
           </button>
         ))}
-      </div>
+      </GlassPanel>
 
       <div className="relative mt-4 grid gap-3 xl:mt-5 xl:grid-cols-[minmax(0,1fr)_290px] xl:gap-4">
-        <div className="rounded-2xl border border-white/10 bg-white/[0.045] p-3 shadow-[0_12px_30px_rgba(0,0,0,0.14)] backdrop-blur-xl min-[420px]:p-4">
+        <GlassPanel className="p-3 min-[420px]:p-4" variant="surface">
           {activeStep === 0 ? (
             <BoatStep boats={boats} selectedBoat={selectedBoat} catalogLoading={catalogLoading} onBoatChange={handleBoatChange} onNext={() => setActiveStep(1)} />
           ) : null}
@@ -449,7 +450,7 @@ const bookingPayload = selectedTour
               onBack={() => setActiveStep(1)}
             />
           ) : null}
-        </div>
+        </GlassPanel>
 
         <div className="xl:hidden">
           <BookingProgressSummary
@@ -497,7 +498,7 @@ const bookingPayload = selectedTour
           onConfirm={handleConfirmPayOnDay}
         />
       ) : null}
-    </div>
+    </GlassPanel>
   );
 }
 
@@ -516,13 +517,10 @@ function BoatStep(props: { boats: Boat[]; selectedBoat: Boat; catalogLoading?: b
       <div className="mt-4 grid gap-2 sm:mt-6 sm:gap-3">
         {props.catalogLoading ? <p className="text-sm font-semibold text-ocean-200">Loading boats...</p> : null}
         {props.boats.map((boat) => (
-          <button
+          <ChoiceCard
             key={boat.id}
-            className={cn(
-              'focus-ring pressable grid grid-cols-[3.25rem_minmax(0,1fr)] items-center gap-3 rounded-xl border border-white/10 bg-white/[0.035] p-2.5 text-left transition-[background-color,border-color,box-shadow,transform] duration-200 hover:border-ocean-400/45 hover:bg-ocean-500/8 sm:grid-cols-[4rem_minmax(0,1fr)_auto] sm:gap-3 sm:p-2.5',
-              props.selectedBoat.id === boat.id && 'border-ocean-400/70 bg-ocean-500/10 shadow-[0_0_0_1px_rgba(110,172,201,0.14)]',
-            )}
-            type="button"
+            className="grid grid-cols-[3.25rem_minmax(0,1fr)] items-center gap-3 p-2.5 text-left sm:grid-cols-[4rem_minmax(0,1fr)_auto] sm:gap-3 sm:p-2.5"
+            selected={props.selectedBoat.id === boat.id}
             onClick={() => props.onBoatChange(boat.id)}
           >
             <img src={boat.image} alt={boat.name} className="h-12 w-12 rounded-xl object-cover sm:h-14 sm:w-14" />
@@ -532,11 +530,11 @@ function BoatStep(props: { boats: Boat[]; selectedBoat: Boat; catalogLoading?: b
               <span className="mt-1 block text-xs font-medium text-ocean-400">{boat.featuredSpec}</span>
             </span>
             <span className="col-span-2 text-sm font-extrabold text-ocean-400 sm:col-span-1 sm:text-right">{boat.basePriceLabel.replace('From ', '')}</span>
-          </button>
+          </ChoiceCard>
         ))}
       </div>
       <div className="mt-4 sm:mt-5">
-        <Button className="w-full bg-ocean-500 text-ocean-950 hover:bg-[#7ED8F4]" type="button" onClick={props.onNext}>
+        <Button fullWidth type="button" onClick={props.onNext}>
           {tr(text.booking.continue, language)}
         </Button>
       </div>
@@ -586,15 +584,15 @@ function TourDetailsStep(props: {
         <legend className="text-sm font-bold text-ocean-100">{tr(text.booking.tourAboard, language)} {props.selectedBoat.name}</legend>
         <div className="mt-3 grid gap-2 min-[420px]:grid-cols-2">
           {tourGroups.map((group) => (
-            <button
+            <ChoiceCard
               key={group.key}
-              className={cn('focus-ring pressable min-w-0 rounded-xl border border-white/10 bg-white/[0.035] p-2.5 text-left transition-[background-color,border-color,box-shadow] duration-200 hover:border-ocean-400/45 hover:bg-ocean-500/8 sm:p-3', activeGroup === group.key && 'border-ocean-400/70 bg-ocean-500/10 ring-4 ring-ocean-500/8')}
-              type="button"
+              className="p-2.5 text-left sm:p-3"
+              selected={activeGroup === group.key}
               onClick={() => props.onTourChange(group.tours[0].id)}
             >
               <span className="block truncate text-sm font-extrabold text-white">{group.label}</span>
               <span className="mt-1 block text-xs font-bold text-ocean-400">From {formatCurrency(group.tours[0].basePrice)}</span>
-            </button>
+            </ChoiceCard>
           ))}
         </div>
       </fieldset>
@@ -604,43 +602,40 @@ function TourDetailsStep(props: {
           <legend className="text-sm font-bold text-ocean-100">{language === 'es' ? 'Escoge paquete o duracion' : 'Choose package or duration'}</legend>
           <div className="mt-3 grid gap-2 min-[420px]:grid-cols-2 min-[640px]:grid-cols-3">
             {activeGroupData.tours.map((tour) => (
-              <label key={tour.id} className={cn('pressable min-w-0 rounded-xl border border-white/10 bg-white/[0.035] p-2.5 transition-[background-color,border-color,box-shadow] duration-200 hover:border-ocean-400/45 hover:bg-ocean-500/8 sm:p-3', props.selectedTour?.id === tour.id && 'border-ocean-400/70 bg-ocean-500/10 ring-4 ring-ocean-500/8')}>
+              <ChoiceCard as="label" key={tour.id} className="cursor-pointer p-2.5 sm:p-3" selected={props.selectedTour?.id === tour.id}>
                 <input className="sr-only" type="radio" name="tourPackage" value={tour.id} checked={props.selectedTour?.id === tour.id} onChange={() => props.onTourChange(tour.id)} />
                 <span className="block truncate text-xs font-extrabold text-white">{getPackageLabel(tour, language)}</span>
                 <span className="mt-1 block text-lg font-extrabold text-ocean-400">{formatCurrency(tour.basePrice)}</span>
-              </label>
+              </ChoiceCard>
             ))}
           </div>
         </fieldset>
       ) : null}
 
       {isFullDayTour(props.selectedTour) ? (
-        <fieldset className="rounded-xl border border-white/10 bg-white/[0.035] p-3 sm:p-4">
+        <GlassPanel as="fieldset" className="p-3 sm:p-4" variant="subtle">
           <legend className="px-1 text-sm font-bold text-ocean-100">{language === 'es' ? 'Comida opcional para Dia completo' : 'Optional meal for Full Day'}</legend>
           <div className="mt-3 grid gap-2 min-[420px]:grid-cols-2">
             {fullDayMealOptions.map((meal) => (
-            <label key={meal.en} className={cn('pressable rounded-xl border border-white/10 bg-white/[0.035] p-2.5 text-xs font-bold leading-5 text-ocean-100 transition-[background-color,border-color,box-shadow] duration-200 hover:border-ocean-400/45 hover:bg-ocean-500/8 sm:p-3 sm:text-sm', props.mealOption === meal[language] && 'border-ocean-400/70 bg-ocean-500/10 ring-4 ring-ocean-500/8')}>
+            <ChoiceCard as="label" key={meal.en} className="cursor-pointer p-2.5 text-xs font-bold leading-5 text-ocean-100 sm:p-3 sm:text-sm" selected={props.mealOption === meal[language]}>
                 <input className="sr-only" type="radio" name="mealOption" value={meal[language]} checked={props.mealOption === meal[language]} onChange={() => props.onMealOptionChange(meal[language])} />
                 {meal[language]}
-              </label>
+              </ChoiceCard>
             ))}
           </div>
-          <button className="mt-3 text-xs font-bold text-ocean-400 underline-offset-4 hover:underline" type="button" onClick={() => props.onMealOptionChange('')}>
+          <button className="glass-focus-ring mt-3 rounded-sm text-xs font-bold text-ocean-400 underline-offset-4 hover:underline" type="button" onClick={() => props.onMealOptionChange('')}>
             {language === 'es' ? 'Sin comida seleccionada' : 'No meal selected'}
           </button>
-        </fieldset>
+        </GlassPanel>
       ) : null}
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <label className="grid min-w-0 gap-2 text-sm font-bold text-ocean-100">
-          {tr(text.booking.date, language)}
-          <input className="focus-ring min-w-0 w-full rounded-xl border border-white/10 bg-ocean-900/70 px-3 py-3 text-sm text-white focus:border-ocean-400 focus:ring-4 focus:ring-ocean-500/15 sm:px-4" type="date" value={props.date} onChange={(event) => props.onDateChange(event.target.value)} />
-        </label>
-        <label className="grid min-w-0 gap-2 text-sm font-bold text-ocean-100">
-          {tr(text.booking.guests, language)}
-          <input className="focus-ring min-w-0 w-full rounded-xl border border-white/10 bg-ocean-900/70 px-3 py-3 text-sm text-white focus:border-ocean-400 focus:ring-4 focus:ring-ocean-500/15 sm:px-4" type="number" inputMode="numeric" min={1} max={props.effectiveMaxGuests} value={props.guests} onChange={(event) => props.onGuestsChange(clampGuests(Number(event.target.value), props.effectiveMaxGuests))} />
-          {props.hasCapacityError ? <span className="text-sm text-red-300">{language === 'es' ? `Este barco tiene capacidad maxima de ${props.effectiveMaxGuests} personas.` : `This boat has a maximum capacity of ${props.effectiveMaxGuests} guests.`}</span> : null}
-        </label>
+        <Field htmlFor="booking-date" label={tr(text.booking.date, language)} labelClassName="text-sm font-bold">
+          <Input id="booking-date" className="sm:px-4" tone="ocean" type="date" value={props.date} onChange={(event) => props.onDateChange(event.target.value)} />
+        </Field>
+        <Field error={props.hasCapacityError ? (language === 'es' ? `Este barco tiene capacidad maxima de ${props.effectiveMaxGuests} personas.` : `This boat has a maximum capacity of ${props.effectiveMaxGuests} guests.`) : undefined} errorId="booking-guests-error" htmlFor="booking-guests" label={tr(text.booking.guests, language)} labelClassName="text-sm font-bold">
+          <Input id="booking-guests" aria-describedby={props.hasCapacityError ? 'booking-guests-error' : undefined} aria-invalid={props.hasCapacityError} className="sm:px-4" inputMode="numeric" max={props.effectiveMaxGuests} min={1} tone="ocean" type="number" value={props.guests} onChange={(event) => props.onGuestsChange(clampGuests(Number(event.target.value), props.effectiveMaxGuests))} />
+        </Field>
       </div>
 
       {props.selectedTour ? (
@@ -648,12 +643,12 @@ function TourDetailsStep(props: {
           <legend className="text-sm font-bold text-ocean-100">{tr(text.booking.departure, language)}</legend>
           <div className="mt-3 grid grid-cols-2 gap-2 min-[520px]:grid-cols-3">
             {(props.availabilitySlots.length ? props.availabilitySlots : props.selectedTour.timeSlots.map((slot) => ({ ...slot, available: true }))).map((slot) => (
-              <label key={slot.id} className={cn('pressable min-w-0 rounded-xl border border-white/10 bg-white/[0.035] p-3 text-center transition-[background-color,border-color,box-shadow] duration-200 hover:border-ocean-400/45 hover:bg-ocean-500/8', props.timeSlotId === slot.id && 'border-ocean-400/70 bg-ocean-500/10 ring-4 ring-ocean-500/8', slot.available === false && 'cursor-not-allowed opacity-45')}>
+              <ChoiceCard as="label" key={slot.id} className="cursor-pointer p-3 text-center" disabled={slot.available === false} selected={props.timeSlotId === slot.id}>
                 <input className="sr-only" type="radio" name="timeSlot" value={slot.id} checked={props.timeSlotId === slot.id} disabled={slot.available === false} onChange={() => props.onTimeSlotChange(slot.id)} />
                 <span className="block truncate text-xs font-extrabold text-white">{slot.label}</span>
                 <span className="mt-1 block text-base font-extrabold text-ocean-600 sm:text-lg">{slot.time}</span>
                 {slot.available === false ? <span className="mt-1 block text-[0.65rem] font-bold text-red-200">Unavailable</span> : null}
-              </label>
+              </ChoiceCard>
             ))}
           </div>
           {props.availabilityLoading ? <p className="mt-2 text-xs font-semibold text-ocean-300">Checking availability...</p> : null}
@@ -661,7 +656,7 @@ function TourDetailsStep(props: {
         </fieldset>
       ) : null}
 
-      <div className="rounded-2xl border border-white/10 bg-ocean-900/55 p-3 text-sm text-ocean-100 sm:p-4">
+      <GlassPanel className="p-3 text-sm text-ocean-100 sm:p-4" variant="subtle">
         <p className="text-xs font-extrabold uppercase tracking-[0.12em] text-ocean-400">Price</p>
         {props.priceLoading ? <p className="mt-2 font-semibold">Calculating...</p> : null}
         {props.priceError ? <p className="mt-2 font-semibold text-red-200">We couldn’t load the booking information. Please try again.</p> : null}
@@ -681,7 +676,7 @@ function TourDetailsStep(props: {
             )}
           </div>
         ) : null}
-      </div>
+      </GlassPanel>
 
       {props.selectedTour && props.guests > props.includedGuests && !props.hasCapacityError ? (
         <div className="rounded-2xl border border-ocean-400/30 bg-ocean-500/10 p-3 text-ocean-100 sm:p-4">
@@ -691,7 +686,7 @@ function TourDetailsStep(props: {
       ) : null}
 
       <div className="mt-auto flex flex-col-reverse gap-3 pt-4 sm:flex-row sm:justify-between">
-        <Button type="button" variant="secondary" onClick={props.onBack}>
+        <Button type="button" variant="glass" onClick={props.onBack}>
           {tr(text.booking.back, language)}
         </Button>
         <Button type="button" disabled={!props.canContinue} onClick={props.onNext}>
@@ -809,45 +804,28 @@ function CustomerStep(props: {
       </div>
 
       <div className="mt-5 grid gap-4 sm:mt-6">
-        <label className="grid gap-2 text-xs font-extrabold uppercase tracking-[0.12em] text-ocean-400">
-          {tr(text.booking.fullName, language)}
-          <span className="relative">
-            <User className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-ocean-500" size={17} />
-            <input className="focus-ring w-full rounded-xl border border-white/10 bg-ocean-950/50 py-3 pl-11 pr-4 text-sm font-medium normal-case tracking-normal text-white placeholder:text-ocean-500 focus:border-ocean-400 focus:ring-4 focus:ring-ocean-500/15" value={props.customerName} onChange={(event) => props.onCustomerNameChange(event.target.value)} placeholder="John Smith" autoComplete="name" />
-          </span>
-        </label>
+        <Field htmlFor="booking-name" label={tr(text.booking.fullName, language)} labelClassName="uppercase tracking-[0.12em] text-ocean-400">
+          <Input id="booking-name" autoComplete="name" placeholder="John Smith" startIcon={<User size={17} />} value={props.customerName} onChange={(event) => props.onCustomerNameChange(event.target.value)} />
+        </Field>
 
-        <label className="grid gap-2 text-xs font-extrabold uppercase tracking-[0.12em] text-ocean-400">
-          {tr(text.booking.email, language)}
-          <span className="relative">
-            <Mail className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-ocean-500" size={17} />
-            <input className="focus-ring w-full rounded-xl border border-white/10 bg-ocean-950/50 py-3 pl-11 pr-4 text-sm font-medium normal-case tracking-normal text-white placeholder:text-ocean-500 focus:border-ocean-400 focus:ring-4 focus:ring-ocean-500/15" type="email" value={props.customerEmail} onChange={(event) => props.onCustomerEmailChange(event.target.value)} placeholder="john@email.com" autoComplete="email" spellCheck={false} />
-          </span>
-        </label>
+        <Field htmlFor="booking-email" label={tr(text.booking.email, language)} labelClassName="uppercase tracking-[0.12em] text-ocean-400">
+          <Input id="booking-email" autoComplete="email" placeholder="john@email.com" spellCheck={false} startIcon={<Mail size={17} />} type="email" value={props.customerEmail} onChange={(event) => props.onCustomerEmailChange(event.target.value)} />
+        </Field>
 
-        <label className="grid gap-2 text-xs font-extrabold uppercase tracking-[0.12em] text-ocean-400">
-          {tr(text.booking.phone, language)}
-          <span className="relative">
-            <Phone className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-ocean-500" size={17} />
-            <input className="focus-ring w-full rounded-xl border border-white/10 bg-ocean-950/50 py-3 pl-11 pr-4 text-sm font-medium normal-case tracking-normal text-white placeholder:text-ocean-500 focus:border-ocean-400 focus:ring-4 focus:ring-ocean-500/15" type="tel" inputMode="tel" value={props.customerWhatsapp} onChange={(event) => props.onCustomerWhatsappChange(event.target.value)} placeholder="+506 0000 0000" autoComplete="tel" />
-          </span>
-        </label>
+        <Field htmlFor="booking-phone" label={tr(text.booking.phone, language)} labelClassName="uppercase tracking-[0.12em] text-ocean-400">
+          <Input id="booking-phone" autoComplete="tel" inputMode="tel" placeholder="+506 0000 0000" startIcon={<Phone size={17} />} type="tel" value={props.customerWhatsapp} onChange={(event) => props.onCustomerWhatsappChange(event.target.value)} />
+        </Field>
 
-        <label className="grid gap-2 text-xs font-extrabold uppercase tracking-[0.12em] text-ocean-400">
-          Special requests
-          <textarea className="focus-ring min-h-[5.5rem] w-full resize-y rounded-xl border border-white/10 bg-ocean-950/50 px-4 py-3 text-sm font-medium normal-case tracking-normal text-white placeholder:text-ocean-500 focus:border-ocean-400 focus:ring-4 focus:ring-ocean-500/15" value={props.specialRequests} onChange={(event) => props.onSpecialRequestsChange(event.target.value)} placeholder="Optional meal notes, celebration details, accessibility needs..." />
-        </label>
+        <Field htmlFor="booking-requests" label="Special requests" labelClassName="uppercase tracking-[0.12em] text-ocean-400">
+          <TextArea id="booking-requests" className="min-h-[5.5rem]" placeholder="Optional meal notes, celebration details, accessibility needs..." shape="rounded" value={props.specialRequests} onChange={(event) => props.onSpecialRequestsChange(event.target.value)} />
+        </Field>
       </div>
 
       <div className="mt-5">
         <BookingPaymentSummary booking={props.booking} />
       </div>
 
-      {props.validationMessage ? (
-        <div className="mt-4 rounded-2xl border border-red-300/30 bg-red-500/10 p-4 text-sm font-bold text-red-100" aria-live="polite">
-          {props.validationMessage}
-        </div>
-      ) : null}
+      {props.validationMessage ? <FieldError className="mt-4" variant="panel">{props.validationMessage}</FieldError> : null}
 
 <TurnstileBox
         className="mt-5"
@@ -856,22 +834,19 @@ function CustomerStep(props: {
         onTokenChange={props.onTurnstileTokenChange}
       />
 
-      <fieldset className="mt-5 rounded-xl border border-white/10 bg-ocean-950/30 p-3 sm:p-4">
+      <GlassPanel as="fieldset" className="mt-5 p-3 sm:p-4" variant="subtle">
         <div className="flex flex-wrap items-end justify-between gap-2">
           <legend className="text-xs font-extrabold uppercase tracking-[0.12em] text-ocean-400">Payment method</legend>
           <span className="text-xs font-semibold text-ocean-300">Choose one option to continue</span>
         </div>
         <div className="mt-3 grid gap-2 lg:grid-cols-3">
           {props.paymentMethods.map((method, index) => (
-<button
+            <ChoiceCard
               key={method.id}
               data-payment-method={method.id}
-              className={cn(
-                'focus-ring pressable group flex min-w-0 items-center gap-2.5 rounded-xl border border-white/10 bg-white/[0.03] p-2.5 text-left transition-[background-color,border-color,box-shadow,transform] duration-200 hover:-translate-y-0.5 hover:border-ocean-400/40 hover:bg-white/[0.055] sm:p-3 lg:min-h-[5.25rem]',
-                props.paymentMethod === method.id && 'border-ocean-400/60 bg-ocean-500/8 ring-2 ring-ocean-500/8',
-              )}
-              type="button"
+              className="group flex items-center gap-2.5 p-2.5 text-left hover:-translate-y-0.5 sm:p-3 lg:min-h-[5.25rem]"
               disabled={props.isSubmitting}
+              selected={props.paymentMethod === method.id}
               onClick={() => handlePaymentMethodAction(method.id)}
             >
               <span className={cn('grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-white/10 bg-white/[0.08] text-ocean-300 transition-transform duration-200 group-hover:scale-[1.03]', method.logo && 'bg-white')}>
@@ -885,10 +860,10 @@ function CustomerStep(props: {
                 <span className="block text-[0.82rem] font-extrabold leading-tight text-white sm:text-sm">{method.title}</span>
                 <span className="mt-0.5 block text-[0.72rem] leading-4 text-ocean-200">{method.description}</span>
               </span>
-            </button>
+            </ChoiceCard>
           ))}
         </div>
-      </fieldset>
+      </GlassPanel>
 
       {props.paypalVisible && props.booking && props.createdBooking ? (
         <PayPalCheckoutBox booking={props.booking} createdBooking={props.createdBooking} onSuccess={props.onPayPalSuccess} onError={props.onPayPalError} onCancel={props.onPayPalCancel} />
@@ -911,7 +886,7 @@ function CustomerStep(props: {
             <SummaryLine label="PayPal transaction reference" value={props.paypalSuccess.transactionId} />
             <SummaryLine label="Tour information" value={`${getTourText(props.booking.tour, 'en').title} - ${props.booking.packageLabel}`} />
           </div>
-          <Button className="mt-4 w-full bg-ocean-500 text-ocean-950 hover:bg-[#7ED8F4]" type="button" onClick={props.onSendPaidConfirmation}>Send confirmation via WhatsApp</Button>
+          <Button className="mt-4" fullWidth type="button" onClick={props.onSendPaidConfirmation}>Send confirmation via WhatsApp</Button>
         </div>
       ) : null}
 
@@ -932,7 +907,7 @@ function CustomerStep(props: {
       ) : null}
 
       <div className="mt-auto flex flex-col-reverse gap-3 pt-7 sm:flex-row sm:items-center sm:justify-between">
-        <Button type="button" variant="secondary" onClick={props.onBack}>Back</Button>
+        <Button type="button" variant="glass" onClick={props.onBack}>Back</Button>
         <span className="text-xs font-semibold text-ocean-400">Status: {props.bookingStatus.split('_').join(' ')} - Payment: {props.paymentStatus}</span>
       </div>
     </div>
@@ -942,14 +917,14 @@ function CustomerStep(props: {
 function BookingPaymentSummary({ booking }: { booking: BookingPaymentPayload | null }) {
   if (!booking) {
     return (
-      <div className="rounded-xl border border-white/10 bg-white/[0.035] p-4 text-sm text-ocean-200">
+      <GlassPanel className="p-4 text-sm text-ocean-200" variant="subtle">
         Complete the tour selection to review the reservation summary.
-      </div>
+      </GlassPanel>
     );
   }
 
   return (
-    <div className="rounded-xl border border-white/10 bg-white/[0.035] p-4 text-sm">
+    <GlassPanel className="p-4 text-sm" variant="subtle">
       <p className="text-xs font-extrabold uppercase tracking-[0.12em] text-ocean-400">Reservation summary</p>
       <div className="mt-3 grid gap-2 text-ocean-100">
         <SummaryLine label="Customer name" value={booking.customerName || 'Required'} />
@@ -967,7 +942,7 @@ function BookingPaymentSummary({ booking }: { booking: BookingPaymentPayload | n
         <SummaryLine label="Total price" value={formatCurrency(booking.total)} />
         <SummaryLine label="Special requests" value={booking.specialRequests || 'None'} />
       </div>
-    </div>
+    </GlassPanel>
   );
 }
 
@@ -1050,7 +1025,7 @@ function BookingSummary(props: {
   const extrasTotal = props.selectedTour?.customQuote ? '-' : formatCurrency(Math.max(props.pricing.total - props.pricing.basePrice - props.pricing.extraGuestsTotal, 0));
 
   return (
-    <aside className="h-fit rounded-2xl border border-white/10 bg-white/[0.045] p-3 text-white shadow-[0_12px_30px_rgba(0,0,0,0.12)] backdrop-blur-xl min-[420px]:p-4 sm:p-4">
+    <GlassPanel as="aside" className="h-fit p-3 text-white min-[420px]:p-4 sm:p-4" variant="surface">
       <p className="text-sm font-bold uppercase tracking-[0.14em] text-ocean-400">{tr(text.booking.summary, language)}</p>
       <img src={coverImage} alt={props.selectedBoat.name} className="mt-3 hidden aspect-[16/7] w-full rounded-xl object-cover min-[520px]:block xl:aspect-[16/8]" loading="lazy" />
       <div className="mt-3 sm:mt-4">
@@ -1064,7 +1039,7 @@ function BookingSummary(props: {
         <SummaryRow label={tr(text.booking.guests, language)} value={`${props.guests} ${tr(text.booking.people, language)}`} />
         {isFullDayTour(props.selectedTour) ? <SummaryRow label={language === 'es' ? 'Comida' : 'Meal option'} value={props.mealOption || (language === 'es' ? 'No seleccionada' : 'Not selected')} /> : null}
       </div>
-      <div className="mt-4 rounded-xl border border-white/10 bg-ocean-900/55 p-3 sm:mt-5 sm:p-4">
+      <GlassPanel className="mt-4 p-3 sm:mt-5 sm:p-4" variant="subtle">
         <SummaryRow label={language === 'es' ? 'Precio base del bote' : 'Boat base price'} value={subtotal} />
         <SummaryRow label={language === 'es' ? 'Incluye hasta' : 'Includes up to'} value={`${props.selectedTour ? getTourIncludedGuests(props.selectedBoat, props.selectedTour) : props.selectedBoat.includedGuests} ${language === 'es' ? 'personas' : 'guests'}`} />
         {props.pricing.extraGuests > 0 ? <SummaryRow label={tr(text.booking.extraPeople, language)} value={`${props.pricing.extraGuests} x ${formatCurrency(props.pricing.extraGuestPrice)}`} /> : null}
@@ -1073,14 +1048,14 @@ function BookingSummary(props: {
           <span className="font-extrabold text-white">Total</span>
           <span className="text-2xl font-extrabold text-ocean-400">{props.selectedTour?.customQuote ? 'Cotizar' : formatCurrency(props.pricing.total)}</span>
         </div>
-      </div>
+      </GlassPanel>
       <p className="mt-4 text-xs font-medium text-ocean-300">{tr(text.booking.secure, language)}</p>
       <div className="mt-4 grid gap-2 border-t border-white/10 pt-4 text-xs leading-5 text-ocean-300">
         {terms.slice(0, 3).map((term) => (
           <p key={term}>{term}</p>
         ))}
       </div>
-    </aside>
+    </GlassPanel>
   );
 }
 
@@ -1099,7 +1074,7 @@ function BookingProgressSummary(props: {
   const selectedTourName = props.selectedTour ? `${getTourText(props.selectedTour, language).title} - ${getPackageLabel(props.selectedTour, language)}` : tr(text.booking.selectTour, language);
 
   return (
-    <aside className="rounded-2xl border border-white/10 bg-white/[0.045] p-3 text-white shadow-[0_10px_24px_rgba(0,0,0,0.12)] backdrop-blur-xl">
+    <GlassPanel as="aside" className="p-3 text-white" variant="surface">
       <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
         <div className="min-w-0">
           <p className="text-xs font-bold uppercase tracking-[0.12em] text-ocean-400">{tr(text.booking.summary, language)}</p>
@@ -1126,7 +1101,7 @@ function BookingProgressSummary(props: {
           <span className="font-bold text-white">{props.guests} {tr(text.booking.people, language)}</span>
         </div>
       ) : null}
-    </aside>
+    </GlassPanel>
   );
 }
 
@@ -1159,14 +1134,13 @@ function ReviewModal(props: {
   const terms = getBookingTerms(language);
   const selectedTourName = props.selectedTour ? `${getTourText(props.selectedTour, language).title} - ${getPackageLabel(props.selectedTour, language)}` : (language === 'es' ? 'No seleccionado' : 'Not selected');
   return (
-    <div className="fixed inset-0 z-[80] grid place-items-center bg-ocean-950/70 px-3 py-4 backdrop-blur-sm sm:px-4">
-      <div className="max-h-[92dvh] w-full max-w-2xl overflow-y-auto rounded-3xl border border-white/10 bg-ocean-950 p-4 text-white shadow-lifted sm:rounded-[2rem] sm:p-8">
+    <ModalShell open onClose={props.onBack} titleId="booking-review-title" className="max-w-2xl p-4 text-white sm:p-8">
         <img className="mb-5 aspect-[16/7] w-full rounded-2xl object-cover" src={props.selectedBoat.image} alt={props.selectedBoat.name} loading="lazy" />
-        <h3 className="text-3xl font-extrabold text-white">{language === 'es' ? 'Revisar reserva' : 'Review reservation'}</h3>
+        <h3 id="booking-review-title" className="text-3xl font-extrabold text-white">{language === 'es' ? 'Revisar reserva' : 'Review reservation'}</h3>
         <p className="mt-3 leading-7 text-ocean-200">
           {language === 'es' ? 'Revisa los detalles antes de confirmar la solicitud. La disponibilidad y el metodo de pago seleccionado se validan al crear la reserva.' : 'Review your reservation details before confirming this request. Availability and the selected payment method are validated when the booking is created.'}
         </p>
-        <div className="mt-6 grid gap-3 rounded-2xl border border-white/10 bg-white/[0.04] p-4 text-sm">
+        <GlassPanel className="mt-6 grid gap-3 p-4 text-sm" variant="subtle">
           <SummaryLine label={language === 'es' ? 'Barco' : 'Boat'} value={props.selectedBoat.name} />
           <SummaryLine label="Tour" value={selectedTourName} />
           <SummaryLine label={language === 'es' ? 'Fecha' : 'Date'} value={formatDisplayDate(props.date)} />
@@ -1180,22 +1154,21 @@ function ReviewModal(props: {
           <SummaryLine label={language === 'es' ? 'Numero de WhatsApp' : 'WhatsApp number'} value={props.customerWhatsapp} />
           <SummaryLine label="Special requests" value={props.specialRequests || 'None'} />
           <SummaryLine label={language === 'es' ? 'Metodo de pago' : 'Payment method'} value={props.paymentMethod} />
-        </div>
-        <div className="mt-4 grid gap-2 rounded-2xl border border-white/10 bg-white/[0.04] p-4 text-xs leading-5 text-ocean-200">
+        </GlassPanel>
+        <GlassPanel className="mt-4 grid gap-2 p-4 text-xs leading-5 text-ocean-200" variant="subtle">
           {terms.map((term) => (
             <p key={term}>{term}</p>
           ))}
-        </div>
+        </GlassPanel>
         <div className="mt-7 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-          <Button variant="secondary" type="button" onClick={props.onBack}>
+          <Button variant="glass" type="button" onClick={props.onBack}>
             {language === 'es' ? 'Volver' : 'Go Back'}
           </Button>
           <Button type="button" onClick={props.onConfirm}>
             {language === 'es' ? 'Confirmar reserva' : 'Confirm reservation'}
           </Button>
         </div>
-      </div>
-    </div>
+    </ModalShell>
   );
 }
 

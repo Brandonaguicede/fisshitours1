@@ -1,22 +1,21 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
-import { Check, Globe2, Loader2, PenLine, Quote, Send, Star, User, X } from 'lucide-react';
+import { Check, Globe2, Loader2, PenLine, Quote, Send, Star, User } from 'lucide-react';
 import { useEffect, useState, type FormEvent } from 'react';
 
 import { useLanguage } from '../../i18n/LanguageContext';
 import { MOCK_TURNSTILE_TOKEN, USE_LOCAL_TURNSTILE_MOCK } from '../../lib/turnstile';
 import { submitReview } from '../../services/reviewService';
 import { cn } from '../../utils/cn';
-import { Button } from '../common/Button';
-import { Modal } from '../common/Modal';
 import { TurnstileBox } from '../common/TurnstileBox';
+import { Badge, Button, CloseButton, FieldError, GlassPanel, Input, ModalShell, TextArea } from '../ui';
 
 interface ReviewModalProps {
   open: boolean;
   onClose: () => void;
 }
 
-const panelClassName = 'max-w-2xl overflow-hidden rounded-[2rem] border border-white/15 bg-[#061B2F] text-white shadow-lifted';
+const panelClassName = 'max-w-2xl overflow-hidden text-white';
 
 export function ReviewModal({ open, onClose }: ReviewModalProps) {
   const { language } = useLanguage();
@@ -87,11 +86,9 @@ export function ReviewModal({ open, onClose }: ReviewModalProps) {
 
   if (submitted) {
     return (
-      <Modal open={open} onClose={onClose} titleId="review-modal-title" className={panelClassName}>
+      <ModalShell open={open} onClose={onClose} titleId="review-modal-title" className={panelClassName}>
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(226,168,109,0.18),transparent_13rem),radial-gradient(circle_at_80%_20%,rgba(110,172,201,0.16),transparent_16rem)]" />
-        <button className="focus-ring pressable absolute right-4 top-4 z-10 grid h-9 w-9 place-items-center rounded-full border border-white/10 bg-white/[0.04] text-ocean-200 transition-colors duration-200 hover:bg-white/10" type="button" aria-label={t('Cerrar', 'Close')} onClick={onClose}>
-          <X size={17} />
-        </button>
+        <CloseButton className="absolute right-4 top-4 z-10 text-ocean-200" label={t('Cerrar', 'Close')} onClick={onClose} />
         <div className="relative px-6 py-10 text-center sm:px-10 sm:py-12">
           <motion.span
             className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-gradient-to-br from-seafoam-400 to-ocean-400 text-ocean-950 shadow-lifted"
@@ -109,59 +106,48 @@ export function ReviewModal({ open, onClose }: ReviewModalProps) {
           </p>
           <Button className="mt-7" type="button" onClick={onClose}>{t('Listo', 'Done')}</Button>
         </div>
-      </Modal>
+      </ModalShell>
     );
   }
 
   return (
-    <Modal open={open} onClose={onClose} titleId="review-modal-title" className={panelClassName}>
+    <ModalShell open={open} onClose={onClose} titleId="review-modal-title" className={panelClassName}>
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_88%_0%,rgba(226,168,109,0.18),transparent_15rem),radial-gradient(circle_at_8%_18%,rgba(110,172,201,0.18),transparent_17rem),linear-gradient(160deg,rgba(43,95,130,0.30),transparent_45%)]" />
-      <button className="focus-ring pressable absolute right-4 top-4 z-10 grid h-9 w-9 place-items-center rounded-full border border-white/10 bg-white/[0.04] text-ocean-200 transition-colors duration-200 hover:bg-white/10" type="button" aria-label={t('Cerrar', 'Close')} onClick={onClose}>
-        <X size={17} />
-      </button>
+      <CloseButton className="absolute right-4 top-4 z-10 text-ocean-200" label={t('Cerrar', 'Close')} onClick={onClose} />
 
       <div className="relative px-5 py-6 sm:px-8 sm:py-8">
-        <header className="rounded-[1.5rem] border border-white/10 bg-white/[0.06] p-5 shadow-soft backdrop-blur-xl sm:p-6">
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-seafoam-400/25 bg-seafoam-400/10 px-3 py-1 text-[0.62rem] font-extrabold uppercase tracking-[0.14em] text-seafoam-400">
+        <GlassPanel as="section" className="p-5 sm:p-6" variant="surface">
+          <Badge className="gap-1.5 uppercase tracking-[0.14em]" variant="subtle">
             <PenLine size={12} /> {t('Comentarios', 'Reviews')}
-          </span>
+          </Badge>
           <h2 id="review-modal-title" className="mt-4 font-display text-3xl font-extrabold leading-tight sm:text-[2rem]">
             {t('Cuéntanos tu', 'Share your')} <span className="font-serifDisplay text-[1.16em] font-normal italic text-ocean-300">{t('experiencia', 'experience')}</span>
           </h2>
           <p className="mt-3 max-w-xl text-sm leading-6 text-ocean-200">
             {t('Tu comentario llega a nuestro panel de administración y, una vez aprobado, aparece aquí con los demás viajeros.', 'Your review goes to our admin panel and, once approved, appears here with other travelers.')}
           </p>
-        </header>
+        </GlassPanel>
 
         <form onSubmit={handleSubmit} noValidate>
-          <div className="mt-5 rounded-[1.5rem] border border-white/10 bg-white/[0.045] p-4">
+          <GlassPanel className="mt-5 p-4" variant="subtle">
             <p className="text-xs font-extrabold uppercase tracking-[0.12em] text-ocean-300">{t('Tu calificación', 'Your rating')}</p>
             <StarRating value={rating} onChange={setRating} />
-          </div>
+          </GlassPanel>
 
           <div className="mt-5 grid gap-4">
             <label className="grid gap-2 text-xs font-extrabold uppercase tracking-[0.12em] text-ocean-400">
               {t('Nombre', 'Name')}
-              <span className="relative">
-                <User className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-ocean-500" size={17} />
-                <input className="focus-ring w-full rounded-2xl border border-white/10 bg-white/[0.055] py-3.5 pl-11 pr-4 text-sm font-medium normal-case tracking-normal text-white placeholder:text-ocean-500 focus:border-ocean-300 focus:ring-4 focus:ring-ocean-500/15" value={name} onChange={(event) => setName(event.target.value)} placeholder={t('Tu nombre', 'Your name')} autoComplete="name" />
-              </span>
+              <Input value={name} onChange={(event) => setName(event.target.value)} placeholder={t('Tu nombre', 'Your name')} autoComplete="name" shape="soft" startIcon={<User size={17} />} />
             </label>
 
             <label className="grid gap-2 text-xs font-extrabold uppercase tracking-[0.12em] text-ocean-400">
               {t('País', 'Country')} <span className="font-semibold normal-case tracking-normal text-ocean-500">({t('opcional', 'optional')})</span>
-              <span className="relative">
-                <Globe2 className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-ocean-500" size={17} />
-                <input className="focus-ring w-full rounded-2xl border border-white/10 bg-white/[0.055] py-3.5 pl-11 pr-4 text-sm font-medium normal-case tracking-normal text-white placeholder:text-ocean-500 focus:border-ocean-300 focus:ring-4 focus:ring-ocean-500/15" value={country} onChange={(event) => setCountry(event.target.value)} placeholder={t('Costa Rica', 'Costa Rica')} autoComplete="country-name" />
-              </span>
+              <Input value={country} onChange={(event) => setCountry(event.target.value)} placeholder={t('Costa Rica', 'Costa Rica')} autoComplete="country-name" shape="soft" startIcon={<Globe2 size={17} />} />
             </label>
 
             <label className="grid gap-2 text-xs font-extrabold uppercase tracking-[0.12em] text-ocean-400">
               {t('Tu comentario', 'Your review')}
-              <span className="relative">
-                <Quote className="pointer-events-none absolute left-4 top-3 text-ocean-500" size={17} />
-                <textarea className="focus-ring min-h-[7rem] w-full resize-y rounded-2xl border border-white/10 bg-white/[0.055] py-3.5 pl-11 pr-4 text-sm font-medium normal-case tracking-normal text-white placeholder:text-ocean-500 focus:border-ocean-300 focus:ring-4 focus:ring-ocean-500/15" rows={4} value={quote} onChange={(event) => setQuote(event.target.value)} placeholder={t('¿Qué fue lo mejor de tu día en el océano?', 'What was the best part of your day on the ocean?')} />
-              </span>
+              <TextArea className="min-h-[7rem]" rows={4} value={quote} onChange={(event) => setQuote(event.target.value)} placeholder={t('¿Qué fue lo mejor de tu día en el océano?', 'What was the best part of your day on the ocean?')} startIcon={<Quote size={17} />} />
             </label>
           </div>
 
@@ -169,14 +155,10 @@ export function ReviewModal({ open, onClose }: ReviewModalProps) {
             <TurnstileBox token={turnstileToken} resetKey={turnstileResetKey} action="review" onTokenChange={setTurnstileToken} />
           </div>
 
-          {formError || mutation.isError ? (
-            <div className="mt-4 rounded-2xl border border-red-300/30 bg-red-500/10 p-4 text-sm font-bold text-red-100" role="alert">
-              {mutation.isError ? t('No pudimos enviar tu comentario. Inténtalo de nuevo.', 'We couldn’t send your review. Please try again.') : formError}
-            </div>
-          ) : null}
+          {formError || mutation.isError ? <FieldError className="mt-4" variant="panel">{mutation.isError ? t('No pudimos enviar tu comentario. Inténtalo de nuevo.', 'We couldn’t send your review. Please try again.') : formError}</FieldError> : null}
 
           <div className="mt-7 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-            <Button variant="secondary" type="button" disabled={mutation.isPending} onClick={onClose}>{t('Cancelar', 'Cancel')}</Button>
+            <Button variant="glass" type="button" disabled={mutation.isPending} onClick={onClose}>{t('Cancelar', 'Cancel')}</Button>
             <Button type="submit" disabled={mutation.isPending || rating < 1}>
               {mutation.isPending ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
               {mutation.isPending ? t('Enviando…', 'Sending…') : t('Enviar comentario', 'Send review')}
@@ -184,7 +166,7 @@ export function ReviewModal({ open, onClose }: ReviewModalProps) {
           </div>
         </form>
       </div>
-    </Modal>
+    </ModalShell>
   );
 }
 
@@ -199,14 +181,15 @@ function StarRating({ value, onChange }: { value: number; onChange: (rating: num
         <button
           key={star}
           className={cn(
-            'focus-ring pressable grid h-11 w-11 place-items-center rounded-full border transition-all duration-200',
+            'glass-control glass-interactive glass-focus-ring grid h-11 w-11 place-items-center rounded-full',
             star <= active
-              ? 'border-seafoam-400/35 bg-seafoam-400/12 text-seafoam-400 shadow-[0_10px_22px_rgba(226,168,109,0.12)]'
-              : 'border-white/10 bg-white/[0.035] text-white/25 hover:border-white/20 hover:text-white/50',
+              ? 'text-seafoam-400'
+              : 'text-white/25',
           )}
           type="button"
           role="radio"
           aria-checked={value === star}
+          data-selected={star <= active || undefined}
           aria-label={`${star} ${star === 1 ? (language === 'es' ? 'estrella' : 'star') : (language === 'es' ? 'estrellas' : 'stars')}`}
           onMouseEnter={() => setHovered(star)}
           onMouseLeave={() => setHovered(0)}

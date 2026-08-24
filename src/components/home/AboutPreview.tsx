@@ -2,8 +2,8 @@ import { Anchor, ShieldCheck, SlidersHorizontal } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 
-import { Button } from '../common/Button';
 import { Container } from '../common/Container';
+import { Button, CardShell, GlassPanel, SectionHeader } from '../ui';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { DEFAULT_ABOUT_SETTINGS, getAboutSettings, splitParagraphs, type AboutSettings } from '../../services/aboutSettings';
 
@@ -70,13 +70,7 @@ export function AboutPreview() {
       <Container>
         <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_420px] lg:items-center">
           <div data-section-anchor>
-            <p className="text-sm font-bold uppercase tracking-[0.14em] text-ocean-400">
-              {about[`about.eyebrow.${locale}` as keyof AboutSettings]}
-            </p>
-            <h2 className="mt-3 max-w-3xl font-display text-4xl font-extrabold leading-tight sm:text-5xl">
-              {about[`about.title.${locale}` as keyof AboutSettings]}
-            </h2>
-
+            <SectionHeader align="left" eyebrow={about[`about.eyebrow.${locale}` as keyof AboutSettings]} title={about[`about.title.${locale}` as keyof AboutSettings]} variant="feature" />
             <div className="mt-6 grid max-w-3xl gap-4 text-base leading-8 text-ocean-200">
               {paragraphs.map((paragraph) => (
                 <p key={paragraph.slice(0, 32)}>{paragraph}</p>
@@ -86,7 +80,7 @@ export function AboutPreview() {
           </div>
 
           <div>
-            <div className="rounded-[2rem] border border-white/10 bg-white/[0.06] p-3 shadow-lifted backdrop-blur-xl">
+            <GlassPanel className="p-3" variant="surface">
               <div className="relative aspect-[4/3] overflow-hidden rounded-[1.4rem]">
                 {images.map((image, index) => (
                   <img
@@ -104,9 +98,9 @@ export function AboutPreview() {
                   ))}
                 </div>
               </div>
-            </div>
+            </GlassPanel>
             <div className="mt-8 flex justify-center">
-              <Button variant="secondary" to="/nosotros">
+              <Button variant="glass" to="/nosotros">
                 {about[`about.preview_button_label.${locale}` as keyof AboutSettings]}
               </Button>
             </div>
@@ -115,7 +109,7 @@ export function AboutPreview() {
 
         <div className="mx-auto mt-14 grid max-w-5xl gap-3 md:grid-cols-3">
           {valueCards.map((card) => (
-            <article key={card.title.en} className="group grid gap-3 rounded-2xl border border-white/10 bg-white/[0.06] p-3 shadow-soft backdrop-blur-xl transition duration-300 hover:-translate-y-1 hover:border-ocean-300/60 hover:bg-white/[0.1] hover:shadow-lifted">
+            <CardShell as="article" interactive key={card.title.en} className="grid gap-3 rounded-2xl p-3 shadow-soft">
               <span className="grid h-10 w-10 place-items-center rounded-full bg-white text-ocean-600 transition duration-300 group-hover:scale-105 group-hover:bg-ocean-100">
                 <card.icon size={18} />
               </span>
@@ -123,7 +117,7 @@ export function AboutPreview() {
                 <h3 className="text-sm font-extrabold text-white">{card.title[language]}</h3>
                 <p className="mt-0.5 text-xs leading-5 text-ocean-200">{card.description[language]}</p>
               </span>
-            </article>
+            </CardShell>
           ))}
         </div>
       </Container>
