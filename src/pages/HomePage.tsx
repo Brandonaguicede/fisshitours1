@@ -26,7 +26,7 @@ export default function HomePage() {
   const catalogTours = toursQuery.data?.length ? toursQuery.data : boatTours;
   const [selectedBoatId, setSelectedBoatId] = useState(boats[0].id);
   const [selectedTourId, setSelectedTourId] = useState<string | undefined>(boatTours.find((tour) => tour.boatId === boats[0].id)?.id);
-  const bookingRef = useRef<HTMLDivElement | null>(null);
+  const bookingRef = useRef<HTMLElement | null>(null);
 
   const selectedBoat = useMemo(() => catalogBoats.find((boat) => boat.id === selectedBoatId) ?? catalogBoats[0], [catalogBoats, selectedBoatId]);
   const selectedTour = useMemo(() => catalogTours.find((tour) => tour.id === selectedTourId && tour.boatId === selectedBoat?.id), [catalogTours, selectedBoat?.id, selectedTourId]);
@@ -83,9 +83,9 @@ export default function HomePage() {
       <Hero />
       <FleetSection boats={catalogBoats} tours={catalogTours} selectedBoat={selectedBoat} onSelectBoat={selectBoat} onViewTourType={viewTourOnHome} onViewAllTours={viewAllToursOnHome} />
       <TourCarouselSection boats={catalogBoats} tours={toursWithKnownBoats} selectedTour={selectedTour} onSelectTour={selectTour} />
-      <section className="scroll-mt-24 bg-ocean-950 py-10 sm:py-14 lg:py-16" id="booking" ref={bookingRef}>
+      <section className="home-section bg-ocean-950 py-10 sm:py-14 lg:py-16" data-home-section id="booking" ref={bookingRef}>
         <Container>
-          <div className="mx-auto max-w-4xl">
+          <div className="mx-auto max-w-4xl" data-section-anchor>
             <div className="max-w-2xl">
               <p className="text-xs font-bold uppercase tracking-[0.14em] text-ocean-400">{tr(text.home.bookingEyebrow, language)}</p>
               <h2 className="mt-2 font-display text-2xl font-extrabold leading-tight text-white sm:text-3xl">{tr(text.home.bookingTitle, language)}</h2>

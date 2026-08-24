@@ -66,10 +66,10 @@ export function AboutPreview() {
   const paragraphs = splitParagraphs(about[`about.preview_text.${locale}` as keyof AboutSettings]);
 
   return (
-    <section className="section-y bg-ocean-900 text-white">
+    <section className="home-section section-y bg-ocean-900 text-white" data-home-section id="about">
       <Container>
         <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_420px] lg:items-center">
-          <div>
+          <div data-section-anchor>
             <p className="text-sm font-bold uppercase tracking-[0.14em] text-ocean-400">
               {about[`about.eyebrow.${locale}` as keyof AboutSettings]}
             </p>

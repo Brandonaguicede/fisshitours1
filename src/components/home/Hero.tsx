@@ -66,7 +66,12 @@ export function Hero() {
   }
 
   return (
-    <section className="relative min-h-[100dvh] overflow-hidden bg-[radial-gradient(circle_at_50%_30%,rgba(73,134,167,0.34),transparent_22rem),linear-gradient(180deg,#0B2842_0%,#061B2F_56%,#020B14_100%)]">
+    <section
+      className="home-section relative min-h-[100dvh] overflow-hidden bg-[radial-gradient(circle_at_50%_30%,rgba(73,134,167,0.34),transparent_22rem),linear-gradient(180deg,#0B2842_0%,#061B2F_56%,#020B14_100%)]"
+      id="home"
+      data-home-section
+      data-nav-href="/"
+    >
       <img
         className="absolute inset-0 h-full w-full object-cover object-center"
         src={hero['home.hero.image'] || FALLBACK_HERO_IMAGE}

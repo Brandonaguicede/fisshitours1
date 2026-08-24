@@ -88,7 +88,7 @@ export default function AboutPage() {
 
   return (
     <main className="bg-ocean-950 text-white">
-      <section className="relative overflow-hidden pb-16 pt-32 sm:pt-36 lg:pb-24">
+      <section className="relative overflow-hidden pb-16 pt-24 sm:pt-28 lg:pb-24 lg:pt-32">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_12%_8%,rgba(110,172,201,0.28),transparent_28rem),linear-gradient(180deg,rgba(11,40,66,0.88),rgba(19,62,98,0.96))]" />
         <Container className="relative grid gap-10 lg:grid-cols-[minmax(0,1fr)_440px] lg:items-end">
           <div>

@@ -1,9 +1,10 @@
 import { Menu, X } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type MouseEvent } from 'react';
 import { Link, NavLink, useLocation } from 'react-router-dom';
 
 import { navigationItems } from '../../constants/navigation';
 import { useLanguage } from '../../i18n/LanguageContext';
+import { scrollToHomeSection } from '../../utils/homeNavigation';
 import { cn } from '../../utils/cn';
 import { Button } from '../common/Button';
 import { Container } from '../common/Container';
@@ -24,6 +25,21 @@ export function Navbar() {
     '/contacto': { es: 'Contacto', en: 'Contact' },
   };
 
+  function handleNavigationClick(event: MouseEvent<HTMLAnchorElement>, href: string) {
+    setIsOpen(false);
+    if (href === '/' && location.pathname === '/') {
+      event.preventDefault();
+      scrollToHomeSection('home');
+      return;
+    }
+
+    const hash = href.startsWith('/#') ? href.slice(1) : '';
+    if (hash && location.pathname === '/' && location.hash === hash) {
+      event.preventDefault();
+      scrollToHomeSection(window.decodeURIComponent(hash.slice(1)));
+    }
+  }
+
   useEffect(() => {
     function handleScroll() {
       setIsScrolled(window.scrollY > 24);
@@ -42,26 +58,17 @@ export function Navbar() {
       return;
     }
 
-    const hashHref = location.hash ? `/${location.hash}` : '/';
-    setActiveHref(navigationItems.some((item) => item.href === hashHref) ? hashHref : '/');
-
-    const sectionItems = navigationItems.filter((item) => item.href.startsWith('/#'));
-
     function updateActiveSection() {
-      if (window.scrollY < window.innerHeight * 0.45) {
-        setActiveHref('/');
-        return;
-      }
+      const rootStyles = getComputedStyle(document.documentElement);
+      const configuredGap = Number.parseFloat(rootStyles.getPropertyValue('--nav-section-gap'));
+      const navbarBottom = document.querySelector<HTMLElement>('[data-navbar-bar]')?.getBoundingClientRect().bottom ?? 0;
+      const viewportMarker = navbarBottom + (Number.isFinite(configuredGap) ? configuredGap : 48) + 1;
+      const currentSection = Array.from(document.querySelectorAll<HTMLElement>('[data-home-section]')).find((section) => {
+        const bounds = section.getBoundingClientRect();
+        return Math.round(bounds.top) <= viewportMarker && Math.round(bounds.bottom) > viewportMarker;
+      });
 
-      const viewportMarker = window.innerHeight * 0.5;
-      let currentHref = '/';
-
-      for (const item of sectionItems) {
-        const section = document.getElementById(item.href.slice(2));
-        if (section && section.getBoundingClientRect().top <= viewportMarker) currentHref = item.href;
-      }
-
-      setActiveHref(currentHref);
+      setActiveHref(currentSection?.dataset.navHref ?? '');
     }
 
     const syncTimer = window.setTimeout(updateActiveSection, location.hash ? 160 : 0);
@@ -77,11 +84,11 @@ export function Navbar() {
 
   return (
     <header className="pointer-events-none fixed left-0 right-0 top-2 z-50 sm:top-3">
-      <Container className="relative flex h-14 items-center justify-between gap-3 sm:h-20 sm:gap-4">
+      <Container className="relative flex h-14 items-center justify-between gap-3 sm:h-20 sm:gap-4" data-navbar-bar>
         <NavLink
           className="focus-ring pointer-events-auto flex shrink-0 items-center rounded-full text-white transition-all duration-200"
           to="/"
-          onClick={() => setIsOpen(false)}
+          onClick={(event) => handleNavigationClick(event, '/')}
         >
           <span className={cn('grid size-16 shrink-0 place-items-center transition-all duration-300 sm:size-20', isScrolled ? 'drop-shadow-lg' : 'drop-shadow-sm')}>
             <img className="h-full w-full object-contain" src="/images/papagayo-logo.png" alt="" aria-hidden="true" loading="eager" decoding="async" />
@@ -107,6 +114,7 @@ export function Navbar() {
                 )}
                 to={item.href}
                 aria-current={isActive ? 'page' : undefined}
+                onClick={(event) => handleNavigationClick(event, item.href)}
               >
                 {navLabels[item.href]?.[language] ?? item.label}
               </Link>
@@ -154,7 +162,7 @@ export function Navbar() {
                 )}
                 to={item.href}
                 aria-current={activeHref === item.href ? 'page' : undefined}
-                onClick={() => setIsOpen(false)}
+                onClick={(event) => handleNavigationClick(event, item.href)}
               >
                 {navLabels[item.href]?.[language] ?? item.label}
               </Link>

@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 
+import { scrollToHomeSection } from '../../utils/homeNavigation';
 import { Footer } from './Footer';
 import { Navbar } from './Navbar';
 
@@ -8,9 +9,15 @@ export function MainLayout() {
   const location = useLocation();
 
   useEffect(() => {
-    if (!location.hash) return;
+    if (!location.hash) {
+      if (location.pathname === '/') {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+      return;
+    }
     const id = window.decodeURIComponent(location.hash.slice(1));
-    window.setTimeout(() => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80);
+    const timer = window.setTimeout(() => scrollToHomeSection(id), 80);
+    return () => window.clearTimeout(timer);
   }, [location.pathname, location.hash]);
 
   return (

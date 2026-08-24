@@ -36,7 +36,8 @@ export function Testimonials() {
 
   return (
     <section
-      className="section-y relative scroll-mt-24 overflow-hidden bg-[linear-gradient(180deg,#0B2842_0%,#061B2F_48%,#0B2842_100%)]"
+      className="home-section section-y relative overflow-hidden bg-[linear-gradient(180deg,#0B2842_0%,#061B2F_48%,#0B2842_100%)]"
+      data-home-section
       id="comments"
     >
       <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-ocean-300/35 to-transparent" />

@@ -94,9 +94,9 @@ export function FleetSection({ boats, tours, selectedBoat, onSelectBoat, onViewT
   }
 
   return (
-    <section className="section-y scroll-mt-24" data-after-hero="true" id="fleet">
+    <section className="home-section pb-16 pt-0 sm:pb-20 sm:pt-8 lg:pb-24 lg:pt-10" data-after-hero="true" data-home-section data-nav-href="/#fleet" id="fleet">
       <Container>
-        <div className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
+        <div className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between" data-section-anchor>
           <SectionTitle
             align="left"
             eyebrow={tr(text.home.fleetEyebrow, language)}

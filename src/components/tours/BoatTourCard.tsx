@@ -1,5 +1,6 @@
-import { ArrowRight, CheckCircle, Clock, Users, X } from 'lucide-react';
+import { Compass, Clock, Users, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 
 import type { Boat } from '../../types/boat';
 import type { BoatTour } from '../../types/boatTour';
@@ -56,44 +57,45 @@ export function BoatTourCard({ boat, tour, relatedTours, isSelected, onSelect }:
 
   return (
     <>
-      <article className={`group relative flex h-full min-h-[335px] flex-col overflow-hidden rounded-2xl border border-white/10 bg-white/[0.06] shadow-soft backdrop-blur-xl transition duration-300 hover:-translate-y-1 hover:border-ocean-400/70 hover:shadow-lifted sm:min-h-[380px] ${isSelected ? 'border-ocean-400 bg-ocean-500/15 ring-4 ring-ocean-500/10' : ''}`}>
-        <div className="relative h-[185px] overflow-hidden sm:h-[215px]">
-          <img
-            src={tour.image}
-            alt={language === 'es' ? `Tour ${display.title} a bordo de ${boat.name}` : `${display.title} tour aboard ${boat.name}`}
-            className="h-full w-full object-cover transition duration-700 ease-out group-hover:scale-[1.035]"
-            loading="lazy"
-          />
-          {isSelected ? (
-            <span className="absolute right-4 top-4 grid h-9 w-9 place-items-center rounded-full bg-ocean-400 text-ocean-950 shadow-sm">
-              <CheckCircle size={20} />
+      <article className="h-full w-full">
+        <button
+          className={`focus-ring glass-surface glass-interactive group flex h-full w-full appearance-none flex-col overflow-hidden rounded-[1.65rem] p-0 text-left ${
+            isSelected ? 'ring-1 ring-inset ring-ocean-200/45' : ''
+          }`}
+          type="button"
+          aria-label={`${language === 'es' ? 'Ver tour' : 'View tour'} ${display.title}`}
+          onClick={openModal}
+        >
+          <span className="relative block h-48 w-full shrink-0 overflow-hidden bg-ocean-900 sm:h-52">
+            <img
+              src={tour.image}
+              alt={language === 'es' ? `Tour ${display.title} a bordo de ${boat.name}` : `${display.title} tour aboard ${boat.name}`}
+              className="absolute inset-0 h-full w-full object-cover transition duration-500 group-hover:scale-[1.025]"
+              loading="lazy"
+              decoding="async"
+            />
+            <span className="absolute inset-0 bg-gradient-to-t from-ocean-950/75 via-transparent to-ocean-950/10" />
+            <span className="absolute inset-x-5 bottom-4">
+              <span className="block font-display text-[1.75rem] font-semibold leading-none text-white">{display.title}</span>
             </span>
-          ) : null}
-        </div>
+          </span>
 
-        <div className="flex flex-1 flex-col p-3.5 sm:p-4">
-          <h3 className="text-balance text-xl font-extrabold leading-tight text-white sm:text-2xl">{display.title}</h3>
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            {display.tags.slice(0, 3).map((tag) => (
-              <span key={tag} className="rounded-full border border-ocean-400/25 bg-ocean-500/10 px-2 py-0.5 text-[0.62rem] font-extrabold uppercase tracking-[0.06em] text-ocean-200 sm:px-2.5 sm:py-1 sm:text-[0.68rem]">{tag}</span>
-            ))}
-          </div>
-          <div className="mt-2.5 grid gap-1 text-xs font-semibold text-ocean-200 sm:mt-3 sm:gap-1.5 sm:text-sm">
-            {display.duration ? <span className="flex items-center gap-2"><Clock size={16} className="text-ocean-400" /> {display.duration}</span> : null}
-            <span className="flex items-center gap-2"><Users size={16} className="text-ocean-400" /> {language === 'es' ? `Hasta ${effectiveMaxGuests} personas` : `Up to ${effectiveMaxGuests} guests`}</span>
-          </div>
+          <span className="flex w-full flex-1 flex-col p-4 sm:p-5">
+            <span className="text-sm font-semibold text-ocean-200">
+              {language === 'es' ? 'Desde' : 'From'} {formatTourPrice(lowestPrice)}
+            </span>
 
-          <div className="mt-auto flex items-end justify-between gap-3 pt-3 sm:pt-4">
-            <div className="min-w-0">
-              <p className="text-[0.65rem] font-bold uppercase tracking-[0.12em] text-ocean-300">{language === 'es' ? 'Desde' : 'From'}</p>
-              <p className="text-xl font-extrabold leading-tight text-ocean-400 sm:text-2xl">{formatCurrency(lowestPrice)}</p>
-            </div>
-            <Button type="button" variant="secondary" className="group/button min-h-9 shrink-0 px-3 text-xs sm:min-h-10 sm:px-4 sm:text-sm" onClick={openModal}>
-              {language === 'es' ? 'Ver Tour' : 'View Tour'}
-              <ArrowRight size={16} className="transition-transform duration-300 group-hover/button:translate-x-0.5" />
-            </Button>
-          </div>
-        </div>
+            <span className="mt-4 grid grid-cols-3 gap-2">
+              <TourSpecChip icon={<Clock size={15} />} value={getDurationLabel(tour, display.duration, language)} />
+              <TourSpecChip icon={<Users size={15} />} value={`${language === 'es' ? 'MÃ¡x.' : 'Max'} ${effectiveMaxGuests}`} />
+              <TourSpecChip icon={<Compass size={15} />} value={display.category} />
+            </span>
+
+            <span className="glass-primary glass-interactive mt-4 flex min-h-10 w-full items-center justify-center rounded-full px-5 py-2 text-sm font-semibold text-ocean-950">
+              {language === 'es' ? 'Ver tour' : 'View Tour'}
+            </span>
+          </span>
+        </button>
       </article>
 
       {isModalOpen ? (
@@ -172,4 +174,28 @@ export function BoatTourCard({ boat, tour, relatedTours, isSelected, onSelect }:
       ) : null}
     </>
   );
+}
+
+function TourSpecChip({ icon, value }: { icon: ReactNode; value: string }) {
+  return (
+    <span className="glass-control flex min-w-0 flex-col items-center justify-center gap-1 rounded-2xl px-2 py-2.5 text-center text-[0.7rem] font-medium leading-tight text-ocean-100">
+      <span className="text-ocean-400">{icon}</span>
+      <span className="w-full truncate">{value}</span>
+    </span>
+  );
+}
+
+function formatTourPrice(value: number) {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    maximumFractionDigits: 0,
+  }).format(value);
+}
+
+function getDurationLabel(tour: BoatTour, localizedDuration: string | undefined, language: 'en' | 'es') {
+  if (localizedDuration) return localizedDuration;
+  const slot = tour.timeSlots[0];
+  if (!slot) return language === 'es' ? 'Consultar' : 'On request';
+  return slot.time;
 }

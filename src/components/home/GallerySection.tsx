@@ -57,9 +57,9 @@ export function GallerySection() {
   }
 
   return (
-    <section className="section-y scroll-mt-24 bg-ocean-950" id="gallery">
+    <section className="home-section bg-ocean-950 pb-16 pt-0 sm:pb-20 sm:pt-8 lg:pb-24 lg:pt-10" data-home-section data-nav-href="/#gallery" id="gallery">
       <Container>
-        <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+        <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between" data-section-anchor>
           <SectionTitle
             align="left"
             eyebrow={tr(text.home.galleryEyebrow, language)}

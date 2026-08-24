@@ -21,7 +21,7 @@ export function Footer() {
   const { language } = useLanguage();
 
   return (
-    <footer className="bg-ocean-950 text-white">
+    <footer className="bg-ocean-950 text-white" id="footer">
       <Container className="grid gap-10 py-16 md:grid-cols-[1.35fr_1fr_1fr_1fr]">
         <div>
           <Link className="flex items-center gap-3 text-xl font-extrabold" to="/">
