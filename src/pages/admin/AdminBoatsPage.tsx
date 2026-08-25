@@ -63,6 +63,21 @@ function fallbackBoatImages(boat: BoatRow): BoatImageRow[] {
   }));
 }
 
+function equipmentTextToItems(value?: string | null) {
+  return (value ?? '')
+    .split(/\n|,/)
+    .map((item) => item.trim().replace(/\.$/, ''))
+    .filter(Boolean);
+}
+
+function equipmentItemsToStorageValue(value?: string | null) {
+  return equipmentTextToItems(value).join(', ');
+}
+
+function equipmentStorageToTextarea(value?: string | null) {
+  return equipmentTextToItems(value).join('\n');
+}
+
 export default function AdminBoatsPage() {
   const db = supabase as any;
   const [boats, setBoats] = useState<BoatRow[] | null>(null);
@@ -243,7 +258,7 @@ export default function AdminBoatsPage() {
       base_price_label: editing.base_price_label?.trim() || null,
       length: editing.length?.trim() || null,
       engine: editing.engine?.trim() || null,
-      featured_spec: editing.featured_spec?.trim() || null,
+      featured_spec: equipmentItemsToStorageValue(editing.featured_spec) || null,
       included_guests: editing.included_guests,
       max_guests: editing.max_guests,
       extra_guest_price: editing.extra_guest_price,
@@ -602,7 +617,13 @@ export default function AdminBoatsPage() {
               <FormSection title="Estado y configuracion" description="Controla visibilidad y orden en el sitio publico." icon={<Settings2 size={16} />}>
                 <label className="admin-field">
                   <span className="admin-field__label">Especificaciones destacadas</span>
-                  <textarea className="admin-input min-h-28" value={editing.featured_spec ?? ''} onChange={(event) => setEditing({ ...editing, featured_spec: event.target.value || null })} placeholder="GPS, radio VHF, sonido, bano, juguetes acuaticos..." />
+                  <textarea
+                    className="admin-input admin-textarea-list"
+                    value={equipmentStorageToTextarea(editing.featured_spec)}
+                    onChange={(event) => setEditing({ ...editing, featured_spec: event.target.value || null })}
+                    placeholder={'Garmin GPS\nVHF radio\nPremium JBL sound\nBluetooth\nRestroom\nWater toys\nSafety equipment'}
+                  />
+                  <span className="admin-field-help">Escribe un item por linea. Se mostraran como chips de equipamiento en la pagina.</span>
                 </label>
                 <ToggleSwitch
                   checked={editing.active}

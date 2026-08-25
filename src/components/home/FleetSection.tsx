@@ -1,4 +1,4 @@
-import { ChevronRight, Gauge, Ruler, Users } from 'lucide-react';
+import { Check, ChevronRight, Gauge, Ruler, ShieldCheck, Users } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 
 import type { Boat } from '../../types/boat';
@@ -10,7 +10,7 @@ import { useLanguage } from '../../i18n/LanguageContext';
 import { text, tr } from '../../i18n/translations';
 import { BoatCard } from '../boats/BoatCard';
 import { Container } from '../common/Container';
-import { Button, CarouselArrow, Chip, ChoiceCard, CloseButton, GlassPanel, MediaGallery, ModalShell, SectionHeader } from '../ui';
+import { Button, CarouselArrow, ChoiceCard, CloseButton, GlassPanel, MediaGallery, ModalShell, SectionHeader } from '../ui';
 
 interface FleetSectionProps {
   boats: Boat[];
@@ -147,11 +147,22 @@ export function FleetSection({ boats, tours, selectedBoat, onSelectBoat, onViewT
                   <GlassPanel className="mt-3 min-h-14 px-4 sm:px-5" variant="control">
                     <DetailLine label={language === 'es' ? 'Persona extra' : 'Additional guest'} value={`${formatCurrency(modalBoat.extraGuestPrice)} ${language === 'es' ? 'cada una' : 'each'}`} />
                   </GlassPanel>
-                  <GlassPanel className="mt-4 p-3.5" variant="control">
-                    <p className="text-[0.68rem] font-semibold uppercase tracking-[0.14em] text-ocean-400">{language === 'es' ? 'Equipamiento' : 'Equipment'}</p>
-                    <div className="mt-2.5 flex flex-wrap gap-2">
+                  <GlassPanel className="mt-4 overflow-hidden p-0" variant="control">
+                    <div className="flex items-center gap-2 border-b border-white/10 px-4 py-3">
+                      <span className="grid size-8 shrink-0 place-items-center rounded-full bg-ocean-300/12 text-ocean-300" aria-hidden="true">
+                        <ShieldCheck size={16} />
+                      </span>
+                      <div>
+                        <p className="text-[0.68rem] font-semibold uppercase tracking-[0.14em] text-ocean-400">{language === 'es' ? 'Equipamiento' : 'Equipment'}</p>
+                        <p className="mt-0.5 text-xs font-medium text-ocean-200">{language === 'es' ? 'A bordo para cada salida' : 'On board for every trip'}</p>
+                      </div>
+                    </div>
+                    <div className="grid gap-2 px-4 py-3 sm:grid-cols-2">
                       {getEquipmentItems(modalBoatText?.featuredSpec ?? modalBoat.featuredSpec).map((item) => (
-                        <Chip key={item}>{item}</Chip>
+                        <span className="flex min-w-0 items-center gap-2 rounded-lg border border-white/10 bg-white/[0.035] px-3 py-2 text-xs font-semibold text-white" key={item}>
+                          <Check className="size-3.5 shrink-0 text-seafoam-400" aria-hidden="true" />
+                          <span className="min-w-0 leading-snug">{item}</span>
+                        </span>
                       ))}
                     </div>
                   </GlassPanel>
