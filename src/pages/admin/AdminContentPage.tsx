@@ -312,10 +312,20 @@ export default function AdminContentPage() {
         imageRequireReplacement
         preview={(draft) => (
           <div className="relative overflow-hidden rounded-xl">
-            <picture>
-              {draft['home.hero.mobile_image'] ? <source media="(max-width: 639px)" srcSet={draft['home.hero.mobile_image']} /> : null}
-              <img className="aspect-[4/5] w-full object-cover sm:aspect-video" src={draft['home.hero.image']} alt={draft['home.hero.image_alt.es']} />
-            </picture>
+            {draft['home.hero.mobile_image'] ? (
+              <img className="aspect-[4/5] w-full object-cover sm:hidden" src={draft['home.hero.mobile_image']} alt={draft['home.hero.image_alt.es']} />
+            ) : (
+              <div className="grid aspect-[4/5] w-full place-items-center border border-dashed border-white/25 text-xs text-white/60 sm:hidden">
+                Sin imagen de celular
+              </div>
+            )}
+            {draft['home.hero.image'] ? (
+              <img className="hidden aspect-video w-full object-cover sm:block" src={draft['home.hero.image']} alt={draft['home.hero.image_alt.es']} />
+            ) : (
+              <div className="hidden aspect-video w-full place-items-center border border-dashed border-white/25 text-xs text-white/60 sm:grid">
+                Sin imagen de compu
+              </div>
+            )}
             <div className="absolute inset-0 bg-ocean-950/45" />
             <div className="absolute inset-0 grid place-items-center p-5 text-center">
               <div>

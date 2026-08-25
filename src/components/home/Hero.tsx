@@ -68,7 +68,7 @@ function getHeroSlides(settings?: HeroSettings) {
     { image: settings['home.hero.slide_2.image'], mobileImage: settings['home.hero.slide_2.mobile_image'] },
     { image: settings['home.hero.slide_3.image'], mobileImage: settings['home.hero.slide_3.mobile_image'] },
     { image: settings['home.hero.slide_4.image'], mobileImage: settings['home.hero.slide_4.mobile_image'] },
-  ].filter((slide) => slide.image);
+  ].filter((slide) => slide.image || slide.mobileImage);
 }
 
 export function Hero() {
@@ -106,23 +106,37 @@ export function Hero() {
       data-nav-href="/"
     >
       {slides.map((slide, index) => (
-        <picture
+        <div
           className={`absolute inset-0 transition-opacity duration-1000 ease-out ${index === activeSlide ? 'opacity-100' : 'opacity-0'}`}
           key={`${slide.image}-${index}`}
         >
-          {slide.mobileImage ? <source media="(max-width: 639px)" srcSet={slide.mobileImage} /> : null}
-          <img
-            className="h-full w-full object-cover object-center"
-            src={slide.image}
-            alt={hero[`home.hero.image_alt.${locale}` as keyof HeroSettings]}
-            width={1920}
-            height={1080}
-            sizes="100vw"
-            fetchPriority={index === 0 ? 'high' : 'auto'}
-            loading={index === 0 ? 'eager' : 'lazy'}
-            decoding="async"
-          />
-        </picture>
+          {slide.mobileImage ? (
+            <img
+              className="h-full w-full object-cover object-center sm:hidden"
+              src={slide.mobileImage}
+              alt={hero[`home.hero.image_alt.${locale}` as keyof HeroSettings]}
+              width={1200}
+              height={1500}
+              sizes="100vw"
+              fetchPriority={index === 0 ? 'high' : 'auto'}
+              loading={index === 0 ? 'eager' : 'lazy'}
+              decoding="async"
+            />
+          ) : null}
+          {slide.image ? (
+            <img
+              className="hidden h-full w-full object-cover object-center sm:block"
+              src={slide.image}
+              alt={hero[`home.hero.image_alt.${locale}` as keyof HeroSettings]}
+              width={1920}
+              height={1080}
+              sizes="100vw"
+              fetchPriority={index === 0 ? 'high' : 'auto'}
+              loading={index === 0 ? 'eager' : 'lazy'}
+              decoding="async"
+            />
+          ) : null}
+        </div>
       ))}
       <div className="absolute inset-0 bg-ocean-950/45" />
       <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-black/80 to-transparent" />
