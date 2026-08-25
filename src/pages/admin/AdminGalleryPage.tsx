@@ -61,9 +61,10 @@ export default function AdminGalleryPage() {
   async function createImage() {
     setNotice('');
     setError('');
+    const initialCategory = filter === 'all' ? 'fishing' : filter;
     const { data, error } = await supabase
       .from('gallery_images')
-      .insert({ id: `gal-${crypto.randomUUID()}`, alt: 'Nueva imagen', category: 'fishing', active: true, sort_order: (images?.length ?? 0) + 1 })
+      .insert({ id: `gal-${crypto.randomUUID()}`, alt: 'Nueva imagen', category: initialCategory, active: true, sort_order: (images?.length ?? 0) + 1 })
       .select('id, src, image_url, image_public_id, alt, category, title, active, sort_order')
       .single();
     if (error) {
@@ -75,8 +76,18 @@ export default function AdminGalleryPage() {
   }
 
   async function closeEditor() {
-    if (editing && !editing.src && !editing.image_url) {
-      await supabase.from('gallery_images').delete().eq('id', editing.id);
+    if (editing) {
+      if (!editing.src && !editing.image_url) {
+        await supabase.from('gallery_images').delete().eq('id', editing.id);
+      } else {
+        // Persist any pending title/alt/category/order edits so closing the
+        // modal never silently discards them (upload only saves the image).
+        await supabase
+          .from('gallery_images')
+          .update({ alt: editing.alt, category: editing.category, title: editing.title, active: editing.active, sort_order: editing.sort_order })
+          .eq('id', editing.id);
+      }
+      await loadImages();
     }
     setEditing(null);
   }

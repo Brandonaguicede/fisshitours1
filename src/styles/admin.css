@@ -1,5 +1,14 @@
-.admin-shell,
-.admin-login {
+/*
+ * Scoped to `body:has(...)` instead of `.admin-shell, .admin-login` directly:
+ * admin modals render via a React portal to document.body (see ModalShell.tsx),
+ * so they sit as DOM siblings of .admin-shell, not descendants — a plain
+ * `.admin-shell { --admin-*: ... }` block would never reach them. Anchoring on
+ * body instead makes these tokens available to the whole document (including
+ * the portal) whenever an admin surface is mounted, without leaking into the
+ * public site once .admin-shell/.admin-login unmount.
+ */
+body:has(.admin-shell),
+body:has(.admin-login) {
   color-scheme: light;
   --admin-canvas: #f4f8fa;
   --admin-surface: #ffffff;
@@ -168,7 +177,6 @@
   gap: 0.75rem;
   min-height: 4.5rem;
   padding: 0.8rem 1rem;
-  border: 1px solid var(--admin-line-soft);
   border-radius: var(--admin-radius-md);
   background: rgba(255, 255, 255, 0.9);
   box-shadow: var(--admin-shadow);
@@ -246,7 +254,6 @@
 .admin-page-header,
 .admin-card,
 .admin-table-card {
-  border: 1px solid var(--admin-line-soft);
   border-radius: var(--admin-radius-md);
   background: var(--admin-surface);
   box-shadow: var(--admin-shadow);
@@ -505,7 +512,6 @@
   border: 1px solid color-mix(in srgb, var(--stat-color, var(--admin-primary)) 18%, white);
   border-radius: var(--admin-radius-md);
   background: linear-gradient(180deg, color-mix(in srgb, var(--stat-color, var(--admin-primary)) 7%, white), #fff 78%);
-  box-shadow: var(--admin-shadow);
 }
 
 .admin-stat-card__head {
@@ -556,10 +562,76 @@
   align-items: center;
   gap: 0.65rem;
   padding: 0.85rem;
-  border: 1px solid var(--admin-line-soft);
   border-radius: var(--admin-radius-md);
   background: white;
   box-shadow: var(--admin-shadow);
+}
+
+.admin-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  padding: 0.35rem;
+  border-radius: var(--admin-radius-md);
+  background: white;
+  box-shadow: var(--admin-shadow);
+}
+
+.admin-tab {
+  appearance: none;
+  -webkit-appearance: none;
+  border: 0;
+  border-radius: var(--admin-radius-sm);
+  padding: 0.55rem 0.9rem;
+  background: transparent;
+  color: var(--admin-muted);
+  font-size: 0.86rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.16s ease, color 0.16s ease;
+}
+
+.admin-tab:hover {
+  background: var(--admin-primary-soft);
+  color: var(--admin-primary-dark);
+}
+
+.admin-tab--active,
+.admin-tab--active:hover {
+  background: linear-gradient(120deg, var(--admin-primary), var(--admin-primary-dark));
+  color: white;
+}
+
+.admin-segmented {
+  display: inline-flex;
+  gap: 0.2rem;
+  padding: 0.2rem;
+  border: 1px solid var(--admin-line);
+  border-radius: 999px;
+  background: #f8fbfc;
+}
+
+.admin-segmented button {
+  appearance: none;
+  -webkit-appearance: none;
+  border: 0;
+  border-radius: 999px;
+  padding: 0.32rem 0.75rem;
+  background: transparent;
+  color: var(--admin-muted);
+  font-size: 0.76rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.16s ease, color 0.16s ease;
+}
+
+.admin-segmented button:hover {
+  color: var(--admin-primary-dark);
+}
+
+.admin-segmented button.admin-segmented__option--active {
+  background: var(--admin-primary-dark);
+  color: white;
 }
 
 .admin-input,
@@ -738,7 +810,7 @@
 }
 
 .admin-textarea-list {
-  min-height: 11rem;
+  min-height: 8rem;
   line-height: 1.65;
   resize: vertical;
 }
@@ -803,7 +875,6 @@
 
 .admin-media-card {
   overflow: hidden;
-  border: 1px solid var(--admin-line-soft);
   border-radius: var(--admin-radius-md);
   background: white;
   box-shadow: var(--admin-shadow);
@@ -1231,15 +1302,15 @@
 
 .admin-boat-thumb {
   display: grid;
-  flex: 0 0 120px;
-  width: 120px;
+  flex: 0 0 132px;
+  width: 132px;
   min-width: 0;
   gap: 0.4rem;
   scroll-snap-align: start;
 }
 
 .admin-boat-thumb > button:first-child {
-  width: 120px;
+  width: 132px;
   height: 80px;
   overflow: hidden;
   border: 2px solid var(--admin-line);
@@ -1260,17 +1331,17 @@
 
 .admin-boat-thumb__actions {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 0.2rem;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.3rem;
 }
 
 .admin-boat-thumb__actions button {
   display: grid;
   min-width: 0;
-  min-height: 44px;
+  min-height: 34px;
   place-items: center;
   border: 1px solid #c3dfe8;
-  border-radius: 8px;
+  border-radius: 7px;
   background: #eef9fc;
   color: var(--admin-primary-dark);
   cursor: pointer;
@@ -1283,6 +1354,13 @@
   background: var(--admin-primary);
   color: white;
   outline: none;
+}
+
+.admin-boat-thumb__actions button:last-child:hover,
+.admin-boat-thumb__actions button:last-child:focus-visible {
+  border-color: var(--admin-danger);
+  background: var(--admin-danger);
+  color: white;
 }
 
 .admin-boat-modal .admin-image-manager__preview img {

@@ -1,4 +1,4 @@
-import { Eye, FileText, Image as ImageIcon, Save } from 'lucide-react';
+import { ChevronDown, ChevronRight, Eye, FileText, Image as ImageIcon, Save } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 
 import AdminImageManager from '../../components/admin/AdminImageManager';
@@ -87,6 +87,14 @@ function storagePathFromPublicUrl(value?: string | null) {
   return value.split('/site-images/')[1] ?? null;
 }
 
+type LangFilter = 'all' | 'es' | 'en';
+
+function fieldLang(key: string): 'es' | 'en' | null {
+  if (key.endsWith('.es')) return 'es';
+  if (key.endsWith('.en')) return 'en';
+  return null;
+}
+
 function defaultsFrom(fields: ContentField[]): Draft {
   return fields.reduce<Draft>((acc, field) => {
     acc[field.key] = field.fallback;
@@ -111,9 +119,18 @@ function ContentSection({ title, description, fields, saveLabel, imageRequireRep
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [langFilter, setLangFilter] = useState<LangFilter>('all');
+  const [showExtraSlides, setShowExtraSlides] = useState(false);
+  const [showTable, setShowTable] = useState(false);
 
   const rowsByKey = useMemo(() => new Map(settings.map((setting) => [setting.key, setting])), [settings]);
   const imageFields = useMemo(() => fields.filter((field) => field.type === 'image'), [fields]);
+  const primaryImageFields = useMemo(() => imageFields.filter((field) => !field.key.includes('.slide_')), [imageFields]);
+  const extraImageFields = useMemo(() => imageFields.filter((field) => field.key.includes('.slide_')), [imageFields]);
+  const textFields = useMemo(
+    () => fields.filter((field) => field.type !== 'image' && (langFilter === 'all' || fieldLang(field.key) === null || fieldLang(field.key) === langFilter)),
+    [fields, langFilter],
+  );
 
   async function loadSettings() {
     setLoading(true);
@@ -212,9 +229,9 @@ function ContentSection({ title, description, fields, saveLabel, imageRequireRep
         <p className="admin-muted">Cargando contenido...</p>
       ) : (
         <div className="grid gap-5">
-          {imageFields.length > 0 ? (
+          {primaryImageFields.length > 0 ? (
             <div className="grid gap-5 lg:grid-cols-2">
-              {imageFields.map((imageField) => (
+              {primaryImageFields.map((imageField) => (
                 <div className="grid gap-2" key={imageField.key}>
                   <p className="admin-muted font-extrabold">{imageField.label}</p>
                   <AdminImageManager
@@ -238,8 +255,63 @@ function ContentSection({ title, description, fields, saveLabel, imageRequireRep
             </div>
           ) : null}
 
+          {extraImageFields.length > 0 ? (
+            <div className="grid gap-3">
+              <button
+                className="admin-btn admin-btn--ghost"
+                type="button"
+                onClick={() => setShowExtraSlides((current) => !current)}
+                style={{ justifySelf: 'start' }}
+              >
+                {showExtraSlides ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                {showExtraSlides ? 'Ocultar diapositivas adicionales' : `Mostrar diapositivas adicionales (${extraImageFields.length})`}
+              </button>
+              {showExtraSlides ? (
+                <div className="grid gap-5 lg:grid-cols-2">
+                  {extraImageFields.map((imageField) => (
+                    <div className="grid gap-2" key={imageField.key}>
+                      <p className="admin-muted font-extrabold">{imageField.label}</p>
+                      <AdminImageManager
+                        resourceTable="site_settings"
+                        resourceId={imageField.key}
+                        folder="general"
+                        currentImageUrl={draft[imageField.key]}
+                        currentStoragePath={storagePathFromPublicUrl(draft[imageField.key])}
+                        label={draft[`${imageField.key.replace(/\.mobile_image$/, '').replace(/\.image$/, '')}.image_alt.es`] ?? imageField.label}
+                        aspect={imageField.aspect ?? 16 / 9}
+                        previewAspect={imageField.aspect ?? 16 / 9}
+                        maxWidth={imageField.maxWidth ?? 1920}
+                        maxHeight={imageField.maxHeight ?? 1080}
+                        maxSizeMB={0.9}
+                        requireReplacementToDelete={imageRequireReplacement && Boolean(imageField.fallback)}
+                        onImageSaved={(image) => handleImageSaved(imageField, image)}
+                        onImageDeleted={(storagePath) => handleImageDeleted(imageField, storagePath)}
+                      />
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="admin-muted font-extrabold">Textos</p>
+            <div className="admin-segmented" role="group" aria-label="Filtrar por idioma">
+              {(['all', 'es', 'en'] as LangFilter[]).map((lang) => (
+                <button
+                  key={lang}
+                  type="button"
+                  className={langFilter === lang ? 'admin-segmented__option--active' : ''}
+                  onClick={() => setLangFilter(lang)}
+                >
+                  {lang === 'all' ? 'Todos' : lang === 'es' ? 'Español' : 'English'}
+                </button>
+              ))}
+            </div>
+          </div>
+
           <div className="grid gap-3 lg:grid-cols-2">
-            {fields.filter((field) => field.type !== 'image').map((field) => (
+            {textFields.map((field) => (
               field.type === 'boolean' ? (
                 <label className="flex items-center gap-2" key={field.key}>
                   <input
@@ -276,26 +348,45 @@ function ContentSection({ title, description, fields, saveLabel, imageRequireRep
             <button className="admin-btn admin-btn--ghost" type="button" onClick={() => void loadSettings()}>Descartar cambios</button>
           </div>
 
-          <AdminTable headers={['Key', 'Tipo', 'Valor', 'Estado']}>
-            {fields.map((field) => {
-              const row = rowsByKey.get(field.key);
-              return (
-                <tr key={field.key}>
-                  <td>{field.key}</td>
-                  <td>{row?.type ?? field.type}</td>
-                  <td className="admin-muted max-w-[24rem] truncate" title={draft[field.key]}>{field.type === 'image' ? (draft[field.key] || '(por defecto)') : draft[field.key]}</td>
-                  <td><AdminBadge value={row?.active ?? true} /></td>
-                </tr>
-              );
-            })}
-          </AdminTable>
+          <div>
+            <button
+              className="admin-btn admin-btn--ghost"
+              type="button"
+              onClick={() => setShowTable((current) => !current)}
+              style={{ justifySelf: 'start' }}
+            >
+              {showTable ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+              {showTable ? 'Ocultar tabla tecnica de claves' : `Ver tabla tecnica de claves (${fields.length})`}
+            </button>
+            {showTable ? (
+              <div className="mt-3">
+                <AdminTable headers={['Key', 'Tipo', 'Valor', 'Estado']}>
+                  {fields.map((field) => {
+                    const row = rowsByKey.get(field.key);
+                    return (
+                      <tr key={field.key}>
+                        <td>{field.key}</td>
+                        <td>{row?.type ?? field.type}</td>
+                        <td className="admin-muted max-w-[24rem] truncate" title={draft[field.key]}>{field.type === 'image' ? (draft[field.key] || '(por defecto)') : draft[field.key]}</td>
+                        <td><AdminBadge value={row?.active ?? true} /></td>
+                      </tr>
+                    );
+                  })}
+                </AdminTable>
+              </div>
+            ) : null}
+          </div>
         </div>
       )}
     </section>
   );
 }
 
+type ContentTab = 'hero' | 'about';
+
 export default function AdminContentPage() {
+  const [activeTab, setActiveTab] = useState<ContentTab>('hero');
+
   return (
     <div className="admin-page">
       <AdminPageHeader
@@ -304,6 +395,16 @@ export default function AdminContentPage() {
         actions={<span />}
       />
 
+      <nav className="admin-tabs" aria-label="Secciones de contenido editable">
+        <button type="button" className={`admin-tab${activeTab === 'hero' ? ' admin-tab--active' : ''}`} onClick={() => setActiveTab('hero')}>
+          Hero / inicio
+        </button>
+        <button type="button" className={`admin-tab${activeTab === 'about' ? ' admin-tab--active' : ''}`} onClick={() => setActiveTab('about')}>
+          Nosotros / About
+        </button>
+      </nav>
+
+      <div style={{ display: activeTab === 'hero' ? undefined : 'none' }}>
       <ContentSection
         title="Hero / inicio"
         description="La imagen administrada es el fondo principal del hero. El archivo de video queda conservado, pero no bloquea el contenido editable."
@@ -337,7 +438,9 @@ export default function AdminContentPage() {
           </div>
         )}
       />
+      </div>
 
+      <div style={{ display: activeTab === 'about' ? undefined : 'none' }}>
       <ContentSection
         title="Nosotros / About"
         description="Controla la pagina /nosotros y la seccion Sobre nosotros de la inicio. La imagen administrada aparece primero en los carruseles; sin imagen se muestran las fotos por defecto."
@@ -363,6 +466,7 @@ export default function AdminContentPage() {
           </div>
         )}
       />
+      </div>
     </div>
   );
 }
