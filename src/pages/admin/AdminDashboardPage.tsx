@@ -27,11 +27,11 @@ export default function AdminDashboardPage() {
       />
       <section className="admin-stat-grid">
         <AdminStatCard label="Reservas totales" value={String(adminData.reservations.length)} icon={CalendarDays} />
-        <AdminStatCard label="Pagos pendientes" value={String(adminData.reservations.filter((item) => item.paymentStatus !== 'paid').length)} icon={CreditCard} color="#d97706" />
-        <AdminStatCard label="Ingresos estimados" value={money(estimatedRevenue)} icon={DollarSign} color="#0f9f6e" />
-        <AdminStatCard label="Tours activos" value={String(adminData.boatTours.length)} icon={Star} color="#2563eb" />
+        <AdminStatCard label="Pagos pendientes" value={String(adminData.reservations.filter((item) => item.paymentStatus !== 'paid').length)} icon={CreditCard} color="#b45309" />
+        <AdminStatCard label="Ingresos estimados" value={money(estimatedRevenue)} icon={DollarSign} color="#047857" />
+        <AdminStatCard label="Tours activos" value={String(adminData.boatTours.length)} icon={Star} color="#256f8f" />
         <AdminStatCard label="Botes activos" value={String(adminData.boats.length)} icon={Ship} color="#0e7490" />
-        <AdminStatCard label="Comentarios por revisar" value={String(pendingReviews)} icon={MessageSquare} color="#7c3aed" />
+        <AdminStatCard label="Comentarios por revisar" value={String(pendingReviews)} icon={MessageSquare} color="#6d5f3f" />
       </section>
       <div className="admin-grid-2">
         <div className="admin-card">
@@ -58,7 +58,7 @@ export default function AdminDashboardPage() {
           <ul className="admin-list mt-4">
             <li><span>Crear tour</span><Link className="admin-btn admin-btn--ghost" to="/admin/tours">Abrir</Link></li>
             <li><span>Crear bote</span><Link className="admin-btn admin-btn--ghost" to="/admin/boats">Abrir</Link></li>
-            <li><span>Subir imagen Cloudflare</span><Link className="admin-btn admin-btn--ghost" to="/admin/gallery">Abrir</Link></li>
+            <li><span>Subir imagen a galeria</span><Link className="admin-btn admin-btn--ghost" to="/admin/gallery">Abrir</Link></li>
             <li><span>Aprobar comentarios</span><Link className="admin-btn admin-btn--ghost" to="/admin/reviews">Abrir</Link></li>
           </ul>
         </aside>

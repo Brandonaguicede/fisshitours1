@@ -34,8 +34,6 @@ const DEFAULT_HERO_SETTINGS = {
   'home.hero.slide_3.mobile_image': '',
   'home.hero.slide_4.image': '',
   'home.hero.slide_4.mobile_image': '',
-  'home.hero.slide_5.image': '',
-  'home.hero.slide_5.mobile_image': '',
   'home.hero.image_alt.es': 'Bote privado navegando en el Pacifico de Costa Rica',
   'home.hero.image_alt.en': 'Private boat sailing Costa Rica Pacific waters',
 };
@@ -70,7 +68,6 @@ function getHeroSlides(settings?: HeroSettings) {
     { image: settings['home.hero.slide_2.image'], mobileImage: settings['home.hero.slide_2.mobile_image'] },
     { image: settings['home.hero.slide_3.image'], mobileImage: settings['home.hero.slide_3.mobile_image'] },
     { image: settings['home.hero.slide_4.image'], mobileImage: settings['home.hero.slide_4.mobile_image'] },
-    { image: settings['home.hero.slide_5.image'], mobileImage: settings['home.hero.slide_5.mobile_image'] },
   ].filter((slide) => slide.image);
 }
 

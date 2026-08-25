@@ -331,9 +331,9 @@
   display: grid;
   gap: 0.85rem;
   padding: 1.15rem;
-  border: 1px solid color-mix(in srgb, var(--stat-color, var(--admin-primary)) 22%, transparent);
+  border: 1px solid color-mix(in srgb, var(--stat-color, var(--admin-primary)) 18%, white);
   border-radius: var(--admin-radius-md);
-  background: color-mix(in srgb, var(--stat-color, var(--admin-primary)) 9%, white);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--stat-color, var(--admin-primary)) 7%, white), #fff 78%);
   box-shadow: var(--admin-shadow);
 }
 
@@ -357,8 +357,8 @@
   height: 2.35rem;
   place-items: center;
   border-radius: 10px;
-  background: var(--stat-color, var(--admin-primary));
-  color: white;
+  background: color-mix(in srgb, var(--stat-color, var(--admin-primary)) 12%, white);
+  color: var(--stat-color, var(--admin-primary));
 }
 
 .admin-stat-card__value {
@@ -630,7 +630,7 @@
 .admin-image-manager__preview img {
   display: block;
   width: 100%;
-  aspect-ratio: 16 / 9;
+  aspect-ratio: var(--admin-image-preview-aspect, 16 / 9);
   object-fit: cover;
 }
 

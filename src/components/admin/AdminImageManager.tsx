@@ -1,11 +1,11 @@
 import imageCompression from 'browser-image-compression';
 import { Crop, ImagePlus, Loader2, RotateCcw, Trash2, UploadCloud } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState, type DragEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type DragEvent } from 'react';
 import Cropper, { type Area } from 'react-easy-crop';
 
 import { Modal } from '../common/Modal';
 import { deleteStorageImage, ImageSessionExpiredError, uploadStorageImageWithProgress, type StorageImage } from '../../services/imageService';
-import { isSupabaseConfigured } from '../../lib/supabase';
+import { isSupabaseConfigured, supabase } from '../../lib/supabase';
 import { formatBytes } from '../../utils/format';
 
 interface AdminImageManagerProps {
@@ -18,6 +18,7 @@ interface AdminImageManagerProps {
   maxWidth?: number;
   maxHeight?: number;
   maxSizeMB?: number;
+  previewAspect?: number;
   label?: string;
   requireReplacementToDelete?: boolean;
   onImageSaved?: (image: StorageImage) => Promise<void> | void;
@@ -40,6 +41,7 @@ export default function AdminImageManager({
   maxWidth = 1600,
   maxHeight = 1200,
   maxSizeMB = 2,
+  previewAspect,
   label,
   requireReplacementToDelete = false,
   onImageSaved,
@@ -156,6 +158,17 @@ export default function AdminImageManager({
         throw new Error('Supabase no esta configurado para gestionar imagenes en este entorno.');
       }
 
+      if (resourceTable === 'site_settings') {
+        const { error } = await supabase.from('site_settings').upsert({
+          key: resourceId,
+          value: imageUrl ?? '',
+          type: 'image',
+          active: true,
+          updated_at: new Date().toISOString(),
+        });
+        if (error) throw new Error(error.message);
+      }
+
       const form = new FormData();
       form.append('file', blob, 'image.webp');
       form.append('resourceTable', resourceTable);
@@ -245,7 +258,13 @@ export default function AdminImageManager({
         onDrop={onDrop}
       >
         {imageUrl ? (
-          <img src={imageUrl} alt={label ?? 'Imagen actual'} loading="lazy" decoding="async" />
+          <img
+            src={imageUrl}
+            alt={label ?? 'Imagen actual'}
+            loading="lazy"
+            decoding="async"
+            style={previewAspect ? ({ '--admin-image-preview-aspect': String(previewAspect) } as CSSProperties) : undefined}
+          />
         ) : (
           <div className="admin-image-manager__empty">
             <ImagePlus size={28} />

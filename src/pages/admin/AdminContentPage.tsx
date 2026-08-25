@@ -28,16 +28,14 @@ type Draft = Record<string, string>;
 const FALLBACK_HERO_IMAGE = '/images/placeholder-image.jpg';
 
 const HERO_IMAGE_FIELDS: ContentField[] = [
-  { key: 'home.hero.image', label: 'Slide 1 desktop / tablet', type: 'image', fallback: FALLBACK_HERO_IMAGE, aspect: 16 / 9, maxWidth: 1920, maxHeight: 1080 },
-  { key: 'home.hero.mobile_image', label: 'Slide 1 movil vertical', type: 'image', fallback: '', aspect: 4 / 5, maxWidth: 1200, maxHeight: 1500 },
-  { key: 'home.hero.slide_2.image', label: 'Slide 2 desktop / tablet', type: 'image', fallback: '', aspect: 16 / 9, maxWidth: 1920, maxHeight: 1080 },
-  { key: 'home.hero.slide_2.mobile_image', label: 'Slide 2 movil vertical', type: 'image', fallback: '', aspect: 4 / 5, maxWidth: 1200, maxHeight: 1500 },
-  { key: 'home.hero.slide_3.image', label: 'Slide 3 desktop / tablet', type: 'image', fallback: '', aspect: 16 / 9, maxWidth: 1920, maxHeight: 1080 },
-  { key: 'home.hero.slide_3.mobile_image', label: 'Slide 3 movil vertical', type: 'image', fallback: '', aspect: 4 / 5, maxWidth: 1200, maxHeight: 1500 },
-  { key: 'home.hero.slide_4.image', label: 'Slide 4 desktop / tablet', type: 'image', fallback: '', aspect: 16 / 9, maxWidth: 1920, maxHeight: 1080 },
-  { key: 'home.hero.slide_4.mobile_image', label: 'Slide 4 movil vertical', type: 'image', fallback: '', aspect: 4 / 5, maxWidth: 1200, maxHeight: 1500 },
-  { key: 'home.hero.slide_5.image', label: 'Slide 5 desktop / tablet', type: 'image', fallback: '', aspect: 16 / 9, maxWidth: 1920, maxHeight: 1080 },
-  { key: 'home.hero.slide_5.mobile_image', label: 'Slide 5 movil vertical', type: 'image', fallback: '', aspect: 4 / 5, maxWidth: 1200, maxHeight: 1500 },
+  { key: 'home.hero.image', label: 'Slide 1 - compu', type: 'image', fallback: FALLBACK_HERO_IMAGE, aspect: 16 / 9, maxWidth: 1920, maxHeight: 1080 },
+  { key: 'home.hero.mobile_image', label: 'Slide 1 - celular', type: 'image', fallback: '', aspect: 4 / 5, maxWidth: 1200, maxHeight: 1500 },
+  { key: 'home.hero.slide_2.image', label: 'Slide 2 - compu', type: 'image', fallback: '', aspect: 16 / 9, maxWidth: 1920, maxHeight: 1080 },
+  { key: 'home.hero.slide_2.mobile_image', label: 'Slide 2 - celular', type: 'image', fallback: '', aspect: 4 / 5, maxWidth: 1200, maxHeight: 1500 },
+  { key: 'home.hero.slide_3.image', label: 'Slide 3 - compu', type: 'image', fallback: '', aspect: 16 / 9, maxWidth: 1920, maxHeight: 1080 },
+  { key: 'home.hero.slide_3.mobile_image', label: 'Slide 3 - celular', type: 'image', fallback: '', aspect: 4 / 5, maxWidth: 1200, maxHeight: 1500 },
+  { key: 'home.hero.slide_4.image', label: 'Slide 4 - compu', type: 'image', fallback: '', aspect: 16 / 9, maxWidth: 1920, maxHeight: 1080 },
+  { key: 'home.hero.slide_4.mobile_image', label: 'Slide 4 - celular', type: 'image', fallback: '', aspect: 4 / 5, maxWidth: 1200, maxHeight: 1500 },
 ];
 
 const HERO_FIELDS: ContentField[] = [
@@ -227,6 +225,7 @@ function ContentSection({ title, description, fields, saveLabel, imageRequireRep
                     currentStoragePath={storagePathFromPublicUrl(draft[imageField.key])}
                     label={draft[`${imageField.key.replace(/\.mobile_image$/, '').replace(/\.image$/, '')}.image_alt.es`] ?? imageField.label}
                     aspect={imageField.aspect ?? 16 / 9}
+                    previewAspect={imageField.aspect ?? 16 / 9}
                     maxWidth={imageField.maxWidth ?? 1920}
                     maxHeight={imageField.maxHeight ?? 1080}
                     maxSizeMB={0.9}
