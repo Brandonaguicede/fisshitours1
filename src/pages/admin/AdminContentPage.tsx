@@ -18,11 +18,27 @@ interface ContentField {
   label: string;
   type: 'text' | 'textarea' | 'url' | 'boolean' | 'image';
   fallback: string;
+  aspect?: number;
+  maxWidth?: number;
+  maxHeight?: number;
 }
 
 type Draft = Record<string, string>;
 
 const FALLBACK_HERO_IMAGE = '/images/placeholder-image.jpg';
+
+const HERO_IMAGE_FIELDS: ContentField[] = [
+  { key: 'home.hero.image', label: 'Slide 1 desktop / tablet', type: 'image', fallback: FALLBACK_HERO_IMAGE, aspect: 16 / 9, maxWidth: 1920, maxHeight: 1080 },
+  { key: 'home.hero.mobile_image', label: 'Slide 1 movil vertical', type: 'image', fallback: '', aspect: 4 / 5, maxWidth: 1200, maxHeight: 1500 },
+  { key: 'home.hero.slide_2.image', label: 'Slide 2 desktop / tablet', type: 'image', fallback: '', aspect: 16 / 9, maxWidth: 1920, maxHeight: 1080 },
+  { key: 'home.hero.slide_2.mobile_image', label: 'Slide 2 movil vertical', type: 'image', fallback: '', aspect: 4 / 5, maxWidth: 1200, maxHeight: 1500 },
+  { key: 'home.hero.slide_3.image', label: 'Slide 3 desktop / tablet', type: 'image', fallback: '', aspect: 16 / 9, maxWidth: 1920, maxHeight: 1080 },
+  { key: 'home.hero.slide_3.mobile_image', label: 'Slide 3 movil vertical', type: 'image', fallback: '', aspect: 4 / 5, maxWidth: 1200, maxHeight: 1500 },
+  { key: 'home.hero.slide_4.image', label: 'Slide 4 desktop / tablet', type: 'image', fallback: '', aspect: 16 / 9, maxWidth: 1920, maxHeight: 1080 },
+  { key: 'home.hero.slide_4.mobile_image', label: 'Slide 4 movil vertical', type: 'image', fallback: '', aspect: 4 / 5, maxWidth: 1200, maxHeight: 1500 },
+  { key: 'home.hero.slide_5.image', label: 'Slide 5 desktop / tablet', type: 'image', fallback: '', aspect: 16 / 9, maxWidth: 1920, maxHeight: 1080 },
+  { key: 'home.hero.slide_5.mobile_image', label: 'Slide 5 movil vertical', type: 'image', fallback: '', aspect: 4 / 5, maxWidth: 1200, maxHeight: 1500 },
+];
 
 const HERO_FIELDS: ContentField[] = [
   { key: 'home.hero.title.es', label: 'Titulo principal ES', type: 'text', fallback: 'Experimenta el oceano' },
@@ -39,7 +55,7 @@ const HERO_FIELDS: ContentField[] = [
   { key: 'home.hero.secondary_href', label: 'Enlace boton secundario', type: 'url', fallback: '#tours' },
   { key: 'home.hero.image_alt.es', label: 'Texto alternativo imagen ES', type: 'text', fallback: 'Bote privado navegando en el Pacifico de Costa Rica' },
   { key: 'home.hero.image_alt.en', label: 'Texto alternativo imagen EN', type: 'text', fallback: 'Private boat sailing Costa Rica Pacific waters' },
-  { key: 'home.hero.image', label: 'Imagen principal', type: 'image', fallback: FALLBACK_HERO_IMAGE },
+  ...HERO_IMAGE_FIELDS,
   { key: 'home.hero.primary_enabled', label: 'Activar boton principal', type: 'boolean', fallback: 'true' },
   { key: 'home.hero.secondary_enabled', label: 'Activar boton secundario', type: 'boolean', fallback: 'true' },
 ];
@@ -65,7 +81,7 @@ const ABOUT_FIELDS: ContentField[] = [
   { key: 'about.cta_button_label.en', label: 'Boton final EN', type: 'text', fallback: 'Book now' },
   { key: 'about.image_alt.es', label: 'Texto alternativo imagen ES', type: 'text', fallback: 'Tripulacion con pesca en aguas de Guanacaste' },
   { key: 'about.image_alt.en', label: 'Texto alternativo imagen EN', type: 'text', fallback: 'Crew with a catch in Guanacaste waters' },
-  { key: 'about.image', label: 'Imagen principal de Nosotros', type: 'image', fallback: '' },
+  { key: 'about.image', label: 'Imagen principal de Nosotros', type: 'image', fallback: '', aspect: 16 / 9, maxWidth: 1920, maxHeight: 1080 },
 ];
 
 function storagePathFromPublicUrl(value?: string | null) {
@@ -99,7 +115,7 @@ function ContentSection({ title, description, fields, saveLabel, imageRequireRep
   const [notice, setNotice] = useState('');
 
   const rowsByKey = useMemo(() => new Map(settings.map((setting) => [setting.key, setting])), [settings]);
-  const imageField = useMemo(() => fields.find((field) => field.type === 'image') ?? null, [fields]);
+  const imageFields = useMemo(() => fields.filter((field) => field.type === 'image'), [fields]);
 
   async function loadSettings() {
     setLoading(true);
@@ -164,10 +180,9 @@ function ContentSection({ title, description, fields, saveLabel, imageRequireRep
     }
   }
 
-  async function handleImageSaved(image: StorageImage) {
-    if (!imageField) return;
+  async function handleImageSaved(field: ContentField, image: StorageImage) {
     try {
-      await upsertKey(imageField.key, image.public_url, 'image');
+      await upsertKey(field.key, image.public_url, 'image');
       setNotice('Imagen actualizada.');
       await loadSettings();
     } catch (imageError) {
@@ -175,10 +190,9 @@ function ContentSection({ title, description, fields, saveLabel, imageRequireRep
     }
   }
 
-  async function handleImageDeleted(storagePath: string) {
-    if (!imageField) return;
+  async function handleImageDeleted(field: ContentField, storagePath: string) {
     try {
-      await upsertKey(imageField.key, imageField.fallback, 'image');
+      await upsertKey(field.key, field.fallback, 'image');
       setNotice('Imagen eliminada. El sitio vuelve al contenido por defecto.');
       await loadSettings();
     } catch {
@@ -200,22 +214,29 @@ function ContentSection({ title, description, fields, saveLabel, imageRequireRep
         <p className="admin-muted">Cargando contenido...</p>
       ) : (
         <div className="grid gap-5">
-          {imageField ? (
-            <AdminImageManager
-              resourceTable="site_settings"
-              resourceId={imageField.key}
-              folder="general"
-              currentImageUrl={draft[imageField.key]}
-              currentStoragePath={storagePathFromPublicUrl(draft[imageField.key])}
-              label={draft[`${imageField.key.replace(/\.image$/, '')}.image_alt.es`] ?? imageField.label}
-              aspect={16 / 9}
-              maxWidth={1920}
-              maxHeight={1080}
-              maxSizeMB={0.9}
-              requireReplacementToDelete={imageRequireReplacement}
-              onImageSaved={handleImageSaved}
-              onImageDeleted={handleImageDeleted}
-            />
+          {imageFields.length > 0 ? (
+            <div className="grid gap-5 lg:grid-cols-2">
+              {imageFields.map((imageField) => (
+                <div className="grid gap-2" key={imageField.key}>
+                  <p className="admin-muted font-extrabold">{imageField.label}</p>
+                  <AdminImageManager
+                    resourceTable="site_settings"
+                    resourceId={imageField.key}
+                    folder="general"
+                    currentImageUrl={draft[imageField.key]}
+                    currentStoragePath={storagePathFromPublicUrl(draft[imageField.key])}
+                    label={draft[`${imageField.key.replace(/\.mobile_image$/, '').replace(/\.image$/, '')}.image_alt.es`] ?? imageField.label}
+                    aspect={imageField.aspect ?? 16 / 9}
+                    maxWidth={imageField.maxWidth ?? 1920}
+                    maxHeight={imageField.maxHeight ?? 1080}
+                    maxSizeMB={0.9}
+                    requireReplacementToDelete={imageRequireReplacement && Boolean(imageField.fallback)}
+                    onImageSaved={(image) => handleImageSaved(imageField, image)}
+                    onImageDeleted={(storagePath) => handleImageDeleted(imageField, storagePath)}
+                  />
+                </div>
+              ))}
+            </div>
           ) : null}
 
           <div className="grid gap-3 lg:grid-cols-2">
@@ -292,7 +313,10 @@ export default function AdminContentPage() {
         imageRequireReplacement
         preview={(draft) => (
           <div className="relative overflow-hidden rounded-xl">
-            <img className="aspect-video w-full object-cover" src={draft['home.hero.image']} alt={draft['home.hero.image_alt.es']} />
+            <picture>
+              {draft['home.hero.mobile_image'] ? <source media="(max-width: 639px)" srcSet={draft['home.hero.mobile_image']} /> : null}
+              <img className="aspect-[4/5] w-full object-cover sm:aspect-video" src={draft['home.hero.image']} alt={draft['home.hero.image_alt.es']} />
+            </picture>
             <div className="absolute inset-0 bg-ocean-950/45" />
             <div className="absolute inset-0 grid place-items-center p-5 text-center">
               <div>

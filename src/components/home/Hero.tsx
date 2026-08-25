@@ -1,6 +1,7 @@
 import { ArrowDown, Facebook, Instagram } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useQuery } from '@tanstack/react-query';
+import { useEffect, useMemo, useState } from 'react';
 
 import { Container } from '../common/Container';
 import { Button, IconButton } from '../ui';
@@ -26,6 +27,15 @@ const DEFAULT_HERO_SETTINGS = {
   'home.hero.secondary_href': '#tours',
   'home.hero.secondary_enabled': 'true',
   'home.hero.image': FALLBACK_HERO_IMAGE,
+  'home.hero.mobile_image': '',
+  'home.hero.slide_2.image': '',
+  'home.hero.slide_2.mobile_image': '',
+  'home.hero.slide_3.image': '',
+  'home.hero.slide_3.mobile_image': '',
+  'home.hero.slide_4.image': '',
+  'home.hero.slide_4.mobile_image': '',
+  'home.hero.slide_5.image': '',
+  'home.hero.slide_5.mobile_image': '',
   'home.hero.image_alt.es': 'Bote privado navegando en el Pacifico de Costa Rica',
   'home.hero.image_alt.en': 'Private boat sailing Costa Rica Pacific waters',
 };
@@ -53,14 +63,39 @@ function splitTitle(title: string) {
   return { lead: lead || title, tail: rest.join(' ') };
 }
 
+function getHeroSlides(settings?: HeroSettings) {
+  if (!settings) return [];
+  return [
+    { image: settings['home.hero.image'], mobileImage: settings['home.hero.mobile_image'] },
+    { image: settings['home.hero.slide_2.image'], mobileImage: settings['home.hero.slide_2.mobile_image'] },
+    { image: settings['home.hero.slide_3.image'], mobileImage: settings['home.hero.slide_3.mobile_image'] },
+    { image: settings['home.hero.slide_4.image'], mobileImage: settings['home.hero.slide_4.mobile_image'] },
+    { image: settings['home.hero.slide_5.image'], mobileImage: settings['home.hero.slide_5.mobile_image'] },
+  ].filter((slide) => slide.image);
+}
+
 export function Hero() {
   const { language } = useLanguage();
   const heroQuery = useQuery({ queryKey: ['site-settings', 'home.hero'], queryFn: getHeroSettings, staleTime: 60_000 });
   const hero = heroQuery.data ?? DEFAULT_HERO_SETTINGS;
   const locale = language === 'es' ? 'es' : 'en';
+  const slides = useMemo(() => getHeroSlides(heroQuery.data), [heroQuery.data]);
+  const [activeSlide, setActiveSlide] = useState(0);
   const title = splitTitle(hero[`home.hero.title.${locale}` as keyof HeroSettings]);
   const primaryEnabled = hero['home.hero.primary_enabled'] !== 'false';
   const secondaryEnabled = hero['home.hero.secondary_enabled'] !== 'false';
+
+  useEffect(() => {
+    setActiveSlide(0);
+  }, [slides.length]);
+
+  useEffect(() => {
+    if (slides.length < 2) return undefined;
+    const interval = window.setInterval(() => {
+      setActiveSlide((current) => (current + 1) % slides.length);
+    }, 6500);
+    return () => window.clearInterval(interval);
+  }, [slides.length]);
 
   function scrollToFleet() {
     document.getElementById('fleet')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -73,16 +108,25 @@ export function Hero() {
       data-home-section
       data-nav-href="/"
     >
-      <img
-        className="absolute inset-0 h-full w-full object-cover object-[58%_center] sm:object-center"
-        src={hero['home.hero.image'] || FALLBACK_HERO_IMAGE}
-        alt={hero[`home.hero.image_alt.${locale}` as keyof HeroSettings]}
-        width={1920}
-        height={1080}
-        sizes="100vw"
-        fetchPriority="high"
-        decoding="async"
-      />
+      {slides.map((slide, index) => (
+        <picture
+          className={`absolute inset-0 transition-opacity duration-1000 ease-out ${index === activeSlide ? 'opacity-100' : 'opacity-0'}`}
+          key={`${slide.image}-${index}`}
+        >
+          {slide.mobileImage ? <source media="(max-width: 639px)" srcSet={slide.mobileImage} /> : null}
+          <img
+            className="h-full w-full object-cover object-center"
+            src={slide.image}
+            alt={hero[`home.hero.image_alt.${locale}` as keyof HeroSettings]}
+            width={1920}
+            height={1080}
+            sizes="100vw"
+            fetchPriority={index === 0 ? 'high' : 'auto'}
+            loading={index === 0 ? 'eager' : 'lazy'}
+            decoding="async"
+          />
+        </picture>
+      ))}
       <div className="absolute inset-0 bg-ocean-950/45" />
       <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-black/80 to-transparent" />
 
