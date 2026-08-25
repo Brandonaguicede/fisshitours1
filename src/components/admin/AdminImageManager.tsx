@@ -1,9 +1,10 @@
 import imageCompression from 'browser-image-compression';
-import { Crop, ImagePlus, Loader2, RotateCcw, Trash2, UploadCloud } from 'lucide-react';
+import { Crop, ImagePlus, Loader2, RotateCcw, Trash2, UploadCloud, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type DragEvent } from 'react';
 import Cropper, { type Area } from 'react-easy-crop';
 
 import { Modal } from '../common/Modal';
+import ModalFooter from './ModalFooter';
 import { deleteStorageImage, ImageSessionExpiredError, uploadStorageImageWithProgress, type StorageImage } from '../../services/imageService';
 import { isSupabaseConfigured, supabase } from '../../lib/supabase';
 import { formatBytes } from '../../utils/format';
@@ -316,39 +317,44 @@ export default function AdminImageManager({
       ) : null}
 
       <Modal open={Boolean(cropFile)} onClose={() => cropFile && !processing && setCropFile(null)} titleId="image-crop-title" className="max-w-2xl">
-        <div className="rounded-2xl border border-white/60 bg-white p-4 shadow-2xl sm:p-5">
-          <h2 id="image-crop-title" className="admin-card__title"><Crop size={18} /> Ajustar imagen</h2>
-          <p className="admin-muted mb-3">Recorta y luego se guardará en WebP comprimido.</p>
-          {cropFile ? (
-            <div className="admin-image-crop">
-              <Cropper
-                image={cropFile.objectUrl}
-                crop={crop}
-                zoom={zoom}
-                aspect={aspect}
-                onCropChange={setCrop}
-                onZoomChange={setZoom}
-                onCropComplete={onCropComplete}
-              />
-            </div>
-          ) : null}
-          <div className="admin-image-crop__meta">
-            <span>Original: {cropFile ? formatBytes(cropFile.originalSize) : '-'}</span>
-            <span>Zoom: {Math.round(zoom * 100)}%</span>
-            <div className="admin-image-crop__zoom">
-              <RotateCcw size={15} aria-hidden />
-              <input type="range" min={1} max={3} step={0.05} value={zoom}
-                aria-label="Zoom del recorte"
-                onChange={(event) => setZoom(Number(event.target.value))} />
+        <div className="admin-modal-shell">
+          <header className="admin-modal-header">
+            <h2 id="image-crop-title" className="admin-card__title"><Crop size={18} /> Ajustar imagen</h2>
+            <button className="admin-icon-btn" type="button" aria-label="Cerrar" disabled={processing} onClick={() => setCropFile(null)}><X size={18} /></button>
+          </header>
+          <div className="admin-modal-body">
+            <p className="admin-muted">Recorta y luego se guardará en WebP comprimido.</p>
+            {cropFile ? (
+              <div className="admin-image-crop">
+                <Cropper
+                  image={cropFile.objectUrl}
+                  crop={crop}
+                  zoom={zoom}
+                  aspect={aspect}
+                  onCropChange={setCrop}
+                  onZoomChange={setZoom}
+                  onCropComplete={onCropComplete}
+                />
+              </div>
+            ) : null}
+            <div className="admin-image-crop__meta">
+              <span>Original: {cropFile ? formatBytes(cropFile.originalSize) : '-'}</span>
+              <span>Zoom: {Math.round(zoom * 100)}%</span>
+              <div className="admin-image-crop__zoom">
+                <RotateCcw size={15} aria-hidden />
+                <input type="range" min={1} max={3} step={0.05} value={zoom}
+                  aria-label="Zoom del recorte"
+                  onChange={(event) => setZoom(Number(event.target.value))} />
+              </div>
             </div>
           </div>
-          <div className="admin-image-manager__actions">
+          <ModalFooter>
+            <button className="admin-btn admin-btn--ghost" type="button" disabled={processing} onClick={() => setCropFile(null)}>Cancelar</button>
             <button className="admin-btn" type="button" disabled={processing || !croppedAreaPixels} onClick={() => void confirmCrop()}>
               {processing ? <Loader2 className="animate-spin" size={16} /> : <UploadCloud size={16} />}
               {processing ? 'Procesando...' : 'Continuar y subir'}
             </button>
-            <button className="admin-btn admin-btn--ghost" type="button" disabled={processing} onClick={() => setCropFile(null)}>Cancelar</button>
-          </div>
+          </ModalFooter>
         </div>
       </Modal>
     </div>

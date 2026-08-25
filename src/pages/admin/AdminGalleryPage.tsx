@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 
 import AdminImageManager from '../../components/admin/AdminImageManager';
 import { AdminBadge, AdminPageHeader, AdminToolbar } from '../../components/admin/AdminPrimitives';
+import ModalFooter from '../../components/admin/ModalFooter';
 import { Modal } from '../../components/common/Modal';
 import { supabase } from '../../lib/supabase';
 import { deleteStorageImage } from '../../services/imageService';
@@ -208,12 +209,12 @@ export default function AdminGalleryPage() {
 
       <Modal open={Boolean(editing)} onClose={() => void closeEditor()} titleId="gallery-edit-title" className="max-w-2xl">
         {editing ? (
-          <div className="rounded-2xl border border-white/60 bg-white p-4 shadow-2xl sm:p-5">
-            <div className="flex items-start justify-between gap-3">
+          <div className="admin-modal-shell">
+            <header className="admin-modal-header">
               <h2 id="gallery-edit-title" className="admin-card__title"><Pencil size={18} /> Editar imagen</h2>
               <button className="admin-icon-btn" type="button" aria-label="Cerrar" onClick={() => void closeEditor()}><X size={18} /></button>
-            </div>
-            <div className="mt-4 grid gap-4">
+            </header>
+            <div className="admin-modal-body">
               <AdminImageManager
                 resourceTable="gallery_images"
                 resourceId={editing.id}
@@ -249,20 +250,20 @@ export default function AdminGalleryPage() {
                 <input type="checkbox" checked={editing.active} onChange={(event) => setEditing({ ...editing, active: event.target.checked })} />
                 <span className="admin-muted">Visible en el sitio</span>
               </label>
-              <div className="admin-image-manager__actions">
-                <button className="admin-btn" type="button" disabled={saving} onClick={() => void saveEditor()}>
-                  {saving ? 'Guardando...' : 'Guardar cambios'}
-                </button>
-                <button className="admin-btn admin-btn--ghost" type="button" onClick={() => void closeEditor()}>Cerrar</button>
-              </div>
             </div>
+            <ModalFooter>
+              <button className="admin-btn admin-btn--secondary" type="button" onClick={() => void closeEditor()}>Cerrar</button>
+              <button className="admin-btn" type="button" disabled={saving} onClick={() => void saveEditor()}>
+                {saving ? 'Guardando...' : 'Guardar cambios'}
+              </button>
+            </ModalFooter>
           </div>
         ) : null}
       </Modal>
 
       <Modal open={Boolean(pendingDelete)} onClose={() => setPendingDelete(null)} titleId="gallery-delete-title" className="max-w-md">
         {pendingDelete ? (
-          <div className="rounded-2xl border border-white/60 bg-white p-5 shadow-2xl">
+          <div className="admin-modal-card">
             <h2 id="gallery-delete-title" className="admin-card__title"><Trash2 size={18} /> Eliminar imagen</h2>
             <p className="admin-muted mt-2">Se solicitara borrar el objeto en Storage y luego se eliminara la referencia de la galeria.</p>
             <p className="mt-3 font-semibold text-ocean-950">{pendingDelete.title ?? pendingDelete.alt}</p>

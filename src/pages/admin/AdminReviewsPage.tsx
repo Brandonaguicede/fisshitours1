@@ -202,7 +202,7 @@ export default function AdminReviewsPage() {
 
       <Modal open={Boolean(pendingDelete)} onClose={() => setPendingDelete(null)} titleId="review-delete-title" className="max-w-md">
         {pendingDelete ? (
-          <div className="rounded-2xl border border-white/60 bg-white p-5 shadow-2xl">
+          <div className="admin-modal-card">
             <h2 id="review-delete-title" className="admin-card__title"><Trash2 size={18} /> Eliminar comentario</h2>
             <p className="admin-muted mt-2">El comentario se quitara del panel y de la pagina publica.</p>
             <p className="mt-3 font-semibold text-ocean-950">{pendingDelete.name}</p>

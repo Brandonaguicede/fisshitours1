@@ -449,7 +449,7 @@ export default function AdminBoatsPage() {
       <Modal open={Boolean(editing)} onClose={() => void closeEditor()} titleId="boat-edit-title" className="admin-boat-modal">
         {editing ? (
           <form
-            className="admin-boat-editor"
+            className="admin-modal-shell"
             onSubmit={(event) => {
               event.preventDefault();
               void saveEditor();

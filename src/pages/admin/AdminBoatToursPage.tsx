@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 
 import AdminImageManager from '../../components/admin/AdminImageManager';
 import { AdminBadge, AdminPageHeader, AdminTable, AdminToolbar } from '../../components/admin/AdminPrimitives';
+import ModalFooter from '../../components/admin/ModalFooter';
 import { Modal } from '../../components/common/Modal';
 import { supabase } from '../../lib/supabase';
 import type { StorageImage } from '../../services/imageService';
@@ -198,12 +199,12 @@ export default function AdminBoatToursPage() {
 
       <Modal open={Boolean(editing)} onClose={() => setEditing(null)} titleId="package-edit-title" className="max-w-2xl">
         {editing ? (
-          <div className="rounded-2xl border border-white/60 bg-white p-4 shadow-2xl sm:p-5">
-            <div className="flex items-start justify-between gap-3">
+          <div className="admin-modal-shell">
+            <header className="admin-modal-header">
               <h2 id="package-edit-title" className="admin-card__title"><Pencil size={18} /> Editar paquete</h2>
               <button className="admin-icon-btn" type="button" aria-label="Cerrar" onClick={() => setEditing(null)}><X size={18} /></button>
-            </div>
-            <div className="mt-4 grid gap-4">
+            </header>
+            <div className="admin-modal-body">
               <AdminImageManager
                 resourceTable="tour_packages"
                 resourceId={editing.id}
@@ -232,11 +233,11 @@ export default function AdminBoatToursPage() {
               <label className="grid gap-1"><span className="admin-muted">Descripcion</span><textarea className="admin-input" value={editing.description ?? ''} onChange={(event) => setEditing({ ...editing, description: event.target.value || null })} /></label>
               <label className="flex items-center gap-2"><input type="checkbox" checked={editing.custom_quote} onChange={(event) => setEditing({ ...editing, custom_quote: event.target.checked })} /><span className="admin-muted">Cotizar manualmente</span></label>
               <label className="flex items-center gap-2"><input type="checkbox" checked={editing.active} onChange={(event) => setEditing({ ...editing, active: event.target.checked })} /><span className="admin-muted">Activo</span></label>
-              <div className="admin-image-manager__actions">
-                <button className="admin-btn" type="button" disabled={saving} onClick={() => void savePackage()}>{saving ? 'Guardando...' : 'Guardar cambios'}</button>
-                <button className="admin-btn admin-btn--ghost" type="button" onClick={() => setEditing(null)}>Cerrar</button>
-              </div>
             </div>
+            <ModalFooter>
+              <button className="admin-btn admin-btn--secondary" type="button" onClick={() => setEditing(null)}>Cerrar</button>
+              <button className="admin-btn" type="button" disabled={saving} onClick={() => void savePackage()}>{saving ? 'Guardando...' : 'Guardar cambios'}</button>
+            </ModalFooter>
           </div>
         ) : null}
       </Modal>

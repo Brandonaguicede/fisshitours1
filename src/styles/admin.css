@@ -1148,7 +1148,7 @@ body:has(.admin-login) {
   background: #fff;
 }
 
-.admin-boat-editor {
+.admin-modal-shell {
   display: flex;
   width: 100%;
   max-height: calc(100dvh - 2rem);
@@ -1156,6 +1156,10 @@ body:has(.admin-login) {
   flex: 1;
   flex-direction: column;
   overflow: hidden;
+}
+
+.admin-modal-card {
+  padding: 1.25rem;
 }
 
 .admin-modal-header .admin-icon-btn {
