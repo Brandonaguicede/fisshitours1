@@ -29,8 +29,11 @@ interface BoatRow {
   slug: string;
   name: string;
   images: string[];
+  badge: string | null;
+  base_price_label: string | null;
   length: string | null;
   engine: string | null;
+  featured_spec: string | null;
   included_guests: number;
   max_guests: number;
   extra_guest_price: number;
@@ -69,15 +72,16 @@ export default function AdminBoatsPage() {
   const [editing, setEditing] = useState<BoatRow | null>(null);
   const [selectedImageId, setSelectedImageId] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<BoatImageRow | null>(null);
+  const [pendingBoatDelete, setPendingBoatDelete] = useState<BoatRow | null>(null);
   const [saving, setSaving] = useState(false);
-  const [fieldErrors, setFieldErrors] = useState<{ includedGuests?: string; maxGuests?: string; extraPrice?: string }>({});
+  const [fieldErrors, setFieldErrors] = useState<{ id?: string; slug?: string; name?: string; includedGuests?: string; maxGuests?: string; extraPrice?: string }>({});
 
   async function loadBoats() {
     setLoading(true);
     setError('');
     const { data, error } = await supabase
       .from('boats')
-      .select('id, slug, name, images, length, engine, included_guests, max_guests, extra_guest_price, image_url, image_public_id, active, sort_order')
+      .select('id, slug, name, images, badge, base_price_label, length, engine, featured_spec, included_guests, max_guests, extra_guest_price, image_url, image_public_id, active, sort_order')
       .order('sort_order', { ascending: true });
 
     if (error) {
@@ -125,36 +129,35 @@ export default function AdminBoatsPage() {
   async function createBoat() {
     setNotice('');
     setError('');
-    const slug = `nuevo-bote-${Date.now()}`;
-    const { data, error } = await supabase
-      .from('boats')
-      .insert({
-        id: slug,
-        slug,
-        name: 'Nuevo bote',
-        included_guests: 5,
-        max_guests: 10,
-        extra_guest_price: 65,
-        active: true,
-        sort_order: (boats?.length ?? 0) + 1,
-      })
-      .select('id, slug, name, images, length, engine, included_guests, max_guests, extra_guest_price, image_url, image_public_id, active, sort_order')
-      .single();
-    if (error) {
-      setError(error.message);
-      return;
-    }
-    const row = { ...(data as BoatRow), images: [], boat_images: [] };
     setFieldErrors({});
-    setEditing(row);
+    const id = `nuevo-bote-${Date.now()}`;
+    setEditing({
+      id,
+      slug: id,
+      name: '',
+      images: [],
+      badge: '',
+      base_price_label: '',
+      length: '',
+      engine: '',
+      featured_spec: '',
+      included_guests: 5,
+      max_guests: 10,
+      extra_guest_price: 65,
+      image_url: null,
+      image_public_id: null,
+      active: true,
+      sort_order: (boats?.length ?? 0) + 1,
+      boat_images: [],
+    });
     setSelectedImageId(null);
-    await loadBoats();
   }
 
   async function closeEditor() {
     setEditing(null);
     setSelectedImageId(null);
     setPendingDelete(null);
+    setPendingBoatDelete(null);
   }
 
   async function syncBoatImageFields(boatId: string, images: BoatImageRow[]) {
@@ -177,7 +180,7 @@ export default function AdminBoatsPage() {
     if (!boatId) return;
     const { data } = await supabase
       .from('boats')
-      .select('id, slug, name, images, length, engine, included_guests, max_guests, extra_guest_price, image_url, image_public_id, active, sort_order')
+      .select('id, slug, name, images, badge, base_price_label, length, engine, featured_spec, included_guests, max_guests, extra_guest_price, image_url, image_public_id, active, sort_order')
       .eq('id', boatId)
       .single();
     if (!data) return;
@@ -201,6 +204,19 @@ export default function AdminBoatsPage() {
   async function saveEditor() {
     if (!editing || saving) return;
     const nextFieldErrors: typeof fieldErrors = {};
+    const isExisting = Boolean(boats?.some((boat) => boat.id === editing.id));
+    const id = editing.id.trim();
+    const slug = editing.slug.trim();
+    const name = editing.name.trim();
+    if (!id || !/^[a-z0-9-]+$/i.test(id)) {
+      nextFieldErrors.id = 'Usa solo letras, numeros y guiones.';
+    }
+    if (!slug || !/^[a-z0-9-]+$/i.test(slug)) {
+      nextFieldErrors.slug = 'Usa solo letras, numeros y guiones.';
+    }
+    if (!name) {
+      nextFieldErrors.name = 'El nombre es obligatorio.';
+    }
     if (!Number.isFinite(editing.included_guests) || editing.included_guests < 1) {
       nextFieldErrors.includedGuests = 'Debe incluir al menos 1 persona.';
     }
@@ -220,28 +236,61 @@ export default function AdminBoatsPage() {
     setSaving(true);
     setError('');
     setNotice('');
-    const { error } = await supabase
-      .from('boats')
-      .update({
-        name: editing.name,
-        slug: editing.slug,
-        length: editing.length,
-        engine: editing.engine,
-        included_guests: editing.included_guests,
-        max_guests: editing.max_guests,
-        extra_guest_price: editing.extra_guest_price,
-        active: editing.active,
-        sort_order: editing.sort_order,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', editing.id);
+    const payload = {
+      slug,
+      name,
+      badge: editing.badge?.trim() || null,
+      base_price_label: editing.base_price_label?.trim() || null,
+      length: editing.length?.trim() || null,
+      engine: editing.engine?.trim() || null,
+      featured_spec: editing.featured_spec?.trim() || null,
+      included_guests: editing.included_guests,
+      max_guests: editing.max_guests,
+      extra_guest_price: editing.extra_guest_price,
+      active: editing.active,
+      sort_order: editing.sort_order,
+      images: editing.images ?? [],
+      image_url: editing.image_url,
+      image_public_id: editing.image_public_id,
+      updated_at: new Date().toISOString(),
+    };
+    const { error } = isExisting
+      ? await supabase.from('boats').update(payload).eq('id', editing.id)
+      : await supabase.from('boats').insert({ ...payload, id });
     setSaving(false);
     if (error) {
       setError(error.message);
       return;
     }
-    setNotice('Bote actualizado.');
-    await refreshEditing(editing.id);
+    setNotice(isExisting ? 'Bote actualizado.' : 'Bote creado.');
+    await refreshEditing(id);
+  }
+
+  async function deleteBoat(boat: BoatRow) {
+    setSaving(true);
+    setError('');
+    setNotice('');
+    const images = boat.boat_images?.length ? boat.boat_images : fallbackBoatImages(boat);
+    const { error } = await supabase.from('boats').delete().eq('id', boat.id);
+    if (error) {
+      setSaving(false);
+      setPendingBoatDelete(null);
+      setError(`${error.message}. Si el bote tiene reservas o referencias historicas, desactivalo en lugar de eliminarlo.`);
+      return;
+    }
+    for (const image of images) {
+      if (!image.storage_path) continue;
+      try {
+        await deleteStorageImage({ storagePath: image.storage_path, resourceTable: 'boat_images', resourceId: image.id });
+      } catch {
+        // The database row is already gone; storage cleanup can be retried separately if needed.
+      }
+    }
+    setSaving(false);
+    setPendingBoatDelete(null);
+    setEditing(null);
+    setNotice('Bote eliminado.');
+    await loadBoats();
   }
 
   async function onGalleryImageSaved(image: StorageImage) {
@@ -340,6 +389,7 @@ export default function AdminBoatsPage() {
 
   const editorImages = useMemo(() => (editing?.boat_images?.length ? editing.boat_images : editing ? fallbackBoatImages(editing) : []), [editing]);
   const selectedImage = editorImages.find((image) => image.id === selectedImageId) ?? editorImages.find((image) => image.is_primary) ?? editorImages[0] ?? null;
+  const isExistingBoat = Boolean(editing && boats?.some((boat) => boat.id === editing.id));
 
   return (
     <div className="admin-page">
@@ -366,7 +416,10 @@ export default function AdminBoatsPage() {
               <td>{money(boat.extra_guest_price)}</td>
               <td><AdminBadge value={boat.active} /></td>
               <td>
-                <button className="admin-btn admin-btn--ghost" type="button" onClick={() => openEditor(boat)}><Pencil size={14} /> Editar</button>
+                <div className="admin-actions">
+                  <button className="admin-btn admin-btn--ghost" type="button" onClick={() => openEditor(boat)}><Pencil size={14} /> Editar</button>
+                  <button className="admin-btn admin-btn--danger" type="button" onClick={() => setPendingBoatDelete(boat)}><Trash2 size={14} /> Eliminar</button>
+                </div>
               </td>
             </tr>
           ))}
@@ -388,7 +441,7 @@ export default function AdminBoatsPage() {
             }}
           >
             <header className="admin-modal-header">
-              <h2 id="boat-edit-title" className="admin-card__title"><Pencil size={18} /> Editar bote</h2>
+              <h2 id="boat-edit-title" className="admin-card__title"><Pencil size={18} /> {boats?.some((boat) => boat.id === editing.id) ? 'Editar bote' : 'Crear bote'}</h2>
               <button className="admin-icon-btn" type="button" aria-label="Cerrar" disabled={saving} onClick={() => void closeEditor()}><X size={18} /></button>
             </header>
 
@@ -403,58 +456,64 @@ export default function AdminBoatsPage() {
 
               <FormSection
                 title="Imagen del bote"
-                description="Sube nuevas fotos, ordena la galeria y elige la imagen principal."
+                description={isExistingBoat ? 'Sube nuevas fotos, ordena la galeria y elige la imagen principal.' : 'Guarda la informacion del bote para habilitar la carga de imagenes.'}
                 icon={<ImageIcon size={16} />}
               >
                 <section className="admin-boat-images">
-                  <div className="admin-boat-images__main">
-                    {selectedImage ? (
-                      <img src={selectedImage.image_url} alt={selectedImage.alt_text || editing.name} loading="eager" decoding="async" />
-                    ) : (
-                      <div className="admin-boat-images__empty"><ImagePlus size={28} /> Sin imagenes del bote</div>
-                    )}
-                    <span className="admin-boat-images__badge">Imagen principal</span>
-                    {selectedImage && !selectedImage.is_primary ? (
-                      <button className="admin-boat-images__primary admin-btn" type="button" onClick={() => void setPrimaryImage(selectedImage)}>
-                        <Star size={14} /> Marcar principal
-                      </button>
-                    ) : null}
-                    {editorImages.length > 1 ? (
-                      <>
-                        <button className="admin-boat-images__arrow admin-boat-images__arrow--prev" type="button" aria-label="Imagen anterior" onClick={() => setSelectedImageId(editorImages[(Math.max(editorImages.findIndex((image) => image.id === selectedImage?.id), 0) - 1 + editorImages.length) % editorImages.length].id)}><ArrowLeft size={18} /></button>
-                        <button className="admin-boat-images__arrow admin-boat-images__arrow--next" type="button" aria-label="Imagen siguiente" onClick={() => setSelectedImageId(editorImages[(Math.max(editorImages.findIndex((image) => image.id === selectedImage?.id), 0) + 1) % editorImages.length].id)}><ArrowRight size={18} /></button>
-                      </>
-                    ) : null}
-                  </div>
-
-                  <div className="admin-boat-images__thumbs" role="list" aria-label="Imagenes del bote">
-                    {editorImages.map((image, index) => (
-                      <div className={`admin-boat-thumb${image.id === selectedImage?.id ? ' admin-boat-thumb--selected' : ''}`} key={image.id} role="listitem">
-                        <button type="button" aria-label={`Ver imagen ${index + 1}`} onClick={() => setSelectedImageId(image.id)}>
-                          <img src={image.image_url} alt="" loading="lazy" decoding="async" />
-                        </button>
-                        <div className="admin-boat-thumb__actions">
-                          <button type="button" aria-label="Marcar como principal" onClick={() => void setPrimaryImage(image)}><Star size={14} /></button>
-                          <button type="button" aria-label="Mover a la izquierda" onClick={() => void moveImage(image, -1)}><ArrowUp size={14} /></button>
-                          <button type="button" aria-label="Mover a la derecha" onClick={() => void moveImage(image, 1)}><ArrowDown size={14} /></button>
-                          <button type="button" aria-label="Copiar URL" title={image.image_url} onClick={() => void copyUrl(image.image_url)}><Copy size={14} /></button>
-                          <button type="button" aria-label="Eliminar imagen" onClick={() => setPendingDelete(image)}><Trash2 size={14} /></button>
-                        </div>
+                  {isExistingBoat ? (
+                    <>
+                      <div className="admin-boat-images__main">
+                        {selectedImage ? (
+                          <img src={selectedImage.image_url} alt={selectedImage.alt_text || editing.name} loading="eager" decoding="async" />
+                        ) : (
+                          <div className="admin-boat-images__empty"><ImagePlus size={28} /> Sin imagenes del bote</div>
+                        )}
+                        <span className="admin-boat-images__badge">Imagen principal</span>
+                        {selectedImage && !selectedImage.is_primary ? (
+                          <button className="admin-boat-images__primary admin-btn" type="button" onClick={() => void setPrimaryImage(selectedImage)}>
+                            <Star size={14} /> Marcar principal
+                          </button>
+                        ) : null}
+                        {editorImages.length > 1 ? (
+                          <>
+                            <button className="admin-boat-images__arrow admin-boat-images__arrow--prev" type="button" aria-label="Imagen anterior" onClick={() => setSelectedImageId(editorImages[(Math.max(editorImages.findIndex((image) => image.id === selectedImage?.id), 0) - 1 + editorImages.length) % editorImages.length].id)}><ArrowLeft size={18} /></button>
+                            <button className="admin-boat-images__arrow admin-boat-images__arrow--next" type="button" aria-label="Imagen siguiente" onClick={() => setSelectedImageId(editorImages[(Math.max(editorImages.findIndex((image) => image.id === selectedImage?.id), 0) + 1) % editorImages.length].id)}><ArrowRight size={18} /></button>
+                          </>
+                        ) : null}
                       </div>
-                    ))}
-                  </div>
 
-                  <AdminImageManager
-                    resourceTable="boats"
-                    resourceId={editing.id}
-                    folder="boats"
-                    label={`${editing.name} galeria`}
-                    aspect={16 / 9}
-                    maxWidth={1600}
-                    maxHeight={900}
-                    maxSizeMB={0.6}
-                    onImageSaved={onGalleryImageSaved}
-                  />
+                      <div className="admin-boat-images__thumbs" role="list" aria-label="Imagenes del bote">
+                        {editorImages.map((image, index) => (
+                          <div className={`admin-boat-thumb${image.id === selectedImage?.id ? ' admin-boat-thumb--selected' : ''}`} key={image.id} role="listitem">
+                            <button type="button" aria-label={`Ver imagen ${index + 1}`} onClick={() => setSelectedImageId(image.id)}>
+                              <img src={image.image_url} alt="" loading="lazy" decoding="async" />
+                            </button>
+                            <div className="admin-boat-thumb__actions">
+                              <button type="button" aria-label="Marcar como principal" onClick={() => void setPrimaryImage(image)}><Star size={14} /></button>
+                              <button type="button" aria-label="Mover a la izquierda" onClick={() => void moveImage(image, -1)}><ArrowUp size={14} /></button>
+                              <button type="button" aria-label="Mover a la derecha" onClick={() => void moveImage(image, 1)}><ArrowDown size={14} /></button>
+                              <button type="button" aria-label="Copiar URL" title={image.image_url} onClick={() => void copyUrl(image.image_url)}><Copy size={14} /></button>
+                              <button type="button" aria-label="Eliminar imagen" onClick={() => setPendingDelete(image)}><Trash2 size={14} /></button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      <AdminImageManager
+                        resourceTable="boats"
+                        resourceId={editing.id}
+                        folder="boats"
+                        label={`${editing.name || 'Bote'} galeria`}
+                        aspect={16 / 9}
+                        maxWidth={1600}
+                        maxHeight={900}
+                        maxSizeMB={0.6}
+                        onImageSaved={onGalleryImageSaved}
+                      />
+                    </>
+                  ) : (
+                    <div className="admin-empty">Completa los datos y guarda el bote. Despues podras subir sus fotos.</div>
+                  )}
                 </section>
               </FormSection>
 
@@ -462,11 +521,26 @@ export default function AdminBoatsPage() {
                 <FormSection title="Informacion general" description="Datos que identifican al bote." icon={<Info size={16} />}>
                   <label className="admin-field">
                     <span className="admin-field__label">Nombre</span>
-                    <input id="boat-name" name="name" className="admin-input" value={editing.name} onChange={(event) => setEditing({ ...editing, name: event.target.value })} />
+                    <input id="boat-name" name="name" className="admin-input" aria-invalid={fieldErrors.name ? true : undefined} value={editing.name} onChange={(event) => setEditing({ ...editing, name: event.target.value })} />
+                    {fieldErrors.name ? <span className="admin-field-error">{fieldErrors.name}</span> : null}
+                  </label>
+                  <label className="admin-field">
+                    <span className="admin-field__label">ID interno</span>
+                    <input id="boat-id" name="id" className="admin-input" aria-invalid={fieldErrors.id ? true : undefined} disabled={boats?.some((boat) => boat.id === editing.id)} value={editing.id} onChange={(event) => setEditing({ ...editing, id: event.target.value })} />
+                    {fieldErrors.id ? <span className="admin-field-error">{fieldErrors.id}</span> : null}
                   </label>
                   <label className="admin-field">
                     <span className="admin-field__label">Slug</span>
-                    <input id="boat-slug" name="slug" className="admin-input" value={editing.slug} onChange={(event) => setEditing({ ...editing, slug: event.target.value })} />
+                    <input id="boat-slug" name="slug" className="admin-input" aria-invalid={fieldErrors.slug ? true : undefined} value={editing.slug} onChange={(event) => setEditing({ ...editing, slug: event.target.value })} />
+                    {fieldErrors.slug ? <span className="admin-field-error">{fieldErrors.slug}</span> : null}
+                  </label>
+                  <label className="admin-field">
+                    <span className="admin-field__label">Etiqueta</span>
+                    <input id="boat-badge" name="badge" className="admin-input" value={editing.badge ?? ''} onChange={(event) => setEditing({ ...editing, badge: event.target.value || null })} placeholder="Ej. Luxury meets nature" />
+                  </label>
+                  <label className="admin-field">
+                    <span className="admin-field__label">Texto de precio base</span>
+                    <input id="boat-base-price-label" name="base_price_label" className="admin-input" value={editing.base_price_label ?? ''} onChange={(event) => setEditing({ ...editing, base_price_label: event.target.value || null })} placeholder="Ej. From $600" />
                   </label>
                   <label className="admin-field">
                     <span className="admin-field__label">Eslora</span>
@@ -526,6 +600,10 @@ export default function AdminBoatsPage() {
               </div>
 
               <FormSection title="Estado y configuracion" description="Controla visibilidad y orden en el sitio publico." icon={<Settings2 size={16} />}>
+                <label className="admin-field">
+                  <span className="admin-field__label">Especificaciones destacadas</span>
+                  <textarea className="admin-input min-h-28" value={editing.featured_spec ?? ''} onChange={(event) => setEditing({ ...editing, featured_spec: event.target.value || null })} placeholder="GPS, radio VHF, sonido, bano, juguetes acuaticos..." />
+                </label>
                 <ToggleSwitch
                   checked={editing.active}
                   onChange={(active) => setEditing({ ...editing, active })}
@@ -562,6 +640,23 @@ export default function AdminBoatsPage() {
             <div className="admin-image-manager__actions mt-5">
               <button className="admin-btn admin-btn--danger" type="button" onClick={() => void deleteBoatImage(pendingDelete)}>Eliminar</button>
               <button className="admin-btn admin-btn--ghost" type="button" onClick={() => setPendingDelete(null)}>Cancelar</button>
+            </div>
+          </div>
+        ) : null}
+      </Modal>
+
+      <Modal open={Boolean(pendingBoatDelete)} onClose={() => setPendingBoatDelete(null)} titleId="boat-delete-title" className="max-w-md">
+        {pendingBoatDelete ? (
+          <div className="admin-modal-card">
+            <h2 id="boat-delete-title" className="admin-card__title"><Trash2 size={18} /> Eliminar bote</h2>
+            <p className="admin-muted mt-2">Esta accion elimina el bote y sus asociaciones. Si tiene reservas historicas, la base de datos puede bloquear la eliminacion.</p>
+            <p className="mt-3 font-semibold text-ocean-950">{pendingBoatDelete.name}</p>
+            <div className="admin-image-manager__actions mt-5">
+              <button className="admin-btn admin-btn--danger" type="button" disabled={saving} onClick={() => void deleteBoat(pendingBoatDelete)}>
+                {saving ? <Loader2 className="animate-spin" size={16} /> : <Trash2 size={16} />}
+                {saving ? 'Eliminando...' : 'Eliminar bote'}
+              </button>
+              <button className="admin-btn admin-btn--ghost" type="button" disabled={saving} onClick={() => setPendingBoatDelete(null)}>Cancelar</button>
             </div>
           </div>
         ) : null}
