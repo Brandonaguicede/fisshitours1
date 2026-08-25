@@ -1,9 +1,9 @@
-import { Anchor, HeartHandshake, ShieldCheck, SlidersHorizontal, Users, Waves } from 'lucide-react';
+import { Anchor, Compass, HeartHandshake, ShieldCheck, SlidersHorizontal, Users, Waves } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 
 import { Container } from '../components/common/Container';
-import { Button, CardShell, Chip, GlassPanel, SectionHeader } from '../components/ui';
+import { Button, Chip, GlassPanel, SectionHeader } from '../components/ui';
 import { useLanguage } from '../i18n/LanguageContext';
 import { DEFAULT_ABOUT_SETTINGS, getAboutSettings, splitParagraphs, type AboutSettings } from '../services/aboutSettings';
 
@@ -87,35 +87,72 @@ export default function AboutPage() {
   const storyParagraphs = splitParagraphs(about[`about.story.${locale}` as keyof AboutSettings]);
 
   return (
-    <main className="bg-ocean-950 text-white">
-      <section className="relative overflow-hidden pb-16 pt-24 sm:pt-28 lg:pb-24 lg:pt-32">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_12%_8%,rgba(110,172,201,0.28),transparent_28rem),linear-gradient(180deg,rgba(11,40,66,0.88),rgba(19,62,98,0.96))]" />
-        <Container className="relative grid gap-10 lg:grid-cols-[minmax(0,1fr)_440px] lg:items-end">
-          <SectionHeader align="left" description={about[`about.description.${locale}` as keyof AboutSettings]} eyebrow={about[`about.eyebrow.${locale}` as keyof AboutSettings]} level={1} title={about[`about.title.${locale}` as keyof AboutSettings]} variant="heroWide" />
+    <main className="tours-ocean-atmosphere text-white">
+      <section className="relative overflow-hidden pb-16 pt-24 sm:pt-28 lg:pb-20 lg:pt-32">
+        <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(7,28,48,0.72),rgba(7,28,48,0.9)_66%,rgba(7,28,48,0.94))]" />
+        <Container className="relative grid gap-10 lg:grid-cols-[minmax(0,1fr)_440px] lg:items-center">
+          <div>
+            <SectionHeader
+              align="left"
+              description={about[`about.description.${locale}` as keyof AboutSettings]}
+              eyebrow={about[`about.eyebrow.${locale}` as keyof AboutSettings]}
+              level={1}
+              title={about[`about.title.${locale}` as keyof AboutSettings]}
+              variant="heroWide"
+            />
 
-          <GlassPanel className="p-3" variant="surface">
-            <div className="relative aspect-[4/3] overflow-hidden rounded-[1.4rem]">
-              {images.map((image, index) => (
-                <img
-                  key={image}
-                  className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-700 ${index === activeHeroImage ? 'opacity-100' : 'opacity-0'}`}
-                  src={image}
-                  alt={index === 0 ? about[`about.image_alt.${locale}` as keyof AboutSettings] : ''}
-                  aria-hidden={index === 0 ? undefined : true}
-                  loading={index === 0 ? 'lazy' : 'eager'}
-                />
-              ))}
-              <div className="absolute bottom-4 left-4 flex gap-1.5" aria-hidden="true">
-                {images.map((image, index) => (
-                  <span key={image} className={`h-1.5 rounded-full transition-all duration-300 ${index === activeHeroImage ? 'w-5 bg-white' : 'w-1.5 bg-white/45'}`} />
-                ))}
-              </div>
+            <div className="mt-8 flex flex-wrap gap-3">
+              <Button href="#crew" size="lg" variant="primary">
+                <Users size={17} /> {language === 'es' ? 'Conoce a Gabriel y Joshua' : 'Meet Gabriel & Joshua'}
+              </Button>
+              <Button size="lg" to="/tours" variant="glass">
+                <Compass size={17} /> {language === 'es' ? 'Explorar tours' : 'Explore our tours'}
+              </Button>
             </div>
-          </GlassPanel>
+          </div>
+
+          <div className="relative">
+            <GlassPanel className="p-3" variant="surface">
+              <div className="relative aspect-[4/3] overflow-hidden rounded-[1.4rem]">
+                {images.map((image, index) => (
+                  <img
+                    key={image}
+                    className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-700 ${index === activeHeroImage ? 'opacity-100' : 'opacity-0'}`}
+                    src={image}
+                    alt={index === 0 ? about[`about.image_alt.${locale}` as keyof AboutSettings] : ''}
+                    aria-hidden={index === 0 ? undefined : true}
+                    loading={index === 0 ? 'lazy' : 'eager'}
+                  />
+                ))}
+                <div className="absolute bottom-4 left-4 flex gap-1.5" aria-hidden="true">
+                  {images.map((image, index) => (
+                    <span key={image} className={`h-1.5 rounded-full transition-all duration-300 ${index === activeHeroImage ? 'w-5 bg-white' : 'w-1.5 bg-white/45'}`} />
+                  ))}
+                </div>
+              </div>
+            </GlassPanel>
+            <Chip className="absolute -top-3 right-4 gap-1.5 border border-white/25 bg-white/10 px-3.5 py-1.5 text-[0.7rem] font-bold uppercase tracking-[0.12em] text-white shadow-soft">
+              <Anchor size={13} /> {language === 'es' ? '100% local' : '100% local'}
+            </Chip>
+          </div>
+        </Container>
+
+        <Container className="relative mt-14">
+          <div className="grid gap-4 sm:grid-cols-3">
+            {values.map((value) => (
+              <GlassPanel as="article" className="p-5" key={value.title.en} variant="subtle">
+                <span className="grid h-11 w-11 place-items-center rounded-full bg-white/12 text-white">
+                  <value.icon size={20} />
+                </span>
+                <h2 className="mt-4 text-lg font-extrabold text-white">{value.title[language]}</h2>
+                <p className="mt-2 text-sm leading-6 text-ocean-100">{value.description[language]}</p>
+              </GlassPanel>
+            ))}
+          </div>
         </Container>
       </section>
 
-      <section className="section-y bg-ocean-900">
+      <section className="section-y bg-ocean-950/72">
         <Container className="grid gap-10 lg:grid-cols-[0.92fr_1.08fr] lg:items-start">
           <GlassPanel className="p-6 sm:p-8" variant="surface">
             <p className="text-sm font-bold uppercase tracking-[0.14em] text-ocean-300">
@@ -141,7 +178,7 @@ export default function AboutPage() {
         </Container>
       </section>
 
-      <section className="section-y bg-ocean-950">
+      <section className="home-section section-y bg-ocean-950/64" id="crew">
         <Container>
           <GlassPanel className="overflow-hidden" variant="surface">
             <div className="grid lg:grid-cols-[0.95fr_1.05fr]">
@@ -191,19 +228,9 @@ export default function AboutPage() {
         </Container>
       </section>
 
-      <section className="section-y bg-ocean-950">
+      <section className="section-y bg-ocean-950/76">
         <Container>
-          <div className="grid gap-4 md:grid-cols-3">
-            {values.map((value) => (
-              <CardShell as="article" interactive key={value.title.en} className="group rounded-2xl p-6 shadow-soft">
-                <value.icon className="text-ocean-300 transition duration-300 group-hover:scale-105" size={30} />
-                <h2 className="mt-5 text-xl font-extrabold text-white">{value.title[language]}</h2>
-                <p className="mt-3 text-sm leading-6 text-ocean-200">{value.description[language]}</p>
-              </CardShell>
-            ))}
-          </div>
-
-          <GlassPanel className="mt-12 p-6 text-center sm:p-10" variant="panel">
+          <GlassPanel className="p-6 text-center sm:p-10" variant="panel">
             <h2 className="font-display text-4xl font-extrabold leading-tight text-white">
               {about[`about.cta_title.${locale}` as keyof AboutSettings]}
             </h2>

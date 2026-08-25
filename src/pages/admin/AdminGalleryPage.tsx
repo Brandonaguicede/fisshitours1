@@ -215,6 +215,8 @@ export default function AdminGalleryPage() {
               <button className="admin-icon-btn" type="button" aria-label="Cerrar" onClick={() => void closeEditor()}><X size={18} /></button>
             </header>
             <div className="admin-modal-body">
+              {error ? <div className="admin-alert admin-alert--danger" role="alert">{error}</div> : null}
+              {notice ? <div className="admin-alert admin-alert--success" role="status">{notice}</div> : null}
               <AdminImageManager
                 resourceTable="gallery_images"
                 resourceId={editing.id}

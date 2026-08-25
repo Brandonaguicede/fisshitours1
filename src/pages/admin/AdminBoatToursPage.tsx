@@ -1,4 +1,4 @@
-import { Pencil, Plus, X } from 'lucide-react';
+import { Loader2, Pencil, Plus, Trash2, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 
 import AdminImageManager from '../../components/admin/AdminImageManager';
@@ -6,7 +6,7 @@ import { AdminBadge, AdminPageHeader, AdminTable, AdminToolbar } from '../../com
 import ModalFooter from '../../components/admin/ModalFooter';
 import { Modal } from '../../components/common/Modal';
 import { supabase } from '../../lib/supabase';
-import type { StorageImage } from '../../services/imageService';
+import { deleteStorageImage, type StorageImage } from '../../services/imageService';
 import { money } from './adminMockData';
 
 interface BoatOption { id: string; name: string }
@@ -36,6 +36,7 @@ export default function AdminBoatToursPage() {
   const [boats, setBoats] = useState<BoatOption[]>([]);
   const [boatTours, setBoatTours] = useState<BoatTourOption[]>([]);
   const [editing, setEditing] = useState<PackageRow | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<PackageRow | null>(null);
   const [boatFilter, setBoatFilter] = useState('all');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -151,6 +152,30 @@ export default function AdminBoatToursPage() {
     await loadData();
   }
 
+  async function deletePackage(pkg: PackageRow) {
+    setSaving(true);
+    setError('');
+    setNotice('');
+    const { error } = await supabase.from('tour_packages').delete().eq('id', pkg.id);
+    if (error) {
+      setSaving(false);
+      setPendingDelete(null);
+      setError(`${error.message}. Si el paquete tiene reservas historicas, desactivalo en lugar de eliminarlo.`);
+      return;
+    }
+    if (pkg.image_public_id) {
+      try {
+        await deleteStorageImage({ storagePath: pkg.image_public_id, resourceTable: 'tour_packages', resourceId: pkg.id });
+      } catch {
+        // The database row is already gone; storage cleanup can be retried separately if needed.
+      }
+    }
+    setSaving(false);
+    setPendingDelete(null);
+    setNotice('Paquete eliminado.');
+    await loadData();
+  }
+
   const visiblePackages = useMemo(
     () => packages.filter((item) => boatFilter === 'all' || item.boat_tours?.boat_id === boatFilter),
     [packages, boatFilter],
@@ -190,7 +215,12 @@ export default function AdminBoatToursPage() {
               <td>{item.included_guests} incluidos / {item.max_guests} max</td>
               <td>{item.sort_order}</td>
               <td><AdminBadge value={item.active} /></td>
-              <td><button className="admin-btn admin-btn--ghost" type="button" onClick={() => setEditing(item)}><Pencil size={14} /> Editar</button></td>
+              <td>
+                <div className="admin-actions">
+                  <button className="admin-btn admin-btn--ghost" type="button" onClick={() => setEditing(item)}><Pencil size={14} /> Editar</button>
+                  <button className="admin-btn admin-btn--danger" type="button" onClick={() => setPendingDelete(item)}><Trash2 size={14} /> Eliminar</button>
+                </div>
+              </td>
             </tr>
           ))}
           {visiblePackages.length === 0 ? <tr><td colSpan={8} className="admin-muted">No hay paquetes.</td></tr> : null}
@@ -205,6 +235,8 @@ export default function AdminBoatToursPage() {
               <button className="admin-icon-btn" type="button" aria-label="Cerrar" onClick={() => setEditing(null)}><X size={18} /></button>
             </header>
             <div className="admin-modal-body">
+              {error ? <div className="admin-alert admin-alert--danger" role="alert">{error}</div> : null}
+              {notice ? <div className="admin-alert admin-alert--success" role="status">{notice}</div> : null}
               <AdminImageManager
                 resourceTable="tour_packages"
                 resourceId={editing.id}
@@ -238,6 +270,23 @@ export default function AdminBoatToursPage() {
               <button className="admin-btn admin-btn--secondary" type="button" onClick={() => setEditing(null)}>Cerrar</button>
               <button className="admin-btn" type="button" disabled={saving} onClick={() => void savePackage()}>{saving ? 'Guardando...' : 'Guardar cambios'}</button>
             </ModalFooter>
+          </div>
+        ) : null}
+      </Modal>
+
+      <Modal open={Boolean(pendingDelete)} onClose={() => setPendingDelete(null)} titleId="package-delete-title" className="max-w-md">
+        {pendingDelete ? (
+          <div className="admin-modal-card">
+            <h2 id="package-delete-title" className="admin-card__title"><Trash2 size={18} /> Eliminar paquete</h2>
+            <p className="admin-muted mt-2">Esta accion elimina el paquete. Si tiene reservas historicas, la base de datos puede bloquear la eliminacion.</p>
+            <p className="mt-3 font-semibold text-ocean-950">{pendingDelete.name}</p>
+            <div className="admin-image-manager__actions mt-5">
+              <button className="admin-btn admin-btn--danger" type="button" disabled={saving} onClick={() => void deletePackage(pendingDelete)}>
+                {saving ? <Loader2 className="animate-spin" size={16} /> : <Trash2 size={16} />}
+                {saving ? 'Eliminando...' : 'Eliminar paquete'}
+              </button>
+              <button className="admin-btn admin-btn--ghost" type="button" disabled={saving} onClick={() => setPendingDelete(null)}>Cancelar</button>
+            </div>
           </div>
         ) : null}
       </Modal>
