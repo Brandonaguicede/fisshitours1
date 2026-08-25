@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, NavLink, Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom';
 
 import { getCurrentAdminProfile, signOutAdmin, type AdminProfile } from '../../services/adminAuthService';
+import ThemeToggle from '../../components/admin/ThemeToggle';
 import '../../styles/admin.css';
 
 const navGroups = [
@@ -148,6 +149,7 @@ export default function AdminLayout() {
             <Link className="admin-btn admin-btn--secondary" to="/">
               Ver sitio <ChevronRight size={16} />
             </Link>
+            <ThemeToggle />
             <button className="admin-icon-btn" type="button" aria-label="Notificaciones">
               <Bell size={18} />
             </button>

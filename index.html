@@ -13,6 +13,19 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link rel="preload" as="image" href="/images/papagayo-logo.png" />
     <title>Pura Ruta Adventures</title>
+    <script>
+      (function () {
+        try {
+          var stored = localStorage.getItem('pft-admin-theme');
+          var theme = stored === 'light' || stored === 'dark'
+            ? stored
+            : (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+          document.documentElement.dataset.theme = theme;
+        } catch (error) {
+          document.documentElement.dataset.theme = 'light';
+        }
+      })();
+    </script>
   </head>
   <body style="margin:0;background:#0B2842">
     <div id="root"></div>

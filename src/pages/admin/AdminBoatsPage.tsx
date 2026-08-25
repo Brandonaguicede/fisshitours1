@@ -1,8 +1,11 @@
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Copy, ImagePlus, Pencil, Plus, Star, Trash2, X } from 'lucide-react';
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Copy, Image as ImageIcon, ImagePlus, Info, Loader2, Pencil, Plus, Save, Settings2, Star, Trash2, Users, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 
 import AdminImageManager from '../../components/admin/AdminImageManager';
 import { AdminBadge, AdminPageHeader, AdminTable } from '../../components/admin/AdminPrimitives';
+import FormSection from '../../components/admin/FormSection';
+import ModalFooter from '../../components/admin/ModalFooter';
+import ToggleSwitch from '../../components/admin/ToggleSwitch';
 import { Modal } from '../../components/common/Modal';
 import { supabase } from '../../lib/supabase';
 import { deleteStorageImage } from '../../services/imageService';
@@ -67,6 +70,7 @@ export default function AdminBoatsPage() {
   const [selectedImageId, setSelectedImageId] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<BoatImageRow | null>(null);
   const [saving, setSaving] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<{ includedGuests?: string; maxGuests?: string; extraPrice?: string }>({});
 
   async function loadBoats() {
     setLoading(true);
@@ -113,6 +117,7 @@ export default function AdminBoatsPage() {
 
   function openEditor(boat: BoatRow) {
     setEditing(boat);
+    setFieldErrors({});
     const images = boat.boat_images?.length ? boat.boat_images : fallbackBoatImages(boat);
     setSelectedImageId((images.find((image) => image.is_primary) ?? images[0])?.id ?? null);
   }
@@ -140,6 +145,7 @@ export default function AdminBoatsPage() {
       return;
     }
     const row = { ...(data as BoatRow), images: [], boat_images: [] };
+    setFieldErrors({});
     setEditing(row);
     setSelectedImageId(null);
     await loadBoats();
@@ -193,13 +199,22 @@ export default function AdminBoatsPage() {
   }
 
   async function saveEditor() {
-    if (!editing) return;
-    if (editing.included_guests < 1 || editing.max_guests < editing.included_guests || editing.extra_guest_price < 0) {
-      setError('Revisa la capacidad: incluidos >= 1, maximo >= incluidos y precio adicional >= 0.');
-      return;
+    if (!editing || saving) return;
+    const nextFieldErrors: typeof fieldErrors = {};
+    if (!Number.isFinite(editing.included_guests) || editing.included_guests < 1) {
+      nextFieldErrors.includedGuests = 'Debe incluir al menos 1 persona.';
     }
-    if (editing.id === 'segundo-viento' && editing.max_guests > 10) {
-      setError('Second Wind no puede superar 10 pasajeros.');
+    if (!Number.isFinite(editing.max_guests) || editing.max_guests < editing.included_guests) {
+      nextFieldErrors.maxGuests = 'La capacidad maxima no puede ser menor a las personas incluidas.';
+    } else if (editing.id === 'segundo-viento' && editing.max_guests > 10) {
+      nextFieldErrors.maxGuests = 'Second Wind no puede superar 10 pasajeros.';
+    }
+    if (!Number.isFinite(editing.extra_guest_price) || editing.extra_guest_price < 0) {
+      nextFieldErrors.extraPrice = 'El precio adicional no puede ser negativo.';
+    }
+    setFieldErrors(nextFieldErrors);
+    if (Object.keys(nextFieldErrors).length > 0) {
+      setError('Revisa los campos marcados antes de guardar.');
       return;
     }
     setSaving(true);
@@ -365,117 +380,183 @@ export default function AdminBoatsPage() {
 
       <Modal open={Boolean(editing)} onClose={() => void closeEditor()} titleId="boat-edit-title" className="admin-boat-modal">
         {editing ? (
-          <>
-            <div className="admin-modal-header">
+          <form
+            className="admin-boat-editor"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void saveEditor();
+            }}
+          >
+            <header className="admin-modal-header">
               <h2 id="boat-edit-title" className="admin-card__title"><Pencil size={18} /> Editar bote</h2>
-              <button className="admin-icon-btn" type="button" aria-label="Cerrar" onClick={() => void closeEditor()}><X size={18} /></button>
-            </div>
+              <button className="admin-icon-btn" type="button" aria-label="Cerrar" disabled={saving} onClick={() => void closeEditor()}><X size={18} /></button>
+            </header>
 
             <div className="admin-modal-body">
-              <section className="admin-boat-images">
-                <div className="admin-boat-images__main">
-                  {selectedImage ? (
-                    <img src={selectedImage.image_url} alt={selectedImage.alt_text || editing.name} loading="eager" decoding="async" />
-                  ) : (
-                    <div className="admin-boat-images__empty"><ImagePlus size={28} /> Sin imagenes del bote</div>
-                  )}
-                  <span className="admin-boat-images__badge">Imagen principal</span>
-                  {selectedImage && !selectedImage.is_primary ? (
-                    <button className="admin-boat-images__primary admin-btn" type="button" onClick={() => void setPrimaryImage(selectedImage)}>
-                      <Star size={14} /> Marcar principal
-                    </button>
-                  ) : null}
-                  {editorImages.length > 1 ? (
-                    <>
-                      <button className="admin-boat-images__arrow admin-boat-images__arrow--prev" type="button" aria-label="Imagen anterior" onClick={() => setSelectedImageId(editorImages[(Math.max(editorImages.findIndex((image) => image.id === selectedImage?.id), 0) - 1 + editorImages.length) % editorImages.length].id)}><ArrowLeft size={18} /></button>
-                      <button className="admin-boat-images__arrow admin-boat-images__arrow--next" type="button" aria-label="Imagen siguiente" onClick={() => setSelectedImageId(editorImages[(Math.max(editorImages.findIndex((image) => image.id === selectedImage?.id), 0) + 1) % editorImages.length].id)}><ArrowRight size={18} /></button>
-                    </>
-                  ) : null}
+              {error ? (
+                <div className="admin-alert admin-alert--danger" role="alert">
+                  {needsEditorNotice(error)
+                    ? 'No se pudo guardar: se requiere una sesion de admin/editor en Supabase.'
+                    : error}
                 </div>
+              ) : null}
 
-                <div className="admin-boat-images__thumbs" role="list" aria-label="Imagenes del bote">
-                  {editorImages.map((image, index) => (
-                    <div className={`admin-boat-thumb${image.id === selectedImage?.id ? ' admin-boat-thumb--selected' : ''}`} key={image.id} role="listitem">
-                      <button type="button" aria-label={`Ver imagen ${index + 1}`} onClick={() => setSelectedImageId(image.id)}>
-                        <img src={image.image_url} alt="" loading="lazy" decoding="async" />
+              <FormSection
+                title="Imagen del bote"
+                description="Sube nuevas fotos, ordena la galeria y elige la imagen principal."
+                icon={<ImageIcon size={16} />}
+              >
+                <section className="admin-boat-images">
+                  <div className="admin-boat-images__main">
+                    {selectedImage ? (
+                      <img src={selectedImage.image_url} alt={selectedImage.alt_text || editing.name} loading="eager" decoding="async" />
+                    ) : (
+                      <div className="admin-boat-images__empty"><ImagePlus size={28} /> Sin imagenes del bote</div>
+                    )}
+                    <span className="admin-boat-images__badge">Imagen principal</span>
+                    {selectedImage && !selectedImage.is_primary ? (
+                      <button className="admin-boat-images__primary admin-btn" type="button" onClick={() => void setPrimaryImage(selectedImage)}>
+                        <Star size={14} /> Marcar principal
                       </button>
-                      <div className="admin-boat-thumb__actions">
-                        <button type="button" aria-label="Marcar como principal" onClick={() => void setPrimaryImage(image)}><Star size={14} /></button>
-                        <button type="button" aria-label="Mover a la izquierda" onClick={() => void moveImage(image, -1)}><ArrowUp size={14} /></button>
-                        <button type="button" aria-label="Mover a la derecha" onClick={() => void moveImage(image, 1)}><ArrowDown size={14} /></button>
-                        <button type="button" aria-label="Copiar URL" title={image.image_url} onClick={() => void copyUrl(image.image_url)}><Copy size={14} /></button>
-                        <button type="button" aria-label="Eliminar imagen" onClick={() => setPendingDelete(image)}><Trash2 size={14} /></button>
+                    ) : null}
+                    {editorImages.length > 1 ? (
+                      <>
+                        <button className="admin-boat-images__arrow admin-boat-images__arrow--prev" type="button" aria-label="Imagen anterior" onClick={() => setSelectedImageId(editorImages[(Math.max(editorImages.findIndex((image) => image.id === selectedImage?.id), 0) - 1 + editorImages.length) % editorImages.length].id)}><ArrowLeft size={18} /></button>
+                        <button className="admin-boat-images__arrow admin-boat-images__arrow--next" type="button" aria-label="Imagen siguiente" onClick={() => setSelectedImageId(editorImages[(Math.max(editorImages.findIndex((image) => image.id === selectedImage?.id), 0) + 1) % editorImages.length].id)}><ArrowRight size={18} /></button>
+                      </>
+                    ) : null}
+                  </div>
+
+                  <div className="admin-boat-images__thumbs" role="list" aria-label="Imagenes del bote">
+                    {editorImages.map((image, index) => (
+                      <div className={`admin-boat-thumb${image.id === selectedImage?.id ? ' admin-boat-thumb--selected' : ''}`} key={image.id} role="listitem">
+                        <button type="button" aria-label={`Ver imagen ${index + 1}`} onClick={() => setSelectedImageId(image.id)}>
+                          <img src={image.image_url} alt="" loading="lazy" decoding="async" />
+                        </button>
+                        <div className="admin-boat-thumb__actions">
+                          <button type="button" aria-label="Marcar como principal" onClick={() => void setPrimaryImage(image)}><Star size={14} /></button>
+                          <button type="button" aria-label="Mover a la izquierda" onClick={() => void moveImage(image, -1)}><ArrowUp size={14} /></button>
+                          <button type="button" aria-label="Mover a la derecha" onClick={() => void moveImage(image, 1)}><ArrowDown size={14} /></button>
+                          <button type="button" aria-label="Copiar URL" title={image.image_url} onClick={() => void copyUrl(image.image_url)}><Copy size={14} /></button>
+                          <button type="button" aria-label="Eliminar imagen" onClick={() => setPendingDelete(image)}><Trash2 size={14} /></button>
+                        </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
 
-                <AdminImageManager
-                  resourceTable="boats"
-                  resourceId={editing.id}
-                  folder="boats"
-                  label={`${editing.name} galeria`}
-                  aspect={16 / 9}
-                  maxWidth={1600}
-                  maxHeight={900}
-                  maxSizeMB={0.6}
-                  onImageSaved={onGalleryImageSaved}
-                />
-              </section>
+                  <AdminImageManager
+                    resourceTable="boats"
+                    resourceId={editing.id}
+                    folder="boats"
+                    label={`${editing.name} galeria`}
+                    aspect={16 / 9}
+                    maxWidth={1600}
+                    maxHeight={900}
+                    maxSizeMB={0.6}
+                    onImageSaved={onGalleryImageSaved}
+                  />
+                </section>
+              </FormSection>
 
-              <div className="grid gap-3 sm:grid-cols-2">
-                <label className="grid gap-1">
-                  <span className="admin-muted">Nombre</span>
-                  <input className="admin-input" value={editing.name} onChange={(event) => setEditing({ ...editing, name: event.target.value })} />
-                </label>
-                <label className="grid gap-1">
-                  <span className="admin-muted">Slug</span>
-                  <input className="admin-input" value={editing.slug} onChange={(event) => setEditing({ ...editing, slug: event.target.value })} />
-                </label>
-                <label className="grid gap-1">
-                  <span className="admin-muted">Eslora</span>
-                  <input className="admin-input" value={editing.length ?? ''} onChange={(event) => setEditing({ ...editing, length: event.target.value || null })} />
-                </label>
-                <label className="grid gap-1">
-                  <span className="admin-muted">Motor</span>
-                  <input className="admin-input" value={editing.engine ?? ''} onChange={(event) => setEditing({ ...editing, engine: event.target.value || null })} />
-                </label>
-                <label className="grid gap-1">
-                  <span className="admin-muted">Incluye hasta 5 personas</span>
-                  <input className="admin-input" type="number" min={1} value={editing.included_guests} onChange={(event) => setEditing({ ...editing, included_guests: Number(event.target.value) })} />
-                </label>
-                <label className="grid gap-1">
-                  <span className="admin-muted">Capacidad maxima</span>
-                  <input className="admin-input" type="number" min={1} max={editing.id === 'segundo-viento' ? 10 : undefined} value={editing.max_guests} onChange={(event) => setEditing({ ...editing, max_guests: Number(event.target.value) })} />
-                </label>
-                <label className="grid gap-1">
-                  <span className="admin-muted">Precio por persona adicional (USD)</span>
-                  <input className="admin-input" type="number" min={0} value={editing.extra_guest_price} onChange={(event) => setEditing({ ...editing, extra_guest_price: Number(event.target.value) })} />
-                </label>
-                <label className="grid gap-1">
-                  <span className="admin-muted">Orden</span>
-                  <input className="admin-input" type="number" value={editing.sort_order} onChange={(event) => setEditing({ ...editing, sort_order: Number(event.target.value) })} />
-                </label>
+              <div className="admin-form-columns">
+                <FormSection title="Informacion general" description="Datos que identifican al bote." icon={<Info size={16} />}>
+                  <label className="admin-field">
+                    <span className="admin-field__label">Nombre</span>
+                    <input id="boat-name" name="name" className="admin-input" value={editing.name} onChange={(event) => setEditing({ ...editing, name: event.target.value })} />
+                  </label>
+                  <label className="admin-field">
+                    <span className="admin-field__label">Slug</span>
+                    <input id="boat-slug" name="slug" className="admin-input" value={editing.slug} onChange={(event) => setEditing({ ...editing, slug: event.target.value })} />
+                  </label>
+                  <label className="admin-field">
+                    <span className="admin-field__label">Eslora</span>
+                    <input id="boat-length" name="length" className="admin-input" value={editing.length ?? ''} onChange={(event) => setEditing({ ...editing, length: event.target.value || null })} placeholder="Ej. 32 pies" />
+                  </label>
+                  <label className="admin-field">
+                    <span className="admin-field__label">Motor</span>
+                    <input id="boat-engine" name="engine" className="admin-input" value={editing.engine ?? ''} onChange={(event) => setEditing({ ...editing, engine: event.target.value || null })} placeholder="Ej. 2x Yamaha 250HP" />
+                  </label>
+                </FormSection>
+
+                <FormSection title="Capacidad y precios" description="Base para el calculo de reservaciones." icon={<Users size={16} />}>
+                  <label className="admin-field">
+                    <span className="admin-field__label">Personas incluidas</span>
+                    <input
+                      id="boat-included-guests"
+                      name="included_guests"
+                      className="admin-input"
+                      type="number"
+                      min={1}
+                      aria-invalid={fieldErrors.includedGuests ? true : undefined}
+                      value={editing.included_guests}
+                      onChange={(event) => setEditing({ ...editing, included_guests: Number(event.target.value) })}
+                    />
+                    {fieldErrors.includedGuests ? <span className="admin-field-error">{fieldErrors.includedGuests}</span> : null}
+                  </label>
+                  <label className="admin-field">
+                    <span className="admin-field__label">Capacidad maxima</span>
+                    <input
+                      id="boat-max-guests"
+                      name="max_guests"
+                      className="admin-input"
+                      type="number"
+                      min={1}
+                      max={editing.id === 'segundo-viento' ? 10 : undefined}
+                      aria-invalid={fieldErrors.maxGuests ? true : undefined}
+                      value={editing.max_guests}
+                      onChange={(event) => setEditing({ ...editing, max_guests: Number(event.target.value) })}
+                    />
+                    {fieldErrors.maxGuests ? <span className="admin-field-error">{fieldErrors.maxGuests}</span> : null}
+                  </label>
+                  <label className="admin-field">
+                    <span className="admin-field__label">Precio por persona adicional (USD)</span>
+                    <input
+                      id="boat-extra-price"
+                      name="extra_guest_price"
+                      className="admin-input"
+                      type="number"
+                      min={0}
+                      aria-invalid={fieldErrors.extraPrice ? true : undefined}
+                      value={editing.extra_guest_price}
+                      onChange={(event) => setEditing({ ...editing, extra_guest_price: Number(event.target.value) })}
+                    />
+                    {fieldErrors.extraPrice ? <span className="admin-field-error">{fieldErrors.extraPrice}</span> : null}
+                  </label>
+                </FormSection>
               </div>
-              <label className="flex items-center gap-2">
-                <input type="checkbox" checked={editing.active} onChange={(event) => setEditing({ ...editing, active: event.target.checked })} />
-                <span className="admin-muted">Bote activo</span>
-              </label>
+
+              <FormSection title="Estado y configuracion" description="Controla visibilidad y orden en el sitio publico." icon={<Settings2 size={16} />}>
+                <ToggleSwitch
+                  checked={editing.active}
+                  onChange={(active) => setEditing({ ...editing, active })}
+                  label="Bote activo"
+                  description="Los botes inactivos no se muestran en el sitio ni admiten reservaciones."
+                  disabled={saving}
+                />
+                <label className="admin-field admin-field--narrow">
+                  <span className="admin-field__label">Orden de despliegue</span>
+                  <input id="boat-sort-order" name="sort_order" className="admin-input" type="number" value={editing.sort_order} onChange={(event) => setEditing({ ...editing, sort_order: Number(event.target.value) })} />
+                </label>
+              </FormSection>
             </div>
 
-            <div className="admin-modal-footer">
-              <button className="admin-btn" type="button" disabled={saving} onClick={() => void saveEditor()}>
-                {saving ? 'Guardando...' : 'Guardar cambios'}
+            <ModalFooter>
+              <button className="admin-btn admin-btn--secondary" type="button" disabled={saving} onClick={() => void closeEditor()}>Cancelar</button>
+              <button className="admin-btn" type="submit" disabled={saving} aria-busy={saving}>
+                {saving ? (
+                  <><Loader2 size={15} className="animate-spin" /> Guardando...</>
+                ) : (
+                  <><Save size={15} /> Guardar cambios</>
+                )}
               </button>
-              <button className="admin-btn admin-btn--ghost" type="button" onClick={() => void closeEditor()}>Cerrar</button>
-            </div>
-          </>
+            </ModalFooter>
+          </form>
         ) : null}
       </Modal>
 
       <Modal open={Boolean(pendingDelete)} onClose={() => setPendingDelete(null)} titleId="boat-image-delete-title" className="max-w-md">
         {pendingDelete ? (
-          <div className="rounded-2xl border border-white/60 bg-white p-5 shadow-2xl">
+          <div className="admin-modal-card">
             <h2 id="boat-image-delete-title" className="admin-card__title"><Trash2 size={18} /> Eliminar imagen</h2>
             <p className="admin-muted mt-2">Si es la principal y hay otra imagen activa, se promovera la siguiente automaticamente.</p>
             <div className="admin-image-manager__actions mt-5">

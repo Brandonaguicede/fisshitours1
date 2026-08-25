@@ -1,0 +1,267 @@
+[
+  {
+    "label": "home",
+    "requestedUrl": "https://fisshitours1-git-feature-storage-st-e899ba-papagayo-fishingtour.vercel.app/",
+    "documentStatus": 200,
+    "title": "Pura Ruta Adventures",
+    "finalUrl": "https://fisshitours1-git-feature-storage-st-e899ba-papagayo-fishingtour.vercel.app/",
+    "bodyText": "Something went wrong\n\nPlease refresh the page or try again in a moment.\n\nReload",
+    "bodyTextLength": 79,
+    "rootElements": 5,
+    "rootHtml": "<main class=\"grid min-h-screen place-items-center bg-ocean-950 px-6 text-center text-white\"><section class=\"max-w-md rounded-2xl border border-white/10 bg-white/[0.06] p-6\"><h1 class=\"text-2xl font-extrabold\">Something went wrong</h1><p class=\"mt-3 text-sm leading-6 text-ocean-100\">Please refresh the page or try again in a moment.</p><button class=\"mt-5 rounded-xl bg-ocean-400 px-4 py-2 text-sm font-extrabold text-ocean-950\" type=\"button\">Reload</button></section></main>",
+    "activeLoaders": [],
+    "topElement": {
+      "tag": "P",
+      "id": "",
+      "className": "mt-3 text-sm leading-6 text-ocean-100",
+      "pointerEvents": "auto",
+      "position": "static",
+      "zIndex": "auto",
+      "opacity": "1",
+      "display": "block",
+      "visibility": "visible"
+    },
+    "rootStyle": {
+      "display": "block",
+      "visibility": "visible",
+      "opacity": "1",
+      "height": "900px"
+    },
+    "bodyStyle": {
+      "display": "block",
+      "visibility": "visible",
+      "opacity": "1",
+      "background": "rgb(11, 40, 66)"
+    },
+    "consoleMessages": [
+      {
+        "type": "error",
+        "text": "Error: Missing Supabase public environment variables. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.\n    at https://fisshitours1-git-feature-storage-st-e899ba-papagayo-fishingtour.vercel.app/assets/supabase-BPnowhXs.js:29:58064"
+      },
+      {
+        "type": "error",
+        "text": "Unexpected application error {message: Missing Supabase public environment variables. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY., componentStack: \n    at Lazy\n    at Hv (https://fisshitours1-git-f…our.vercel.app/assets/index-CXgnm3WE.js:41:85862)}"
+      }
+    ],
+    "pageErrors": [],
+    "failedRequests": [],
+    "badResponses": [],
+    "supabaseResponses": [
+      {
+        "url": "https://fisshitours1-git-feature-storage-st-e899ba-papagayo-fishingtour.vercel.app/assets/supabase-BPnowhXs.js",
+        "status": 200,
+        "type": "script",
+        "body": "const Pr=Symbol.for(\"@supabase/supabase-js.traceContextExtractor\");function Ir(){return globalThis[Pr]}function Ye(t,e){var r={};for(var s in t)Object.prototype.hasOwnProperty.call(t,s)&&e.indexOf(s)<0&&(r[s]=t[s]);if(t!=null&&typeof Object.getOwnPropertySymbols==\"function\")for(var n=0,s=Object.getOwnPropertySymbols(t);n<s.length;n++)e.indexOf(s[n])<0&&Object.prototype.propertyIsEnumerable.call(t,s[n])&&(r[s[n]]=t[s[n]]);return r}function jr(t,e,r,s){function n(i){return i instanceof r?i:new r(function(a){a(i)})}return new(r||(r=Promise))(function(i,a){function o(u){try{c(s.next(u))}catch(h){a"
+      }
+    ],
+    "assets": [
+      {
+        "url": "https://fisshitours1-git-feature-storage-st-e899ba-papagayo-fishingtour.vercel.app/assets/index-D6K9DVsz.css",
+        "status": 200,
+        "type": "stylesheet"
+      },
+      {
+        "url": "https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Outfit:wght@400;500;600;700;800&display=swap",
+        "status": 200,
+        "type": "stylesheet"
+      },
+      {
+        "url": "https://fisshitours1-git-feature-storage-st-e899ba-papagayo-fishingtour.vercel.app/assets/index-CXgnm3WE.js",
+        "status": 200,
+        "type": "script"
+      },
+      {
+        "url": "https://fisshitours1-git-feature-storage-st-e899ba-papagayo-fishingtour.vercel.app/assets/useQuery-CSwFQRg9.js",
+        "status": 200,
+        "type": "script"
+      },
+      {
+        "url": "https://fisshitours1-git-feature-storage-st-e899ba-papagayo-fishingtour.vercel.app/assets/boatService-Dog4eL9W.js",
+        "status": 200,
+        "type": "script"
+      },
+      {
+        "url": "https://fisshitours1-git-feature-storage-st-e899ba-papagayo-fishingtour.vercel.app/assets/HomePage-Dj2RdSXk.js",
+        "status": 200,
+        "type": "script"
+      },
+      {
+        "url": "https://fisshitours1-git-feature-storage-st-e899ba-papagayo-fishingtour.vercel.app/assets/ship-CrQpZs_q.js",
+        "status": 200,
+        "type": "script"
+      },
+      {
+        "url": "https://fisshitours1-git-feature-storage-st-e899ba-papagayo-fishingtour.vercel.app/assets/gauge-CPDfeEIf.js",
+        "status": 200,
+        "type": "script"
+      },
+      {
+        "url": "https://fisshitours1-git-feature-storage-st-e899ba-papagayo-fishingtour.vercel.app/assets/message-circle-B9-FWIDN.js",
+        "status": 200,
+        "type": "script"
+      },
+      {
+        "url": "https://fisshitours1-git-feature-storage-st-e899ba-papagayo-fishingtour.vercel.app/assets/formatCurrency-DIj48C0H.js",
+        "status": 200,
+        "type": "script"
+      },
+      {
+        "url": "https://fisshitours1-git-feature-storage-st-e899ba-papagayo-fishingtour.vercel.app/assets/users-NsPmB67n.js",
+        "status": 200,
+        "type": "script"
+      },
+      {
+        "url": "https://fisshitours1-git-feature-storage-st-e899ba-papagayo-fishingtour.vercel.app/assets/sliders-horizontal-_uxGhQ45.js",
+        "status": 200,
+        "type": "script"
+      },
+      {
+        "url": "https://fisshitours1-git-feature-storage-st-e899ba-papagayo-fishingtour.vercel.app/assets/anchor-D7-mJYz-.js",
+        "status": 200,
+        "type": "script"
+      },
+      {
+        "url": "https://fisshitours1-git-feature-storage-st-e899ba-papagayo-fishingtour.vercel.app/assets/star-DhivZpOR.js",
+        "status": 200,
+        "type": "script"
+      },
+      {
+        "url": "https://fisshitours1-git-feature-storage-st-e899ba-papagayo-fishingtour.vercel.app/assets/arrow-down-BAlB_IoN.js",
+        "status": 200,
+        "type": "script"
+      },
+      {
+        "url": "https://fisshitours1-git-feature-storage-st-e899ba-papagayo-fishingtour.vercel.app/assets/loader-2-8uOAB7to.js",
+        "status": 200,
+        "type": "script"
+      },
+      {
+        "url": "https://fisshitours1-git-feature-storage-st-e899ba-papagayo-fishingtour.vercel.app/assets/boats-DHAYNTdO.js",
+        "status": 200,
+        "type": "script"
+      },
+      {
+        "url": "https://fisshitours1-git-feature-storage-st-e899ba-papagayo-fishingtour.vercel.app/assets/Modal-BuFheP4h.js",
+        "status": 200,
+        "type": "script"
+      },
+      {
+        "url": "https://fisshitours1-git-feature-storage-st-e899ba-papagayo-fishingtour.vercel.app/assets/supabase-BPnowhXs.js",
+        "status": 200,
+        "type": "script"
+      },
+      {
+        "url": "https://fisshitours1-git-feature-storage-st-e899ba-papagayo-fishingtour.vercel.app/assets/check-DMk0MKdw.js",
+        "status": 200,
+        "type": "script"
+      }
+    ]
+  },
+  {
+    "label": "admin-login",
+    "requestedUrl": "https://fisshitours1-git-feature-storage-st-e899ba-papagayo-fishingtour.vercel.app/admin/login",
+    "documentStatus": 200,
+    "title": "Pura Ruta Adventures",
+    "finalUrl": "https://fisshitours1-git-feature-storage-st-e899ba-papagayo-fishingtour.vercel.app/admin/login",
+    "bodyText": "Something went wrong\n\nPlease refresh the page or try again in a moment.\n\nReload",
+    "bodyTextLength": 79,
+    "rootElements": 5,
+    "rootHtml": "<main class=\"grid min-h-screen place-items-center bg-ocean-950 px-6 text-center text-white\"><section class=\"max-w-md rounded-2xl border border-white/10 bg-white/[0.06] p-6\"><h1 class=\"text-2xl font-extrabold\">Something went wrong</h1><p class=\"mt-3 text-sm leading-6 text-ocean-100\">Please refresh the page or try again in a moment.</p><button class=\"mt-5 rounded-xl bg-ocean-400 px-4 py-2 text-sm font-extrabold text-ocean-950\" type=\"button\">Reload</button></section></main>",
+    "activeLoaders": [],
+    "topElement": {
+      "tag": "P",
+      "id": "",
+      "className": "mt-3 text-sm leading-6 text-ocean-100",
+      "pointerEvents": "auto",
+      "position": "static",
+      "zIndex": "auto",
+      "opacity": "1",
+      "display": "block",
+      "visibility": "visible"
+    },
+    "rootStyle": {
+      "display": "block",
+      "visibility": "visible",
+      "opacity": "1",
+      "height": "900px"
+    },
+    "bodyStyle": {
+      "display": "block",
+      "visibility": "visible",
+      "opacity": "1",
+      "background": "rgb(11, 40, 66)"
+    },
+    "consoleMessages": [
+      {
+        "type": "error",
+        "text": "Error: Missing Supabase public environment variables. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.\n    at https://fisshitours1-git-feature-storage-st-e899ba-papagayo-fishingtour.vercel.app/assets/supabase-BPnowhXs.js:29:58064"
+      },
+      {
+        "type": "error",
+        "text": "Unexpected application error {message: Missing Supabase public environment variables. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY., componentStack: \n    at Lazy\n    at Hv (https://fisshitours1-git-f…our.vercel.app/assets/index-CXgnm3WE.js:41:85862)}"
+      },
+      {
+        "type": "warning",
+        "text": "The resource https://fisshitours1-git-feature-storage-st-e899ba-papagayo-fishingtour.vercel.app/images/papagayo-logo.png was preloaded using link preload but not used within a few seconds from the window's load event. Please make sure it has an appropriate `as` value and it is preloaded intentionally."
+      }
+    ],
+    "pageErrors": [],
+    "failedRequests": [],
+    "badResponses": [],
+    "supabaseResponses": [
+      {
+        "url": "https://fisshitours1-git-feature-storage-st-e899ba-papagayo-fishingtour.vercel.app/assets/supabase-BPnowhXs.js",
+        "status": 200,
+        "type": "script",
+        "body": "const Pr=Symbol.for(\"@supabase/supabase-js.traceContextExtractor\");function Ir(){return globalThis[Pr]}function Ye(t,e){var r={};for(var s in t)Object.prototype.hasOwnProperty.call(t,s)&&e.indexOf(s)<0&&(r[s]=t[s]);if(t!=null&&typeof Object.getOwnPropertySymbols==\"function\")for(var n=0,s=Object.getOwnPropertySymbols(t);n<s.length;n++)e.indexOf(s[n])<0&&Object.prototype.propertyIsEnumerable.call(t,s[n])&&(r[s[n]]=t[s[n]]);return r}function jr(t,e,r,s){function n(i){return i instanceof r?i:new r(function(a){a(i)})}return new(r||(r=Promise))(function(i,a){function o(u){try{c(s.next(u))}catch(h){a"
+      }
+    ],
+    "assets": [
+      {
+        "url": "https://fisshitours1-git-feature-storage-st-e899ba-papagayo-fishingtour.vercel.app/assets/index-D6K9DVsz.css",
+        "status": 200,
+        "type": "stylesheet"
+      },
+      {
+        "url": "https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Outfit:wght@400;500;600;700;800&display=swap",
+        "status": 200,
+        "type": "stylesheet"
+      },
+      {
+        "url": "https://fisshitours1-git-feature-storage-st-e899ba-papagayo-fishingtour.vercel.app/assets/index-CXgnm3WE.js",
+        "status": 200,
+        "type": "script"
+      },
+      {
+        "url": "https://fisshitours1-git-feature-storage-st-e899ba-papagayo-fishingtour.vercel.app/assets/admin-CTVH_q0p.css",
+        "status": 200,
+        "type": "stylesheet"
+      },
+      {
+        "url": "https://fisshitours1-git-feature-storage-st-e899ba-papagayo-fishingtour.vercel.app/assets/AdminLoginPage-DGGaaFX8.js",
+        "status": 200,
+        "type": "script"
+      },
+      {
+        "url": "https://fisshitours1-git-feature-storage-st-e899ba-papagayo-fishingtour.vercel.app/assets/admin-C3ll6ZuX.js",
+        "status": 200,
+        "type": "script"
+      },
+      {
+        "url": "https://fisshitours1-git-feature-storage-st-e899ba-papagayo-fishingtour.vercel.app/assets/anchor-D7-mJYz-.js",
+        "status": 200,
+        "type": "script"
+      },
+      {
+        "url": "https://fisshitours1-git-feature-storage-st-e899ba-papagayo-fishingtour.vercel.app/assets/loader-2-8uOAB7to.js",
+        "status": 200,
+        "type": "script"
+      },
+      {
+        "url": "https://fisshitours1-git-feature-storage-st-e899ba-papagayo-fishingtour.vercel.app/assets/supabase-BPnowhXs.js",
+        "status": 200,
+        "type": "script"
+      }
+    ]
+  }
+]

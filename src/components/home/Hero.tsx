@@ -68,17 +68,18 @@ export function Hero() {
 
   return (
     <section
-      className="home-section relative min-h-[100dvh] overflow-hidden bg-[radial-gradient(circle_at_50%_30%,rgba(73,134,167,0.34),transparent_22rem),linear-gradient(180deg,#0B2842_0%,#061B2F_56%,#020B14_100%)]"
+      className="home-section relative min-h-[100svh] overflow-hidden bg-[radial-gradient(circle_at_50%_30%,rgba(73,134,167,0.34),transparent_22rem),linear-gradient(180deg,#0B2842_0%,#061B2F_56%,#020B14_100%)] lg:min-h-[100dvh]"
       id="home"
       data-home-section
       data-nav-href="/"
     >
       <img
-        className="absolute inset-0 h-full w-full object-cover object-center"
+        className="absolute inset-0 h-full w-full object-cover object-[58%_center] sm:object-center"
         src={hero['home.hero.image'] || FALLBACK_HERO_IMAGE}
         alt={hero[`home.hero.image_alt.${locale}` as keyof HeroSettings]}
         width={1920}
         height={1080}
+        sizes="100vw"
         fetchPriority="high"
         decoding="async"
       />
@@ -100,7 +101,7 @@ export function Hero() {
         <img className="h-full w-full object-contain" src="/images/whatsapp.png" alt="" aria-hidden="true" />
       </a>
 
-      <Container className="relative grid min-h-[100dvh] place-items-center px-6 pb-32 pt-24 text-center sm:px-8 sm:pb-20 sm:pt-28 lg:px-10">
+      <Container className="relative grid min-h-[100svh] place-items-center px-6 pb-32 pt-24 text-center sm:px-8 sm:pb-20 sm:pt-28 lg:min-h-[100dvh] lg:px-10">
         <div className="mx-auto w-full max-w-[52rem]">
           <motion.p
             className="text-sm font-extrabold uppercase tracking-[0.18em] text-white/75"
