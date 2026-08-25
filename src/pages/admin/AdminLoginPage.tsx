@@ -1,4 +1,4 @@
-import { Anchor, Loader2 } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 
@@ -68,13 +68,15 @@ export default function AdminLoginPage() {
   return (
     <main className="admin-login">
       <section className="admin-login__card">
-        <span className="admin-sidebar__mark"><Anchor size={18} /></span>
-        <h1 className="mt-4">Admin Fishing Tours</h1>
-        <p className="admin-muted mt-2">Inicia sesion con tu usuario administrativo.</p>
-        {checking ? <p className="admin-muted mt-2">Validando sesion existente...</p> : null}
+        <span className="admin-brand-logo admin-brand-logo--login">
+          <img src="/images/papagayo-logo.png" alt="Papagayo Fishing Tours" />
+        </span>
+        <h1>Admin Fishing Tours</h1>
+        <p className="admin-muted">Inicia sesion con tu usuario administrativo.</p>
+        {checking ? <p className="admin-muted">Validando sesion existente...</p> : null}
         <form className="admin-login__form" onSubmit={handleSubmit}>
-          <label className="grid gap-1 text-left">
-            <span className="admin-muted">Email</span>
+          <label className="admin-login__field">
+            <span className="admin-login__label">Email</span>
             <input
               className="admin-input"
               type="email"
@@ -85,8 +87,8 @@ export default function AdminLoginPage() {
               required
             />
           </label>
-          <label className="grid gap-1 text-left">
-            <span className="admin-muted">Password</span>
+          <label className="admin-login__field">
+            <span className="admin-login__label">Password</span>
             <input
               className="admin-input"
               type="password"

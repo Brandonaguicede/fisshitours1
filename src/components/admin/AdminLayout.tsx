@@ -107,7 +107,9 @@ export default function AdminLayout() {
       <div className={open ? 'admin-mobile-overlay admin-mobile-overlay--visible' : 'admin-mobile-overlay'} onClick={() => setOpen(false)} />
       <aside className={open ? 'admin-sidebar admin-sidebar--open' : 'admin-sidebar'}>
         <Link className="admin-sidebar__brand" to="/admin" onClick={() => setOpen(false)}>
-          <span className="admin-sidebar__mark">PFT</span>
+          <span className="admin-brand-logo admin-brand-logo--sidebar">
+            <img src="/images/papagayo-logo.png" alt="" aria-hidden="true" />
+          </span>
           <span>
             <strong>Papagayo</strong>
             <span>Admin console</span>
