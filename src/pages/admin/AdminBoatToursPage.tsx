@@ -10,7 +10,8 @@ import { deleteStorageImage, type StorageImage } from '../../services/imageServi
 import { money } from './adminMockData';
 
 interface BoatOption { id: string; name: string }
-interface BoatTourOption { id: string; boat_id: string; tour_id: string }
+interface TourOption { id: string; title: string }
+interface BoatTourOption { id: string; boat_id: string; tour_id: string; boats?: { name: string } | null; tours?: { title: string } | null }
 
 interface PackageRow {
   id: string;
@@ -34,6 +35,7 @@ interface PackageRow {
 export default function AdminBoatToursPage() {
   const [packages, setPackages] = useState<PackageRow[]>([]);
   const [boats, setBoats] = useState<BoatOption[]>([]);
+  const [tours, setTours] = useState<TourOption[]>([]);
   const [boatTours, setBoatTours] = useState<BoatTourOption[]>([]);
   const [editing, setEditing] = useState<PackageRow | null>(null);
   const [pendingDelete, setPendingDelete] = useState<PackageRow | null>(null);
@@ -46,21 +48,23 @@ export default function AdminBoatToursPage() {
   async function loadData() {
     setLoading(true);
     setError('');
-    const [packagesRes, boatsRes, boatToursRes] = await Promise.all([
+    const [packagesRes, boatsRes, toursRes, boatToursRes] = await Promise.all([
       supabase
         .from('tour_packages')
         .select('*, boat_tours(boat_id, tour_id, boats(name), tours(title))')
         .order('sort_order'),
       supabase.from('boats').select('id, name').order('sort_order'),
-      supabase.from('boat_tours').select('id, boat_id, tour_id').eq('active', true).order('sort_order'),
+      supabase.from('tours').select('id, title').order('sort_order'),
+      supabase.from('boat_tours').select('id, boat_id, tour_id, boats(name), tours(title)').eq('active', true).order('sort_order'),
     ]);
     setLoading(false);
-    if (packagesRes.error || boatsRes.error || boatToursRes.error) {
-      setError(packagesRes.error?.message ?? boatsRes.error?.message ?? boatToursRes.error?.message ?? 'No se pudieron cargar los paquetes.');
+    if (packagesRes.error || boatsRes.error || toursRes.error || boatToursRes.error) {
+      setError(packagesRes.error?.message ?? boatsRes.error?.message ?? toursRes.error?.message ?? boatToursRes.error?.message ?? 'No se pudieron cargar los paquetes.');
       return;
     }
     setPackages((packagesRes.data ?? []) as unknown as PackageRow[]);
     setBoats((boatsRes.data ?? []) as BoatOption[]);
+    setTours((toursRes.data ?? []) as TourOption[]);
     setBoatTours((boatToursRes.data ?? []) as BoatTourOption[]);
   }
 
@@ -69,36 +73,40 @@ export default function AdminBoatToursPage() {
   }, []);
 
   async function createPackage() {
-    const firstBoatTour = boatTours[0];
-    if (!firstBoatTour) {
+    const firstBoat = boats[0];
+    const firstTour = tours[0];
+    if (!firstBoat || !firstTour) {
       setError('');
-      setNotice('Crea primero un tour y una asociacion bote-tour activa antes de crear paquetes.');
+      setNotice('Crea primero al menos un bote y un tour base antes de crear paquetes.');
       return;
     }
+    const firstBoatTour = boatTours.find((item) => item.boat_id === firstBoat.id && item.tour_id === firstTour.id);
     const id = `package-${crypto.randomUUID().slice(0, 8)}`;
-    const { data, error } = await supabase
-      .from('tour_packages')
-      .insert({
-        id,
-        boat_tour_id: firstBoatTour.id,
-        name: 'Nuevo paquete',
-        package_type: 'half_day',
-        base_price: 0,
-        included_guests: 5,
-        max_guests: 10,
-        extra_guest_price: 65,
-        custom_quote: false,
-        active: true,
-        sort_order: packages.length + 1,
-      })
-      .select('*, boat_tours(boat_id, tour_id, boats(name), tours(title))')
-      .single();
-    if (error) {
-      setError(error.message);
-      return;
-    }
-    setEditing(data as unknown as PackageRow);
-    await loadData();
+    setError('');
+    setNotice('');
+    setEditing({
+      id,
+      boat_tour_id: firstBoatTour?.id ?? '',
+      name: 'Nuevo paquete',
+      package_type: 'half_day',
+      description: null,
+      duration_minutes: null,
+      base_price: 0,
+      included_guests: 5,
+      max_guests: 10,
+      extra_guest_price: 65,
+      custom_quote: false,
+      image_url: null,
+      image_public_id: null,
+      active: true,
+      sort_order: packages.length + 1,
+      boat_tours: {
+        boat_id: firstBoat.id,
+        tour_id: firstTour.id,
+        boats: { name: firstBoat.name },
+        tours: { title: firstTour.title },
+      },
+    });
   }
 
   async function savePackage() {
@@ -107,17 +115,43 @@ export default function AdminBoatToursPage() {
       setError('Revisa los valores: precio base >= 0, incluidos >= 1, maximo >= incluidos y precio adicional >= 0.');
       return;
     }
-    if (editing.boat_tours?.boat_id === 'segundo-viento' && editing.max_guests > 10) {
-      setError('Second Wind no puede superar 10 pasajeros.');
+    const selectedBoatId = editing.boat_tours?.boat_id;
+    const selectedTourId = editing.boat_tours?.tour_id;
+    if (!selectedBoatId || !selectedTourId) {
+      setError('Selecciona un bote y un tour para este paquete.');
       return;
     }
     setSaving(true);
     setError('');
     setNotice('');
+
+    const existingBoatTour = boatTours.find((item) => item.boat_id === selectedBoatId && item.tour_id === selectedTourId);
+    let boatTourId = existingBoatTour?.id ?? editing.boat_tour_id;
+    if (!existingBoatTour) {
+      const { data: createdBoatTour, error: boatTourError } = await supabase
+        .from('boat_tours')
+        .insert({
+          boat_id: selectedBoatId,
+          tour_id: selectedTourId,
+          active: true,
+          sort_order: boatTours.length + 1,
+        })
+        .select('id')
+        .single();
+
+      if (boatTourError) {
+        setSaving(false);
+        setError(boatTourError.message);
+        return;
+      }
+      boatTourId = createdBoatTour.id;
+    }
+
     const { error } = await supabase
       .from('tour_packages')
-      .update({
-        boat_tour_id: editing.boat_tour_id,
+      .upsert({
+        id: editing.id,
+        boat_tour_id: boatTourId,
         name: editing.name,
         package_type: editing.package_type,
         description: editing.description,
@@ -131,13 +165,14 @@ export default function AdminBoatToursPage() {
         sort_order: editing.sort_order,
         updated_at: new Date().toISOString(),
       })
-      .eq('id', editing.id);
+      .select('id')
+      .single();
     setSaving(false);
     if (error) {
       setError(error.message);
       return;
     }
-    setNotice('Paquete actualizado.');
+    setNotice('Paquete guardado.');
     await loadData();
   }
 
@@ -192,19 +227,19 @@ export default function AdminBoatToursPage() {
       </AdminToolbar>
       {error ? <div className="admin-alert admin-alert--danger">{error}</div> : null}
       {notice ? <div className="admin-alert admin-alert--success">{notice}</div> : null}
-      {!loading && boatTours.length === 0 ? (
+      {!loading && (boats.length === 0 || tours.length === 0) ? (
         <section className="admin-card">
-          <h2 className="admin-card__title">No hay asociaciones bote-tour activas</h2>
-          <p className="admin-muted">Primero crea el tour base. Luego asocialo con un bote y vuelve para crear paquetes reservables.</p>
+          <h2 className="admin-card__title">Faltan botes o tours base</h2>
+          <p className="admin-muted">Primero crea al menos un bote y un tour. Despues puedes crear paquetes para cualquier combinacion bote-tour desde este panel.</p>
           <div className="admin-image-manager__actions mt-4">
             <a className="admin-btn" href="/admin/tours"><Plus size={16} /> Crear tour</a>
-            <a className="admin-btn admin-btn--secondary" href="/admin/boat-tours"><Plus size={16} /> Asociar tour con barco</a>
+            <a className="admin-btn admin-btn--secondary" href="/admin/boats"><Plus size={16} /> Crear bote</a>
           </div>
         </section>
       ) : null}
       {loading ? (
         <p className="admin-muted">Cargando paquetes...</p>
-      ) : boatTours.length > 0 ? (
+      ) : boats.length > 0 && tours.length > 0 ? (
         <AdminTable headers={['Paquete', 'Bote', 'Tour', 'Precio base', 'Capacidad', 'Orden', 'Estado', 'Acciones']}>
           {visiblePackages.map((item) => (
             <tr key={item.id}>
@@ -252,14 +287,63 @@ export default function AdminBoatToursPage() {
                 onImageSaved={onImageSaved}
               />
               <div className="grid gap-3 sm:grid-cols-2">
-                <label className="grid gap-1"><span className="admin-muted">Bote y tour asociados</span><select className="admin-select" value={editing.boat_tour_id} onChange={(event) => setEditing({ ...editing, boat_tour_id: event.target.value })}>{boatTours.map((item) => <option key={item.id} value={item.id}>{item.boat_id} / {item.tour_id}</option>)}</select></label>
+                <label className="grid gap-1">
+                  <span className="admin-muted">Bote</span>
+                  <select
+                    className="admin-select"
+                    value={editing.boat_tours?.boat_id ?? ''}
+                    onChange={(event) => {
+                      const boat = boats.find((item) => item.id === event.target.value);
+                      const tourId = editing.boat_tours?.tour_id ?? tours[0]?.id ?? '';
+                      const tour = tours.find((item) => item.id === tourId);
+                      const match = boatTours.find((item) => item.boat_id === event.target.value && item.tour_id === tourId);
+                      setEditing({
+                        ...editing,
+                        boat_tour_id: match?.id ?? '',
+                        boat_tours: {
+                          boat_id: event.target.value,
+                          tour_id: tourId,
+                          boats: boat ? { name: boat.name } : null,
+                          tours: tour ? { title: tour.title } : null,
+                        },
+                      });
+                    }}
+                  >
+                    {boats.map((boat) => <option key={boat.id} value={boat.id}>{boat.name}</option>)}
+                  </select>
+                </label>
+                <label className="grid gap-1">
+                  <span className="admin-muted">Tour</span>
+                  <select
+                    className="admin-select"
+                    value={editing.boat_tours?.tour_id ?? ''}
+                    onChange={(event) => {
+                      const tour = tours.find((item) => item.id === event.target.value);
+                      const boatId = editing.boat_tours?.boat_id ?? boats[0]?.id ?? '';
+                      const boat = boats.find((item) => item.id === boatId);
+                      const match = boatTours.find((item) => item.boat_id === boatId && item.tour_id === event.target.value);
+                      setEditing({
+                        ...editing,
+                        boat_tour_id: match?.id ?? '',
+                        boat_tours: {
+                          boat_id: boatId,
+                          tour_id: event.target.value,
+                          boats: boat ? { name: boat.name } : null,
+                          tours: tour ? { title: tour.title } : null,
+                        },
+                      });
+                    }}
+                  >
+                    {tours.map((tour) => <option key={tour.id} value={tour.id}>{tour.title}</option>)}
+                  </select>
+                </label>
                 <label className="grid gap-1"><span className="admin-muted">Nombre</span><input className="admin-input" value={editing.name} onChange={(event) => setEditing({ ...editing, name: event.target.value })} /></label>
                 <label className="grid gap-1"><span className="admin-muted">Half Day, 3/4 Day, Full Day, Classic o Deluxe</span><input className="admin-input" value={editing.package_type} onChange={(event) => setEditing({ ...editing, package_type: event.target.value })} /></label>
                 <label className="grid gap-1"><span className="admin-muted">Duracion en minutos (vacío si pendiente)</span><input className="admin-input" type="number" min={1} value={editing.duration_minutes ?? ''} onChange={(event) => setEditing({ ...editing, duration_minutes: event.target.value ? Number(event.target.value) : null })} /></label>
                 <label className="grid gap-1"><span className="admin-muted">Precio base del bote</span><input className="admin-input" type="number" min={0} value={editing.base_price} onChange={(event) => setEditing({ ...editing, base_price: Number(event.target.value) })} /></label>
                 <label className="grid gap-1"><span className="admin-muted">Precio por persona adicional</span><input className="admin-input" type="number" min={0} value={editing.extra_guest_price} onChange={(event) => setEditing({ ...editing, extra_guest_price: Number(event.target.value) })} /></label>
                 <label className="grid gap-1"><span className="admin-muted">Incluye hasta 5 personas</span><input className="admin-input" type="number" min={1} value={editing.included_guests} onChange={(event) => setEditing({ ...editing, included_guests: Number(event.target.value) })} /></label>
-                <label className="grid gap-1"><span className="admin-muted">Capacidad máxima</span><input className="admin-input" type="number" min={1} max={10} value={editing.max_guests} onChange={(event) => setEditing({ ...editing, max_guests: Number(event.target.value) })} /></label>
+                <label className="grid gap-1"><span className="admin-muted">Capacidad maxima</span><input className="admin-input" type="number" min={1} value={editing.max_guests} onChange={(event) => setEditing({ ...editing, max_guests: Number(event.target.value) })} /></label>
                 <label className="grid gap-1"><span className="admin-muted">Orden</span><input className="admin-input" type="number" value={editing.sort_order} onChange={(event) => setEditing({ ...editing, sort_order: Number(event.target.value) })} /></label>
               </div>
               <label className="grid gap-1"><span className="admin-muted">Descripcion</span><textarea className="admin-input" value={editing.description ?? ''} onChange={(event) => setEditing({ ...editing, description: event.target.value || null })} /></label>
