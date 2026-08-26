@@ -1214,6 +1214,160 @@ body:has(.admin-login) {
   height: min(900px, calc(100dvh - 2rem));
 }
 
+.admin-tour-modal {
+  max-width: 1160px;
+  height: min(920px, calc(100dvh - 2rem));
+}
+
+.admin-tour-modal__header {
+  align-items: flex-start;
+}
+
+.admin-tour-tabs {
+  position: sticky;
+  top: 4.35rem;
+  z-index: 2;
+  margin: 0;
+  border-radius: 0;
+  border-bottom: 1px solid var(--admin-line-soft);
+  box-shadow: none;
+}
+
+.admin-inline-editor {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.6rem;
+  align-items: start;
+}
+
+.admin-token-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.admin-token {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.35rem 0.45rem 0.35rem 0.7rem;
+  border: 1px solid #c3dfe8;
+  border-radius: 999px;
+  background: #eef9fc;
+  color: var(--admin-primary-dark);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.admin-token button {
+  display: grid;
+  width: 1.45rem;
+  height: 1.45rem;
+  place-items: center;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.admin-token button:hover,
+.admin-token button:focus-visible {
+  background: var(--admin-primary);
+  color: white;
+  outline: none;
+}
+
+.admin-dynamic-list,
+.admin-package-list,
+.admin-tour-gallery,
+.admin-boat-choice-grid {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.admin-dynamic-row {
+  display: grid;
+  grid-template-columns: minmax(12rem, 1fr) minmax(12rem, 0.65fr) auto auto auto;
+  gap: 0.5rem;
+  align-items: center;
+  padding: 0.75rem;
+  border: 1px solid var(--admin-line-soft);
+  border-radius: var(--admin-radius-md);
+  background: white;
+}
+
+.admin-package-editor,
+.admin-boat-choice,
+.admin-tour-gallery__item {
+  display: grid;
+  gap: 0.85rem;
+  padding: 1rem;
+  border: 1px solid var(--admin-line-soft);
+  border-radius: var(--admin-radius-md);
+  background: white;
+}
+
+.admin-package-editor > header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.admin-package-editor > header strong,
+.admin-boat-choice strong {
+  color: var(--admin-ink);
+  font-size: 0.95rem;
+  font-weight: 800;
+}
+
+.admin-boat-choice-grid {
+  grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+}
+
+.admin-boat-choice {
+  grid-template-columns: 4.5rem minmax(0, 1fr);
+  align-items: center;
+}
+
+.admin-boat-choice .admin-switch-field {
+  grid-column: 1 / -1;
+}
+
+.admin-boat-choice--selected {
+  border-color: #9bd5e4;
+  background: #f4fbfd;
+}
+
+.admin-boat-choice img,
+.admin-boat-choice__empty {
+  width: 4.5rem;
+  height: 4.5rem;
+  border-radius: var(--admin-radius-sm);
+  object-fit: cover;
+}
+
+.admin-boat-choice__empty {
+  display: grid;
+  place-items: center;
+  background: var(--admin-primary-soft);
+  color: var(--admin-primary-dark);
+}
+
+.admin-tour-gallery__item {
+  grid-template-columns: 10rem minmax(0, 1fr);
+  align-items: start;
+}
+
+.admin-tour-gallery__item img {
+  width: 100%;
+  aspect-ratio: 3 / 2;
+  border-radius: var(--admin-radius-sm);
+  object-fit: cover;
+}
+
 .admin-boat-images {
   display: grid;
   gap: 0.9rem;
@@ -1377,7 +1531,17 @@ body:has(.admin-login) {
   }
 
   .admin-topbar {
+    flex-wrap: wrap;
+    max-width: 100%;
     border-radius: 10px;
+  }
+
+  .admin-topbar > * {
+    min-width: 0;
+  }
+
+  .admin-user-pill {
+    max-width: 100%;
   }
 
   .admin-page-header {
@@ -1411,6 +1575,17 @@ body:has(.admin-login) {
 
   .admin-form-columns {
     grid-template-columns: 1fr;
+  }
+
+  .admin-inline-editor,
+  .admin-dynamic-row,
+  .admin-tour-gallery__item {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-inline-editor .admin-btn,
+  .admin-dynamic-row .admin-icon-btn {
+    width: 100%;
   }
 
   .admin-boat-images__main {

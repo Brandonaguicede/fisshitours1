@@ -17,9 +17,14 @@ export interface BoatTour {
   boatId: string;
   boatTourId?: string;
   tourId?: string;
+  tourTitle?: string;
   name: string;
   category: TourCategory;
   description: string;
+  shortDescription?: string;
+  activities?: string[];
+  included?: string[];
+  galleryImages?: Array<{ src: string; alt: string }>;
   duration?: number;
   basePrice: number;
   includedGuests?: number;

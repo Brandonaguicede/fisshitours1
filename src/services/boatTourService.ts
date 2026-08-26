@@ -14,7 +14,7 @@ export async function getActiveTimeSlots(): Promise<TourTimeSlot[]> {
 }
 
 export async function getActiveBoatTours(): Promise<BoatTour[]> {
-  const [timeSlots, packages] = await Promise.all([
+  const [timeSlots, packages, images, inclusions] = await Promise.all([
     getActiveTimeSlots(),
     supabase
       .from('tour_packages')
@@ -23,10 +23,14 @@ export async function getActiveBoatTours(): Promise<BoatTour[]> {
       .eq('boat_tours.active', true)
       .eq('boat_tours.tours.active', true)
       .order('sort_order'),
+    supabase.from('tour_images').select('*').eq('active', true).order('sort_order'),
+    supabase.from('tour_inclusions').select('*').eq('active', true).order('sort_order'),
   ]);
 
   if (packages.error) throw new Error(packages.error.message);
-  return ((packages.data ?? []) as unknown as BoatTourCatalogRow[]).map((row) => mapBoatTour(row, timeSlots));
+  if (images.error) throw new Error(images.error.message);
+  if (inclusions.error) throw new Error(inclusions.error.message);
+  return ((packages.data ?? []) as unknown as BoatTourCatalogRow[]).map((row) => mapBoatTour(row, timeSlots, images.data ?? [], inclusions.data ?? []));
 }
 
 export async function getActivePaymentMethods() {

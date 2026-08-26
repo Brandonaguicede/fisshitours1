@@ -19,6 +19,9 @@ export function TourDetailModal({ boat, onClose, onSelect, open, packageTours, t
   const { language } = useLanguage();
   const display = getTourText(tour, language);
   const effectiveMaxGuests = getEffectiveMaxGuests(boat, tour);
+  const galleryImages = tour.galleryImages?.length ? tour.galleryImages : [{ alt: display.title, src: tour.image }];
+  const activities = tour.activities?.length ? tour.activities : display.activities;
+  const included = tour.included?.length ? tour.included : display.included;
 
   return (
     <ModalShell
@@ -30,7 +33,7 @@ export function TourDetailModal({ boat, onClose, onSelect, open, packageTours, t
       <div className="min-h-0 overflow-y-auto overscroll-contain">
         <div className="relative">
           <MediaGallery
-            images={[{ alt: display.title, src: tour.image }]}
+            images={galleryImages}
             label={language === 'es' ? `Galería de ${display.title}` : `${display.title} gallery`}
             nextLabel={language === 'es' ? 'Imagen siguiente' : 'Next image'}
             previousLabel={language === 'es' ? 'Imagen anterior' : 'Previous image'}
@@ -45,11 +48,11 @@ export function TourDetailModal({ boat, onClose, onSelect, open, packageTours, t
             <h3 id="tour-detail-title" className="mt-1 font-display text-3xl font-semibold leading-none text-white sm:text-4xl">{display.title}</h3>
           </div>
 
-          <p className="mt-5 text-base leading-7 text-ocean-200">{tour.description}</p>
+          <p className="mt-5 text-base leading-7 text-ocean-200">{tour.shortDescription ?? tour.description}</p>
           <div className="mt-5 grid gap-3 sm:grid-cols-3">
             <GlassPanel className="p-4" variant="subtle">
               <p className="text-xs font-bold uppercase tracking-[0.12em] text-ocean-400">{language === 'es' ? 'Actividades' : 'Activities'}</p>
-              <p className="mt-1 font-extrabold text-white">{display.activities.slice(0, 3).join(', ')}</p>
+              <p className="mt-1 font-extrabold text-white">{activities.slice(0, 3).join(', ')}</p>
             </GlassPanel>
             <GlassPanel className="p-4" variant="subtle">
               <p className="text-xs font-bold uppercase tracking-[0.12em] text-ocean-400">{language === 'es' ? 'Capacidad' : 'Capacity'}</p>
@@ -64,7 +67,7 @@ export function TourDetailModal({ boat, onClose, onSelect, open, packageTours, t
             <div>
               <p className="text-xs font-bold uppercase tracking-[0.12em] text-ocean-400">{language === 'es' ? 'Incluye' : 'Included'}</p>
               <ul className="mt-3 grid gap-2 text-sm leading-6 text-ocean-200">
-                {display.included.map((item) => <li key={item}>{item}</li>)}
+                {included.map((item) => <li key={item}>{item}</li>)}
               </ul>
             </div>
             <div>

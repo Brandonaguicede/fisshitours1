@@ -180,7 +180,7 @@ export function FleetSection({ boats, tours, selectedBoat, onSelectBoat, onViewT
                         onClick={() => handleViewTourType(tour.representativeTour)}
                       >
                         <span className="min-w-0">
-                          <span className="block truncate font-display text-lg font-semibold leading-tight text-white">{tour.title}</span>
+                          <h5 className="block truncate font-display text-lg font-semibold leading-tight text-white">{tour.title}</h5>
                           <span className="mt-1 block text-xs font-medium text-ocean-200">
                             {language === 'es' ? 'Desde' : 'From'} {formatCurrency(tour.price)} · {tour.category}
                           </span>

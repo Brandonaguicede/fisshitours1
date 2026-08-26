@@ -1187,19 +1187,123 @@ export type Database = {
           },
         ]
       }
+      tour_images: {
+        Row: {
+          active: boolean
+          alt_text: string
+          created_at: string
+          deletion_error: string | null
+          id: string
+          image_url: string
+          is_primary: boolean
+          pending_deletion: boolean
+          sort_order: number
+          storage_path: string | null
+          tour_id: string
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          alt_text?: string
+          created_at?: string
+          deletion_error?: string | null
+          id?: string
+          image_url: string
+          is_primary?: boolean
+          pending_deletion?: boolean
+          sort_order?: number
+          storage_path?: string | null
+          tour_id: string
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          alt_text?: string
+          created_at?: string
+          deletion_error?: string | null
+          id?: string
+          image_url?: string
+          is_primary?: boolean
+          pending_deletion?: boolean
+          sort_order?: number
+          storage_path?: string | null
+          tour_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tour_images_tour_id_fkey"
+            columns: ["tour_id"]
+            isOneToOne: false
+            referencedRelation: "tours"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tour_inclusions: {
+        Row: {
+          active: boolean
+          created_at: string
+          id: string
+          label: string
+          sort_order: number
+          tour_id: string
+          tour_package_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          id?: string
+          label: string
+          sort_order?: number
+          tour_id: string
+          tour_package_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          id?: string
+          label?: string
+          sort_order?: number
+          tour_id?: string
+          tour_package_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tour_inclusions_tour_id_fkey"
+            columns: ["tour_id"]
+            isOneToOne: false
+            referencedRelation: "tours"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tour_inclusions_tour_package_id_fkey"
+            columns: ["tour_package_id"]
+            isOneToOne: false
+            referencedRelation: "tour_packages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tours: {
         Row: {
           active: boolean
           category: string
           created_at: string
           description: string | null
+          featured: boolean
           highlights: Json
           id: string
+          image_alt: string | null
           image_public_id: string | null
           image_url: string | null
           included: Json
           location: string | null
           long_description: string | null
+          publication_status: string
           rating: number
           slug: string
           sort_order: number
@@ -1211,13 +1315,16 @@ export type Database = {
           category: string
           created_at?: string
           description?: string | null
+          featured?: boolean
           highlights?: Json
           id: string
+          image_alt?: string | null
           image_public_id?: string | null
           image_url?: string | null
           included?: Json
           location?: string | null
           long_description?: string | null
+          publication_status?: string
           rating?: number
           slug: string
           sort_order?: number
@@ -1229,13 +1336,16 @@ export type Database = {
           category?: string
           created_at?: string
           description?: string | null
+          featured?: boolean
           highlights?: Json
           id?: string
+          image_alt?: string | null
           image_public_id?: string | null
           image_url?: string | null
           included?: Json
           location?: string | null
           long_description?: string | null
+          publication_status?: string
           rating?: number
           slug?: string
           sort_order?: number

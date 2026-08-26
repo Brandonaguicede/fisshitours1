@@ -1,190 +1,957 @@
-import { Pencil, Plus, X } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import {
+  ArrowDown,
+  ArrowUp,
+  Check,
+  Copy,
+  DollarSign,
+  Image as ImageIcon,
+  ImagePlus,
+  Info,
+  Loader2,
+  Pencil,
+  Plus,
+  Save,
+  Settings2,
+  Ship,
+  Sparkles,
+  Trash2,
+  X,
+} from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
 
 import AdminImageManager from '../../components/admin/AdminImageManager';
 import { AdminBadge, AdminPageHeader, AdminTable, AdminToolbar } from '../../components/admin/AdminPrimitives';
+import FormSection from '../../components/admin/FormSection';
 import ModalFooter from '../../components/admin/ModalFooter';
+import ToggleSwitch from '../../components/admin/ToggleSwitch';
 import { Modal } from '../../components/common/Modal';
 import { supabase } from '../../lib/supabase';
-import type { StorageImage } from '../../services/imageService';
+import { deleteStorageImage, type StorageImage } from '../../services/imageService';
+import type { Database, Tables } from '../../types/supabase';
+import { money } from './adminMockData';
 
-interface TourRow {
+type TourRow = Tables<'tours'>;
+type BoatRow = Pick<Tables<'boats'>, 'id' | 'name' | 'image_url' | 'included_guests' | 'max_guests' | 'extra_guest_price' | 'active' | 'sort_order'>;
+type BoatTourRow = Tables<'boat_tours'>;
+type PackageRow = Tables<'tour_packages'>;
+type DestinationRow = Pick<Tables<'destinations'>, 'id' | 'name' | 'active' | 'sort_order'>;
+type TourImageRow = Tables<'tour_images'>;
+type TourInclusionRow = Tables<'tour_inclusions'>;
+
+type PublicationStatus = 'draft' | 'published' | 'inactive';
+type EditorTab = 'info' | 'experience' | 'prices' | 'boats' | 'publishing';
+
+interface EditablePackage {
+  id: string;
+  boatTourId: string | null;
+  boatId: string;
+  name: string;
+  durationValue: number;
+  durationUnit: 'hours' | 'days';
+  basePrice: number;
+  description: string;
+  sortOrder: number;
+  active: boolean;
+  isNew: boolean;
+  pendingDelete?: boolean;
+}
+
+interface EditableInclusion {
+  id: string;
+  label: string;
+  packageId: string | null;
+  sortOrder: number;
+  active: boolean;
+  isNew: boolean;
+  pendingDelete?: boolean;
+}
+
+interface TourEditor {
   id: string;
   title: string;
   slug: string;
-  location: string | null;
-  description: string | null;
-  image_url: string | null;
-  image_public_id: string | null;
+  location: string;
+  description: string;
+  longDescription: string;
+  imageUrl: string | null;
+  imagePublicId: string | null;
+  imageAlt: string;
   category: string;
-  rating: number;
-  active: boolean;
-  sort_order: number;
+  publicationStatus: PublicationStatus;
+  featured: boolean;
+  sortOrder: number;
+  activities: string[];
+  images: TourImageRow[];
+  inclusions: EditableInclusion[];
+  packages: EditablePackage[];
+  selectedBoatIds: string[];
 }
 
+type FieldErrors = Partial<Record<string, string>>;
+
+const categories = ['Fishing', 'Snorkeling & Beach', 'Surfing', 'Bioluminescence', 'Water Toys'];
+const tabs: Array<{ id: EditorTab; label: string }> = [
+  { id: 'info', label: 'Informacion' },
+  { id: 'experience', label: 'Experiencia' },
+  { id: 'prices', label: 'Precios' },
+  { id: 'boats', label: 'Barcos' },
+  { id: 'publishing', label: 'Publicacion' },
+];
+
 function slugify(value: string) {
-  return value.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || `tour-${Date.now()}`;
+  return value
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '') || `tour-${Date.now()}`;
+}
+
+function jsonStringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0) : [];
+}
+
+function toPublicationStatus(tour: TourRow): PublicationStatus {
+  const status = tour.publication_status;
+  if (status === 'draft' || status === 'published' || status === 'inactive') return status;
+  return tour.active ? 'published' : 'inactive';
+}
+
+function minutesToDuration(value: number | null): { durationValue: number; durationUnit: 'hours' | 'days' } {
+  if (!value) return { durationValue: 4, durationUnit: 'hours' };
+  if (value >= 1440 && value % 1440 === 0) return { durationValue: value / 1440, durationUnit: 'days' };
+  return { durationValue: Math.round((value / 60) * 100) / 100, durationUnit: 'hours' };
+}
+
+function durationToMinutes(value: number, unit: 'hours' | 'days') {
+  return Math.round(value * (unit === 'days' ? 1440 : 60));
+}
+
+function needsEditorNotice(message: string) {
+  return /permission denied|denied for table|must be logged in|jwt/i.test(message);
+}
+
+function packageLabel(pkg: EditablePackage) {
+  return `${pkg.name || 'Duracion sin nombre'} - ${pkg.durationValue || 0} ${pkg.durationUnit === 'hours' ? 'h' : 'dia(s)'}`;
+}
+
+function createEditor(tour: TourRow, packageRows: PackageRow[], boatTours: BoatTourRow[], images: TourImageRow[], inclusions: TourInclusionRow[]): TourEditor {
+  const relatedBoatTours = boatTours.filter((item) => item.tour_id === tour.id);
+  return {
+    id: tour.id,
+    title: tour.title,
+    slug: tour.slug,
+    location: tour.location ?? '',
+    description: tour.description ?? '',
+    longDescription: tour.long_description ?? '',
+    imageUrl: tour.image_url,
+    imagePublicId: tour.image_public_id,
+    imageAlt: tour.image_alt ?? tour.title,
+    category: tour.category,
+    publicationStatus: toPublicationStatus(tour),
+    featured: tour.featured,
+    sortOrder: tour.sort_order,
+    activities: jsonStringArray(tour.highlights),
+    images,
+    selectedBoatIds: relatedBoatTours.filter((item) => item.active).map((item) => item.boat_id),
+    packages: packageRows
+      .map((pkg) => {
+        const relation = boatTours.find((item) => item.id === pkg.boat_tour_id);
+        const duration = minutesToDuration(pkg.duration_minutes);
+        return {
+          id: pkg.id,
+          boatTourId: pkg.boat_tour_id,
+          boatId: relation?.boat_id ?? '',
+          name: pkg.name,
+          durationValue: duration.durationValue,
+          durationUnit: duration.durationUnit,
+          basePrice: Number(pkg.base_price),
+          description: pkg.description ?? '',
+          sortOrder: pkg.sort_order,
+          active: pkg.active,
+          isNew: false,
+        };
+      })
+      .sort((a, b) => a.sortOrder - b.sortOrder),
+    inclusions: inclusions
+      .map((item) => ({
+        id: item.id,
+        label: item.label,
+        packageId: item.tour_package_id,
+        sortOrder: item.sort_order,
+        active: item.active,
+        isNew: false,
+      }))
+      .sort((a, b) => a.sortOrder - b.sortOrder),
+  };
 }
 
 export default function AdminToursPage() {
   const [tours, setTours] = useState<TourRow[]>([]);
-  const [editing, setEditing] = useState<TourRow | null>(null);
+  const [boats, setBoats] = useState<BoatRow[]>([]);
+  const [destinations, setDestinations] = useState<DestinationRow[]>([]);
+  const [boatTours, setBoatTours] = useState<BoatTourRow[]>([]);
+  const [tourPackages, setTourPackages] = useState<PackageRow[]>([]);
+  const [tourImages, setTourImages] = useState<TourImageRow[]>([]);
+  const [tourInclusions, setTourInclusions] = useState<TourInclusionRow[]>([]);
+  const [editing, setEditing] = useState<TourEditor | null>(null);
+  const [activeTab, setActiveTab] = useState<EditorTab>('info');
+  const [activityInput, setActivityInput] = useState('');
+  const [inclusionInput, setInclusionInput] = useState('');
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [deletePackage, setDeletePackage] = useState<EditablePackage | null>(null);
+  const [deleteImage, setDeleteImage] = useState<TourImageRow | null>(null);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
+  const [dirty, setDirty] = useState(false);
 
   async function loadTours() {
     setLoading(true);
     setError('');
-    const { data, error } = await supabase
-      .from('tours')
-      .select('id, title, slug, location, description, image_url, image_public_id, category, rating, active, sort_order')
-      .order('sort_order');
+    const [toursRes, boatsRes, destinationsRes, boatToursRes, packagesRes, imagesRes, inclusionsRes] = await Promise.all([
+      supabase.from('tours').select('*').order('sort_order'),
+      supabase.from('boats').select('id, name, image_url, included_guests, max_guests, extra_guest_price, active, sort_order').order('sort_order'),
+      supabase.from('destinations').select('id, name, active, sort_order').eq('active', true).order('sort_order'),
+      supabase.from('boat_tours').select('*').order('sort_order'),
+      supabase.from('tour_packages').select('*').order('sort_order'),
+      supabase.from('tour_images').select('*').eq('active', true).order('sort_order'),
+      supabase.from('tour_inclusions').select('*').order('sort_order'),
+    ]);
+
     setLoading(false);
-    if (error) {
-      setError(error.message);
+    const firstError = toursRes.error ?? boatsRes.error ?? destinationsRes.error ?? boatToursRes.error ?? packagesRes.error ?? imagesRes.error ?? inclusionsRes.error;
+    if (firstError) {
+      setError(firstError.message);
       setTours([]);
       return;
     }
-    setTours((data ?? []) as TourRow[]);
+
+    setTours(toursRes.data ?? []);
+    setBoats(boatsRes.data ?? []);
+    setDestinations(destinationsRes.data ?? []);
+    setBoatTours(boatToursRes.data ?? []);
+    setTourPackages(packagesRes.data ?? []);
+    setTourImages(imagesRes.data ?? []);
+    setTourInclusions(inclusionsRes.data ?? []);
   }
 
   useEffect(() => {
     void loadTours();
   }, []);
 
+  function markEditing(next: TourEditor) {
+    setEditing(next);
+    setDirty(true);
+  }
+
+  function openEditor(tour: TourRow) {
+    setEditing(createEditor(
+      tour,
+      tourPackages.filter((pkg) => boatTours.some((relation) => relation.id === pkg.boat_tour_id && relation.tour_id === tour.id)),
+      boatTours,
+      tourImages.filter((image) => image.tour_id === tour.id),
+      tourInclusions.filter((item) => item.tour_id === tour.id),
+    ));
+    setActiveTab('info');
+    setFieldErrors({});
+    setDirty(false);
+  }
+
   async function createTour() {
     const id = `tour-${crypto.randomUUID().slice(0, 8)}`;
+    const title = 'Nuevo tour';
     const { data, error } = await supabase
       .from('tours')
       .insert({
         id,
-        title: 'Nuevo tour',
+        title,
         slug: id,
-        category: 'Fishing',
+        category: 'Snorkeling & Beach',
+        publication_status: 'draft',
+        active: false,
+        featured: false,
         rating: 5,
-        active: true,
         sort_order: tours.length + 1,
+        description: '',
+        long_description: '',
+        highlights: [],
+        included: [],
       })
-      .select('id, title, slug, location, description, image_url, image_public_id, category, rating, active, sort_order')
+      .select('*')
       .single();
+
     if (error) {
       setError(error.message);
       return;
     }
-    setEditing(data as TourRow);
+
     await loadTours();
+    setEditing(createEditor(data, [], boatTours, [], []));
+    setActiveTab('info');
+    setDirty(false);
   }
 
-  async function saveTour() {
-    if (!editing) return;
+  function requestClose() {
+    if (dirty && !window.confirm('Hay cambios sin guardar. Si cierras ahora, se perderan.')) return;
+    setEditing(null);
+    setFieldErrors({});
+    setDirty(false);
+  }
+
+  function validateEditor(editor: TourEditor) {
+    const errors: FieldErrors = {};
+    if (!editor.title.trim()) errors.title = 'El nombre del tour es obligatorio.';
+    if (!editor.description.trim()) errors.description = 'La descripcion corta es obligatoria.';
+    if (!editor.slug.trim() || !/^[a-z0-9-]+$/.test(editor.slug)) errors.slug = 'Usa solo letras minusculas, numeros y guiones.';
+    if (tours.some((tour) => tour.id !== editor.id && tour.slug === editor.slug.trim())) errors.slug = 'Ya existe otro tour con este slug.';
+    editor.packages.forEach((pkg) => {
+      if (pkg.pendingDelete) return;
+      if (!pkg.name.trim()) errors[`package-${pkg.id}-name`] = 'El nombre visible es obligatorio.';
+      if (!Number.isFinite(pkg.durationValue) || pkg.durationValue <= 0) errors[`package-${pkg.id}-duration`] = 'La duracion debe ser mayor a cero.';
+      if (!Number.isFinite(pkg.basePrice) || pkg.basePrice <= 0) errors[`package-${pkg.id}-price`] = 'El precio debe ser mayor a cero.';
+      if (!pkg.boatId) errors[`package-${pkg.id}-boat`] = 'Selecciona el barco al que aplica este precio.';
+    });
+    return errors;
+  }
+
+  async function ensureBoatTour(tourId: string, boatId: string) {
+    const existing = boatTours.find((item) => item.tour_id === tourId && item.boat_id === boatId);
+    if (existing) return existing.id;
+    const { data: current, error: currentError } = await supabase
+      .from('boat_tours')
+      .select('id, active')
+      .eq('tour_id', tourId)
+      .eq('boat_id', boatId)
+      .maybeSingle();
+    if (currentError) throw new Error(currentError.message);
+    if (current) {
+      if (!current.active) {
+        const { error } = await supabase.from('boat_tours').update({ active: true }).eq('id', current.id);
+        if (error) throw new Error(error.message);
+      }
+      return current.id;
+    }
+    const { data, error } = await supabase
+      .from('boat_tours')
+      .insert({ boat_id: boatId, tour_id: tourId, active: true, sort_order: boatTours.length + 1 })
+      .select('id')
+      .single();
+    if (error) throw new Error(error.message);
+    return data.id;
+  }
+
+  async function saveEditor(statusOverride?: PublicationStatus) {
+    if (!editing || saving) return;
+    const nextEditor = statusOverride ? { ...editing, publicationStatus: statusOverride } : editing;
+    const errors = validateEditor(nextEditor);
+    setFieldErrors(errors);
+    if (Object.keys(errors).length > 0) {
+      setError('Revisa los campos marcados antes de guardar.');
+      return;
+    }
+
     setSaving(true);
     setError('');
     setNotice('');
+
+    try {
+      const status = nextEditor.publicationStatus;
+      const active = status === 'published';
+      const { error: tourError } = await supabase
+        .from('tours')
+        .update({
+          title: nextEditor.title.trim(),
+          slug: nextEditor.slug.trim(),
+          location: nextEditor.location.trim() || null,
+          description: nextEditor.description.trim(),
+          long_description: nextEditor.longDescription.trim() || null,
+          image_url: nextEditor.imageUrl,
+          image_public_id: nextEditor.imagePublicId,
+          image_alt: nextEditor.imageAlt.trim() || nextEditor.title.trim(),
+          category: nextEditor.category,
+          publication_status: status,
+          active,
+          featured: nextEditor.featured,
+          sort_order: nextEditor.sortOrder,
+          highlights: nextEditor.activities,
+          included: nextEditor.inclusions.filter((item) => !item.pendingDelete && item.active && item.packageId === null).map((item) => item.label.trim()),
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', nextEditor.id);
+      if (tourError) throw new Error(tourError.message);
+
+      for (const boat of boats) {
+        const shouldBeActive = nextEditor.selectedBoatIds.includes(boat.id);
+        const relation = boatTours.find((item) => item.tour_id === nextEditor.id && item.boat_id === boat.id);
+        if (relation) {
+          const { error } = await supabase.from('boat_tours').update({ active: shouldBeActive }).eq('id', relation.id);
+          if (error) throw new Error(error.message);
+        } else if (shouldBeActive) {
+          await ensureBoatTour(nextEditor.id, boat.id);
+        }
+      }
+
+      for (const pkg of nextEditor.packages) {
+        if (pkg.pendingDelete) {
+          if (!pkg.isNew) {
+            const { error } = await supabase.from('tour_packages').delete().eq('id', pkg.id);
+            if (error) throw new Error(`${error.message}. Si el paquete tiene reservas historicas, desactivalo en lugar de eliminarlo.`);
+          }
+          continue;
+        }
+
+        const boatTourId = await ensureBoatTour(nextEditor.id, pkg.boatId);
+        const { error } = await supabase.from('tour_packages').upsert({
+          id: pkg.id,
+          boat_tour_id: boatTourId,
+          name: pkg.name.trim(),
+          package_type: slugify(pkg.name),
+          description: pkg.description.trim() || null,
+          duration_minutes: durationToMinutes(pkg.durationValue, pkg.durationUnit),
+          base_price: pkg.basePrice,
+          included_guests: boats.find((boat) => boat.id === pkg.boatId)?.included_guests ?? 1,
+          max_guests: boats.find((boat) => boat.id === pkg.boatId)?.max_guests ?? 1,
+          extra_guest_price: boats.find((boat) => boat.id === pkg.boatId)?.extra_guest_price ?? 0,
+          custom_quote: false,
+          active: pkg.active,
+          sort_order: pkg.sortOrder,
+          updated_at: new Date().toISOString(),
+        });
+        if (error) throw new Error(error.message);
+      }
+
+      for (const item of nextEditor.inclusions) {
+        if (item.pendingDelete) {
+          if (!item.isNew) {
+            const { error } = await supabase.from('tour_inclusions').delete().eq('id', item.id);
+            if (error) throw new Error(error.message);
+          }
+          continue;
+        }
+        if (!item.label.trim()) continue;
+        const { error } = await supabase.from('tour_inclusions').upsert({
+          id: item.id,
+          tour_id: nextEditor.id,
+          tour_package_id: item.packageId,
+          label: item.label.trim(),
+          sort_order: item.sortOrder,
+          active: item.active,
+          updated_at: new Date().toISOString(),
+        });
+        if (error) throw new Error(error.message);
+      }
+
+      for (const image of nextEditor.images) {
+        const { error } = await supabase
+          .from('tour_images')
+          .update({
+            alt_text: image.alt_text.trim() || nextEditor.title.trim(),
+            sort_order: image.sort_order,
+            is_primary: image.image_url === nextEditor.imageUrl,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', image.id);
+        if (error) throw new Error(error.message);
+      }
+
+      await loadTours();
+      setSaving(false);
+      setNotice(status === 'published' ? 'Tour publicado y actualizado.' : 'Tour guardado.');
+      setDirty(false);
+    } catch (err) {
+      setSaving(false);
+      setError(err instanceof Error ? err.message : 'No se pudo guardar el tour.');
+    }
+  }
+
+  async function onMainImageSaved(image: StorageImage) {
+    if (!editing) return;
+    const next = { ...editing, imageUrl: image.public_url, imagePublicId: image.storage_path };
+    markEditing(next);
     const { error } = await supabase
       .from('tours')
-      .update({
-        title: editing.title,
-        slug: editing.slug || slugify(editing.title),
-        location: editing.location,
-        description: editing.description,
-        category: editing.category,
-        rating: editing.rating,
-        active: editing.active,
-        sort_order: editing.sort_order,
-        updated_at: new Date().toISOString(),
-      })
+      .update({ image_url: image.public_url, image_public_id: image.storage_path, image_alt: next.imageAlt || next.title, updated_at: new Date().toISOString() })
       .eq('id', editing.id);
-    setSaving(false);
+    if (error) throw new Error(error.message);
+    await loadTours();
+  }
+
+  async function onGalleryImageSaved(image: StorageImage) {
+    if (!editing) return;
+    const shouldBePrimary = editing.images.length === 0 && !editing.imageUrl;
+    const { data, error } = await supabase
+      .from('tour_images')
+      .insert({
+        tour_id: editing.id,
+        image_url: image.public_url,
+        storage_path: image.storage_path,
+        alt_text: editing.imageAlt || editing.title,
+        is_primary: shouldBePrimary,
+        sort_order: editing.images.length + 1,
+        active: true,
+      })
+      .select('*')
+      .single();
+    if (error) throw new Error(error.message);
+    const nextImages = [...editing.images, data];
+    markEditing({ ...editing, images: nextImages, imageUrl: shouldBePrimary ? data.image_url : editing.imageUrl, imagePublicId: shouldBePrimary ? data.storage_path : editing.imagePublicId });
+    if (shouldBePrimary) {
+      await supabase.from('tours').update({ image_url: data.image_url, image_public_id: data.storage_path, image_alt: data.alt_text }).eq('id', editing.id);
+    }
+    await loadTours();
+  }
+
+  async function setPrimaryImage(image: TourImageRow) {
+    if (!editing) return;
+    await supabase.from('tour_images').update({ is_primary: false }).eq('tour_id', editing.id);
+    const { error } = await supabase.from('tour_images').update({ is_primary: true }).eq('id', image.id);
     if (error) {
       setError(error.message);
       return;
     }
-    setNotice('Tour actualizado.');
-    await loadTours();
-  }
-
-  async function onImageSaved(image: StorageImage) {
-    if (!editing) return;
-    const { error } = await supabase
+    const { error: tourError } = await supabase
       .from('tours')
-      .update({ image_url: image.public_url, image_public_id: image.storage_path, updated_at: new Date().toISOString() })
+      .update({ image_url: image.image_url, image_public_id: image.storage_path, image_alt: image.alt_text || editing.title })
       .eq('id', editing.id);
-    if (error) throw new Error(error.message);
-    setEditing({ ...editing, image_url: image.public_url, image_public_id: image.storage_path });
+    if (tourError) {
+      setError(tourError.message);
+      return;
+    }
+    markEditing({
+      ...editing,
+      imageUrl: image.image_url,
+      imagePublicId: image.storage_path,
+      imageAlt: image.alt_text || editing.title,
+      images: editing.images.map((item) => ({ ...item, is_primary: item.id === image.id })),
+    });
     await loadTours();
   }
 
-  const visibleTours = tours.filter((tour) => !search || tour.title.toLowerCase().includes(search.toLowerCase()) || tour.slug.includes(search.toLowerCase()));
+  async function confirmDeleteImage(image: TourImageRow) {
+    if (!editing) return;
+    const { error } = await supabase.from('tour_images').update({ active: false, pending_deletion: Boolean(image.storage_path) }).eq('id', image.id);
+    if (error) {
+      setError(error.message);
+      return;
+    }
+    if (image.storage_path) {
+      try {
+        await deleteStorageImage({ storagePath: image.storage_path, resourceTable: 'tour_images', resourceId: image.id });
+      } catch {
+        await supabase.from('tour_images').update({ deletion_error: 'Storage delete failed' }).eq('id', image.id);
+      }
+    }
+    const remaining = editing.images.filter((item) => item.id !== image.id);
+    markEditing({ ...editing, images: remaining });
+    setDeleteImage(null);
+    await loadTours();
+  }
+
+  function addActivity() {
+    if (!editing || !activityInput.trim()) return;
+    markEditing({ ...editing, activities: [...editing.activities, activityInput.trim()] });
+    setActivityInput('');
+  }
+
+  function addInclusion() {
+    if (!editing || !inclusionInput.trim()) return;
+    markEditing({
+      ...editing,
+      inclusions: [
+        ...editing.inclusions,
+        { id: crypto.randomUUID(), label: inclusionInput.trim(), packageId: null, sortOrder: editing.inclusions.length + 1, active: true, isNew: true },
+      ],
+    });
+    setInclusionInput('');
+  }
+
+  function addPackage() {
+    if (!editing) return;
+    const firstBoatId = editing.selectedBoatIds[0] ?? boats[0]?.id ?? '';
+    markEditing({
+      ...editing,
+      selectedBoatIds: firstBoatId && !editing.selectedBoatIds.includes(firstBoatId) ? [...editing.selectedBoatIds, firstBoatId] : editing.selectedBoatIds,
+      packages: [
+        ...editing.packages,
+        {
+          id: `package-${crypto.randomUUID().slice(0, 8)}`,
+          boatTourId: null,
+          boatId: firstBoatId,
+          name: 'Half Day',
+          durationValue: 4,
+          durationUnit: 'hours',
+          basePrice: 650,
+          description: '',
+          sortOrder: editing.packages.length + 1,
+          active: true,
+          isNew: true,
+        },
+      ],
+    });
+  }
+
+  function moveArrayItem<T>(items: T[], index: number, direction: -1 | 1) {
+    const nextIndex = index + direction;
+    if (nextIndex < 0 || nextIndex >= items.length) return items;
+    const next = [...items];
+    [next[index], next[nextIndex]] = [next[nextIndex], next[index]];
+    return next;
+  }
+
+  const visibleTours = tours.filter((tour) => {
+    const text = `${tour.title} ${tour.slug} ${tour.category} ${tour.location ?? ''}`.toLowerCase();
+    return !search || text.includes(search.toLowerCase());
+  });
+
+  const packagesForCurrentTour = useMemo(() => editing?.packages.filter((pkg) => !pkg.pendingDelete).sort((a, b) => a.sortOrder - b.sortOrder) ?? [], [editing]);
 
   return (
     <div className="admin-page">
-      <AdminPageHeader title="Tours" description="Tours generales visibles en la pagina publica." actions={<button className="admin-btn" type="button" onClick={() => void createTour()}><Plus size={16} /> Crear tour</button>} />
+      <AdminPageHeader title="Tours" description="Crea experiencias, actividades, precios por duracion y barcos disponibles." actions={<button className="admin-btn" type="button" onClick={() => void createTour()}><Plus size={16} /> Crear tour</button>} />
       <AdminToolbar>
-        <input className="admin-input" placeholder="Buscar tour" value={search} onChange={(event) => setSearch(event.target.value)} />
+        <input className="admin-input" placeholder="Buscar tour por nombre, slug o categoria" value={search} onChange={(event) => setSearch(event.target.value)} />
       </AdminToolbar>
-      {error ? <div className="admin-alert admin-alert--danger">{error}</div> : null}
+
+      {error ? <div className="admin-alert admin-alert--danger">{needsEditorNotice(error) ? 'No se pudo acceder a tours: se requiere una sesion de admin/editor en Supabase.' : error}</div> : null}
       {notice ? <div className="admin-alert admin-alert--success">{notice}</div> : null}
+
       {loading ? (
         <p className="admin-muted">Cargando tours...</p>
       ) : (
-        <AdminTable headers={['Tour', 'Categoria', 'Ubicacion', 'Rating', 'Orden', 'Estado', 'Acciones']}>
+        <AdminTable headers={['Tour', 'Categoria', 'Punto de salida', 'Publicacion', 'Destacado', 'Orden', 'Acciones']}>
           {visibleTours.map((tour) => (
             <tr key={tour.id}>
               <td>{tour.title}<div className="admin-muted">{tour.slug}</div></td>
               <td>{tour.category}</td>
               <td>{tour.location ?? '-'}</td>
-              <td>{tour.rating}</td>
+              <td><AdminBadge value={toPublicationStatus(tour)} /></td>
+              <td><AdminBadge value={tour.featured ? 'destacado' : 'normal'} /></td>
               <td>{tour.sort_order}</td>
-              <td><AdminBadge value={tour.active} /></td>
-              <td><button className="admin-btn admin-btn--ghost" type="button" onClick={() => setEditing(tour)}><Pencil size={14} /> Editar</button></td>
+              <td><button className="admin-btn admin-btn--ghost" type="button" onClick={() => openEditor(tour)}><Pencil size={14} /> Editar</button></td>
             </tr>
           ))}
-          {visibleTours.length === 0 ? <tr><td colSpan={7} className="admin-muted">No hay tours.</td></tr> : null}
+          {visibleTours.length === 0 ? <tr><td colSpan={7} className="admin-muted">No hay tours para esta busqueda.</td></tr> : null}
         </AdminTable>
       )}
 
-      <Modal open={Boolean(editing)} onClose={() => setEditing(null)} titleId="tour-edit-title" className="max-w-2xl">
+      <Modal open={Boolean(editing)} onClose={requestClose} titleId="tour-edit-title" className="admin-tour-modal">
         {editing ? (
-          <div className="admin-modal-shell">
-            <header className="admin-modal-header">
-              <h2 id="tour-edit-title" className="admin-card__title"><Pencil size={18} /> Editar tour</h2>
-              <button className="admin-icon-btn" type="button" aria-label="Cerrar" onClick={() => setEditing(null)}><X size={18} /></button>
+          <form
+            className="admin-modal-shell"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void saveEditor(editing.publicationStatus);
+            }}
+          >
+            <header className="admin-modal-header admin-tour-modal__header">
+              <div>
+                <h2 id="tour-edit-title" className="admin-card__title"><Pencil size={18} /> {editing.title || 'Nuevo tour'}</h2>
+                <p className="admin-muted">Paso: {tabs.find((tab) => tab.id === activeTab)?.label}</p>
+              </div>
+              <button className="admin-icon-btn" type="button" aria-label="Cerrar editor de tour" disabled={saving} onClick={requestClose}><X size={18} /></button>
             </header>
+
+            <nav className="admin-tabs admin-tour-tabs" aria-label="Secciones del formulario de tour">
+              {tabs.map((tab) => (
+                <button key={tab.id} className={`admin-tab${activeTab === tab.id ? ' admin-tab--active' : ''}`} type="button" onClick={() => setActiveTab(tab.id)}>
+                  {tab.label}
+                </button>
+              ))}
+            </nav>
+
             <div className="admin-modal-body">
               {error ? <div className="admin-alert admin-alert--danger" role="alert">{error}</div> : null}
               {notice ? <div className="admin-alert admin-alert--success" role="status">{notice}</div> : null}
-              <AdminImageManager
-                resourceTable="tours"
-                resourceId={editing.id}
-                folder="tours"
-                currentImageUrl={editing.image_url}
-                currentStoragePath={editing.image_public_id}
-                label={editing.title}
-                aspect={3 / 2}
-                maxWidth={1200}
-                maxHeight={800}
-                maxSizeMB={0.35}
-                requireReplacementToDelete
-                onImageSaved={onImageSaved}
-              />
-              <div className="grid gap-3 sm:grid-cols-2">
-                <label className="grid gap-1"><span className="admin-muted">Titulo</span><input className="admin-input" value={editing.title} onChange={(event) => setEditing({ ...editing, title: event.target.value })} /></label>
-                <label className="grid gap-1"><span className="admin-muted">Slug</span><input className="admin-input" value={editing.slug} onChange={(event) => setEditing({ ...editing, slug: slugify(event.target.value) })} /></label>
-                <label className="grid gap-1"><span className="admin-muted">Categoria</span><input className="admin-input" value={editing.category} onChange={(event) => setEditing({ ...editing, category: event.target.value })} /></label>
-                <label className="grid gap-1"><span className="admin-muted">Ubicacion</span><input className="admin-input" value={editing.location ?? ''} onChange={(event) => setEditing({ ...editing, location: event.target.value || null })} /></label>
-                <label className="grid gap-1"><span className="admin-muted">Rating</span><input className="admin-input" type="number" min={0} max={5} step={0.1} value={editing.rating} onChange={(event) => setEditing({ ...editing, rating: Number(event.target.value) })} /></label>
-                <label className="grid gap-1"><span className="admin-muted">Orden</span><input className="admin-input" type="number" value={editing.sort_order} onChange={(event) => setEditing({ ...editing, sort_order: Number(event.target.value) })} /></label>
-              </div>
-              <label className="grid gap-1"><span className="admin-muted">Descripcion</span><textarea className="admin-input" value={editing.description ?? ''} onChange={(event) => setEditing({ ...editing, description: event.target.value || null })} /></label>
-              <label className="flex items-center gap-2"><input type="checkbox" checked={editing.active} onChange={(event) => setEditing({ ...editing, active: event.target.checked })} /><span className="admin-muted">Activo</span></label>
+
+              {activeTab === 'info' ? (
+                <FormSection title="Informacion principal" description="Datos que los clientes veran primero en la pagina publica." icon={<Info size={16} />}>
+                  <div className="admin-form-columns">
+                    <label className="admin-field">
+                      <span className="admin-field__label">Nombre del tour</span>
+                      <input className="admin-input" aria-invalid={fieldErrors.title ? true : undefined} value={editing.title} onChange={(event) => markEditing({ ...editing, title: event.target.value, slug: editing.slug ? editing.slug : slugify(event.target.value) })} />
+                      <span className="admin-field-help">Este nombre sera visible para los clientes en la pagina publica.</span>
+                      {fieldErrors.title ? <span className="admin-field-error">{fieldErrors.title}</span> : null}
+                    </label>
+                    <label className="admin-field">
+                      <span className="admin-field__label">Categoria</span>
+                      <select className="admin-select" value={editing.category} onChange={(event) => markEditing({ ...editing, category: event.target.value })}>
+                        {categories.map((category) => <option key={category} value={category}>{category}</option>)}
+                      </select>
+                      <span className="admin-field-help">Agrupa el tour para filtros y tarjetas publicas.</span>
+                    </label>
+                    <label className="admin-field">
+                      <span className="admin-field__label">Punto de salida</span>
+                      {destinations.length > 0 ? (
+                        <select className="admin-select" value={editing.location} onChange={(event) => markEditing({ ...editing, location: event.target.value })}>
+                          <option value="">Selecciona un punto de salida</option>
+                          {destinations.map((destination) => <option key={destination.id} value={destination.name}>{destination.name}</option>)}
+                        </select>
+                      ) : (
+                        <input className="admin-input" value={editing.location} onChange={(event) => markEditing({ ...editing, location: event.target.value })} />
+                      )}
+                      <span className="admin-field-help">Usa una ubicacion registrada cuando exista para mantener consistencia.</span>
+                    </label>
+                    <label className="admin-field">
+                      <span className="admin-field__label">Estado de publicacion</span>
+                      <select className="admin-select" value={editing.publicationStatus} onChange={(event) => markEditing({ ...editing, publicationStatus: event.target.value as PublicationStatus })}>
+                        <option value="draft">Borrador</option>
+                        <option value="published">Publicado</option>
+                        <option value="inactive">Inactivo</option>
+                      </select>
+                      <span className="admin-field-help">Solo los tours publicados aparecen en el sitio y aceptan reservas.</span>
+                    </label>
+                  </div>
+                  <label className="admin-field">
+                    <span className="admin-field__label">Descripcion corta</span>
+                    <textarea className="admin-input" rows={3} aria-invalid={fieldErrors.description ? true : undefined} value={editing.description} onChange={(event) => markEditing({ ...editing, description: event.target.value })} />
+                    <span className="admin-field-help">Resumen breve para tarjetas y modal publico.</span>
+                    {fieldErrors.description ? <span className="admin-field-error">{fieldErrors.description}</span> : null}
+                  </label>
+                  <label className="admin-field">
+                    <span className="admin-field__label">Descripcion completa</span>
+                    <textarea className="admin-input admin-textarea-list" value={editing.longDescription} onChange={(event) => markEditing({ ...editing, longDescription: event.target.value })} />
+                    <span className="admin-field-help">Explica la experiencia con mas detalle. Puedes dejarla vacia si la descripcion corta es suficiente.</span>
+                  </label>
+                  <ToggleSwitch checked={editing.featured} onChange={(featured) => markEditing({ ...editing, featured })} label="Tour destacado" description="Marca este tour para resaltarlo en listados administrativos y futuras secciones destacadas." disabled={saving} />
+                </FormSection>
+              ) : null}
+
+              {activeTab === 'experience' ? (
+                <>
+                  <FormSection title="Imagen principal del tour" description="Formatos permitidos: JPG, PNG o WebP. Peso maximo: 10 MB antes de comprimir. Resolucion recomendada: 1200 x 800 px." icon={<ImageIcon size={16} />}>
+                    <AdminImageManager
+                      resourceTable="tours"
+                      resourceId={editing.id}
+                      folder="tours"
+                      currentImageUrl={editing.imageUrl}
+                      currentStoragePath={editing.imagePublicId}
+                      label={editing.imageAlt || editing.title}
+                      aspect={3 / 2}
+                      previewAspect={3 / 2}
+                      maxWidth={1200}
+                      maxHeight={800}
+                      maxSizeMB={0.35}
+                      onImageSaved={onMainImageSaved}
+                    />
+                    <label className="admin-field">
+                      <span className="admin-field__label">Texto alternativo de la imagen</span>
+                      <input className="admin-input" value={editing.imageAlt} onChange={(event) => markEditing({ ...editing, imageAlt: event.target.value })} />
+                      <span className="admin-field-help">Describe la imagen para accesibilidad y buscadores.</span>
+                    </label>
+                  </FormSection>
+
+                  <FormSection title="Galeria adicional" description="Agrega imagenes de apoyo y elige cual sera la portada del tour." icon={<ImagePlus size={16} />}>
+                    <div className="admin-tour-gallery">
+                      {editing.images.map((image) => (
+                        <article className="admin-tour-gallery__item" key={image.id}>
+                          <img src={image.image_url} alt={image.alt_text || editing.title} loading="lazy" decoding="async" />
+                          <div>
+                            <input className="admin-input" value={image.alt_text} aria-label="Texto alternativo" onChange={(event) => markEditing({ ...editing, images: editing.images.map((item) => item.id === image.id ? { ...item, alt_text: event.target.value } : item) })} />
+                            <div className="admin-actions mt-2">
+                              <button className="admin-btn admin-btn--ghost" type="button" onClick={() => void setPrimaryImage(image)}><Check size={14} /> Portada</button>
+                              <button className="admin-btn admin-btn--danger" type="button" onClick={() => setDeleteImage(image)}><Trash2 size={14} /> Eliminar</button>
+                            </div>
+                          </div>
+                        </article>
+                      ))}
+                      {editing.images.length === 0 ? <p className="admin-muted">Este tour aun no tiene galeria adicional.</p> : null}
+                    </div>
+                    <AdminImageManager resourceTable="tours" resourceId={editing.id} folder="tours" label={`${editing.title} galeria`} aspect={3 / 2} maxWidth={1200} maxHeight={800} maxSizeMB={0.35} onImageSaved={onGalleryImageSaved} />
+                  </FormSection>
+
+                  <FormSection title="Actividades del tour" description="Agrega actividades como etiquetas individuales. Puedes reordenarlas o eliminarlas." icon={<Sparkles size={16} />}>
+                    <div className="admin-inline-editor">
+                      <input className="admin-input" value={activityInput} placeholder="Ej. Snorkeling" onChange={(event) => setActivityInput(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); addActivity(); } }} />
+                      <button className="admin-btn" type="button" onClick={addActivity}><Plus size={14} /> Agregar actividad</button>
+                    </div>
+                    <div className="admin-token-list">
+                      {editing.activities.map((activity, index) => (
+                        <span className="admin-token" key={`${activity}-${index}`}>
+                          {activity}
+                          <button type="button" aria-label="Subir actividad" onClick={() => markEditing({ ...editing, activities: moveArrayItem(editing.activities, index, -1) })}><ArrowUp size={13} /></button>
+                          <button type="button" aria-label="Bajar actividad" onClick={() => markEditing({ ...editing, activities: moveArrayItem(editing.activities, index, 1) })}><ArrowDown size={13} /></button>
+                          <button type="button" aria-label="Eliminar actividad" onClick={() => markEditing({ ...editing, activities: editing.activities.filter((_, itemIndex) => itemIndex !== index) })}><X size={13} /></button>
+                        </span>
+                      ))}
+                    </div>
+                  </FormSection>
+
+                  <FormSection title="Que incluye" description="Cada elemento se administra en una fila. Puede aplicar a todos los paquetes o a una duracion concreta." icon={<Check size={16} />}>
+                    <div className="admin-inline-editor">
+                      <input className="admin-input" value={inclusionInput} placeholder="Ej. Bebidas alcoholicas y no alcoholicas" onChange={(event) => setInclusionInput(event.target.value)} />
+                      <button className="admin-btn" type="button" onClick={addInclusion}><Plus size={14} /> Agregar incluido</button>
+                    </div>
+                    <div className="admin-dynamic-list">
+                      {editing.inclusions.filter((item) => !item.pendingDelete).map((item, index) => (
+                        <div className="admin-dynamic-row" key={item.id}>
+                          <input className="admin-input" value={item.label} onChange={(event) => markEditing({ ...editing, inclusions: editing.inclusions.map((entry) => entry.id === item.id ? { ...entry, label: event.target.value } : entry) })} />
+                          <select className="admin-select" value={item.packageId ?? ''} onChange={(event) => markEditing({ ...editing, inclusions: editing.inclusions.map((entry) => entry.id === item.id ? { ...entry, packageId: event.target.value || null } : entry) })}>
+                            <option value="">Todos los paquetes</option>
+                            {packagesForCurrentTour.map((pkg) => <option key={pkg.id} value={pkg.id}>{packageLabel(pkg)}</option>)}
+                          </select>
+                          <button className="admin-icon-btn" type="button" aria-label="Subir incluido" onClick={() => markEditing({ ...editing, inclusions: moveArrayItem(editing.inclusions, index, -1).map((entry, sortOrder) => ({ ...entry, sortOrder })) })}><ArrowUp size={16} /></button>
+                          <button className="admin-icon-btn" type="button" aria-label="Bajar incluido" onClick={() => markEditing({ ...editing, inclusions: moveArrayItem(editing.inclusions, index, 1).map((entry, sortOrder) => ({ ...entry, sortOrder })) })}><ArrowDown size={16} /></button>
+                          <button className="admin-icon-btn" type="button" aria-label="Eliminar incluido" onClick={() => markEditing({ ...editing, inclusions: editing.inclusions.map((entry) => entry.id === item.id ? { ...entry, pendingDelete: true } : entry) })}><Trash2 size={16} /></button>
+                        </div>
+                      ))}
+                    </div>
+                  </FormSection>
+                </>
+              ) : null}
+
+              {activeTab === 'prices' ? (
+                <FormSection title="Duraciones y precios" description="Agrega las opciones de duracion que el cliente podra seleccionar para este tour." icon={<DollarSign size={16} />}>
+                  <div className="admin-actions">
+                    <button className="admin-btn" type="button" onClick={addPackage}><Plus size={16} /> Agregar duracion y precio</button>
+                  </div>
+                  <div className="admin-package-list">
+                    {packagesForCurrentTour.map((pkg, index) => (
+                      <article className="admin-package-editor" key={pkg.id}>
+                        <header>
+                          <strong>{pkg.name || 'Nueva duracion'}</strong>
+                          <div className="admin-actions">
+                            <button className="admin-btn admin-btn--ghost" type="button" onClick={() => markEditing({ ...editing, packages: [...editing.packages, { ...pkg, id: `package-${crypto.randomUUID().slice(0, 8)}`, name: `${pkg.name} copia`, sortOrder: editing.packages.length + 1, isNew: true }] })}><Copy size={14} /> Duplicar</button>
+                            <button className="admin-btn admin-btn--ghost" type="button" onClick={() => markEditing({ ...editing, packages: editing.packages.map((item) => item.id === pkg.id ? { ...item, active: !item.active } : item) })}>{pkg.active ? 'Desactivar' : 'Activar'}</button>
+                            <button className="admin-btn admin-btn--danger" type="button" onClick={() => setDeletePackage(pkg)}><Trash2 size={14} /> Eliminar</button>
+                          </div>
+                        </header>
+                        <div className="admin-form-columns">
+                          <label className="admin-field">
+                            <span className="admin-field__label">Nombre visible</span>
+                            <input className="admin-input" aria-invalid={fieldErrors[`package-${pkg.id}-name`] ? true : undefined} value={pkg.name} onChange={(event) => markEditing({ ...editing, packages: editing.packages.map((item) => item.id === pkg.id ? { ...item, name: event.target.value } : item) })} />
+                            {fieldErrors[`package-${pkg.id}-name`] ? <span className="admin-field-error">{fieldErrors[`package-${pkg.id}-name`]}</span> : null}
+                          </label>
+                          <label className="admin-field">
+                            <span className="admin-field__label">Barco para este precio</span>
+                            <select className="admin-select" aria-invalid={fieldErrors[`package-${pkg.id}-boat`] ? true : undefined} value={pkg.boatId} onChange={(event) => markEditing({ ...editing, packages: editing.packages.map((item) => item.id === pkg.id ? { ...item, boatId: event.target.value } : item), selectedBoatIds: editing.selectedBoatIds.includes(event.target.value) ? editing.selectedBoatIds : [...editing.selectedBoatIds, event.target.value] })}>
+                              <option value="">Selecciona un barco</option>
+                              {boats.map((boat) => <option key={boat.id} value={boat.id}>{boat.name}</option>)}
+                            </select>
+                            {fieldErrors[`package-${pkg.id}-boat`] ? <span className="admin-field-error">{fieldErrors[`package-${pkg.id}-boat`]}</span> : null}
+                          </label>
+                          <label className="admin-field">
+                            <span className="admin-field__label">Duracion</span>
+                            <input className="admin-input" type="number" min={0.5} step={0.5} aria-invalid={fieldErrors[`package-${pkg.id}-duration`] ? true : undefined} value={pkg.durationValue} onChange={(event) => markEditing({ ...editing, packages: editing.packages.map((item) => item.id === pkg.id ? { ...item, durationValue: Number(event.target.value) } : item) })} />
+                            {fieldErrors[`package-${pkg.id}-duration`] ? <span className="admin-field-error">{fieldErrors[`package-${pkg.id}-duration`]}</span> : null}
+                          </label>
+                          <label className="admin-field">
+                            <span className="admin-field__label">Unidad</span>
+                            <select className="admin-select" value={pkg.durationUnit} onChange={(event) => markEditing({ ...editing, packages: editing.packages.map((item) => item.id === pkg.id ? { ...item, durationUnit: event.target.value as 'hours' | 'days' } : item) })}>
+                              <option value="hours">Horas</option>
+                              <option value="days">Dias</option>
+                            </select>
+                          </label>
+                          <label className="admin-field">
+                            <span className="admin-field__label">Precio en USD</span>
+                            <input className="admin-input" type="number" min={1} aria-invalid={fieldErrors[`package-${pkg.id}-price`] ? true : undefined} value={pkg.basePrice} onChange={(event) => markEditing({ ...editing, packages: editing.packages.map((item) => item.id === pkg.id ? { ...item, basePrice: Number(event.target.value) } : item) })} />
+                            {fieldErrors[`package-${pkg.id}-price`] ? <span className="admin-field-error">{fieldErrors[`package-${pkg.id}-price`]}</span> : null}
+                          </label>
+                          <label className="admin-field">
+                            <span className="admin-field__label">Orden de aparicion</span>
+                            <input className="admin-input" type="number" value={pkg.sortOrder} onChange={(event) => markEditing({ ...editing, packages: editing.packages.map((item) => item.id === pkg.id ? { ...item, sortOrder: Number(event.target.value) } : item) })} />
+                          </label>
+                        </div>
+                        <label className="admin-field">
+                          <span className="admin-field__label">Descripcion opcional</span>
+                          <textarea className="admin-input" value={pkg.description} onChange={(event) => markEditing({ ...editing, packages: editing.packages.map((item) => item.id === pkg.id ? { ...item, description: event.target.value } : item) })} />
+                        </label>
+                        <div className="admin-actions">
+                          <button className="admin-btn admin-btn--ghost" type="button" onClick={() => markEditing({ ...editing, packages: moveArrayItem(editing.packages, index, -1).map((item, sortOrder) => ({ ...item, sortOrder })) })}><ArrowUp size={14} /> Subir</button>
+                          <button className="admin-btn admin-btn--ghost" type="button" onClick={() => markEditing({ ...editing, packages: moveArrayItem(editing.packages, index, 1).map((item, sortOrder) => ({ ...item, sortOrder })) })}><ArrowDown size={14} /> Bajar</button>
+                        </div>
+                      </article>
+                    ))}
+                    {packagesForCurrentTour.length === 0 ? <p className="admin-muted">Este tour aun no tiene duraciones ni precios.</p> : null}
+                  </div>
+                </FormSection>
+              ) : null}
+
+              {activeTab === 'boats' ? (
+                <FormSection title="Barcos disponibles para este tour" description="Selecciona los barcos donde se ofrece el tour. La capacidad y persona extra provienen del barco." icon={<Ship size={16} />}>
+                  <div className="admin-boat-choice-grid">
+                    {boats.map((boat) => {
+                      const selected = editing.selectedBoatIds.includes(boat.id);
+                      return (
+                        <article className={`admin-boat-choice${selected ? ' admin-boat-choice--selected' : ''}`} key={boat.id}>
+                          {boat.image_url ? <img src={boat.image_url} alt="" loading="lazy" decoding="async" /> : <span className="admin-boat-choice__empty"><Ship size={20} /></span>}
+                          <div>
+                            <strong>{boat.name}</strong>
+                            <p className="admin-muted">{boat.included_guests} incluidos / {boat.max_guests} max</p>
+                            <p className="admin-muted">Persona adicional: {money(Number(boat.extra_guest_price))}</p>
+                          </div>
+                          <ToggleSwitch
+                            checked={selected}
+                            label={`Disponible en ${boat.name}`}
+                            description={selected ? 'Este tour se puede vender en este barco.' : 'Este tour no se ofrece en este barco.'}
+                            disabled={saving}
+                            onChange={(checked) => markEditing({ ...editing, selectedBoatIds: checked ? [...editing.selectedBoatIds, boat.id] : editing.selectedBoatIds.filter((id) => id !== boat.id) })}
+                          />
+                        </article>
+                      );
+                    })}
+                  </div>
+                </FormSection>
+              ) : null}
+
+              {activeTab === 'publishing' ? (
+                <FormSection title="Configuracion avanzada" description="Campos internos para URL, orden y control de publicacion." icon={<Settings2 size={16} />}>
+                  <div className="admin-form-columns">
+                    <label className="admin-field">
+                      <span className="admin-field__label">Slug</span>
+                      <input className="admin-input" aria-invalid={fieldErrors.slug ? true : undefined} value={editing.slug} onChange={(event) => markEditing({ ...editing, slug: slugify(event.target.value) })} />
+                      <span className="admin-field-help">Se genera desde el nombre, pero puedes ajustarlo. Solo letras, numeros y guiones.</span>
+                      {fieldErrors.slug ? <span className="admin-field-error">{fieldErrors.slug}</span> : null}
+                    </label>
+                    <label className="admin-field">
+                      <span className="admin-field__label">Orden de aparicion</span>
+                      <input className="admin-input" type="number" value={editing.sortOrder} onChange={(event) => markEditing({ ...editing, sortOrder: Number(event.target.value) })} />
+                    </label>
+                  </div>
+                  <div className="admin-form-columns">
+                    <button className="admin-btn admin-btn--secondary" type="button" disabled={saving} onClick={() => markEditing({ ...editing, slug: slugify(editing.title) })}>Generar slug desde nombre</button>
+                  </div>
+                  <p className="admin-field-help">ID interno: {editing.id}</p>
+                </FormSection>
+              ) : null}
             </div>
+
             <ModalFooter>
-              <button className="admin-btn admin-btn--secondary" type="button" onClick={() => setEditing(null)}>Cerrar</button>
-              <button className="admin-btn" type="button" disabled={saving} onClick={() => void saveTour()}>{saving ? 'Guardando...' : 'Guardar cambios'}</button>
+              <button className="admin-btn admin-btn--secondary" type="button" disabled={saving} onClick={requestClose}>Cancelar</button>
+              <button className="admin-btn admin-btn--ghost" type="button" disabled={saving} onClick={() => void saveEditor('draft')}>Guardar borrador</button>
+              <button className="admin-btn" type="submit" disabled={saving} aria-busy={saving}>
+                {saving ? <><Loader2 size={15} className="animate-spin" /> Guardando...</> : <><Save size={15} /> {editing.publicationStatus === 'published' ? 'Guardar cambios' : 'Publicar tour'}</>}
+              </button>
             </ModalFooter>
+          </form>
+        ) : null}
+      </Modal>
+
+      <Modal open={Boolean(deletePackage)} onClose={() => setDeletePackage(null)} titleId="package-delete-title" className="max-w-md">
+        {deletePackage && editing ? (
+          <div className="admin-modal-card">
+            <h2 id="package-delete-title" className="admin-card__title"><Trash2 size={18} /> Eliminar duracion y precio</h2>
+            <p className="admin-muted mt-2">Esta accion elimina "{deletePackage.name}". Si ya tiene reservas historicas, la base de datos puede impedir la eliminacion.</p>
+            <div className="admin-image-manager__actions mt-5">
+              <button className="admin-btn admin-btn--danger" type="button" onClick={() => { markEditing({ ...editing, packages: editing.packages.map((pkg) => pkg.id === deletePackage.id ? { ...pkg, pendingDelete: true } : pkg) }); setDeletePackage(null); }}><Trash2 size={16} /> Eliminar</button>
+              <button className="admin-btn admin-btn--ghost" type="button" onClick={() => setDeletePackage(null)}>Cancelar</button>
+            </div>
+          </div>
+        ) : null}
+      </Modal>
+
+      <Modal open={Boolean(deleteImage)} onClose={() => setDeleteImage(null)} titleId="tour-image-delete-title" className="max-w-md">
+        {deleteImage ? (
+          <div className="admin-modal-card">
+            <h2 id="tour-image-delete-title" className="admin-card__title"><Trash2 size={18} /> Eliminar imagen</h2>
+            <p className="admin-muted mt-2">La imagen se quitara de la galeria del tour.</p>
+            <div className="admin-image-manager__actions mt-5">
+              <button className="admin-btn admin-btn--danger" type="button" onClick={() => void confirmDeleteImage(deleteImage)}><Trash2 size={16} /> Eliminar</button>
+              <button className="admin-btn admin-btn--ghost" type="button" onClick={() => setDeleteImage(null)}>Cancelar</button>
+            </div>
           </div>
         ) : null}
       </Modal>

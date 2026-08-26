@@ -6,6 +6,7 @@ import type { BoatTour } from '../../types/boatTour';
 import { getTourText } from '../../i18n/content';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { getEffectiveMaxGuests } from '../../utils/bookingPricing';
+import { formatCurrency } from '../../utils/formatCurrency';
 import { CardActions, CardContent, CardMedia, CardShell, PriceLabel, SpecItem, SpecsGrid } from '../ui';
 import { TourDetailModal } from './TourDetailModal';
 
@@ -51,9 +52,18 @@ export function BoatTourCard({ boat, tour, relatedTours, isSelected, onSelect }:
 
             <SpecsGrid>
               <SpecItem icon={Clock} value={getDurationLabel(tour, display.duration, language)} />
-              <SpecItem icon={Users} value={`${language === 'es' ? 'MÃ¡x.' : 'Max'} ${effectiveMaxGuests}`} />
+              <SpecItem icon={Users} value={language === 'es' ? `Hasta ${effectiveMaxGuests} personas` : `Up to ${effectiveMaxGuests} guests`} />
               <SpecItem icon={Compass} value={display.category} />
             </SpecsGrid>
+
+            <div className="mt-4 grid gap-1.5">
+              {packageTours.slice(0, 3).map((item) => (
+                <div className="flex items-center justify-between gap-3 text-xs font-bold text-ocean-200" key={item.id}>
+                  <span className="truncate">{item.name.replace(/^.* - /, '')}</span>
+                  <span className="shrink-0 text-ocean-400">{formatCurrency(item.basePrice)}</span>
+                </div>
+              ))}
+            </div>
 
             <CardActions>{language === 'es' ? 'Ver tour' : 'View Tour'}</CardActions>
           </CardContent>

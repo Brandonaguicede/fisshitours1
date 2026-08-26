@@ -81,6 +81,17 @@ export function getTourDisplay(tour: BoatTour, language: Language) {
 }
 
 export function getTourText(tour: BoatTour, language: Language): TourText {
+  if ((tour.activities?.length ?? 0) > 0 || (tour.included?.length ?? 0) > 0 || tour.tourTitle || tour.shortDescription) {
+    const dynamicTitle = (tour.tourTitle ?? tour.name.replace(/\s+-\s+.*$/, '')).replace(/\s+Tour$/i, '');
+    return {
+      title: dynamicTitle,
+      category: tour.category,
+      tags: tour.activities?.length ? tour.activities : [tour.category],
+      duration: tour.duration ? `${tour.duration} ${language === 'es' ? 'horas' : 'hours'}` : undefined,
+      activities: tour.activities?.length ? tour.activities : [tour.category],
+      included: tour.included ?? [],
+    };
+  }
   const group = getTourDisplay(tour, language);
   if (typeof group.title === 'string') {
     return {
