@@ -26,7 +26,7 @@ serve(async (req) => {
   const supabase = createClient(supabaseUrl, serviceRole, { auth: { persistSession: false } });
   const { data: pkg, error } = await supabase
     .from('tour_packages')
-    .select('id, boat_tour_id, base_price, included_guests, max_guests, extra_guest_price, custom_quote, boat_tours!inner(boat_id, tour_id, active, boats!inner(active), tours!inner(active))')
+    .select('id, boat_tour_id, base_price, included_guests, max_guests, extra_guest_price, custom_quote, boat_tours!inner(boat_id, tour_id, active, boats!inner(active, max_guests), tours!inner(active))')
     .eq('id', parsed.data.tourPackageId)
     .eq('active', true)
     .eq('boat_tours.boat_id', parsed.data.boatId)
@@ -37,10 +37,12 @@ serve(async (req) => {
 
   if (error || !pkg) return Response.json({ message: 'Tour package not found' }, { status: 404, headers });
   const boatTour = Array.isArray(pkg.boat_tours) ? pkg.boat_tours[0] : pkg.boat_tours;
+  const boat = Array.isArray(boatTour?.boats) ? boatTour.boats[0] : boatTour?.boats;
   if (!boatTour?.active) return Response.json({ message: 'Tour package is not available' }, { status: 404, headers });
   if (boatTour.boat_id !== parsed.data.boatId) return Response.json({ message: 'Tour package does not belong to boat' }, { status: 400, headers });
   if (parsed.data.tourId && boatTour.tour_id !== parsed.data.tourId) return Response.json({ message: 'Tour package does not belong to tour' }, { status: 400, headers });
-  if (parsed.data.guests > pkg.max_guests) return Response.json({ message: 'Guest quantity exceeds capacity' }, { status: 400, headers });
+  const effectiveMaxGuests = Math.min(pkg.max_guests, boat?.max_guests ?? pkg.max_guests);
+  if (parsed.data.guests > effectiveMaxGuests) return Response.json({ message: 'Guest quantity exceeds capacity' }, { status: 400, headers });
   if (pkg.custom_quote) return Response.json({ custom_quote: true, total: null, currency: 'USD' }, { headers });
 
   const extraGuests = Math.max(parsed.data.guests - pkg.included_guests, 0);
@@ -71,7 +73,7 @@ serve(async (req) => {
     custom_quote: false,
     base_price: Number(pkg.base_price),
     included_guests: pkg.included_guests,
-    max_guests: pkg.max_guests,
+    max_guests: effectiveMaxGuests,
     extra_guest_price: Number(pkg.extra_guest_price),
     extra_guests: extraGuests,
     extra_guests_total: extraGuestsTotal,

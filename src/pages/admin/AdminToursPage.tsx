@@ -48,7 +48,7 @@ interface EditablePackage {
   packageType: string;
   durationValue: number;
   durationUnit: 'hours' | 'days';
-  basePrice: number;
+  basePrice: string;
   includedGuests: number;
   maxGuests: number;
   extraGuestPrice: number;
@@ -140,6 +140,36 @@ function packageLabel(pkg: EditablePackage) {
   return `${pkg.name || 'Duracion sin nombre'} - ${pkg.durationValue || 0} ${pkg.durationUnit === 'hours' ? 'h' : 'dia(s)'}`;
 }
 
+function getBasePriceError(value: string) {
+  if (!value.trim()) return 'El precio base es obligatorio.';
+  const price = Number(value);
+  if (!Number.isFinite(price) || price < 0) return 'El precio base debe ser un numero no negativo.';
+  return undefined;
+}
+
+function createEditablePackage(boatId: string, sortOrder: number): EditablePackage {
+  return {
+    id: `package-${crypto.randomUUID().slice(0, 8)}`,
+    boatTourId: null,
+    boatId,
+    name: 'Half Day',
+    packageType: 'half-day',
+    durationValue: 4,
+    durationUnit: 'hours',
+    basePrice: '650',
+    includedGuests: 5,
+    maxGuests: 10,
+    extraGuestPrice: 65,
+    customQuote: false,
+    description: '',
+    imageUrl: null,
+    imagePublicId: null,
+    sortOrder,
+    active: true,
+    isNew: true,
+  };
+}
+
 function createEditor(tour: TourRow, packageRows: PackageRow[], boatTours: BoatTourRow[], images: TourImageRow[], inclusions: TourInclusionRow[]): TourEditor {
   return {
     id: tour.id,
@@ -169,7 +199,7 @@ function createEditor(tour: TourRow, packageRows: PackageRow[], boatTours: BoatT
           packageType: pkg.package_type,
           durationValue: duration.durationValue,
           durationUnit: duration.durationUnit,
-          basePrice: Number(pkg.base_price),
+          basePrice: String(pkg.base_price),
           includedGuests: pkg.included_guests,
           maxGuests: pkg.max_guests,
           extraGuestPrice: Number(pkg.extra_guest_price),
@@ -311,9 +341,10 @@ export default function AdminToursPage() {
     }
 
     await loadTours();
-    setEditing(createEditor(data, [], boatTours, [], []));
-    setActiveTab('info');
-    setDirty(false);
+    const editor = createEditor(data, [], boatTours, [], []);
+    setEditing({ ...editor, packages: [createEditablePackage('', 1)] });
+    setActiveTab('packages');
+    setDirty(true);
   }
 
   function requestClose() {
@@ -329,16 +360,25 @@ export default function AdminToursPage() {
     if (!editor.description.trim()) errors.description = 'La descripcion corta es obligatoria.';
     if (!editor.slug.trim() || !/^[a-z0-9-]+$/.test(editor.slug)) errors.slug = 'Usa solo letras minusculas, numeros y guiones.';
     if (tours.some((tour) => tour.id !== editor.id && tour.slug === editor.slug.trim())) errors.slug = 'Ya existe otro tour con este slug.';
+    const availablePackages = editor.packages.filter((pkg) => !pkg.pendingDelete);
+    if (editor.publicationStatus === 'published' && !availablePackages.some((pkg) => pkg.active && pkg.boatId)) {
+      errors.packages = 'Para publicar el tour necesitas al menos un Package activo asociado a un bote.';
+    }
     editor.packages.forEach((pkg) => {
       if (pkg.pendingDelete) return;
       if (!pkg.name.trim()) errors[`package-${pkg.id}-name`] = 'El nombre visible es obligatorio.';
       if (!pkg.boatId) errors[`package-${pkg.id}-boat`] = 'Selecciona el barco al que aplica este paquete.';
       if (!pkg.customQuote) {
         if (!Number.isFinite(pkg.durationValue) || pkg.durationValue <= 0) errors[`package-${pkg.id}-duration`] = 'La duracion debe ser mayor a cero.';
-        if (!Number.isFinite(pkg.basePrice) || pkg.basePrice < 0) errors[`package-${pkg.id}-price`] = 'El precio base no puede ser negativo.';
+        const priceError = getBasePriceError(pkg.basePrice);
+        if (priceError) errors[`package-${pkg.id}-price`] = priceError;
       }
       if (!Number.isFinite(pkg.includedGuests) || pkg.includedGuests < 1) errors[`package-${pkg.id}-included`] = 'Debe incluir al menos 1 persona.';
       if (!Number.isFinite(pkg.maxGuests) || pkg.maxGuests < pkg.includedGuests) errors[`package-${pkg.id}-max`] = 'La capacidad maxima no puede ser menor a las personas incluidas.';
+      const packageBoat = boats.find((boat) => boat.id === pkg.boatId);
+      if (packageBoat && Number.isFinite(pkg.maxGuests) && pkg.maxGuests > packageBoat.max_guests) {
+        errors[`package-${pkg.id}-max`] = `El maximo de invitados del paquete no puede superar la capacidad del bote (${packageBoat.max_guests}).`;
+      }
       if (!Number.isFinite(pkg.extraGuestPrice) || pkg.extraGuestPrice < 0) errors[`package-${pkg.id}-extra`] = 'El precio adicional no puede ser negativo.';
     });
     return errors;
@@ -373,6 +413,7 @@ export default function AdminToursPage() {
     setFieldErrors(errors);
     if (Object.keys(errors).length > 0) {
       setError('Revisa los campos marcados antes de guardar.');
+      if (errors.packages || Object.keys(errors).some((key) => key.startsWith('package-'))) setActiveTab('packages');
       return;
     }
 
@@ -427,7 +468,7 @@ export default function AdminToursPage() {
           package_type: pkg.packageType.trim() || slugify(pkg.name),
           description: pkg.description.trim() || null,
           duration_minutes: durationToMinutes(pkg.durationValue, pkg.durationUnit),
-          base_price: pkg.basePrice,
+          base_price: Number(pkg.basePrice),
           included_guests: pkg.includedGuests,
           max_guests: pkg.maxGuests,
           extra_guest_price: pkg.extraGuestPrice,
@@ -591,29 +632,7 @@ export default function AdminToursPage() {
     const lastBoatId = editing.packages[editing.packages.length - 1]?.boatId || boats[0]?.id || '';
     markEditing({
       ...editing,
-      packages: [
-        ...editing.packages,
-        {
-          id: `package-${crypto.randomUUID().slice(0, 8)}`,
-          boatTourId: null,
-          boatId: lastBoatId,
-          name: 'Half Day',
-          packageType: 'half-day',
-          durationValue: 4,
-          durationUnit: 'hours',
-          basePrice: 650,
-          includedGuests: 5,
-          maxGuests: 10,
-          extraGuestPrice: 65,
-          customQuote: false,
-          description: '',
-          imageUrl: null,
-          imagePublicId: null,
-          sortOrder: editing.packages.length + 1,
-          active: true,
-          isNew: true,
-        },
-      ],
+      packages: [...editing.packages, createEditablePackage(lastBoatId, editing.packages.length + 1)],
     });
   }
 
@@ -828,6 +847,7 @@ export default function AdminToursPage() {
 
               {activeTab === 'packages' ? (
                 <FormSection title="Paquetes" description="Cada paquete es la unica fuente de precio, duracion, personas incluidas y capacidad para esa combinacion de tour y bote." icon={<Package size={16} />}>
+                  {fieldErrors.packages ? <div className="admin-alert admin-alert--danger" role="alert">{fieldErrors.packages}</div> : null}
                   <div className="admin-actions">
                     <button className="admin-btn" type="button" onClick={addPackage}><Plus size={16} /> Agregar paquete</button>
                   </div>
@@ -895,7 +915,25 @@ export default function AdminToursPage() {
                             <div className="admin-form-columns">
                               <label className="admin-field">
                                 <span className="admin-field__label">Precio base USD</span>
-                                <input className="admin-input" type="number" min={0} aria-invalid={fieldErrors[`package-${pkg.id}-price`] ? true : undefined} value={pkg.basePrice} onChange={(event) => markEditing({ ...editing, packages: editing.packages.map((item) => item.id === pkg.id ? { ...item, basePrice: Number(event.target.value) } : item) })} />
+                                <input
+                                  className="admin-input admin-input--manual-number"
+                                  type="number"
+                                  inputMode="decimal"
+                                  min={0}
+                                  step="any"
+                                  aria-invalid={fieldErrors[`package-${pkg.id}-price`] ? true : undefined}
+                                  value={pkg.basePrice}
+                                  onChange={(event) => markEditing({ ...editing, packages: editing.packages.map((item) => item.id === pkg.id ? { ...item, basePrice: event.target.value } : item) })}
+                                  onBlur={() => {
+                                    const message = getBasePriceError(pkg.basePrice);
+                                    setFieldErrors((current) => {
+                                      const next = { ...current };
+                                      if (message) next[`package-${pkg.id}-price`] = message;
+                                      else delete next[`package-${pkg.id}-price`];
+                                      return next;
+                                    });
+                                  }}
+                                />
                                 {fieldErrors[`package-${pkg.id}-price`] ? <span className="admin-field-error">{fieldErrors[`package-${pkg.id}-price`]}</span> : null}
                               </label>
                               <label className="admin-field">

@@ -22,6 +22,8 @@ interface AdminImageManagerProps {
   previewAspect?: number;
   label?: string;
   requireReplacementToDelete?: boolean;
+  disabled?: boolean;
+  retainPreviousOnUpload?: boolean;
   onImageSaved?: (image: StorageImage) => Promise<void> | void;
   onImageDeleted?: (storagePath: string) => Promise<void> | void;
 }
@@ -45,6 +47,8 @@ export default function AdminImageManager({
   previewAspect,
   label,
   requireReplacementToDelete = false,
+  disabled = false,
+  retainPreviousOnUpload = false,
   onImageSaved,
   onImageDeleted,
 }: AdminImageManagerProps) {
@@ -75,6 +79,7 @@ export default function AdminImageManager({
   }, [cropFile]);
 
   function acceptFile(file: File | null) {
+    if (disabled) return;
     if (!file) return;
     const allowed = ['image/jpeg', 'image/png', 'image/webp'];
     if (!allowed.includes(file.type)) {
@@ -194,7 +199,7 @@ export default function AdminImageManager({
       setImageUrl(image.public_url);
       setStoragePath(image.storage_path);
 
-      if (previousStoragePath && previousStoragePath !== image.storage_path) {
+      if (!retainPreviousOnUpload && previousStoragePath && previousStoragePath !== image.storage_path) {
         try {
           await deleteStorageImage({ storagePath: previousStoragePath, resourceTable, resourceId });
         } catch {
@@ -251,7 +256,9 @@ export default function AdminImageManager({
     <div className="admin-image-manager">
       <div
         className={`admin-image-manager__preview${dragOver ? ' admin-image-manager__preview--drag' : ''}`}
+        aria-disabled={disabled || undefined}
         onDragOver={(event) => {
+          if (disabled) return;
           event.preventDefault();
           setDragOver(true);
         }}
@@ -280,9 +287,9 @@ export default function AdminImageManager({
       ) : null}
 
       <div className="admin-image-manager__actions">
-        <label className="admin-btn admin-btn--secondary admin-image-manager__pick" role="button" tabIndex={0}
+        <label className="admin-btn admin-btn--secondary admin-image-manager__pick" role="button" tabIndex={disabled ? -1 : 0} aria-disabled={disabled || undefined}
           onKeyDown={(event) => {
-            if (event.key === 'Enter' || event.key === ' ') {
+            if (!disabled && (event.key === 'Enter' || event.key === ' ')) {
               event.preventDefault();
               inputRef.current?.click();
             }
@@ -295,6 +302,7 @@ export default function AdminImageManager({
             accept="image/jpeg,image/png,image/webp"
             className="sr-only"
             aria-label="Elegir archivo de imagen"
+            disabled={disabled}
             onChange={(event) => acceptFile(event.target.files?.[0] ?? null)}
           />
         </label>

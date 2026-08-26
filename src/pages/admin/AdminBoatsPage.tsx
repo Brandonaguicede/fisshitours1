@@ -87,7 +87,9 @@ export default function AdminBoatsPage() {
   const [pendingBoatDelete, setPendingBoatDelete] = useState<BoatRow | null>(null);
   const [saving, setSaving] = useState(false);
   const [startingPrices, setStartingPrices] = useState<Record<string, number>>({});
-  const [fieldErrors, setFieldErrors] = useState<{ id?: string; slug?: string; name?: string; maxGuests?: string }>({});
+  const [fieldErrors, setFieldErrors] = useState<{ id?: string; slug?: string; name?: string; maxGuests?: string; images?: string }>({});
+
+  const isValidActiveImageCount = (count: number) => count >= 3 && count <= 9 && count % 3 === 0;
 
   async function loadBoats() {
     setLoading(true);
@@ -175,7 +177,7 @@ export default function AdminBoatsPage() {
       max_guests: 10,
       image_url: null,
       image_public_id: null,
-      active: true,
+      active: false,
       sort_order: (boats?.length ?? 0) + 1,
       boat_images: [],
     });
@@ -251,6 +253,10 @@ export default function AdminBoatsPage() {
     } else if (editing.id === 'segundo-viento' && editing.max_guests > 10) {
       nextFieldErrors.maxGuests = 'Second Wind no puede superar 10 pasajeros.';
     }
+    const activeImageCount = (editing.boat_images?.length ? editing.boat_images : fallbackBoatImages(editing)).filter((image) => image.active).length;
+    if (editing.active && !isValidActiveImageCount(activeImageCount)) {
+      nextFieldErrors.images = 'Para activar el bote necesitas exactamente 3, 6 o 9 imagenes.';
+    }
     setFieldErrors(nextFieldErrors);
     if (Object.keys(nextFieldErrors).length > 0) {
       setError('Revisa los campos marcados antes de guardar.');
@@ -316,6 +322,13 @@ export default function AdminBoatsPage() {
   async function onGalleryImageSaved(image: StorageImage) {
     if (!editing) return;
     const currentImages = editing.boat_images ?? [];
+    if (currentImages.length >= 9) throw new Error('El bote ya alcanzo el maximo de 9 imagenes.');
+    const nextImageCount = currentImages.length + 1;
+    const deactivatedForImageCount = editing.active && !isValidActiveImageCount(nextImageCount);
+    if (deactivatedForImageCount) {
+      const { error: deactivateError } = await supabase.from('boats').update({ active: false, updated_at: new Date().toISOString() }).eq('id', editing.id);
+      if (deactivateError) throw new Error(deactivateError.message);
+    }
     const shouldBePrimary = currentImages.length === 0;
     const { data, error } = await db
       .from('boat_images')
@@ -333,6 +346,9 @@ export default function AdminBoatsPage() {
     if (error) throw new Error(error.message);
     const nextImages = shouldBePrimary ? [data as BoatImageRow] : [...currentImages, data as BoatImageRow];
     await syncBoatImageFields(editing.id, nextImages);
+    if (deactivatedForImageCount) {
+      setNotice(`Imagen agregada. El bote se inactivo temporalmente porque ahora tiene ${nextImages.length} imagenes; podras activarlo al completar 3, 6 o 9.`);
+    }
     setSelectedImageId((data as BoatImageRow).id);
     await refreshEditing(editing.id);
   }
@@ -374,6 +390,11 @@ export default function AdminBoatsPage() {
     if (!editing) return;
     const currentImages = editing.boat_images ?? [];
     const remaining = currentImages.filter((item) => item.id !== image.id);
+    if (editing.active && !isValidActiveImageCount(remaining.length)) {
+      setPendingDelete(null);
+      setError(`No puedes eliminar esta imagen mientras el bote esta activo: quedaria con ${remaining.length}. Inactivalo primero.`);
+      return;
+    }
     if (image.is_primary && remaining.length > 0) {
       const replacement = remaining[0];
       await db.from('boat_images').update({ is_primary: true }).eq('id', replacement.id);
@@ -528,8 +549,14 @@ export default function AdminBoatsPage() {
                         maxWidth={1600}
                         maxHeight={900}
                         maxSizeMB={0.6}
+                        disabled={editorImages.length >= 9}
+                        retainPreviousOnUpload
                         onImageSaved={onGalleryImageSaved}
                       />
+                      <p className="admin-field-help" aria-live="polite">
+                        {editorImages.length} / 9 imagenes. Para activar el bote necesitas 3, 6 o 9 imagenes. Maximo 9 imagenes.
+                      </p>
+                      {fieldErrors.images ? <span className="admin-field-error">{fieldErrors.images}</span> : null}
                     </>
                   ) : (
                     <div className="admin-empty">Completa los datos y guarda el bote. Despues podras subir sus fotos.</div>
@@ -601,7 +628,18 @@ export default function AdminBoatsPage() {
                 </label>
                 <ToggleSwitch
                   checked={editing.active}
-                  onChange={(active) => setEditing({ ...editing, active })}
+                  onChange={(active) => {
+                    if (active && !isValidActiveImageCount(editorImages.length)) {
+                      setFieldErrors((current) => ({ ...current, images: 'Para activar el bote necesitas exactamente 3, 6 o 9 imagenes.' }));
+                      return;
+                    }
+                    setFieldErrors((current) => {
+                      const next = { ...current };
+                      delete next.images;
+                      return next;
+                    });
+                    setEditing({ ...editing, active });
+                  }}
                   label="Bote activo"
                   description="Los botes inactivos no se muestran en el sitio ni admiten reservaciones."
                   disabled={saving}

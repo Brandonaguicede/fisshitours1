@@ -649,8 +649,26 @@ body:has(.admin-login) {
 }
 
 .admin-input {
-  min-width: min(100%, 16rem);
+  min-width: 0;
+  max-width: 100%;
   padding: 0.55rem 0.75rem;
+}
+
+.admin-input--manual-number {
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+.admin-input--manual-number::-webkit-inner-spin-button,
+.admin-input--manual-number::-webkit-outer-spin-button {
+  margin: 0;
+  -webkit-appearance: none;
+}
+
+.admin-image-manager__pick[aria-disabled='true'] {
+  cursor: not-allowed;
+  opacity: 0.55;
+  pointer-events: none;
 }
 
 .admin-select {
