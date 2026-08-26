@@ -84,8 +84,9 @@
     color: #133E62;
     --ease-out-strong: cubic-bezier(0.23, 1, 0.32, 1);
     --ease-in-out-strong: cubic-bezier(0.77, 0, 0.175, 1);
-    --home-anchor-offset: 96px;
-    --nav-section-gap: 28px;
+    --header-safe-height: 72px;
+    --nav-section-gap: 32px;
+    --home-anchor-offset: calc(var(--header-safe-height) + var(--nav-section-gap));
   }
 
   html {
@@ -125,6 +126,7 @@
 @media (min-width: 640px) {
   :root {
     --layout-gutter: 1.5rem;
+    --header-safe-height: 96px;
     --nav-section-gap: 44px;
     --section-space-block: 5rem;
   }
@@ -133,7 +135,7 @@
 @media (min-width: 1024px) {
   :root {
     --layout-gutter: 2rem;
-    --nav-section-gap: 52px;
+    --nav-section-gap: 56px;
     --section-space-block: 6rem;
   }
 }

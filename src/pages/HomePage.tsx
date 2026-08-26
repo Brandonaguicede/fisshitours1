@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 
 import { BookingPanel } from '../components/booking/BookingPanel';
@@ -18,6 +18,7 @@ import type { Boat } from '../types/boat';
 import type { BoatTour } from '../types/boatTour';
 import { getActiveBoats } from '../services/boatService';
 import { getActiveBoatTours } from '../services/boatTourService';
+import { scrollToHomeSection } from '../utils/homeNavigation';
 
 export default function HomePage() {
   const { language } = useLanguage();
@@ -27,7 +28,6 @@ export default function HomePage() {
   const catalogTours = toursQuery.data?.length ? toursQuery.data : boatTours;
   const [selectedBoatId, setSelectedBoatId] = useState(boats[0].id);
   const [selectedTourId, setSelectedTourId] = useState<string | undefined>(boatTours.find((tour) => tour.boatId === boats[0].id)?.id);
-  const bookingRef = useRef<HTMLElement | null>(null);
 
   const selectedBoat = useMemo(() => catalogBoats.find((boat) => boat.id === selectedBoatId) ?? catalogBoats[0], [catalogBoats, selectedBoatId]);
   const selectedTour = useMemo(() => catalogTours.find((tour) => tour.id === selectedTourId && tour.boatId === selectedBoat?.id), [catalogTours, selectedBoat?.id, selectedTourId]);
@@ -35,7 +35,7 @@ export default function HomePage() {
   const catalogLoading = boatsQuery.isLoading || toursQuery.isLoading;
 
   function scrollToTours() {
-    document.getElementById('tours')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    scrollToHomeSection('tours');
   }
 
   function selectBoat(boat: Boat, shouldScrollToTours = true) {
@@ -52,7 +52,7 @@ export default function HomePage() {
       setSelectedBoatId(tourBoat.id);
     }
     setSelectedTourId(tour.id);
-    window.setTimeout(() => bookingRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80);
+    window.setTimeout(() => scrollToHomeSection('booking'), 80);
   }
 
   function viewTourOnHome(tour: BoatTour) {
@@ -84,7 +84,7 @@ export default function HomePage() {
       <Hero />
       <FleetSection boats={catalogBoats} tours={catalogTours} selectedBoat={selectedBoat} onSelectBoat={selectBoat} onViewTourType={viewTourOnHome} onViewAllTours={viewAllToursOnHome} />
       <TourCarouselSection boats={catalogBoats} tours={toursWithKnownBoats} selectedTour={selectedTour} onSelectTour={selectTour} />
-      <section className="home-section bg-ocean-950 py-10 sm:py-14 lg:py-16" data-home-section id="booking" ref={bookingRef}>
+      <section className="home-section bg-ocean-950 py-10 sm:py-14 lg:py-16" data-home-section id="booking">
         <Container>
           <div className="mx-auto max-w-4xl" data-section-anchor>
             <SectionHeader

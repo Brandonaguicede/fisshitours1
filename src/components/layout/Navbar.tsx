@@ -4,7 +4,7 @@ import { Link, NavLink, useLocation } from 'react-router-dom';
 
 import { navigationItems } from '../../constants/navigation';
 import { useLanguage } from '../../i18n/LanguageContext';
-import { scrollToHomeSection } from '../../utils/homeNavigation';
+import { scrollToHomeSection, getHomeAnchorOffset } from '../../utils/homeNavigation';
 import { cn } from '../../utils/cn';
 import { Button, GlassPanel, IconButton } from '../ui';
 import { Container } from '../common/Container';
@@ -59,10 +59,7 @@ export function Navbar() {
     }
 
     function updateActiveSection() {
-      const rootStyles = getComputedStyle(document.documentElement);
-      const configuredGap = Number.parseFloat(rootStyles.getPropertyValue('--nav-section-gap'));
-      const navbarBottom = document.querySelector<HTMLElement>('[data-navbar-bar]')?.getBoundingClientRect().bottom ?? 0;
-      const viewportMarker = navbarBottom + (Number.isFinite(configuredGap) ? configuredGap : 48) + 1;
+      const viewportMarker = getHomeAnchorOffset() + 1;
       const currentSection = Array.from(document.querySelectorAll<HTMLElement>('[data-home-section]')).find((section) => {
         const bounds = section.getBoundingClientRect();
         return Math.round(bounds.top) <= viewportMarker && Math.round(bounds.bottom) > viewportMarker;

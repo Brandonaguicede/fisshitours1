@@ -44,7 +44,7 @@ export function Testimonials() {
       <div className="pointer-events-none absolute -right-28 bottom-10 h-80 w-80 rounded-full bg-seafoam-400/10 blur-3xl" />
 
       <Container className="relative">
-        <div className="grid gap-8 lg:grid-cols-[0.9fr_1.1fr] lg:items-end">
+        <div className="grid gap-8 lg:grid-cols-[0.9fr_1.1fr] lg:items-end" data-section-anchor>
           <SectionHeader
             align="left"
             eyebrow={language === 'es' ? 'Comentarios' : 'Reviews'}

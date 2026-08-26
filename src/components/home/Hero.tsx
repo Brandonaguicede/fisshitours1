@@ -8,6 +8,7 @@ import { Button, IconButton } from '../ui';
 import { FACEBOOK_URL, INSTAGRAM_URL, WHATSAPP_NUMBER } from '../../constants/contact';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { supabase } from '../../lib/supabase';
+import { scrollToHomeSection } from '../../utils/homeNavigation';
 
 const FALLBACK_HERO_IMAGE = '/images/placeholder-image.jpg';
 
@@ -95,7 +96,7 @@ export function Hero() {
   }, [slides.length]);
 
   function scrollToFleet() {
-    document.getElementById('fleet')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    scrollToHomeSection('fleet');
   }
 
   return (
