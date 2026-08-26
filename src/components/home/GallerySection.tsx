@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 
 import type { GalleryCategory } from '../../types/gallery';
 import { Container } from '../common/Container';
-import { Button, CardMedia, CardShell, FilterPill, GlassPanel, SectionHeader } from '../ui';
+import { Button, FilterPill, Gallery, GalleryGrid, GalleryImage, GlassPanel, SectionHeader } from '../ui';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { text, tr } from '../../i18n/translations';
 import { supabase } from '../../lib/supabase';
@@ -77,27 +77,32 @@ export function GallerySection() {
           </div>
         </div>
 
-        <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {visibleImages.map((image) => (
-            <CardShell as="figure" key={image.id} className="group rounded-2xl shadow-soft">
-              <CardMedia alt={image.alt} src={image.src} variant="gallery" />
-            </CardShell>
-          ))}
-        </div>
+        <Gallery closeLabel={language === 'es' ? 'Cerrar galería' : 'Close gallery'}>
+          <GalleryGrid className="mt-10">
+            {visibleImages.map((image) => (
+              <GalleryImage
+                key={image.id}
+                id={String(image.id)}
+                src={image.src}
+                alt={image.alt ?? (language === 'es' ? 'Imagen de la galería' : 'Gallery image')}
+              />
+            ))}
+          </GalleryGrid>
 
-        {!galleryQuery.isLoading && visibleImages.length === 0 ? (
-          <GlassPanel className="mt-10 rounded-3xl p-8 text-center text-ocean-200" variant="subtle">
-            {language === 'es' ? 'La galeria se esta actualizando. Vuelve pronto para ver nuevas imagenes.' : 'The gallery is being updated. Check back soon for new images.'}
-          </GlassPanel>
-        ) : null}
+          {!galleryQuery.isLoading && visibleImages.length === 0 ? (
+            <GlassPanel className="mt-10 rounded-3xl p-8 text-center text-ocean-200" variant="subtle">
+              {language === 'es' ? 'La galeria se esta actualizando. Vuelve pronto para ver nuevas imagenes.' : 'The gallery is being updated. Check back soon for new images.'}
+            </GlassPanel>
+          ) : null}
 
-        {hasMore ? (
-          <div className="mt-8 text-center">
-            <Button variant="glass" type="button" onClick={() => setVisibleCount((count) => count + 4)}>
-              {language === 'es' ? 'Ver más' : 'View More'}
-            </Button>
-          </div>
-        ) : null}
+          {hasMore ? (
+            <div className="mt-8 text-center">
+              <Button variant="glass" type="button" onClick={() => setVisibleCount((count) => count + 4)}>
+                {language === 'es' ? 'Ver más' : 'View More'}
+              </Button>
+            </div>
+          ) : null}
+        </Gallery>
       </Container>
     </section>
   );

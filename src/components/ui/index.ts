@@ -17,6 +17,7 @@ export type { IconButtonSize, IconButtonVariant } from './IconButton';
 export { PriceLabel } from './PriceLabel';
 export { SectionHeader } from './SectionHeader';
 export type { SectionHeaderVariant } from './SectionHeader';
+export { Gallery, GalleryGrid, GalleryImage } from './SharedElementGallery';
 export { MediaGallery } from './MediaGallery';
 export type { MediaGalleryImage } from './MediaGallery';
 export { ModalShell } from './ModalShell';
