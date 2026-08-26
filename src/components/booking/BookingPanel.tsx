@@ -13,7 +13,7 @@ import { getActivePaymentMethods } from '../../services/paymentService';
 import type { Boat } from '../../types/boat';
 import type { BoatTour } from '../../types/boatTour';
 import { buildBookingPaymentPayload, createWhatsAppBookingMessage, getWhatsAppBookingUrl, type BookingPaymentMethod, type BookingStatus, type BookingPaymentPayload, type PaymentStatus } from '../../utils/bookingPayment';
-import { calculateBookingTotal, getEffectiveMaxGuests, getExtraGuestPrice, getTourIncludedGuests } from '../../utils/bookingPricing';
+import { calculateBookingTotal, getBoatStartingPrice, getEffectiveMaxGuests, getExtraGuestPrice, getTourIncludedGuests } from '../../utils/bookingPricing';
 import { cn } from '../../utils/cn';
 import { formatCurrency } from '../../utils/formatCurrency';
 import { TurnstileBox } from '../common/TurnstileBox';
@@ -72,7 +72,7 @@ export function BookingPanel({ selectedBoat, selectedTour, boats, tours, catalog
   const [activeStep, setActiveStep] = useState(0);
   const [date, setDate] = useState(() => new Date(Date.now() + 86400000).toISOString().slice(0, 10));
   const [timeSlotId, setTimeSlotId] = useState(selectedTimeSlotId ?? selectedTour?.timeSlots[0]?.id ?? '');
-  const [guests, setGuests] = useState(selectedTour ? getTourIncludedGuests(selectedBoat, selectedTour) : selectedBoat.includedGuests);
+  const [guests, setGuests] = useState(getTourIncludedGuests(selectedBoat, selectedTour));
   const [customerName, setCustomerName] = useState('');
   const [customerEmail, setCustomerEmail] = useState('');
   const [customerWhatsapp, setCustomerWhatsapp] = useState('');
@@ -166,7 +166,7 @@ const bookingPayload = selectedTour
     onBoatChange(nextBoat);
     onTourChange(undefined);
     setTimeSlotId('');
-    setGuests(nextBoat.includedGuests);
+    setGuests(getTourIncludedGuests(nextBoat, undefined));
     setBookingStatus('pending');
     setPaymentStatus('pending');
     setPaypalVisible(false);
@@ -215,9 +215,9 @@ const bookingPayload = selectedTour
       setValidationMessage('Please select a date.');
       return null;
     }
-    if (guests < 1 || guests > 10 || guests > effectiveMaxGuests) {
+    if (guests < 1 || guests > effectiveMaxGuests) {
       setActiveStep(1);
-      setValidationMessage('Please select between 1 and 10 guests.');
+      setValidationMessage(`Please select between 1 and ${effectiveMaxGuests} guests.`);
       return null;
     }
     if (!customerName.trim()) {
@@ -364,7 +364,7 @@ const bookingPayload = selectedTour
       <div className="relative mt-4 grid gap-3 xl:mt-5 xl:grid-cols-[minmax(0,1fr)_290px] xl:gap-4">
         <GlassPanel className="p-3 min-[420px]:p-4" variant="surface">
           {activeStep === 0 ? (
-            <BoatStep boats={boats} selectedBoat={selectedBoat} catalogLoading={catalogLoading} onBoatChange={handleBoatChange} onNext={() => setActiveStep(1)} />
+            <BoatStep boats={boats} tours={tours} selectedBoat={selectedBoat} catalogLoading={catalogLoading} onBoatChange={handleBoatChange} onNext={() => setActiveStep(1)} />
           ) : null}
 
           {activeStep === 1 ? (
@@ -502,7 +502,7 @@ const bookingPayload = selectedTour
   );
 }
 
-function BoatStep(props: { boats: Boat[]; selectedBoat: Boat; catalogLoading?: boolean; onBoatChange: (boatId: string) => void; onNext: () => void }) {
+function BoatStep(props: { boats: Boat[]; tours: BoatTour[]; selectedBoat: Boat; catalogLoading?: boolean; onBoatChange: (boatId: string) => void; onNext: () => void }) {
   const { language } = useLanguage();
 
   return (
@@ -526,10 +526,10 @@ function BoatStep(props: { boats: Boat[]; selectedBoat: Boat; catalogLoading?: b
             <img src={boat.image} alt={boat.name} className="h-12 w-12 rounded-xl object-cover sm:h-14 sm:w-14" />
             <span className="min-w-0">
               <span className="block truncate text-sm font-extrabold text-white sm:text-base">{boat.name}</span>
-              <span className="mt-1 block text-xs font-semibold text-ocean-200">{boat.includedGuests} {tr(text.booking.people, language)} - {boat.length}</span>
+              <span className="mt-1 block text-xs font-semibold text-ocean-200">{boat.length}</span>
               <span className="mt-1 block text-xs font-medium text-ocean-400">{boat.featuredSpec}</span>
             </span>
-            <span className="col-span-2 text-sm font-extrabold text-ocean-400 sm:col-span-1 sm:text-right">{boat.basePriceLabel.replace('From ', '')}</span>
+            <span className="col-span-2 text-sm font-extrabold text-ocean-400 sm:col-span-1 sm:text-right">{formatCurrency(getBoatStartingPrice(boat.id, props.tours))}</span>
           </ChoiceCard>
         ))}
       </div>
@@ -720,9 +720,9 @@ function mapBackendPricing(boat: Boat, tour: BoatTour | undefined, guests: numbe
     return {
       isCustomQuote: true,
       basePrice: 0,
-      includedGuests: Number(price.included_guests ?? tour?.includedGuests ?? boat.includedGuests),
+      includedGuests: Number(price.included_guests ?? getTourIncludedGuests(boat, tour)),
       extraGuests: 0,
-      extraGuestPrice: Number(price.extra_guest_price ?? tour?.extraGuestPrice ?? boat.extraGuestPrice),
+      extraGuestPrice: Number(price.extra_guest_price ?? getExtraGuestPrice(boat, tour)),
       extraGuestsTotal: 0,
       extrasTotal: 0,
       total: 0,
@@ -731,7 +731,7 @@ function mapBackendPricing(boat: Boat, tour: BoatTour | undefined, guests: numbe
   return {
     isCustomQuote: false,
     basePrice: Number(price.base_price ?? 0),
-    includedGuests: Number(price.included_guests ?? tour?.includedGuests ?? boat.includedGuests),
+    includedGuests: Number(price.included_guests ?? getTourIncludedGuests(boat, tour)),
     extraGuests: Number(price.extra_guests ?? 0),
     extraGuestPrice: Number(price.extra_guest_price ?? 0),
     extraGuestsTotal: Number(price.extra_guests_total ?? 0),
@@ -746,7 +746,7 @@ function isFullDayTour(tour?: BoatTour) {
 
 function clampGuests(value: number, maxGuests: number) {
   if (!Number.isFinite(value)) return 1;
-  return Math.min(Math.max(Math.round(value), 1), Math.min(maxGuests, 10));
+  return Math.min(Math.max(Math.round(value), 1), maxGuests);
 }
 
 function isValidEmail(value: string) {
@@ -1030,7 +1030,7 @@ function BookingSummary(props: {
       <img src={coverImage} alt={props.selectedBoat.name} className="mt-3 hidden aspect-[16/7] w-full rounded-xl object-cover min-[520px]:block xl:aspect-[16/8]" loading="lazy" />
       <div className="mt-3 sm:mt-4">
         <h3 className="text-lg font-extrabold text-white sm:text-xl">{props.selectedBoat.name}</h3>
-        <p className="mt-1 text-sm font-semibold text-ocean-300">{props.selectedBoat.includedGuests} {tr(text.booking.people, language)} - {props.selectedBoat.length} - {props.selectedBoat.engine}</p>
+        <p className="mt-1 text-sm font-semibold text-ocean-300">{props.selectedBoat.length} - {props.selectedBoat.engine}</p>
       </div>
       <div className="mt-4 grid gap-2 text-sm text-ocean-100">
         <SummaryRow label={tr(text.booking.tourType, language)} value={props.selectedTour ? `${selectedTourName}${props.selectedTour.duration ? ` (${props.selectedTour.duration}h)` : ''}` : tr(text.booking.selectTour, language)} />
@@ -1040,8 +1040,8 @@ function BookingSummary(props: {
         {isFullDayTour(props.selectedTour) ? <SummaryRow label={language === 'es' ? 'Comida' : 'Meal option'} value={props.mealOption || (language === 'es' ? 'No seleccionada' : 'Not selected')} /> : null}
       </div>
       <GlassPanel className="mt-4 p-3 sm:mt-5 sm:p-4" variant="subtle">
-        <SummaryRow label={language === 'es' ? 'Precio base del bote' : 'Boat base price'} value={subtotal} />
-        <SummaryRow label={language === 'es' ? 'Incluye hasta' : 'Includes up to'} value={`${props.selectedTour ? getTourIncludedGuests(props.selectedBoat, props.selectedTour) : props.selectedBoat.includedGuests} ${language === 'es' ? 'personas' : 'guests'}`} />
+        <SummaryRow label={language === 'es' ? 'Precio base' : 'Base price'} value={subtotal} />
+        <SummaryRow label={language === 'es' ? 'Incluye hasta' : 'Includes up to'} value={`${getTourIncludedGuests(props.selectedBoat, props.selectedTour)} ${language === 'es' ? 'personas' : 'guests'}`} />
         {props.pricing.extraGuests > 0 ? <SummaryRow label={tr(text.booking.extraPeople, language)} value={`${props.pricing.extraGuests} x ${formatCurrency(props.pricing.extraGuestPrice)}`} /> : null}
         <SummaryRow label={tr(text.booking.taxes, language)} value={extrasTotal} />
         <div className="mt-4 flex flex-wrap items-end justify-between gap-3 border-t border-white/10 pt-4">

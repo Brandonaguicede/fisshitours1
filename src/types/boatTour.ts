@@ -26,11 +26,12 @@ export interface BoatTour {
   included?: string[];
   galleryImages?: Array<{ src: string; alt: string }>;
   duration?: number;
+  /** All commercial terms below come from tour_packages — the single source of truth. */
   basePrice: number;
-  includedGuests?: number;
-  maxGuests?: number;
-  extraGuestPrice?: number;
-  customQuote?: boolean;
+  includedGuests: number;
+  maxGuests: number;
+  extraGuestPrice: number;
+  customQuote: boolean;
   image: string;
   timeSlots: TourTimeSlot[];
 }

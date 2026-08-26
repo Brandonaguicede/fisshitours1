@@ -1,4 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
+import { useQuery } from '@tanstack/react-query';
 import { Mail, MapPin, MessageCircle, Phone, Send } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
@@ -7,8 +8,19 @@ import { Container } from '../components/common/Container';
 import { Button, CardShell, ChoiceCard, Field, FieldError, GlassPanel, Input, SectionHeader, Select, TextArea } from '../components/ui';
 import { DISPLAY_PHONE, WHATSAPP_NUMBER } from '../constants/contact';
 import { departureTimes } from '../data/departureTimes';
-import { tours } from '../data/tours';
 import { useLanguage } from '../i18n/LanguageContext';
+import { getActiveBoatTours } from '../services/boatTourService';
+
+function uniqueTourOptions(tours: Array<{ tourId?: string; tourTitle?: string }>) {
+  const seen = new Set<string>();
+  const options: Array<{ id: string; title: string }> = [];
+  for (const tour of tours) {
+    if (!tour.tourId || !tour.tourTitle || seen.has(tour.tourId)) continue;
+    seen.add(tour.tourId);
+    options.push({ id: tour.tourId, title: tour.tourTitle });
+  }
+  return options;
+}
 
 const contactText = {
   es: {
@@ -96,6 +108,8 @@ type ContactFormValues = {
 export default function ContactPage() {
   const { language } = useLanguage();
   const copy = contactText[language];
+  const toursQuery = useQuery({ queryKey: ['boatTours', 'active'], queryFn: getActiveBoatTours });
+  const tourOptions = uniqueTourOptions(toursQuery.data ?? []);
   const contactSchema = z.object({
     name: z.string().min(2, copy.errors.name),
     email: z.string().email(copy.errors.email),
@@ -151,8 +165,8 @@ export default function ContactPage() {
                 <Field error={errors.tourType?.message} errorId="contact-tour-error" htmlFor="contact-tour" label={copy.experience}>
                   <Select id="contact-tour" aria-describedby={errors.tourType ? 'contact-tour-error' : undefined} aria-invalid={Boolean(errors.tourType)} autoComplete="off" className="font-semibold" shape="pill" tone="deep" {...register('tourType')}>
                     <option value="">{copy.selectExperience}</option>
-                    {tours.map((tour) => (
-                      <option key={tour.id} value={tour.slug}>
+                    {tourOptions.map((tour) => (
+                      <option key={tour.id} value={tour.id}>
                         {tour.title}
                       </option>
                     ))}

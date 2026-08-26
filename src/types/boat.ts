@@ -5,12 +5,10 @@ export interface Boat {
   image: string;
   images?: string[];
   badge?: string;
-  basePriceLabel: string;
   length: string;
   engine: string;
-  includedGuests: number;
+  /** Physical capacity of the boat. Not a pricing default — see tour_packages for commercial terms. */
   maxGuests: number;
-  extraGuestPrice: number;
   featuredSpec: string;
   tours: string[];
 }

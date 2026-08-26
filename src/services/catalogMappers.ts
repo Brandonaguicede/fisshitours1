@@ -26,12 +26,9 @@ export function mapBoat(row: BoatRow): Boat {
     image: row.image_url ?? '/images/placeholder-image.jpg',
     images: Array.isArray(row.images) ? row.images.filter((item): item is string => typeof item === 'string') : undefined,
     badge: row.badge ?? undefined,
-    basePriceLabel: row.base_price_label ?? 'From $0',
     length: row.length ?? '',
     engine: row.engine ?? '',
-    includedGuests: row.included_guests,
     maxGuests: row.max_guests,
-    extraGuestPrice: Number(row.extra_guest_price),
     featuredSpec: row.featured_spec ?? '',
     tours: [],
   };

@@ -1,16 +1,27 @@
 import type { Boat } from '../types/boat';
 import type { BoatTour } from '../types/boatTour';
 
-export function getTourIncludedGuests(boat: Boat, tour?: BoatTour) {
-  return tour?.includedGuests ?? boat.includedGuests;
+const DEFAULT_INCLUDED_GUESTS = 1;
+const DEFAULT_EXTRA_GUEST_PRICE = 0;
+
+// tour_packages (represented here as BoatTour) is the single source of truth for
+// included guests, extra guest price and base price. `boat.maxGuests` is the boat's
+// physical capacity and is only ever used as a safety ceiling, never as a price default.
+export function getTourIncludedGuests(_boat: Boat, tour?: BoatTour) {
+  return tour?.includedGuests ?? DEFAULT_INCLUDED_GUESTS;
 }
 
 export function getEffectiveMaxGuests(boat: Boat, tour?: BoatTour) {
   return Math.min(boat.maxGuests, tour?.maxGuests ?? boat.maxGuests);
 }
 
-export function getExtraGuestPrice(boat: Boat, tour?: BoatTour) {
-  return tour?.extraGuestPrice ?? boat.extraGuestPrice;
+export function getExtraGuestPrice(_boat: Boat, tour?: BoatTour) {
+  return tour?.extraGuestPrice ?? DEFAULT_EXTRA_GUEST_PRICE;
+}
+
+export function getBoatStartingPrice(boatId: string, tours: BoatTour[]) {
+  const prices = tours.filter((tour) => tour.boatId === boatId && !tour.customQuote).map((tour) => tour.basePrice);
+  return prices.length ? Math.min(...prices) : 0;
 }
 
 export function calculateBookingTotal(boat: Boat, tour: BoatTour | undefined, guests: number) {
@@ -27,9 +38,9 @@ export function calculateBookingTotal(boat: Boat, tour: BoatTour | undefined, gu
     };
   }
 
-  const includedGuests = getTourIncludedGuests(boat, tour);
+  const includedGuests = tour.includedGuests;
   const extraGuests = Math.max(guests - includedGuests, 0);
-  const extraGuestPrice = getExtraGuestPrice(boat, tour);
+  const extraGuestPrice = tour.extraGuestPrice;
   const extraGuestsTotal = extraGuests * extraGuestPrice;
 
   return {

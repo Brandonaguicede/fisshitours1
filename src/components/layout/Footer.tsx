@@ -1,13 +1,26 @@
+import { useQuery } from '@tanstack/react-query';
 import { Facebook, Instagram, Mail, MapPin, Phone } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 import { DISPLAY_PHONE, FACEBOOK_URL, INSTAGRAM_URL } from '../../constants/contact';
 import { navigationItems } from '../../constants/navigation';
-import { tours } from '../../data/tours';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { text, tr } from '../../i18n/translations';
+import { getActiveBoatTours } from '../../services/boatTourService';
 import { Container } from '../common/Container';
 import { IconButton } from '../ui';
+
+function uniqueTourTitles(tours: Array<{ tourId?: string; tourTitle?: string }>) {
+  const seen = new Set<string>();
+  const titles: Array<{ id: string; title: string }> = [];
+  for (const tour of tours) {
+    if (!tour.tourId || !tour.tourTitle || seen.has(tour.tourId)) continue;
+    seen.add(tour.tourId);
+    titles.push({ id: tour.tourId, title: tour.tourTitle });
+    if (titles.length >= 4) break;
+  }
+  return titles;
+}
 
 function navLabel(href: string, language: 'es' | 'en') {
   if (href === '/') return tr(text.nav.home, language);
@@ -20,6 +33,8 @@ function navLabel(href: string, language: 'es' | 'en') {
 
 export function Footer() {
   const { language } = useLanguage();
+  const toursQuery = useQuery({ queryKey: ['boatTours', 'active'], queryFn: getActiveBoatTours });
+  const footerTours = uniqueTourTitles(toursQuery.data ?? []);
 
   return (
     <footer className="bg-ocean-950 text-white" id="footer">
@@ -58,8 +73,8 @@ export function Footer() {
         <div>
           <h3 className="font-semibold">Tours</h3>
           <div className="mt-4 grid gap-2">
-            {tours.slice(0, 4).map((tour) => (
-              <Link className="text-sm text-ocean-200 transition hover:text-ocean-400" key={tour.id} to={`/tours/${tour.slug}`}>
+            {footerTours.map((tour) => (
+              <Link className="text-sm text-ocean-200 transition hover:text-ocean-400" key={tour.id} to="/tours#tours">
                 {tour.title}
               </Link>
             ))}

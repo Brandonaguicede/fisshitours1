@@ -10,6 +10,7 @@ const standardGuests = {
   includedGuests: 5,
   maxGuests: 10,
   extraGuestPrice: 65,
+  customQuote: false,
 };
 
 export const boatTours: BoatTour[] = [

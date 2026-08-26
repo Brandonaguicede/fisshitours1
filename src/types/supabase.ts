@@ -1,4 +1,4 @@
-export type Json =
+﻿export type Json =
   | string
   | number
   | boolean
@@ -7,6 +7,11 @@ export type Json =
   | Json[]
 
 export type Database = {
+  // Allows to automatically instantiate createClient with right options
+  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
+  __InternalSupabase: {
+    PostgrestVersion: "14.15"
+  }
   graphql_public: {
     Tables: {
       [_ in never]: never
@@ -130,6 +135,65 @@ export type Database = {
           },
         ]
       }
+      boat_images: {
+        Row: {
+          active: boolean
+          alt_text: string
+          boat_id: string
+          created_at: string
+          deleted_at: string | null
+          deletion_attempts: number
+          deletion_error: string | null
+          id: string
+          image_url: string
+          is_primary: boolean
+          pending_deletion: boolean
+          sort_order: number
+          storage_path: string | null
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          alt_text?: string
+          boat_id: string
+          created_at?: string
+          deleted_at?: string | null
+          deletion_attempts?: number
+          deletion_error?: string | null
+          id?: string
+          image_url: string
+          is_primary?: boolean
+          pending_deletion?: boolean
+          sort_order?: number
+          storage_path?: string | null
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          alt_text?: string
+          boat_id?: string
+          created_at?: string
+          deleted_at?: string | null
+          deletion_attempts?: number
+          deletion_error?: string | null
+          id?: string
+          image_url?: string
+          is_primary?: boolean
+          pending_deletion?: boolean
+          sort_order?: number
+          storage_path?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "boat_images_boat_id_fkey"
+            columns: ["boat_id"]
+            isOneToOne: false
+            referencedRelation: "boats"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       boat_tours: {
         Row: {
           active: boolean
@@ -202,7 +266,7 @@ export type Database = {
           image_public_id?: string | null
           image_url?: string | null
           images?: Json
-          included_guests: number
+          included_guests?: number
           length?: string | null
           max_guests: number
           name: string
@@ -313,6 +377,27 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      booking_rate_limits: {
+        Row: {
+          attempts: number
+          ip_hash: string
+          updated_at: string
+          window_start: string
+        }
+        Insert: {
+          attempts?: number
+          ip_hash: string
+          updated_at?: string
+          window_start?: string
+        }
+        Update: {
+          attempts?: number
+          ip_hash?: string
+          updated_at?: string
+          window_start?: string
+        }
+        Relationships: []
       }
       booking_status_history: {
         Row: {
@@ -702,13 +787,18 @@ export type Database = {
       }
       media_assets: {
         Row: {
+          active: boolean
           byte_size: number | null
           created_at: string
           created_by: string | null
+          deleted_at: string | null
+          deletion_attempts: number
+          deletion_error: string | null
           height: number | null
           id: string
           mime_type: string | null
           original_filename: string | null
+          pending_deletion: boolean
           provider: string
           provider_id: string
           public_url: string | null
@@ -722,13 +812,18 @@ export type Database = {
           width: number | null
         }
         Insert: {
+          active?: boolean
           byte_size?: number | null
           created_at?: string
           created_by?: string | null
+          deleted_at?: string | null
+          deletion_attempts?: number
+          deletion_error?: string | null
           height?: number | null
           id?: string
           mime_type?: string | null
           original_filename?: string | null
+          pending_deletion?: boolean
           provider?: string
           provider_id: string
           public_url?: string | null
@@ -742,13 +837,18 @@ export type Database = {
           width?: number | null
         }
         Update: {
+          active?: boolean
           byte_size?: number | null
           created_at?: string
           created_by?: string | null
+          deleted_at?: string | null
+          deletion_attempts?: number
+          deletion_error?: string | null
           height?: number | null
           id?: string
           mime_type?: string | null
           original_filename?: string | null
+          pending_deletion?: boolean
           provider?: string
           provider_id?: string
           public_url?: string | null
@@ -1007,6 +1107,7 @@ export type Database = {
       }
       reviews: {
         Row: {
+          active: boolean
           boat_id: string | null
           country: string | null
           created_at: string
@@ -1017,11 +1118,13 @@ export type Database = {
           name: string
           quote: string
           rating: number
+          sort_order: number
           status: string
           tour_id: string | null
           updated_at: string
         }
         Insert: {
+          active?: boolean
           boat_id?: string | null
           country?: string | null
           created_at?: string
@@ -1032,11 +1135,13 @@ export type Database = {
           name: string
           quote: string
           rating: number
+          sort_order?: number
           status?: string
           tour_id?: string | null
           updated_at?: string
         }
         Update: {
+          active?: boolean
           boat_id?: string | null
           country?: string | null
           created_at?: string
@@ -1047,6 +1152,7 @@ export type Database = {
           name?: string
           quote?: string
           rating?: number
+          sort_order?: number
           status?: string
           tour_id?: string | null
           updated_at?: string
@@ -1118,74 +1224,6 @@ export type Database = {
           starts_at?: string
         }
         Relationships: []
-      }
-      tour_packages: {
-        Row: {
-          active: boolean
-          base_price: number
-          boat_tour_id: string
-          created_at: string
-          custom_quote: boolean
-          description: string | null
-          duration_minutes: number | null
-          extra_guest_price: number
-          id: string
-          image_public_id: string | null
-          image_url: string | null
-          included_guests: number
-          max_guests: number
-          name: string
-          package_type: string
-          sort_order: number
-          updated_at: string
-        }
-        Insert: {
-          active?: boolean
-          base_price?: number
-          boat_tour_id: string
-          created_at?: string
-          custom_quote?: boolean
-          description?: string | null
-          duration_minutes?: number | null
-          extra_guest_price?: number
-          id: string
-          image_public_id?: string | null
-          image_url?: string | null
-          included_guests?: number
-          max_guests: number
-          name: string
-          package_type: string
-          sort_order?: number
-          updated_at?: string
-        }
-        Update: {
-          active?: boolean
-          base_price?: number
-          boat_tour_id?: string
-          created_at?: string
-          custom_quote?: boolean
-          description?: string | null
-          duration_minutes?: number | null
-          extra_guest_price?: number
-          id?: string
-          image_public_id?: string | null
-          image_url?: string | null
-          included_guests?: number
-          max_guests?: number
-          name?: string
-          package_type?: string
-          sort_order?: number
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "tour_packages_boat_tour_id_fkey"
-            columns: ["boat_tour_id"]
-            isOneToOne: false
-            referencedRelation: "boat_tours"
-            referencedColumns: ["id"]
-          },
-        ]
       }
       tour_images: {
         Row: {
@@ -1288,6 +1326,74 @@ export type Database = {
           },
         ]
       }
+      tour_packages: {
+        Row: {
+          active: boolean
+          base_price: number
+          boat_tour_id: string
+          created_at: string
+          custom_quote: boolean
+          description: string | null
+          duration_minutes: number | null
+          extra_guest_price: number
+          id: string
+          image_public_id: string | null
+          image_url: string | null
+          included_guests: number
+          max_guests: number
+          name: string
+          package_type: string
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          base_price?: number
+          boat_tour_id: string
+          created_at?: string
+          custom_quote?: boolean
+          description?: string | null
+          duration_minutes?: number | null
+          extra_guest_price?: number
+          id: string
+          image_public_id?: string | null
+          image_url?: string | null
+          included_guests?: number
+          max_guests: number
+          name: string
+          package_type: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          base_price?: number
+          boat_tour_id?: string
+          created_at?: string
+          custom_quote?: boolean
+          description?: string | null
+          duration_minutes?: number | null
+          extra_guest_price?: number
+          id?: string
+          image_public_id?: string | null
+          image_url?: string | null
+          included_guests?: number
+          max_guests?: number
+          name?: string
+          package_type?: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tour_packages_boat_tour_id_fkey"
+            columns: ["boat_tour_id"]
+            isOneToOne: false
+            referencedRelation: "boat_tours"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tours: {
         Row: {
           active: boolean
@@ -1359,6 +1465,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      check_booking_rate_limit: {
+        Args: { p_ip_hash: string; p_limit?: number; p_window_minutes?: number }
+        Returns: boolean
+      }
       create_booking_transaction: { Args: { payload: Json }; Returns: Json }
       expire_pending_paypal_bookings: { Args: never; Returns: number }
       is_admin: { Args: never; Returns: boolean }
@@ -1407,6 +1517,15 @@ export type Database = {
       record_review_attempt: {
         Args: { p_ip_hash: string; p_limit?: number }
         Returns: boolean
+      }
+      update_booking_status: {
+        Args: {
+          p_booking_id: string
+          p_booking_status: string
+          p_note?: string
+          p_payment_status?: string
+        }
+        Returns: Json
       }
     }
     Enums: {
@@ -1543,4 +1662,3 @@ export const Constants = {
     Enums: {},
   },
 } as const
-

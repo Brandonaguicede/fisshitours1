@@ -116,7 +116,6 @@ export function getTourText(tour: BoatTour, language: Language): TourText {
 export function getBoatText(boat: Boat, language: Language) {
   return {
     badge: language === 'es' ? 'Lujo y naturaleza' : boat.badge ?? 'Luxury meets nature',
-    basePriceLabel: language === 'es' ? boat.basePriceLabel.replace('From', 'Desde') : boat.basePriceLabel,
     length: language === 'es' ? 'Bote Cigarette de 32 pies' : boat.length,
     featuredSpec: language === 'es'
       ? 'Garmin GPS, radio VHF, sonido premium JBL, Bluetooth, bano a bordo, juguetes acuaticos, tuna tube, vivero para carnada, equipo de seguridad y poliza de responsabilidad civil.'

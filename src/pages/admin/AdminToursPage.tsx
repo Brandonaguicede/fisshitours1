@@ -3,21 +3,21 @@ import {
   ArrowUp,
   Check,
   Copy,
-  DollarSign,
   Image as ImageIcon,
   ImagePlus,
   Info,
   Loader2,
+  Package,
   Pencil,
   Plus,
   Save,
   Settings2,
-  Ship,
   Sparkles,
   Trash2,
   X,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 
 import AdminImageManager from '../../components/admin/AdminImageManager';
 import { AdminBadge, AdminPageHeader, AdminTable, AdminToolbar } from '../../components/admin/AdminPrimitives';
@@ -28,10 +28,9 @@ import { Modal } from '../../components/common/Modal';
 import { supabase } from '../../lib/supabase';
 import { deleteStorageImage, type StorageImage } from '../../services/imageService';
 import type { Database, Tables } from '../../types/supabase';
-import { money } from './adminMockData';
 
 type TourRow = Tables<'tours'>;
-type BoatRow = Pick<Tables<'boats'>, 'id' | 'name' | 'image_url' | 'included_guests' | 'max_guests' | 'extra_guest_price' | 'active' | 'sort_order'>;
+type BoatRow = Pick<Tables<'boats'>, 'id' | 'name' | 'image_url' | 'max_guests' | 'active' | 'sort_order'>;
 type BoatTourRow = Tables<'boat_tours'>;
 type PackageRow = Tables<'tour_packages'>;
 type DestinationRow = Pick<Tables<'destinations'>, 'id' | 'name' | 'active' | 'sort_order'>;
@@ -39,17 +38,24 @@ type TourImageRow = Tables<'tour_images'>;
 type TourInclusionRow = Tables<'tour_inclusions'>;
 
 type PublicationStatus = 'draft' | 'published' | 'inactive';
-type EditorTab = 'info' | 'experience' | 'prices' | 'boats' | 'publishing';
+type EditorTab = 'info' | 'experience' | 'packages' | 'publishing';
 
 interface EditablePackage {
   id: string;
   boatTourId: string | null;
   boatId: string;
   name: string;
+  packageType: string;
   durationValue: number;
   durationUnit: 'hours' | 'days';
   basePrice: number;
+  includedGuests: number;
+  maxGuests: number;
+  extraGuestPrice: number;
+  customQuote: boolean;
   description: string;
+  imageUrl: string | null;
+  imagePublicId: string | null;
   sortOrder: number;
   active: boolean;
   isNew: boolean;
@@ -84,7 +90,6 @@ interface TourEditor {
   images: TourImageRow[];
   inclusions: EditableInclusion[];
   packages: EditablePackage[];
-  selectedBoatIds: string[];
 }
 
 type FieldErrors = Partial<Record<string, string>>;
@@ -93,8 +98,7 @@ const categories = ['Fishing', 'Snorkeling & Beach', 'Surfing', 'Bioluminescence
 const tabs: Array<{ id: EditorTab; label: string }> = [
   { id: 'info', label: 'Informacion' },
   { id: 'experience', label: 'Experiencia' },
-  { id: 'prices', label: 'Precios' },
-  { id: 'boats', label: 'Barcos' },
+  { id: 'packages', label: 'Paquetes' },
   { id: 'publishing', label: 'Publicacion' },
 ];
 
@@ -137,7 +141,6 @@ function packageLabel(pkg: EditablePackage) {
 }
 
 function createEditor(tour: TourRow, packageRows: PackageRow[], boatTours: BoatTourRow[], images: TourImageRow[], inclusions: TourInclusionRow[]): TourEditor {
-  const relatedBoatTours = boatTours.filter((item) => item.tour_id === tour.id);
   return {
     id: tour.id,
     title: tour.title,
@@ -154,7 +157,6 @@ function createEditor(tour: TourRow, packageRows: PackageRow[], boatTours: BoatT
     sortOrder: tour.sort_order,
     activities: jsonStringArray(tour.highlights),
     images,
-    selectedBoatIds: relatedBoatTours.filter((item) => item.active).map((item) => item.boat_id),
     packages: packageRows
       .map((pkg) => {
         const relation = boatTours.find((item) => item.id === pkg.boat_tour_id);
@@ -164,10 +166,17 @@ function createEditor(tour: TourRow, packageRows: PackageRow[], boatTours: BoatT
           boatTourId: pkg.boat_tour_id,
           boatId: relation?.boat_id ?? '',
           name: pkg.name,
+          packageType: pkg.package_type,
           durationValue: duration.durationValue,
           durationUnit: duration.durationUnit,
           basePrice: Number(pkg.base_price),
+          includedGuests: pkg.included_guests,
+          maxGuests: pkg.max_guests,
+          extraGuestPrice: Number(pkg.extra_guest_price),
+          customQuote: pkg.custom_quote,
           description: pkg.description ?? '',
+          imageUrl: pkg.image_url,
+          imagePublicId: pkg.image_public_id,
           sortOrder: pkg.sort_order,
           active: pkg.active,
           isNew: false,
@@ -188,6 +197,7 @@ function createEditor(tour: TourRow, packageRows: PackageRow[], boatTours: BoatT
 }
 
 export default function AdminToursPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [tours, setTours] = useState<TourRow[]>([]);
   const [boats, setBoats] = useState<BoatRow[]>([]);
   const [destinations, setDestinations] = useState<DestinationRow[]>([]);
@@ -214,7 +224,7 @@ export default function AdminToursPage() {
     setError('');
     const [toursRes, boatsRes, destinationsRes, boatToursRes, packagesRes, imagesRes, inclusionsRes] = await Promise.all([
       supabase.from('tours').select('*').order('sort_order'),
-      supabase.from('boats').select('id, name, image_url, included_guests, max_guests, extra_guest_price, active, sort_order').order('sort_order'),
+      supabase.from('boats').select('id, name, image_url, max_guests, active, sort_order').order('sort_order'),
       supabase.from('destinations').select('id, name, active, sort_order').eq('active', true).order('sort_order'),
       supabase.from('boat_tours').select('*').order('sort_order'),
       supabase.from('tour_packages').select('*').order('sort_order'),
@@ -242,6 +252,17 @@ export default function AdminToursPage() {
   useEffect(() => {
     void loadTours();
   }, []);
+
+  useEffect(() => {
+    const tourId = searchParams.get('tourId');
+    if (!tourId || loading || editing) return;
+    const tour = tours.find((item) => item.id === tourId);
+    if (!tour) return;
+    openEditor(tour);
+    if (searchParams.get('tab') === 'packages') setActiveTab('packages');
+    setSearchParams({}, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tours, loading, searchParams]);
 
   function markEditing(next: TourEditor) {
     setEditing(next);
@@ -311,9 +332,14 @@ export default function AdminToursPage() {
     editor.packages.forEach((pkg) => {
       if (pkg.pendingDelete) return;
       if (!pkg.name.trim()) errors[`package-${pkg.id}-name`] = 'El nombre visible es obligatorio.';
-      if (!Number.isFinite(pkg.durationValue) || pkg.durationValue <= 0) errors[`package-${pkg.id}-duration`] = 'La duracion debe ser mayor a cero.';
-      if (!Number.isFinite(pkg.basePrice) || pkg.basePrice <= 0) errors[`package-${pkg.id}-price`] = 'El precio debe ser mayor a cero.';
-      if (!pkg.boatId) errors[`package-${pkg.id}-boat`] = 'Selecciona el barco al que aplica este precio.';
+      if (!pkg.boatId) errors[`package-${pkg.id}-boat`] = 'Selecciona el barco al que aplica este paquete.';
+      if (!pkg.customQuote) {
+        if (!Number.isFinite(pkg.durationValue) || pkg.durationValue <= 0) errors[`package-${pkg.id}-duration`] = 'La duracion debe ser mayor a cero.';
+        if (!Number.isFinite(pkg.basePrice) || pkg.basePrice < 0) errors[`package-${pkg.id}-price`] = 'El precio base no puede ser negativo.';
+      }
+      if (!Number.isFinite(pkg.includedGuests) || pkg.includedGuests < 1) errors[`package-${pkg.id}-included`] = 'Debe incluir al menos 1 persona.';
+      if (!Number.isFinite(pkg.maxGuests) || pkg.maxGuests < pkg.includedGuests) errors[`package-${pkg.id}-max`] = 'La capacidad maxima no puede ser menor a las personas incluidas.';
+      if (!Number.isFinite(pkg.extraGuestPrice) || pkg.extraGuestPrice < 0) errors[`package-${pkg.id}-extra`] = 'El precio adicional no puede ser negativo.';
     });
     return errors;
   }
@@ -323,21 +349,17 @@ export default function AdminToursPage() {
     if (existing) return existing.id;
     const { data: current, error: currentError } = await supabase
       .from('boat_tours')
-      .select('id, active')
+      .select('id')
       .eq('tour_id', tourId)
       .eq('boat_id', boatId)
       .maybeSingle();
     if (currentError) throw new Error(currentError.message);
-    if (current) {
-      if (!current.active) {
-        const { error } = await supabase.from('boat_tours').update({ active: true }).eq('id', current.id);
-        if (error) throw new Error(error.message);
-      }
-      return current.id;
-    }
+    if (current) return current.id;
+    // boat_tours.active is derived automatically from tour_packages by a database trigger,
+    // so it is intentionally not set here.
     const { data, error } = await supabase
       .from('boat_tours')
-      .insert({ boat_id: boatId, tour_id: tourId, active: true, sort_order: boatTours.length + 1 })
+      .insert({ boat_id: boatId, tour_id: tourId, active: false, sort_order: boatTours.length + 1 })
       .select('id')
       .single();
     if (error) throw new Error(error.message);
@@ -384,17 +406,10 @@ export default function AdminToursPage() {
         .eq('id', nextEditor.id);
       if (tourError) throw new Error(tourError.message);
 
-      for (const boat of boats) {
-        const shouldBeActive = nextEditor.selectedBoatIds.includes(boat.id);
-        const relation = boatTours.find((item) => item.tour_id === nextEditor.id && item.boat_id === boat.id);
-        if (relation) {
-          const { error } = await supabase.from('boat_tours').update({ active: shouldBeActive }).eq('id', relation.id);
-          if (error) throw new Error(error.message);
-        } else if (shouldBeActive) {
-          await ensureBoatTour(nextEditor.id, boat.id);
-        }
-      }
-
+      // tour_packages is the single source of truth for commercial terms (price, duration,
+      // included guests, extra guest price, max capacity) of a Tour+Boat+Package combination.
+      // Nothing here is copied from `boats` — boat_tours.active is derived automatically by a
+      // database trigger from which packages are active, so it is never toggled manually either.
       for (const pkg of nextEditor.packages) {
         if (pkg.pendingDelete) {
           if (!pkg.isNew) {
@@ -409,14 +424,16 @@ export default function AdminToursPage() {
           id: pkg.id,
           boat_tour_id: boatTourId,
           name: pkg.name.trim(),
-          package_type: slugify(pkg.name),
+          package_type: pkg.packageType.trim() || slugify(pkg.name),
           description: pkg.description.trim() || null,
           duration_minutes: durationToMinutes(pkg.durationValue, pkg.durationUnit),
           base_price: pkg.basePrice,
-          included_guests: boats.find((boat) => boat.id === pkg.boatId)?.included_guests ?? 1,
-          max_guests: boats.find((boat) => boat.id === pkg.boatId)?.max_guests ?? 1,
-          extra_guest_price: boats.find((boat) => boat.id === pkg.boatId)?.extra_guest_price ?? 0,
-          custom_quote: false,
+          included_guests: pkg.includedGuests,
+          max_guests: pkg.maxGuests,
+          extra_guest_price: pkg.extraGuestPrice,
+          custom_quote: pkg.customQuote,
+          image_url: pkg.imageUrl,
+          image_public_id: pkg.imagePublicId,
           active: pkg.active,
           sort_order: pkg.sortOrder,
           updated_at: new Date().toISOString(),
@@ -571,21 +588,27 @@ export default function AdminToursPage() {
 
   function addPackage() {
     if (!editing) return;
-    const firstBoatId = editing.selectedBoatIds[0] ?? boats[0]?.id ?? '';
+    const lastBoatId = editing.packages[editing.packages.length - 1]?.boatId || boats[0]?.id || '';
     markEditing({
       ...editing,
-      selectedBoatIds: firstBoatId && !editing.selectedBoatIds.includes(firstBoatId) ? [...editing.selectedBoatIds, firstBoatId] : editing.selectedBoatIds,
       packages: [
         ...editing.packages,
         {
           id: `package-${crypto.randomUUID().slice(0, 8)}`,
           boatTourId: null,
-          boatId: firstBoatId,
+          boatId: lastBoatId,
           name: 'Half Day',
+          packageType: 'half-day',
           durationValue: 4,
           durationUnit: 'hours',
           basePrice: 650,
+          includedGuests: 5,
+          maxGuests: 10,
+          extraGuestPrice: 65,
+          customQuote: false,
           description: '',
+          imageUrl: null,
+          imagePublicId: null,
           sortOrder: editing.packages.length + 1,
           active: true,
           isNew: true,
@@ -803,96 +826,153 @@ export default function AdminToursPage() {
                 </>
               ) : null}
 
-              {activeTab === 'prices' ? (
-                <FormSection title="Duraciones y precios" description="Agrega las opciones de duracion que el cliente podra seleccionar para este tour." icon={<DollarSign size={16} />}>
+              {activeTab === 'packages' ? (
+                <FormSection title="Paquetes" description="Cada paquete es la unica fuente de precio, duracion, personas incluidas y capacidad para esa combinacion de tour y bote." icon={<Package size={16} />}>
                   <div className="admin-actions">
-                    <button className="admin-btn" type="button" onClick={addPackage}><Plus size={16} /> Agregar duracion y precio</button>
+                    <button className="admin-btn" type="button" onClick={addPackage}><Plus size={16} /> Agregar paquete</button>
                   </div>
                   <div className="admin-package-list">
-                    {packagesForCurrentTour.map((pkg, index) => (
-                      <article className="admin-package-editor" key={pkg.id}>
-                        <header>
-                          <strong>{pkg.name || 'Nueva duracion'}</strong>
-                          <div className="admin-actions">
-                            <button className="admin-btn admin-btn--ghost" type="button" onClick={() => markEditing({ ...editing, packages: [...editing.packages, { ...pkg, id: `package-${crypto.randomUUID().slice(0, 8)}`, name: `${pkg.name} copia`, sortOrder: editing.packages.length + 1, isNew: true }] })}><Copy size={14} /> Duplicar</button>
-                            <button className="admin-btn admin-btn--ghost" type="button" onClick={() => markEditing({ ...editing, packages: editing.packages.map((item) => item.id === pkg.id ? { ...item, active: !item.active } : item) })}>{pkg.active ? 'Desactivar' : 'Activar'}</button>
-                            <button className="admin-btn admin-btn--danger" type="button" onClick={() => setDeletePackage(pkg)}><Trash2 size={14} /> Eliminar</button>
-                          </div>
-                        </header>
-                        <div className="admin-form-columns">
-                          <label className="admin-field">
-                            <span className="admin-field__label">Nombre visible</span>
-                            <input className="admin-input" aria-invalid={fieldErrors[`package-${pkg.id}-name`] ? true : undefined} value={pkg.name} onChange={(event) => markEditing({ ...editing, packages: editing.packages.map((item) => item.id === pkg.id ? { ...item, name: event.target.value } : item) })} />
-                            {fieldErrors[`package-${pkg.id}-name`] ? <span className="admin-field-error">{fieldErrors[`package-${pkg.id}-name`]}</span> : null}
-                          </label>
-                          <label className="admin-field">
-                            <span className="admin-field__label">Barco para este precio</span>
-                            <select className="admin-select" aria-invalid={fieldErrors[`package-${pkg.id}-boat`] ? true : undefined} value={pkg.boatId} onChange={(event) => markEditing({ ...editing, packages: editing.packages.map((item) => item.id === pkg.id ? { ...item, boatId: event.target.value } : item), selectedBoatIds: editing.selectedBoatIds.includes(event.target.value) ? editing.selectedBoatIds : [...editing.selectedBoatIds, event.target.value] })}>
-                              <option value="">Selecciona un barco</option>
-                              {boats.map((boat) => <option key={boat.id} value={boat.id}>{boat.name}</option>)}
-                            </select>
-                            {fieldErrors[`package-${pkg.id}-boat`] ? <span className="admin-field-error">{fieldErrors[`package-${pkg.id}-boat`]}</span> : null}
-                          </label>
-                          <label className="admin-field">
-                            <span className="admin-field__label">Duracion</span>
-                            <input className="admin-input" type="number" min={0.5} step={0.5} aria-invalid={fieldErrors[`package-${pkg.id}-duration`] ? true : undefined} value={pkg.durationValue} onChange={(event) => markEditing({ ...editing, packages: editing.packages.map((item) => item.id === pkg.id ? { ...item, durationValue: Number(event.target.value) } : item) })} />
-                            {fieldErrors[`package-${pkg.id}-duration`] ? <span className="admin-field-error">{fieldErrors[`package-${pkg.id}-duration`]}</span> : null}
-                          </label>
-                          <label className="admin-field">
-                            <span className="admin-field__label">Unidad</span>
-                            <select className="admin-select" value={pkg.durationUnit} onChange={(event) => markEditing({ ...editing, packages: editing.packages.map((item) => item.id === pkg.id ? { ...item, durationUnit: event.target.value as 'hours' | 'days' } : item) })}>
-                              <option value="hours">Horas</option>
-                              <option value="days">Dias</option>
-                            </select>
-                          </label>
-                          <label className="admin-field">
-                            <span className="admin-field__label">Precio en USD</span>
-                            <input className="admin-input" type="number" min={1} aria-invalid={fieldErrors[`package-${pkg.id}-price`] ? true : undefined} value={pkg.basePrice} onChange={(event) => markEditing({ ...editing, packages: editing.packages.map((item) => item.id === pkg.id ? { ...item, basePrice: Number(event.target.value) } : item) })} />
-                            {fieldErrors[`package-${pkg.id}-price`] ? <span className="admin-field-error">{fieldErrors[`package-${pkg.id}-price`]}</span> : null}
-                          </label>
-                          <label className="admin-field">
-                            <span className="admin-field__label">Orden de aparicion</span>
-                            <input className="admin-input" type="number" value={pkg.sortOrder} onChange={(event) => markEditing({ ...editing, packages: editing.packages.map((item) => item.id === pkg.id ? { ...item, sortOrder: Number(event.target.value) } : item) })} />
-                          </label>
-                        </div>
-                        <label className="admin-field">
-                          <span className="admin-field__label">Descripcion opcional</span>
-                          <textarea className="admin-input" value={pkg.description} onChange={(event) => markEditing({ ...editing, packages: editing.packages.map((item) => item.id === pkg.id ? { ...item, description: event.target.value } : item) })} />
-                        </label>
-                        <div className="admin-actions">
-                          <button className="admin-btn admin-btn--ghost" type="button" onClick={() => markEditing({ ...editing, packages: moveArrayItem(editing.packages, index, -1).map((item, sortOrder) => ({ ...item, sortOrder })) })}><ArrowUp size={14} /> Subir</button>
-                          <button className="admin-btn admin-btn--ghost" type="button" onClick={() => markEditing({ ...editing, packages: moveArrayItem(editing.packages, index, 1).map((item, sortOrder) => ({ ...item, sortOrder })) })}><ArrowDown size={14} /> Bajar</button>
-                        </div>
-                      </article>
-                    ))}
-                    {packagesForCurrentTour.length === 0 ? <p className="admin-muted">Este tour aun no tiene duraciones ni precios.</p> : null}
-                  </div>
-                </FormSection>
-              ) : null}
-
-              {activeTab === 'boats' ? (
-                <FormSection title="Barcos disponibles para este tour" description="Selecciona los barcos donde se ofrece el tour. La capacidad y persona extra provienen del barco." icon={<Ship size={16} />}>
-                  <div className="admin-boat-choice-grid">
-                    {boats.map((boat) => {
-                      const selected = editing.selectedBoatIds.includes(boat.id);
+                    {packagesForCurrentTour.map((pkg, index) => {
+                      const packageBoat = boats.find((boat) => boat.id === pkg.boatId);
+                      const packageInclusions = editing.inclusions.filter((item) => !item.pendingDelete && item.active && (item.packageId === null || item.packageId === pkg.id));
                       return (
-                        <article className={`admin-boat-choice${selected ? ' admin-boat-choice--selected' : ''}`} key={boat.id}>
-                          {boat.image_url ? <img src={boat.image_url} alt="" loading="lazy" decoding="async" /> : <span className="admin-boat-choice__empty"><Ship size={20} /></span>}
-                          <div>
-                            <strong>{boat.name}</strong>
-                            <p className="admin-muted">{boat.included_guests} incluidos / {boat.max_guests} max</p>
-                            <p className="admin-muted">Persona adicional: {money(Number(boat.extra_guest_price))}</p>
+                        <article className="admin-package-editor" key={pkg.id}>
+                          <header>
+                            <strong>{pkg.name || 'Nuevo paquete'}{packageBoat ? ` — ${packageBoat.name}` : ''}</strong>
+                            <div className="admin-actions">
+                              <button className="admin-btn admin-btn--ghost" type="button" onClick={() => markEditing({ ...editing, packages: [...editing.packages, { ...pkg, id: `package-${crypto.randomUUID().slice(0, 8)}`, name: `${pkg.name} copia`, sortOrder: editing.packages.length + 1, isNew: true, imageUrl: null, imagePublicId: null }] })}><Copy size={14} /> Duplicar</button>
+                              <button className="admin-btn admin-btn--ghost" type="button" onClick={() => markEditing({ ...editing, packages: editing.packages.map((item) => item.id === pkg.id ? { ...item, active: !item.active } : item) })}>{pkg.active ? 'Desactivar' : 'Activar'}</button>
+                              <button className="admin-btn admin-btn--danger" type="button" onClick={() => setDeletePackage(pkg)}><Trash2 size={14} /> Eliminar</button>
+                            </div>
+                          </header>
+
+                          <div className="admin-package-editor__section">
+                            <p className="admin-package-editor__section-label">Identificacion</p>
+                            <div className="admin-form-columns">
+                              <label className="admin-field">
+                                <span className="admin-field__label">Nombre visible</span>
+                                <input className="admin-input" aria-invalid={fieldErrors[`package-${pkg.id}-name`] ? true : undefined} value={pkg.name} onChange={(event) => markEditing({ ...editing, packages: editing.packages.map((item) => item.id === pkg.id ? { ...item, name: event.target.value } : item) })} />
+                                {fieldErrors[`package-${pkg.id}-name`] ? <span className="admin-field-error">{fieldErrors[`package-${pkg.id}-name`]}</span> : null}
+                              </label>
+                              <label className="admin-field">
+                                <span className="admin-field__label">Bote</span>
+                                <select className="admin-select" aria-invalid={fieldErrors[`package-${pkg.id}-boat`] ? true : undefined} value={pkg.boatId} onChange={(event) => markEditing({ ...editing, packages: editing.packages.map((item) => item.id === pkg.id ? { ...item, boatId: event.target.value } : item) })}>
+                                  <option value="">Selecciona un bote</option>
+                                  {boats.map((boat) => <option key={boat.id} value={boat.id}>{boat.name}</option>)}
+                                </select>
+                                {packageBoat ? <span className="admin-field-help">Capacidad fisica del bote: {packageBoat.max_guests} personas.</span> : null}
+                                {fieldErrors[`package-${pkg.id}-boat`] ? <span className="admin-field-error">{fieldErrors[`package-${pkg.id}-boat`]}</span> : null}
+                              </label>
+                              <label className="admin-field">
+                                <span className="admin-field__label">Codigo / modalidad</span>
+                                <input className="admin-input" placeholder="Ej. half-day, full-day, deluxe" value={pkg.packageType} onChange={(event) => markEditing({ ...editing, packages: editing.packages.map((item) => item.id === pkg.id ? { ...item, packageType: event.target.value } : item) })} />
+                                <span className="admin-field-help">Identificador interno de la modalidad. Se genera solo desde el nombre si lo dejas vacio.</span>
+                              </label>
+                            </div>
                           </div>
-                          <ToggleSwitch
-                            checked={selected}
-                            label={`Disponible en ${boat.name}`}
-                            description={selected ? 'Este tour se puede vender en este barco.' : 'Este tour no se ofrece en este barco.'}
-                            disabled={saving}
-                            onChange={(checked) => markEditing({ ...editing, selectedBoatIds: checked ? [...editing.selectedBoatIds, boat.id] : editing.selectedBoatIds.filter((id) => id !== boat.id) })}
-                          />
+
+                          <div className="admin-package-editor__section">
+                            <p className="admin-package-editor__section-label">Duracion</p>
+                            <div className="admin-form-columns">
+                              <label className="admin-field">
+                                <span className="admin-field__label">Duracion</span>
+                                <input className="admin-input" type="number" min={0.5} step={0.5} aria-invalid={fieldErrors[`package-${pkg.id}-duration`] ? true : undefined} value={pkg.durationValue} onChange={(event) => markEditing({ ...editing, packages: editing.packages.map((item) => item.id === pkg.id ? { ...item, durationValue: Number(event.target.value) } : item) })} />
+                                {fieldErrors[`package-${pkg.id}-duration`] ? <span className="admin-field-error">{fieldErrors[`package-${pkg.id}-duration`]}</span> : null}
+                              </label>
+                              <label className="admin-field">
+                                <span className="admin-field__label">Unidad</span>
+                                <select className="admin-select" value={pkg.durationUnit} onChange={(event) => markEditing({ ...editing, packages: editing.packages.map((item) => item.id === pkg.id ? { ...item, durationUnit: event.target.value as 'hours' | 'days' } : item) })}>
+                                  <option value="hours">Horas</option>
+                                  <option value="days">Dias</option>
+                                </select>
+                              </label>
+                            </div>
+                            <p className="admin-package-editor__duration-preview">{pkg.durationValue} {pkg.durationUnit === 'days' ? 'dia(s)' : 'horas'} &rarr; {durationToMinutes(pkg.durationValue, pkg.durationUnit)} min</p>
+                          </div>
+
+                          <div className="admin-package-editor__section">
+                            <p className="admin-package-editor__section-label">Precio</p>
+                            <div className="admin-form-columns">
+                              <label className="admin-field">
+                                <span className="admin-field__label">Precio base USD</span>
+                                <input className="admin-input" type="number" min={0} aria-invalid={fieldErrors[`package-${pkg.id}-price`] ? true : undefined} value={pkg.basePrice} onChange={(event) => markEditing({ ...editing, packages: editing.packages.map((item) => item.id === pkg.id ? { ...item, basePrice: Number(event.target.value) } : item) })} />
+                                {fieldErrors[`package-${pkg.id}-price`] ? <span className="admin-field-error">{fieldErrors[`package-${pkg.id}-price`]}</span> : null}
+                              </label>
+                              <label className="admin-field">
+                                <span className="admin-field__label">Personas incluidas en el precio</span>
+                                <input className="admin-input" type="number" min={1} aria-invalid={fieldErrors[`package-${pkg.id}-included`] ? true : undefined} value={pkg.includedGuests} onChange={(event) => markEditing({ ...editing, packages: editing.packages.map((item) => item.id === pkg.id ? { ...item, includedGuests: Number(event.target.value) } : item) })} />
+                                <span className="admin-field-help">Cantidad de huespedes cubiertos por el precio base.</span>
+                                {fieldErrors[`package-${pkg.id}-included`] ? <span className="admin-field-error">{fieldErrors[`package-${pkg.id}-included`]}</span> : null}
+                              </label>
+                              <label className="admin-field">
+                                <span className="admin-field__label">Precio por persona adicional</span>
+                                <input className="admin-input" type="number" min={0} aria-invalid={fieldErrors[`package-${pkg.id}-extra`] ? true : undefined} value={pkg.extraGuestPrice} onChange={(event) => markEditing({ ...editing, packages: editing.packages.map((item) => item.id === pkg.id ? { ...item, extraGuestPrice: Number(event.target.value) } : item) })} />
+                                <span className="admin-field-help">Monto que se agregara por cada huesped que supere la cantidad incluida.</span>
+                                {fieldErrors[`package-${pkg.id}-extra`] ? <span className="admin-field-error">{fieldErrors[`package-${pkg.id}-extra`]}</span> : null}
+                              </label>
+                              <label className="admin-field">
+                                <span className="admin-field__label">Capacidad maxima</span>
+                                <input className="admin-input" type="number" min={1} aria-invalid={fieldErrors[`package-${pkg.id}-max`] ? true : undefined} value={pkg.maxGuests} onChange={(event) => markEditing({ ...editing, packages: editing.packages.map((item) => item.id === pkg.id ? { ...item, maxGuests: Number(event.target.value) } : item) })} />
+                                <span className="admin-field-help">Numero maximo de huespedes permitidos para esta modalidad.</span>
+                                {fieldErrors[`package-${pkg.id}-max`] ? <span className="admin-field-error">{fieldErrors[`package-${pkg.id}-max`]}</span> : null}
+                              </label>
+                            </div>
+                            <label className="admin-field">
+                              <span className="admin-field__label">Descripcion opcional</span>
+                              <textarea className="admin-input" value={pkg.description} onChange={(event) => markEditing({ ...editing, packages: editing.packages.map((item) => item.id === pkg.id ? { ...item, description: event.target.value } : item) })} />
+                            </label>
+                          </div>
+
+                          <div className="admin-package-editor__section">
+                            <p className="admin-package-editor__section-label">Incluidos</p>
+                            <div className="admin-package-editor__inclusions">
+                              {packageInclusions.length > 0
+                                ? packageInclusions.map((item) => <span key={item.id} className="admin-muted">&bull; {item.label}</span>)
+                                : <span className="admin-muted">Este paquete aun no tiene incluidos.</span>}
+                            </div>
+                            <span className="admin-field-help">Se editan desde la pestana Experiencia: cada fila de "Que incluye" puede aplicar a todos los paquetes o a este en particular.</span>
+                          </div>
+
+                          <div className="admin-package-editor__section">
+                            <p className="admin-package-editor__section-label">Configuracion</p>
+                            <div className="admin-form-columns">
+                              <label className="admin-field">
+                                <span className="admin-field__label">Orden de aparicion</span>
+                                <input className="admin-input" type="number" value={pkg.sortOrder} onChange={(event) => markEditing({ ...editing, packages: editing.packages.map((item) => item.id === pkg.id ? { ...item, sortOrder: Number(event.target.value) } : item) })} />
+                              </label>
+                            </div>
+                            <ToggleSwitch checked={pkg.customQuote} onChange={(checked) => markEditing({ ...editing, packages: editing.packages.map((item) => item.id === pkg.id ? { ...item, customQuote: checked } : item) })} label="Cotizar manualmente" description="El precio se maneja fuera del sistema; el cliente vera 'Cotizar' en vez de un precio automatico." disabled={saving} />
+                            <ToggleSwitch checked={pkg.active} onChange={(checked) => markEditing({ ...editing, packages: editing.packages.map((item) => item.id === pkg.id ? { ...item, active: checked } : item) })} label="Paquete activo" description={pkg.active ? 'Visible y reservable en el sitio publico.' : 'Oculto del sitio publico y no acepta reservas.'} disabled={saving} />
+                            <div className="admin-actions">
+                              <button className="admin-btn admin-btn--ghost" type="button" onClick={() => markEditing({ ...editing, packages: moveArrayItem(editing.packages, index, -1).map((item, sortOrder) => ({ ...item, sortOrder })) })}><ArrowUp size={14} /> Subir</button>
+                              <button className="admin-btn admin-btn--ghost" type="button" onClick={() => markEditing({ ...editing, packages: moveArrayItem(editing.packages, index, 1).map((item, sortOrder) => ({ ...item, sortOrder })) })}><ArrowDown size={14} /> Bajar</button>
+                            </div>
+                          </div>
+
+                          <div className="admin-package-editor__section">
+                            <p className="admin-package-editor__section-label">Multimedia</p>
+                            {!pkg.isNew ? (
+                              <AdminImageManager
+                                resourceTable="tour_packages"
+                                resourceId={pkg.id}
+                                folder="tours"
+                                currentImageUrl={pkg.imageUrl}
+                                currentStoragePath={pkg.imagePublicId}
+                                label={pkg.name}
+                                aspect={3 / 2}
+                                maxWidth={1200}
+                                maxHeight={800}
+                                maxSizeMB={0.35}
+                                onImageSaved={(image) => markEditing({ ...editing, packages: editing.packages.map((item) => item.id === pkg.id ? { ...item, imageUrl: image.public_url, imagePublicId: image.storage_path } : item) })}
+                              />
+                            ) : (
+                              <p className="admin-field-help">Guarda el paquete para poder subir una imagen propia.</p>
+                            )}
+                          </div>
                         </article>
                       );
                     })}
+                    {packagesForCurrentTour.length === 0 ? <p className="admin-muted">Este tour aun no tiene paquetes.</p> : null}
                   </div>
                 </FormSection>
               ) : null}

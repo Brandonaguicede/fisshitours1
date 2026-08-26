@@ -30,13 +30,10 @@ interface BoatRow {
   name: string;
   images: string[];
   badge: string | null;
-  base_price_label: string | null;
   length: string | null;
   engine: string | null;
   featured_spec: string | null;
-  included_guests: number;
   max_guests: number;
-  extra_guest_price: number;
   image_url: string | null;
   image_public_id: string | null;
   active: boolean;
@@ -89,14 +86,15 @@ export default function AdminBoatsPage() {
   const [pendingDelete, setPendingDelete] = useState<BoatImageRow | null>(null);
   const [pendingBoatDelete, setPendingBoatDelete] = useState<BoatRow | null>(null);
   const [saving, setSaving] = useState(false);
-  const [fieldErrors, setFieldErrors] = useState<{ id?: string; slug?: string; name?: string; includedGuests?: string; maxGuests?: string; extraPrice?: string }>({});
+  const [startingPrices, setStartingPrices] = useState<Record<string, number>>({});
+  const [fieldErrors, setFieldErrors] = useState<{ id?: string; slug?: string; name?: string; maxGuests?: string }>({});
 
   async function loadBoats() {
     setLoading(true);
     setError('');
     const { data, error } = await supabase
       .from('boats')
-      .select('id, slug, name, images, badge, base_price_label, length, engine, featured_spec, included_guests, max_guests, extra_guest_price, image_url, image_public_id, active, sort_order')
+      .select('id, slug, name, images, badge, length, engine, featured_spec, max_guests, image_url, image_public_id, active, sort_order')
       .order('sort_order', { ascending: true });
 
     if (error) {
@@ -128,6 +126,25 @@ export default function AdminBoatsPage() {
 
     setBoats(rows.map((boat) => ({ ...boat, boat_images: imagesByBoat.get(boat.id) ?? fallbackBoatImages(boat) })));
     setLoading(false);
+    await loadStartingPrices();
+  }
+
+  // "Desde $X" is computed live from tour_packages (the source of truth for pricing),
+  // never stored on boats.
+  async function loadStartingPrices() {
+    const { data, error } = await supabase
+      .from('tour_packages')
+      .select('base_price, custom_quote, boat_tours(boat_id)')
+      .eq('active', true);
+    if (error || !data) return;
+    const prices: Record<string, number> = {};
+    for (const row of data as unknown as { base_price: number; custom_quote: boolean; boat_tours: { boat_id: string } | null }[]) {
+      if (row.custom_quote || !row.boat_tours) continue;
+      const boatId = row.boat_tours.boat_id;
+      const price = Number(row.base_price);
+      prices[boatId] = boatId in prices ? Math.min(prices[boatId], price) : price;
+    }
+    setStartingPrices(prices);
   }
 
   useEffect(() => {
@@ -152,13 +169,10 @@ export default function AdminBoatsPage() {
       name: '',
       images: [],
       badge: '',
-      base_price_label: '',
       length: '',
       engine: '',
       featured_spec: '',
-      included_guests: 5,
       max_guests: 10,
-      extra_guest_price: 65,
       image_url: null,
       image_public_id: null,
       active: true,
@@ -195,7 +209,7 @@ export default function AdminBoatsPage() {
     if (!boatId) return;
     const { data } = await supabase
       .from('boats')
-      .select('id, slug, name, images, badge, base_price_label, length, engine, featured_spec, included_guests, max_guests, extra_guest_price, image_url, image_public_id, active, sort_order')
+      .select('id, slug, name, images, badge, length, engine, featured_spec, max_guests, image_url, image_public_id, active, sort_order')
       .eq('id', boatId)
       .single();
     if (!data) return;
@@ -232,16 +246,10 @@ export default function AdminBoatsPage() {
     if (!name) {
       nextFieldErrors.name = 'El nombre es obligatorio.';
     }
-    if (!Number.isFinite(editing.included_guests) || editing.included_guests < 1) {
-      nextFieldErrors.includedGuests = 'Debe incluir al menos 1 persona.';
-    }
-    if (!Number.isFinite(editing.max_guests) || editing.max_guests < editing.included_guests) {
-      nextFieldErrors.maxGuests = 'La capacidad maxima no puede ser menor a las personas incluidas.';
+    if (!Number.isFinite(editing.max_guests) || editing.max_guests < 1) {
+      nextFieldErrors.maxGuests = 'La capacidad debe ser al menos 1.';
     } else if (editing.id === 'segundo-viento' && editing.max_guests > 10) {
       nextFieldErrors.maxGuests = 'Second Wind no puede superar 10 pasajeros.';
-    }
-    if (!Number.isFinite(editing.extra_guest_price) || editing.extra_guest_price < 0) {
-      nextFieldErrors.extraPrice = 'El precio adicional no puede ser negativo.';
     }
     setFieldErrors(nextFieldErrors);
     if (Object.keys(nextFieldErrors).length > 0) {
@@ -255,13 +263,10 @@ export default function AdminBoatsPage() {
       slug,
       name,
       badge: editing.badge?.trim() || null,
-      base_price_label: editing.base_price_label?.trim() || null,
       length: editing.length?.trim() || null,
       engine: editing.engine?.trim() || null,
       featured_spec: equipmentItemsToStorageValue(editing.featured_spec) || null,
-      included_guests: editing.included_guests,
       max_guests: editing.max_guests,
-      extra_guest_price: editing.extra_guest_price,
       active: editing.active,
       sort_order: editing.sort_order,
       images: editing.images ?? [],
@@ -422,13 +427,13 @@ export default function AdminBoatsPage() {
       {loading ? (
         <p className="admin-muted">Cargando botes...</p>
       ) : (
-        <AdminTable headers={['Bote', 'Capacidad', 'Motor', 'Precio extra', 'Estado', 'Acciones']}>
+        <AdminTable headers={['Bote', 'Capacidad fisica', 'Motor', 'Desde', 'Estado', 'Acciones']}>
           {(boats ?? []).map((boat) => (
             <tr key={boat.id}>
               <td>{boat.name}<div className="admin-muted">{boat.length ?? '-'}</div></td>
-              <td>{boat.included_guests} incluidos / {boat.max_guests} max</td>
+              <td>{boat.max_guests} max</td>
               <td>{boat.engine ?? '-'}</td>
-              <td>{money(boat.extra_guest_price)}</td>
+              <td>{boat.id in startingPrices ? money(startingPrices[boat.id]) : '-'}</td>
               <td><AdminBadge value={boat.active} /></td>
               <td>
                 <div className="admin-actions">
@@ -554,10 +559,6 @@ export default function AdminBoatsPage() {
                     <input id="boat-badge" name="badge" className="admin-input" value={editing.badge ?? ''} onChange={(event) => setEditing({ ...editing, badge: event.target.value || null })} placeholder="Ej. Luxury meets nature" />
                   </label>
                   <label className="admin-field">
-                    <span className="admin-field__label">Texto de precio base</span>
-                    <input id="boat-base-price-label" name="base_price_label" className="admin-input" value={editing.base_price_label ?? ''} onChange={(event) => setEditing({ ...editing, base_price_label: event.target.value || null })} placeholder="Ej. From $600" />
-                  </label>
-                  <label className="admin-field">
                     <span className="admin-field__label">Eslora</span>
                     <input id="boat-length" name="length" className="admin-input" value={editing.length ?? ''} onChange={(event) => setEditing({ ...editing, length: event.target.value || null })} placeholder="Ej. 32 pies" />
                   </label>
@@ -567,21 +568,7 @@ export default function AdminBoatsPage() {
                   </label>
                 </FormSection>
 
-                <FormSection title="Capacidad y precios" description="Base para el calculo de reservaciones." icon={<Users size={16} />}>
-                  <label className="admin-field">
-                    <span className="admin-field__label">Personas incluidas</span>
-                    <input
-                      id="boat-included-guests"
-                      name="included_guests"
-                      className="admin-input"
-                      type="number"
-                      min={1}
-                      aria-invalid={fieldErrors.includedGuests ? true : undefined}
-                      value={editing.included_guests}
-                      onChange={(event) => setEditing({ ...editing, included_guests: Number(event.target.value) })}
-                    />
-                    {fieldErrors.includedGuests ? <span className="admin-field-error">{fieldErrors.includedGuests}</span> : null}
-                  </label>
+                <FormSection title="Capacidad" description="Capacidad fisica del bote. El precio, las personas incluidas y el precio por persona adicional se configuran por paquete en cada tour (Tours &gt; Paquetes)." icon={<Users size={16} />}>
                   <label className="admin-field">
                     <span className="admin-field__label">Capacidad maxima</span>
                     <input
@@ -595,21 +582,8 @@ export default function AdminBoatsPage() {
                       value={editing.max_guests}
                       onChange={(event) => setEditing({ ...editing, max_guests: Number(event.target.value) })}
                     />
+                    <span className="admin-field-help">Techo fisico del bote. Ningun paquete deberia superar este numero de huespedes.</span>
                     {fieldErrors.maxGuests ? <span className="admin-field-error">{fieldErrors.maxGuests}</span> : null}
-                  </label>
-                  <label className="admin-field">
-                    <span className="admin-field__label">Precio por persona adicional (USD)</span>
-                    <input
-                      id="boat-extra-price"
-                      name="extra_guest_price"
-                      className="admin-input"
-                      type="number"
-                      min={0}
-                      aria-invalid={fieldErrors.extraPrice ? true : undefined}
-                      value={editing.extra_guest_price}
-                      onChange={(event) => setEditing({ ...editing, extra_guest_price: Number(event.target.value) })}
-                    />
-                    {fieldErrors.extraPrice ? <span className="admin-field-error">{fieldErrors.extraPrice}</span> : null}
                   </label>
                 </FormSection>
               </div>

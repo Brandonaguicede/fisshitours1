@@ -5,6 +5,7 @@ import type { Boat } from '../../types/boat';
 import type { BoatTour } from '../../types/boatTour';
 import { getBoatText, getTourGroupKey, getTourText } from '../../i18n/content';
 import type { Language } from '../../i18n/LanguageContext';
+import { getBoatStartingPrice } from '../../utils/bookingPricing';
 import { formatCurrency } from '../../utils/formatCurrency';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { text, tr } from '../../i18n/translations';
@@ -142,11 +143,7 @@ export function FleetSection({ boats, tours, selectedBoat, onSelectBoat, onViewT
                     <CompactSpec icon={<Ruler size={16} />} label={language === 'es' ? 'Tamaño' : 'Size'} value={modalBoatText?.length ?? modalBoat.length} />
                     <CompactSpec icon={<Gauge size={16} />} label={language === 'es' ? 'Motor' : 'Engine'} value={modalBoat.engine} />
                     <CompactSpec icon={<Users size={16} />} label={language === 'es' ? 'Capacidad máxima' : 'Maximum capacity'} value={String(modalBoat.maxGuests)} />
-                    <CompactSpec icon={<Users size={16} />} label={language === 'es' ? 'Incluidos' : 'Guests included'} value={String(modalBoat.includedGuests)} />
                   </div>
-                  <GlassPanel className="mt-3 min-h-14 px-4 sm:px-5" variant="control">
-                    <DetailLine label={language === 'es' ? 'Persona extra' : 'Additional guest'} value={`${formatCurrency(modalBoat.extraGuestPrice)} ${language === 'es' ? 'cada una' : 'each'}`} />
-                  </GlassPanel>
                   <GlassPanel className="mt-4 overflow-hidden p-0" variant="control">
                     <div className="flex items-center gap-2 border-b border-white/10 px-4 py-3">
                       <span className="grid size-8 shrink-0 place-items-center rounded-full bg-ocean-300/12 text-ocean-300" aria-hidden="true">
@@ -216,26 +213,12 @@ function CompactSpec({ icon, label, value }: { icon: ReactNode; label: string; v
   );
 }
 
-function DetailLine({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-center justify-between gap-5 py-3">
-      <span className="text-ocean-200">{label}</span>
-      <span className="text-right font-semibold text-white">{value}</span>
-    </div>
-  );
-}
-
 const modalArrowIconSize = 17;
 
 function getBoatImages(boat: Boat | null) {
   if (!boat) return [];
   const images = boat.images?.length ? boat.images : [boat.image];
   return Array.from(new Set(images.filter(Boolean)));
-}
-
-function getBoatStartingPrice(boatId: string, tours: BoatTour[]) {
-  const prices = tours.filter((tour) => tour.boatId === boatId).map((tour) => tour.basePrice);
-  return prices.length ? Math.min(...prices) : 0;
 }
 
 function getEquipmentItems(equipment: string) {

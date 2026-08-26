@@ -60,7 +60,7 @@ export function TourDetailModal({ boat, onClose, onSelect, open, packageTours, t
             </GlassPanel>
             <GlassPanel className="p-4" variant="subtle">
               <p className="text-xs font-bold uppercase tracking-[0.12em] text-ocean-400">{language === 'es' ? 'Persona extra' : 'Additional guest'}</p>
-              <p className="mt-1 font-extrabold text-ocean-400">{formatCurrency(tour.extraGuestPrice ?? boat.extraGuestPrice)} {language === 'es' ? 'cada una' : 'each'}</p>
+              <p className="mt-1 font-extrabold text-ocean-400">{formatCurrency(tour.extraGuestPrice)} {language === 'es' ? 'cada una' : 'each'}</p>
             </GlassPanel>
           </div>
           <div className="mt-5 grid gap-4 sm:grid-cols-2">

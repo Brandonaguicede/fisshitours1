@@ -3,7 +3,6 @@ import { boatTours } from '../../data/boatTours';
 import { destinations } from '../../data/destinations';
 import { galleryImages } from '../../data/gallery';
 import { testimonials } from '../../data/testimonials';
-import { tours } from '../../data/tours';
 
 export const adminData = {
   boats,
@@ -11,7 +10,6 @@ export const adminData = {
   destinations,
   galleryImages,
   testimonials,
-  tours,
   reservations: [
     {
       id: 'res-001',

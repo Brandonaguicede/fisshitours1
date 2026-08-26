@@ -19,7 +19,7 @@ const navGroups = [
     items: [
       { label: 'Tours', to: '/admin/tours', icon: Star },
       { label: 'Botes', to: '/admin/boats', icon: Ship },
-      { label: 'Paquetes', to: '/admin/boat-tours', icon: Package },
+      { label: 'Paquetes (todos)', to: '/admin/boat-tours', icon: Package },
     ],
   },
   {
@@ -45,7 +45,7 @@ const titles: Record<string, string> = {
   '/admin/reservations': 'Reservas',
   '/admin/tours': 'Tours',
   '/admin/boats': 'Botes',
-  '/admin/boat-tours': 'Paquetes por bote',
+  '/admin/boat-tours': 'Paquetes (todos los tours)',
   '/admin/reviews': 'Comentarios',
   '/admin/gallery': 'Galeria',
   '/admin/destinations': 'Destinos',

@@ -13,6 +13,7 @@ import { getActiveBoats } from '../services/boatService';
 import { getActiveBoatTours } from '../services/boatTourService';
 import type { Boat } from '../types/boat';
 import type { BoatTour } from '../types/boatTour';
+import { getBoatStartingPrice } from '../utils/bookingPricing';
 
 export default function ToursPage() {
   const { language } = useLanguage();
@@ -79,8 +80,8 @@ export default function ToursPage() {
             </h1>
             <p className="mt-4 max-w-2xl text-lg leading-8 text-ocean-200">
               {language === 'es'
-                ? 'El precio base cubre hasta 5 personas. Desde la sexta persona se agregan $65 por persona, con capacidad maxima de 10.'
-                : 'The base price covers up to 5 people. From the sixth guest onward, $65 is added per person, with maximum capacity of 10.'}
+                ? 'Cada modalidad muestra su precio base, cuantas personas incluye y el cargo por huesped adicional antes de reservar.'
+                : 'Every package shows its base price, how many guests are included and the extra-guest charge before you book.'}
             </p>
           </GlassPanel>
         </Container>
@@ -123,8 +124,8 @@ export default function ToursPage() {
                 <p className="text-lg font-extrabold text-white">{selectedBoat.name}</p>
                 <p className="mt-1 text-sm text-ocean-200">
                   {language === 'es'
-                    ? `Base para ${selectedBoat.includedGuests} personas, maximo ${selectedBoat.maxGuests}. Persona extra $${selectedBoat.extraGuestPrice}.`
-                    : `Includes ${selectedBoat.includedGuests} guests, maximum ${selectedBoat.maxGuests}. Extra guest from $${selectedBoat.extraGuestPrice}.`}
+                    ? `Desde $${getBoatStartingPrice(selectedBoat.id, catalogTours)}. Capacidad maxima ${selectedBoat.maxGuests} personas.`
+                    : `From $${getBoatStartingPrice(selectedBoat.id, catalogTours)}. Maximum capacity ${selectedBoat.maxGuests} guests.`}
                 </p>
               </div>
             </GlassPanel>
@@ -168,11 +169,6 @@ export default function ToursPage() {
 function getTourGroupKey(tour: BoatTour) {
   if (tour.category === 'Bioluminescence Basic' || tour.category === 'Bioluminescence Deluxe') return `${tour.boatId}-Bioluminescence`;
   return `${tour.boatId}-${tour.category}`;
-}
-
-function getBoatStartingPrice(boatId: string, tours: BoatTour[]) {
-  const prices = tours.filter((tour) => tour.boatId === boatId).map((tour) => tour.basePrice);
-  return prices.length ? Math.min(...prices) : 0;
 }
 
 function groupToursForCards(tours: BoatTour[]) {
