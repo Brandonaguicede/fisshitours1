@@ -13,9 +13,9 @@ export function AdminPageHeader(props: { title: string; description: string; act
   );
 }
 
-export function AdminStatCard(props: { label: string; value: string; icon: LucideIcon; color?: string }) {
+export function AdminStatCard(props: { label: string; value: string; icon: LucideIcon; tone?: 'ocean' | 'success' | 'warning' }) {
   return (
-    <article className="admin-stat-card" style={{ '--stat-color': props.color ?? '#0e7490' } as React.CSSProperties}>
+    <article className={`admin-stat-card admin-stat-card--${props.tone ?? 'ocean'}`}>
       <div className="admin-stat-card__head">
         <p className="admin-stat-card__label">{props.label}</p>
         <span className="admin-stat-card__icon"><props.icon size={18} /></span>
@@ -39,9 +39,9 @@ export function AdminBadge({ value }: { value: string | boolean }) {
   return <span className={`admin-badge admin-badge--${tone}`}>{text}</span>;
 }
 
-export function AdminTable(props: { headers: string[]; children: ReactNode }) {
+export function AdminTable(props: { headers: string[]; children: ReactNode; embedded?: boolean }) {
   return (
-    <section className="admin-table-card">
+    <section className={props.embedded ? 'admin-table-card admin-table-card--embedded' : 'admin-table-card'}>
       <div className="admin-table-wrap">
         <table className="admin-table">
           <thead>
@@ -54,6 +54,10 @@ export function AdminTable(props: { headers: string[]; children: ReactNode }) {
   );
 }
 
-export function AdminToolbar(props: { children: ReactNode }) {
-  return <div className="admin-toolbar">{props.children}</div>;
+export function AdminToolbar(props: { children: ReactNode; embedded?: boolean }) {
+  return <div className={props.embedded ? 'admin-toolbar admin-toolbar--embedded' : 'admin-toolbar'}>{props.children}</div>;
+}
+
+export function AdminModuleSurface(props: { children: ReactNode; className?: string }) {
+  return <section className={`admin-module-surface${props.className ? ` ${props.className}` : ''}`}>{props.children}</section>;
 }

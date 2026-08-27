@@ -1,7 +1,7 @@
 import { Check, Download, Filter, Plus, Search, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-import { AdminBadge, AdminPageHeader, AdminTable, AdminToolbar } from '../../components/admin/AdminPrimitives';
+import { AdminBadge, AdminModuleSurface, AdminTable, AdminToolbar } from '../../components/admin/AdminPrimitives';
 import { supabase } from '../../lib/supabase';
 import { money } from './adminMockData';
 
@@ -187,16 +187,11 @@ export default function AdminReservationsPage() {
 
   return (
     <div className="admin-page">
-      <AdminPageHeader
-        title="Reservas"
-        description="Gestiona solicitudes, estados de pago y disponibilidad."
-        actions={<><button className="admin-btn" type="button"><Plus size={16} /> Crear reserva</button><button className="admin-btn admin-btn--secondary" type="button"><Download size={16} /> Exportar</button></>}
-      />
-
-      <AdminToolbar>
-        <div className="relative min-w-[220px] flex-1">
-          <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ocean-400" size={15} />
-          <input className="admin-input pl-9" placeholder="Buscar cliente, email o WhatsApp" value={search} onChange={(event) => setSearch(event.target.value)} />
+      <AdminModuleSurface className="admin-reservations-surface">
+      <AdminToolbar embedded>
+        <div className="admin-search-field">
+          <Search aria-hidden="true" size={16} />
+          <input className="admin-input" aria-label="Buscar reservas" placeholder="Buscar reservas por cliente, email o WhatsApp" value={search} onChange={(event) => setSearch(event.target.value)} />
         </div>
         <div className="admin-filter-menu">
           <button
@@ -242,6 +237,10 @@ export default function AdminReservationsPage() {
             </>
           ) : null}
         </div>
+        <div className="admin-toolbar__actions">
+          <button className="admin-btn" type="button"><Plus size={16} /> Crear reserva</button>
+          <button className="admin-btn admin-btn--secondary" type="button"><Download size={16} /> Exportar</button>
+        </div>
       </AdminToolbar>
 
       {error ? (
@@ -257,7 +256,7 @@ export default function AdminReservationsPage() {
       {loading ? (
         <p className="admin-muted">Cargando reservas...</p>
       ) : (
-        <AdminTable headers={['Referencia', 'Cliente', 'Fecha', 'Bote / tour', 'Personas', 'Total', 'Metodo', 'Pago', 'Reserva', 'Acciones']}>
+        <AdminTable embedded headers={['Referencia', 'Cliente', 'Fecha', 'Bote / tour', 'Personas', 'Total', 'Metodo', 'Pago', 'Reserva', 'Acciones']}>
           {visibleReservations.map((reservation) => (
             <tr key={reservation.id}>
               <td>{reservation.booking_reference}</td>
@@ -304,6 +303,7 @@ export default function AdminReservationsPage() {
           ) : null}
         </AdminTable>
       )}
+      </AdminModuleSurface>
     </div>
   );
 }
