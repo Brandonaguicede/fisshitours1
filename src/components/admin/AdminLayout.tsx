@@ -1,5 +1,5 @@
 import { Bell, CalendarDays, ChevronRight, CreditCard, FileText, Gauge, Image, LayoutDashboard, LifeBuoy, LogOut, MapPin, Menu, MessageSquare, Package, Settings, Ship, Star, Users, X } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, NavLink, Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom';
 
 import { getCurrentAdminProfile, signOutAdmin, type AdminProfile } from '../../services/adminAuthService';
@@ -55,7 +55,7 @@ const titles: Record<string, string> = {
 };
 
 export default function AdminLayout() {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(() => typeof window !== 'undefined' && window.matchMedia('(min-width: 961px)').matches);
   const [profile, setProfile] = useState<AdminProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [authError, setAuthError] = useState('');
@@ -63,6 +63,45 @@ export default function AdminLayout() {
   const navigate = useNavigate();
   const title = titles[location.pathname] ?? 'Panel admin';
   const crumb = useMemo(() => `Fishing Tours / Admin / ${title}`, [title]);
+  const sidebarRef = useRef<HTMLElement>(null);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 960px)');
+    const onChange = (event: MediaQueryListEvent) => setOpen(!event.matches);
+    media.addEventListener('change', onChange);
+    return () => media.removeEventListener('change', onChange);
+  }, []);
+
+  useEffect(() => {
+    if (open) sidebarRef.current?.removeAttribute('inert');
+    else sidebarRef.current?.setAttribute('inert', '');
+  }, [open]);
+
+  useEffect(() => {
+    if (!open || !window.matchMedia('(max-width: 960px)').matches) return;
+    const sidebar = sidebarRef.current;
+    const focusable = sidebar?.querySelectorAll<HTMLElement>('a[href], button:not([disabled])');
+    focusable?.[0]?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setOpen(false);
+        menuButtonRef.current?.focus();
+        return;
+      }
+      if (event.key !== 'Tab' || !focusable?.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [open]);
+
+  function closeOnMobile() {
+    if (window.matchMedia('(max-width: 960px)').matches) setOpen(false);
+  }
 
   useEffect(() => {
     let mounted = true;
@@ -103,10 +142,10 @@ export default function AdminLayout() {
   }
 
   return (
-    <div className="admin-shell">
-      <div className={open ? 'admin-mobile-overlay admin-mobile-overlay--visible' : 'admin-mobile-overlay'} onClick={() => setOpen(false)} />
-      <aside className={open ? 'admin-sidebar admin-sidebar--open' : 'admin-sidebar'}>
-        <Link className="admin-sidebar__brand" to="/admin" onClick={() => setOpen(false)}>
+    <div className={open ? 'admin-shell admin-shell--sidebar-open' : 'admin-shell admin-shell--sidebar-closed'}>
+      <div className={open ? 'admin-mobile-overlay admin-mobile-overlay--visible' : 'admin-mobile-overlay'} onClick={() => { setOpen(false); menuButtonRef.current?.focus(); }} />
+      <aside ref={sidebarRef} id="admin-sidebar" className={open ? 'admin-sidebar admin-sidebar--open' : 'admin-sidebar'} aria-hidden={!open}>
+        <Link className="admin-sidebar__brand" to="/admin" onClick={closeOnMobile}>
           <span className="admin-brand-logo admin-brand-logo--sidebar">
             <img src="/images/papagayo-logo.png" alt="" aria-hidden="true" />
           </span>
@@ -126,7 +165,7 @@ export default function AdminLayout() {
                       end={item.to === '/admin'}
                       className={({ isActive }) => (isActive ? 'admin-sidebar__link admin-sidebar__link--active' : 'admin-sidebar__link')}
                       to={item.to}
-                      onClick={() => setOpen(false)}
+                      onClick={closeOnMobile}
                     >
                       <item.icon size={18} />
                       <span>{item.label}</span>
@@ -141,7 +180,7 @@ export default function AdminLayout() {
       <main className="admin-main">
         <div className="admin-content">
           <header className="admin-topbar">
-            <button className="admin-topbar__menu" type="button" aria-label={open ? 'Cerrar menu' : 'Abrir menu'} onClick={() => setOpen((value) => !value)}>
+            <button ref={menuButtonRef} className="admin-topbar__menu" type="button" aria-label={open ? 'Cerrar menu' : 'Abrir menu'} aria-expanded={open} aria-controls="admin-sidebar" onClick={() => setOpen((value) => !value)}>
               {open ? <X size={19} /> : <Menu size={19} />}
             </button>
             <div className="admin-topbar__titles">

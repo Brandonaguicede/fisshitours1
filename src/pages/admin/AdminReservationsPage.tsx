@@ -1,5 +1,5 @@
-import { Check, Download, Plus, Search, X } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { Check, Download, Filter, Plus, Search, X } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { AdminBadge, AdminPageHeader, AdminTable, AdminToolbar } from '../../components/admin/AdminPrimitives';
 import { supabase } from '../../lib/supabase';
@@ -65,6 +65,38 @@ export default function AdminReservationsPage() {
   const [busyId, setBusyId] = useState('');
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const filterTriggerRef = useRef<HTMLButtonElement>(null);
+  const filterPanelRef = useRef<HTMLDivElement>(null);
+  const firstFilterRef = useRef<HTMLSelectElement>(null);
+  const activeFilterCount = Number(bookingStatus !== 'all') + Number(paymentStatus !== 'all') + Number(Boolean(date));
+
+  useEffect(() => {
+    if (!filtersOpen) return;
+    firstFilterRef.current?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setFiltersOpen(false);
+        filterTriggerRef.current?.focus();
+      }
+    };
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (!filterPanelRef.current?.contains(target) && !filterTriggerRef.current?.contains(target)) setFiltersOpen(false);
+    };
+    document.addEventListener('keydown', onKeyDown);
+    document.addEventListener('pointerdown', onPointerDown);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      document.removeEventListener('pointerdown', onPointerDown);
+    };
+  }, [filtersOpen]);
+
+  function resetFilters() {
+    setBookingStatus('all');
+    setPaymentStatus('all');
+    setDate('');
+  }
 
   async function loadReservations() {
     setLoading(true);
@@ -166,13 +198,50 @@ export default function AdminReservationsPage() {
           <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ocean-400" size={15} />
           <input className="admin-input pl-9" placeholder="Buscar cliente, email o WhatsApp" value={search} onChange={(event) => setSearch(event.target.value)} />
         </div>
-        <select className="admin-select" value={bookingStatus} onChange={(event) => setBookingStatus(event.target.value)}>
-          {bookingStatusOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-        </select>
-        <select className="admin-select" value={paymentStatus} onChange={(event) => setPaymentStatus(event.target.value)}>
-          {paymentStatusOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-        </select>
-        <input className="admin-input" type="date" value={date} onChange={(event) => setDate(event.target.value)} />
+        <div className="admin-filter-menu">
+          <button
+            ref={filterTriggerRef}
+            className="admin-btn admin-btn--secondary admin-filter-trigger"
+            type="button"
+            aria-expanded={filtersOpen}
+            aria-controls="reservation-filters"
+            onClick={() => setFiltersOpen((value) => !value)}
+          >
+            <Filter size={16} /> <span>Filtros</span>
+            {activeFilterCount > 0 ? <AdminBadge value={String(activeFilterCount)} /> : null}
+          </button>
+          {filtersOpen ? (
+            <>
+              <div className="admin-filter-backdrop" aria-hidden="true" />
+              <div ref={filterPanelRef} id="reservation-filters" className="admin-filter-panel" role="dialog" aria-label="Filtros de reservas">
+                <div className="admin-filter-panel__header">
+                  <div><strong>Filtros</strong><span>Refina la lista de reservas.</span></div>
+                  <button className="admin-icon-btn" type="button" aria-label="Cerrar filtros" onClick={() => { setFiltersOpen(false); filterTriggerRef.current?.focus(); }}><X size={17} /></button>
+                </div>
+                <label className="admin-field">
+                  <span className="admin-field__label">Estado de reserva</span>
+                  <select ref={firstFilterRef} className="admin-select" value={bookingStatus} onChange={(event) => setBookingStatus(event.target.value)}>
+                    {bookingStatusOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                  </select>
+                </label>
+                <label className="admin-field">
+                  <span className="admin-field__label">Estado de pago</span>
+                  <select className="admin-select" value={paymentStatus} onChange={(event) => setPaymentStatus(event.target.value)}>
+                    {paymentStatusOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                  </select>
+                </label>
+                <label className="admin-field">
+                  <span className="admin-field__label">Fecha del tour</span>
+                  <input className="admin-input" type="date" value={date} onChange={(event) => setDate(event.target.value)} />
+                </label>
+                <div className="admin-filter-panel__actions">
+                  <button className="admin-btn admin-btn--ghost" type="button" disabled={activeFilterCount === 0} onClick={resetFilters}>Limpiar</button>
+                  <button className="admin-btn" type="button" onClick={() => { setFiltersOpen(false); filterTriggerRef.current?.focus(); }}>Listo</button>
+                </div>
+              </div>
+            </>
+          ) : null}
+        </div>
       </AdminToolbar>
 
       {error ? (
