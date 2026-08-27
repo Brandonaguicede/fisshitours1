@@ -1326,6 +1326,41 @@ export type Database = {
           },
         ]
       }
+      tour_locations: {
+        Row: {
+          created_at: string
+          id: string
+          location: string
+          sort_order: number
+          tour_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          location: string
+          sort_order?: number
+          tour_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          location?: string
+          sort_order?: number
+          tour_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tour_locations_tour_id_fkey"
+            columns: ["tour_id"]
+            isOneToOne: false
+            referencedRelation: "tours"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tour_packages: {
         Row: {
           active: boolean

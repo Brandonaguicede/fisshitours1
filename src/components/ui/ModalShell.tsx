@@ -17,6 +17,11 @@ export function ModalShell({ open, onClose, titleId, children, className, tone =
   const reduceMotion = useReducedMotion();
   const panelRef = useRef<HTMLDivElement | null>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
+  const onCloseRef = useRef(onClose);
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
 
   useEffect(() => {
     if (!open) return;
@@ -41,7 +46,7 @@ export function ModalShell({ open, onClose, titleId, children, className, tone =
     function onKeyDown(event: KeyboardEvent) {
       if (event.key === 'Escape') {
         event.stopPropagation();
-        onClose();
+        onCloseRef.current();
         return;
       }
       if (event.key !== 'Tab' || !panelRef.current) return;
@@ -71,7 +76,7 @@ export function ModalShell({ open, onClose, titleId, children, className, tone =
       previousFocusRef.current?.focus({ preventScroll: true });
       window.scrollTo(0, scrollY);
     };
-  }, [open, onClose]);
+  }, [open]);
 
   const modal = (
     <AnimatePresence>

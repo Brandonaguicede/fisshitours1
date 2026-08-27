@@ -290,6 +290,27 @@ body:has(.admin-login) {
   outline-offset: 3px;
 }
 
+.admin-icon-action {
+  display: inline-grid;
+  place-items: center;
+  padding: 0.35rem;
+  color: var(--admin-muted);
+  background: transparent;
+  border: 0;
+  border-radius: 0.5rem;
+  transition: color 160ms ease, background-color 160ms ease;
+}
+
+.admin-icon-action:hover {
+  color: var(--admin-primary-dark);
+  background: var(--admin-primary-soft);
+}
+
+.admin-icon-action:focus-visible {
+  outline: 2px solid var(--admin-focus);
+  outline-offset: 2px;
+}
+
 .admin-topbar__menu {
   display: none;
 }
@@ -1644,6 +1665,61 @@ body:has(.admin-login) {
   object-fit: cover;
 }
 
+.admin-tour-image-slot__media {
+  display: block;
+  width: 100%;
+  padding: 0;
+  overflow: hidden;
+  background: transparent;
+  border: 0;
+}
+
+.admin-tour-image-slot--editing {
+  grid-column: span 2;
+}
+
+.admin-tour-image-slot--editing .admin-image-manager {
+  min-width: 0;
+}
+
+.admin-tour-image-slot--editing .admin-image-manager__preview {
+  min-height: 9rem;
+}
+
+.admin-tour-image-slot--editing .admin-image-manager__path {
+  display: none;
+}
+
+.admin-location-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  min-height: 1.75rem;
+}
+
+.admin-location-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.55rem 0.35rem 0.7rem;
+  color: var(--admin-ink);
+  background: var(--admin-surface-subtle);
+  border: 1px solid var(--admin-line);
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.admin-location-chip button {
+  display: grid;
+  place-items: center;
+  padding: 0;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  border-radius: 999px;
+}
+
 .admin-tour-image-slot__empty {
   display: grid;
   place-items: center;
@@ -1699,6 +1775,14 @@ body:has(.admin-login) {
   border: 1px solid var(--admin-line-soft);
   border-radius: var(--admin-radius-md);
   background: var(--admin-surface-subtle);
+}
+
+.admin-package-editor__heading,
+.admin-package-editor__actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
 }
 
 .admin-package-preview > div:first-child {
