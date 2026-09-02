@@ -40,13 +40,14 @@ export function TurnstileBox({ token, resetKey, action = 'booking', className, o
       return;
     }
 
+    const siteKey = TURNSTILE_SITE_KEY;
     let cancelled = false;
     const renderWidget = () => {
       if (cancelled || !containerRef.current || !window.turnstile) return;
       containerRef.current.innerHTML = '';
       setLoadState('ready');
       widgetIdRef.current = window.turnstile.render(containerRef.current, {
-        sitekey: TURNSTILE_SITE_KEY,
+        sitekey: siteKey,
         action,
         callback: onTokenChange,
         'expired-callback': () => onTokenChange(''),

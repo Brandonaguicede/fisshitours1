@@ -78,6 +78,7 @@ function getClientIp(req: Request) {
 }
 
 async function verifyTurnstile(token: string | undefined, req: Request) {
+  if (Deno.env.get('DISABLE_TURNSTILE') === 'true') return true;
   if (areExternalProviderMocksAllowed()) return token === 'mock-valid-turnstile';
   if (!token) return false;
   const secret = Deno.env.get('TURNSTILE_SECRET_KEY') ?? Deno.env.get('CLOUDFLARE_TURNSTILE_SECRET_KEY');

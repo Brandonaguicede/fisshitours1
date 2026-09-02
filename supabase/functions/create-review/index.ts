@@ -87,8 +87,10 @@ async function hashIp(value: string) {
   return Array.from(new Uint8Array(hash)).map((byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
-async function verifyTurnstile(token: string, req: Request) {
+async function verifyTurnstile(token: string | undefined, req: Request) {
+  if (Deno.env.get('DISABLE_TURNSTILE') === 'true') return true;
   if (areExternalProviderMocksAllowed()) return token === 'mock-valid-turnstile';
+  if (!token) return false;
   const secret = Deno.env.get('TURNSTILE_SECRET_KEY') ?? Deno.env.get('CLOUDFLARE_TURNSTILE_SECRET_KEY');
   if (!secret) return false;
   const controller = new AbortController();
