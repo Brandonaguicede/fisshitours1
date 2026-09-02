@@ -57,9 +57,19 @@ async function callPayPalFunction<T>(name: string, body: unknown): Promise<T> {
     },
     body: JSON.stringify(body),
   });
-  const data = await response.json();
+  const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data?.message || 'PayPal request could not be completed.');
   return data as T;
+}
+
+export function getPayPalErrorMessage(error: unknown) {
+  if (error instanceof Error && error.message) return error.message;
+  if (typeof error === 'string' && error.trim()) return error;
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return 'PayPal returned an error. Please try again or choose another payment method.';
+  }
 }
 
 export async function createPayPalOrder(bookingId: string) {

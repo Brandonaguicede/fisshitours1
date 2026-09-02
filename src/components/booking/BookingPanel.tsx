@@ -6,7 +6,7 @@ import { getBoatText, getPackageLabel, getTourGroupKey, getTourText } from '../.
 import { useLanguage } from '../../i18n/LanguageContext';
 import { text, tr } from '../../i18n/translations';
 import { MOCK_TURNSTILE_TOKEN, USE_LOCAL_TURNSTILE_MOCK } from '../../lib/turnstile';
-import { capturePayPalOrder, createPayPalOrder, loadPayPalSdk, type PayPalCaptureResult } from '../../services/paypalService';
+import { capturePayPalOrder, createPayPalOrder, getPayPalErrorMessage, loadPayPalSdk, type PayPalCaptureResult } from '../../services/paypalService';
 import { getBookingAvailability, type AvailabilitySlot } from '../../services/availabilityService';
 import { calculateBookingPrice, createBooking, getActiveDepartureLocations, type BookingResult, type DepartureLocation, type PriceResult } from '../../services/bookingService';
 import { getActivePaymentMethods } from '../../services/paymentService';
@@ -1057,17 +1057,28 @@ function PayPalCheckoutBox(props: {
   onError: (message: string) => void;
   onCancel: () => void;
 }) {
-  const { booking, createdBooking, onSuccess, onError, onCancel } = props;
+  const { createdBooking, onSuccess, onError, onCancel } = props;
   const clientId = import.meta.env.VITE_PAYPAL_CLIENT_ID;
-  const containerId = `paypal-button-container-${booking.bookingReference}`;
+  const containerId = `paypal-button-container-${createdBooking.booking_id}`;
+  const callbacksRef = useRef({ onSuccess, onError, onCancel });
+
+  useEffect(() => {
+    callbacksRef.current = { onSuccess, onError, onCancel };
+  }, [onSuccess, onError, onCancel]);
+
+  const buttonStyle = useMemo(
+    () => ({ layout: 'vertical', color: 'blue', shape: 'rect', label: 'paypal' }),
+    [],
+  );
 
   useEffect(() => {
     let isMounted = true;
+    let rendered = false;
     const container = document.getElementById(containerId);
     if (container) container.innerHTML = '';
 
     if (!clientId) {
-      onError('PayPal is not configured. Set VITE_PAYPAL_CLIENT_ID to enable sandbox checkout.');
+      callbacksRef.current.onError('PayPal is not configured. Set VITE_PAYPAL_CLIENT_ID to enable sandbox checkout.');
       return;
     }
 
@@ -1075,32 +1086,37 @@ function PayPalCheckoutBox(props: {
       createPayPalOrder(createdBooking.booking_id)
         .then((orderId) => capturePayPalOrder(orderId, createdBooking.booking_id, createdBooking.booking_reference))
         .then((result) => {
-          if (isMounted) onSuccess(result);
+          if (isMounted) callbacksRef.current.onSuccess(result);
         })
-        .catch((error: Error) => onError(error.message));
+        .catch((error: Error) => callbacksRef.current.onError(error.message));
       return;
     }
 
     loadPayPalSdk(clientId)
       .then(() => {
         if (!isMounted || !window.paypal) return;
+        rendered = true;
         return window.paypal.Buttons({
-          style: { layout: 'vertical', color: 'blue', shape: 'rect', label: 'paypal' },
+          style: buttonStyle,
           createOrder: () => createPayPalOrder(createdBooking.booking_id),
           onApprove: async (data) => {
             const result = await capturePayPalOrder(data.orderID, createdBooking.booking_id, createdBooking.booking_reference);
-            onSuccess(result);
+            callbacksRef.current.onSuccess(result);
           },
-          onCancel,
-          onError: () => onError('PayPal returned an error. Please try again or choose another payment method.'),
+          onCancel: () => callbacksRef.current.onCancel(),
+          onError: (error) => callbacksRef.current.onError(getPayPalErrorMessage(error)),
         }).render(`#${containerId}`);
       })
-      .catch((error: Error) => onError(error.message));
+      .catch((error: Error) => callbacksRef.current.onError(error.message));
 
     return () => {
       isMounted = false;
+      if (!rendered) {
+        const container = document.getElementById(containerId);
+        if (container) container.innerHTML = '';
+      }
     };
-  }, [booking, booking.bookingReference, clientId, containerId, createdBooking.booking_id, createdBooking.booking_reference, onError, onSuccess]);
+  }, [buttonStyle, clientId, containerId, createdBooking.booking_id, createdBooking.booking_reference]);
 
   return (
     <div className="mt-4 rounded-xl border border-ocean-400/25 bg-ocean-500/8 p-4">
