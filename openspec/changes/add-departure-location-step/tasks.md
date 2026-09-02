@@ -1,0 +1,12 @@
+- [x] Create `departure_locations` migration and seed initial locations.
+- [x] Add nullable departure snapshot columns to `bookings`.
+- [x] Update `create_booking_transaction` in a new migration.
+- [x] Update `calculate-booking-price` to include active-location surcharge.
+- [x] Add the required public booking step.
+- [x] Show departure location and surcharge in summaries and WhatsApp messages.
+- [x] Preserve PayPal/pay-on-day/WhatsApp payment flows while using backend totals.
+- [x] Add admin page for departure locations.
+- [x] Show departure snapshots in admin reservations.
+- [x] Add backend tests for surcharges, inactive locations, snapshots, old bookings, PayPal, pay-on-day, WhatsApp, and admin management.
+- [ ] Apply migration `202609010001_departure_locations.sql` to the production Supabase project.
+- [ ] Configure Vercel `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` for the affected deployment.

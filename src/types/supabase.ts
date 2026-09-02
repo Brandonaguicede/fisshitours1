@@ -461,6 +461,10 @@ export type Database = {
           created_at: string
           currency: string
           customer_id: string
+          departure_currency_snapshot: string | null
+          departure_location_id: string | null
+          departure_location_name_snapshot: string | null
+          departure_surcharge_snapshot: number | null
           expires_at: string | null
           extra_guest_price_snapshot: number
           extra_guests_snapshot: number
@@ -492,6 +496,10 @@ export type Database = {
           created_at?: string
           currency?: string
           customer_id: string
+          departure_currency_snapshot?: string | null
+          departure_location_id?: string | null
+          departure_location_name_snapshot?: string | null
+          departure_surcharge_snapshot?: number | null
           expires_at?: string | null
           extra_guest_price_snapshot: number
           extra_guests_snapshot?: number
@@ -523,6 +531,10 @@ export type Database = {
           created_at?: string
           currency?: string
           customer_id?: string
+          departure_currency_snapshot?: string | null
+          departure_location_id?: string | null
+          departure_location_name_snapshot?: string | null
+          departure_surcharge_snapshot?: number | null
           expires_at?: string | null
           extra_guest_price_snapshot?: number
           extra_guests_snapshot?: number
@@ -567,6 +579,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "bookings_departure_location_id_fkey"
+            columns: ["departure_location_id"]
+            isOneToOne: false
+            referencedRelation: "departure_locations"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "bookings_payment_method_key_fkey"
             columns: ["payment_method_key"]
             isOneToOne: false
@@ -595,6 +614,48 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      departure_locations: {
+        Row: {
+          active: boolean
+          created_at: string
+          currency: string
+          description: string | null
+          id: string
+          is_default: boolean
+          name: string
+          slug: string
+          sort_order: number
+          surcharge_amount: number
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          currency?: string
+          description?: string | null
+          id?: string
+          is_default?: boolean
+          name: string
+          slug: string
+          sort_order?: number
+          surcharge_amount?: number
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          currency?: string
+          description?: string | null
+          id?: string
+          is_default?: boolean
+          name?: string
+          slug?: string
+          sort_order?: number
+          surcharge_amount?: number
+          updated_at?: string
+        }
+        Relationships: []
       }
       customers: {
         Row: {
