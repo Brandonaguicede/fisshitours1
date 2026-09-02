@@ -66,7 +66,9 @@ serve(async (req) => {
 
     return Response.json({ id: data.id, bookingId: booking.id, bookingReference: booking.booking_reference, amount, currency: booking.currency }, { headers });
   } catch (error) {
-    return Response.json({ message: error instanceof Error ? error.message : 'PayPal request could not be completed' }, { status: 500, headers });
+    const message = error instanceof Error ? error.message : 'PayPal request could not be completed';
+    const status = message.toLowerCase().includes('auth') ? 401 : 500;
+    return Response.json({ message }, { status, headers });
   }
 });
 
@@ -96,7 +98,7 @@ async function getPayPalAccessToken() {
     body: 'grant_type=client_credentials',
   });
   const data = await response.json();
-  if (!response.ok) throw new Error(data?.error_description ?? 'PayPal authentication failed');
+  if (!response.ok) throw new Error(data?.error_description ?? 'PayPal client authentication failed. Check PAYPAL_CLIENT_ID, PAYPAL_CLIENT_SECRET and PAYPAL_ENVIRONMENT.');
   return data.access_token as string;
 }
 
