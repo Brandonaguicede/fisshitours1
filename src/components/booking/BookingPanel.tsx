@@ -167,6 +167,12 @@ const bookingPayload = selectedTour
     headingRef.current?.focus();
   }, [activeStep]);
 
+  useEffect(() => {
+    if (departureLocationId || !departureLocations.length) return;
+    const defaultLocation = departureLocations.find((location) => location.is_default) ?? departureLocations[0];
+    setDepartureLocationId(defaultLocation.id);
+  }, [departureLocationId, departureLocations]);
+
   function handleBoatChange(boatId: string) {
     const nextBoat = boats.find((boat) => boat.id === boatId);
     if (!nextBoat) return;
@@ -809,7 +815,7 @@ function DepartureLocationStep(props: {
         ) : null}
         <div className="grid gap-2 min-[520px]:grid-cols-2">
           {props.locations.map((location) => (
-            <ChoiceCard as="label" key={location.id} className="cursor-pointer p-3 text-left sm:p-4" selected={props.selectedLocationId === location.id}>
+            <ChoiceCard as="label" key={location.id} className="cursor-pointer p-3 text-left sm:p-4" selected={props.selectedLocationId === location.id} onClick={() => props.onLocationChange(location.id)}>
               <input className="sr-only" type="radio" name="departureLocation" value={location.id} checked={props.selectedLocationId === location.id} onChange={() => props.onLocationChange(location.id)} />
               <span className="flex items-start justify-between gap-3">
                 <span className="min-w-0">
