@@ -37,6 +37,9 @@ export interface BookingPaymentPayload {
   additionalGuests: number;
   additionalGuestPrice: number;
   additionalGuestCharge: number;
+  departureLocationName: string;
+  departureSurcharge: number;
+  departureCurrency: string;
   extras: Array<{ key: string; label: string; quantity: number; unit_price: number; total: number }>;
   extrasTotal: number;
   total: number;
@@ -58,6 +61,7 @@ export function buildBookingPaymentPayload(input: {
   date: string;
   guests: number;
   pricing: BookingPricing;
+  departureLocation?: { name: string; surcharge_amount: number; currency: string };
   extras?: Array<{ key: string; label: string; quantity: number; unit_price: number; total: number }>;
   specialRequests: string;
 }): BookingPaymentPayload {
@@ -77,6 +81,9 @@ export function buildBookingPaymentPayload(input: {
     additionalGuests: input.pricing.extraGuests,
     additionalGuestPrice: input.pricing.extraGuestPrice,
     additionalGuestCharge: input.pricing.extraGuestsTotal,
+    departureLocationName: cleanText(input.departureLocation?.name ?? ''),
+    departureSurcharge: Number(input.departureLocation?.surcharge_amount ?? input.pricing.departureSurcharge ?? 0),
+    departureCurrency: input.departureLocation?.currency ?? 'USD',
     extras: input.extras ?? [],
     extrasTotal: input.pricing.extrasTotal,
     total: input.pricing.total,
@@ -114,6 +121,8 @@ export function createWhatsAppBookingMessage(booking: BookingPaymentPayload, var
     `Includes up to: ${booking.includedGuests} guests`,
     `Additional guests: ${booking.additionalGuests} x ${formatMessageCurrency(booking.additionalGuestPrice)}`,
     `Additional guest charge: ${formatMessageCurrency(booking.additionalGuestCharge)}`,
+    `Departure location: ${booking.departureLocationName || 'Not selected'}`,
+    `Departure surcharge: ${booking.departureSurcharge > 0 ? formatMessageCurrency(booking.departureSurcharge) : 'No cost'}`,
     `Extras: ${booking.extras.length ? booking.extras.map((extra) => `${extra.label} x${extra.quantity}`).join(', ') : 'None'}`,
     `Extras charge: ${formatMessageCurrency(booking.extrasTotal)}`,
     `Total: ${formatMessageCurrency(booking.total)}`,

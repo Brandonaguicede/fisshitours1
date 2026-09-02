@@ -24,7 +24,7 @@ export function getBoatStartingPrice(boatId: string, tours: BoatTour[]) {
   return prices.length ? Math.min(...prices) : 0;
 }
 
-export function calculateBookingTotal(boat: Boat, tour: BoatTour | undefined, guests: number) {
+export function calculateBookingTotal(boat: Boat, tour: BoatTour | undefined, guests: number, departureSurcharge = 0) {
   if (!tour || tour.customQuote) {
     return {
       isCustomQuote: true,
@@ -34,6 +34,7 @@ export function calculateBookingTotal(boat: Boat, tour: BoatTour | undefined, gu
       extraGuestPrice: getExtraGuestPrice(boat, tour),
       extraGuestsTotal: 0,
       extrasTotal: 0,
+      departureSurcharge: 0,
       total: 0,
     };
   }
@@ -51,6 +52,7 @@ export function calculateBookingTotal(boat: Boat, tour: BoatTour | undefined, gu
     extraGuestPrice,
     extraGuestsTotal,
     extrasTotal: 0,
-    total: tour.basePrice + extraGuestsTotal,
+    departureSurcharge,
+    total: tour.basePrice + extraGuestsTotal + departureSurcharge,
   };
 }

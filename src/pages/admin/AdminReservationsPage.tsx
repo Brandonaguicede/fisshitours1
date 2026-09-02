@@ -11,6 +11,8 @@ interface AdminReservation {
   tour_date: string;
   guests: number;
   total_snapshot: number;
+  departure_location_name_snapshot: string | null;
+  departure_surcharge_snapshot: number | null;
   payment_method_key: string;
   payment_status: string;
   booking_status: string;
@@ -110,6 +112,8 @@ export default function AdminReservationsPage() {
         tour_date,
         guests,
         total_snapshot,
+        departure_location_name_snapshot,
+        departure_surcharge_snapshot,
         payment_method_key,
         payment_status,
         booking_status,
@@ -256,7 +260,7 @@ export default function AdminReservationsPage() {
       {loading ? (
         <p className="admin-muted">Cargando reservas...</p>
       ) : (
-        <AdminTable embedded headers={['Referencia', 'Cliente', 'Fecha', 'Bote / tour', 'Personas', 'Total', 'Metodo', 'Pago', 'Reserva', 'Acciones']}>
+        <AdminTable embedded headers={['Referencia', 'Cliente', 'Fecha', 'Bote / tour', 'Personas', 'Salida', 'Total', 'Metodo', 'Pago', 'Reserva', 'Acciones']}>
           {visibleReservations.map((reservation) => (
             <tr key={reservation.id}>
               <td>{reservation.booking_reference}</td>
@@ -270,6 +274,7 @@ export default function AdminReservationsPage() {
               </td>
               <td>{reservation.boats?.name ?? '-'}<div className="admin-muted">{reservation.tours?.title ?? '-'}</div></td>
               <td>{reservation.guests}</td>
+              <td>{reservation.departure_location_name_snapshot ?? '-'}<div className="admin-muted">{Number(reservation.departure_surcharge_snapshot ?? 0) > 0 ? money(Number(reservation.departure_surcharge_snapshot)) : 'Sin costo'}</div></td>
               <td>{money(Number(reservation.total_snapshot))}</td>
               <td>{reservation.payment_method_key}</td>
               <td><AdminBadge value={reservation.payment_status} /></td>
@@ -298,7 +303,7 @@ export default function AdminReservationsPage() {
           ))}
           {visibleReservations.length === 0 ? (
             <tr>
-              <td colSpan={10} className="admin-muted">No hay reservas para este filtro.</td>
+              <td colSpan={11} className="admin-muted">No hay reservas para este filtro.</td>
             </tr>
           ) : null}
         </AdminTable>

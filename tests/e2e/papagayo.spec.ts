@@ -17,11 +17,15 @@ function projectDate(projectName: string, baseDate: string): string {
 }
 
 async function choosePackage(page: import('@playwright/test').Page, amount: string) {
-  await page.locator('label').filter({ hasText: amount }).first().click();
+  await page.locator('#booking label').filter({ hasText: amount }).first().click();
 }
 
 async function chooseTimeSlot(page: import('@playwright/test').Page, label: string) {
-  await page.locator('label').filter({ hasText: label }).first().click();
+  await page.locator('#booking label').filter({ hasText: label }).first().click();
+}
+
+async function chooseDepartureLocation(page: import('@playwright/test').Page, label: string) {
+  await page.locator('#booking label').filter({ hasText: label }).first().click();
 }
 
 test.describe('Papagayo connected frontend', () => {
@@ -70,14 +74,20 @@ test.describe('Papagayo connected frontend', () => {
     const date = projectDate(testInfo.project.name, '2026-12-01');
     await page.goto('/');
     await page.locator('#booking').scrollIntoViewIfNeeded();
-    await page.getByRole('button', { name: /Continue/i }).first().click();
-    await page.getByRole('button', { name: /Beach/i }).first().click();
+    const booking = page.locator('#booking');
+    await booking.getByRole('button', { name: /Continue/i }).first().click();
+    await booking.getByRole('button', { name: /Beach/i }).first().click();
     await choosePackage(page, 'USD 650');
     await page.getByLabel(/Date/i).fill(date);
     await page.getByLabel(/Guests/i).fill('6');
     await expect(page.getByText(/USD\s*715/).first()).toBeVisible();
     await chooseTimeSlot(page, 'Morning');
-    await page.getByRole('button', { name: /Continue/i }).last().click();
+    await booking.getByRole('button', { name: /Continue/i }).last().click();
+    await expect(page.getByRole('heading', { name: /Selecciona el lugar de salida/i })).toBeVisible();
+    await expect(page.getByText(/Selecciona un lugar de salida/i)).toBeVisible();
+    await chooseDepartureLocation(page, 'Tamarindo');
+    await expect(page.getByText(/USD\s*765/).first()).toBeVisible();
+    await booking.getByRole('button', { name: /Continuar|Continue/i }).last().click();
     await page.getByPlaceholder('John Smith').fill('E2E Tester');
     await page.getByPlaceholder('john@email.com').fill('e2e@example.com');
     await page.getByPlaceholder('+506 0000 0000').fill('50600000000');
@@ -90,8 +100,9 @@ test.describe('Papagayo connected frontend', () => {
     const second = await context.newPage();
     await second.goto('/');
     await second.locator('#booking').scrollIntoViewIfNeeded();
-    await second.getByRole('button', { name: /Continue/i }).first().click();
-    await second.getByRole('button', { name: /Beach/i }).first().click();
+    const secondBooking = second.locator('#booking');
+    await secondBooking.getByRole('button', { name: /Continue/i }).first().click();
+    await secondBooking.getByRole('button', { name: /Beach/i }).first().click();
     await second.getByLabel(/Date/i).fill(date);
     await expect(second.getByText('Unavailable').first()).toBeVisible();
     await page.screenshot({ path: `${screenshotDir}/pay-on-day-result.png`, fullPage: true });
@@ -106,11 +117,14 @@ test.describe('Papagayo connected frontend', () => {
     });
     await page.goto('/');
     await page.locator('#booking').scrollIntoViewIfNeeded();
-    await page.getByRole('button', { name: /Continue/i }).first().click();
-    await page.getByRole('button', { name: /Fishing/i }).first().click();
+    const booking = page.locator('#booking');
+    await booking.getByRole('button', { name: /Continue/i }).first().click();
+    await booking.getByRole('button', { name: /Fishing/i }).first().click();
     await page.getByLabel(/Date/i).fill(date);
     await chooseTimeSlot(page, 'Morning');
-    await page.getByRole('button', { name: /Continue/i }).last().click();
+    await booking.getByRole('button', { name: /Continue/i }).last().click();
+    await chooseDepartureLocation(page, 'Playas del Coco');
+    await booking.getByRole('button', { name: /Continuar|Continue/i }).last().click();
     await page.getByPlaceholder('John Smith').fill('WhatsApp Tester');
     await page.getByPlaceholder('john@email.com').fill('wa@example.com');
     await page.getByPlaceholder('+506 0000 0000').fill('50600000000');
@@ -130,6 +144,8 @@ test.describe('Papagayo connected frontend', () => {
     expect(message).toMatch(/Time:/);
     expect(message).toMatch(/Guests: \d+/);
     expect(message).toContain('Extras: None');
+    expect(message).toContain('Departure location: Playas del Coco');
+    expect(message).toContain('Departure surcharge: No cost');
     expect(message).toMatch(/Total: \$/);
     expect(message).not.toContain('Payment Successful');
     expect(page.getByText('Payment Successful')).toHaveCount(0);
@@ -140,11 +156,15 @@ test.describe('Papagayo connected frontend', () => {
     const date = projectDate(testInfo.project.name, '2026-12-03');
     await page.goto('/');
     await page.locator('#booking').scrollIntoViewIfNeeded();
-    await page.getByRole('button', { name: /Continue/i }).first().click();
-    await page.getByRole('button', { name: /Beach/i }).first().click();
+    const booking = page.locator('#booking');
+    await booking.getByRole('button', { name: /Continue/i }).first().click();
+    await booking.getByRole('button', { name: /Beach/i }).first().click();
     await page.getByLabel(/Date/i).fill(date);
     await chooseTimeSlot(page, 'Morning');
-    await page.getByRole('button', { name: /Continue/i }).last().click();
+    await booking.getByRole('button', { name: /Continue/i }).last().click();
+    await chooseDepartureLocation(page, 'Flamingo');
+    await expect(page.getByText(/USD\s*700/).first()).toBeVisible();
+    await booking.getByRole('button', { name: /Continuar|Continue/i }).last().click();
     await page.getByPlaceholder('John Smith').fill('PayPal Tester');
     await page.getByPlaceholder('john@email.com').fill('paypal@example.com');
     await page.getByPlaceholder('+506 0000 0000').fill('50600000000');

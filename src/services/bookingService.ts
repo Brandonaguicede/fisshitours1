@@ -7,6 +7,7 @@ export interface PriceRequest {
   boatTourId?: string;
   tourPackageId: string;
   guests: number;
+  departureLocationId?: string;
   extras: Array<{ key: string; quantity: number }>;
 }
 
@@ -20,8 +21,22 @@ export interface PriceResult {
   extra_guests_total?: number;
   extras?: Array<{ key: string; label: string; quantity: number; unit_price: number; total: number }>;
   extras_total?: number;
+  departure_location?: DepartureLocation;
+  departure_surcharge?: number;
   total: number | null;
   currency: string;
+}
+
+export interface DepartureLocation {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  surcharge_amount: number;
+  currency: string;
+  active: boolean;
+  sort_order: number;
+  is_default: boolean;
 }
 
 export interface CreateBookingRequest {
@@ -32,6 +47,7 @@ export interface CreateBookingRequest {
   tourDate: string;
   timeSlotId: string;
   guests: number;
+  departureLocationId: string;
   mealOption?: string;
   specialRequests?: string;
   paymentMethodKey: BookingPaymentMethod;
@@ -56,6 +72,10 @@ export interface BookingResult {
   extra_guests_snapshot: number;
   extra_guests_total_snapshot: number;
   extras_total_snapshot: number;
+  departure_location_id: string | null;
+  departure_location_name_snapshot: string | null;
+  departure_surcharge_snapshot: number | null;
+  departure_currency_snapshot: string | null;
 }
 
 async function callFunction<T>(name: string, body: unknown): Promise<T> {
@@ -85,4 +105,15 @@ export function calculateBookingPrice(input: PriceRequest) {
 
 export function createBooking(input: CreateBookingRequest) {
   return callFunction<BookingResult>('create-booking', input);
+}
+
+export async function getActiveDepartureLocations() {
+  const { data, error } = await (supabase as any)
+    .from('departure_locations')
+    .select('id, name, slug, description, surcharge_amount, currency, active, sort_order, is_default')
+    .eq('active', true)
+    .order('sort_order', { ascending: true })
+    .order('name', { ascending: true });
+  if (error) throw error;
+  return (data ?? []) as DepartureLocation[];
 }

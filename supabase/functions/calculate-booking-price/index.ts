@@ -8,6 +8,7 @@ const schema = z.object({
   guests: z.number().int().positive(),
   boatId: z.string().min(1),
   tourId: z.string().min(1).optional(),
+  departureLocationId: z.string().min(1).optional(),
   extras: z.array(z.object({ key: z.string().min(1).max(80), quantity: z.number().int().positive() })).default([]),
 });
 
@@ -49,6 +50,21 @@ serve(async (req) => {
   const extraGuestsTotal = extraGuests * Number(pkg.extra_guest_price);
   const pricedExtras = [];
   let extrasTotal = 0;
+  let departureSurcharge = 0;
+  let departureLocation = null;
+
+  if (parsed.data.departureLocationId) {
+    const { data: location } = await supabase
+      .from('departure_locations')
+      .select('id, name, slug, description, surcharge_amount, currency, active, sort_order, is_default')
+      .eq('id', parsed.data.departureLocationId)
+      .eq('active', true)
+      .single();
+
+    if (!location) return Response.json({ message: 'Departure location not found' }, { status: 404, headers });
+    departureLocation = location;
+    departureSurcharge = Number(location.surcharge_amount);
+  }
 
   for (const extra of parsed.data.extras) {
     const { data: extraRecord } = await supabase
@@ -67,7 +83,7 @@ serve(async (req) => {
     pricedExtras.push({ key: extraRecord.key, label: extraRecord.label, quantity: extra.quantity, unit_price: unitPrice, total: lineTotal });
   }
 
-  const total = Number(pkg.base_price) + extraGuestsTotal + extrasTotal;
+  const total = Number(pkg.base_price) + extraGuestsTotal + extrasTotal + departureSurcharge;
 
   return Response.json({
     custom_quote: false,
@@ -79,6 +95,8 @@ serve(async (req) => {
     extra_guests_total: extraGuestsTotal,
     extras: pricedExtras,
     extras_total: extrasTotal,
+    departure_location: departureLocation,
+    departure_surcharge: departureSurcharge,
     total,
     currency: 'USD',
   }, { headers });

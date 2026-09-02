@@ -35,6 +35,7 @@ const navGroups = [
     caption: 'Pagos y sistema',
     items: [
       { label: 'Metodos de pago', to: '/admin/payment-methods', icon: CreditCard },
+      { label: 'Lugares de salida', to: '/admin/departure-locations', icon: MapPin },
       { label: 'Settings', to: '/admin/settings', icon: Settings },
     ],
   },
@@ -51,6 +52,7 @@ const titles: Record<string, string> = {
   '/admin/destinations': 'Destinos',
   '/admin/content': 'Textos editables',
   '/admin/payment-methods': 'Metodos de pago',
+  '/admin/departure-locations': 'Lugares de salida',
   '/admin/settings': 'Settings',
 };
 

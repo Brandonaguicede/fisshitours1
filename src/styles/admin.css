@@ -1095,6 +1095,12 @@ body:has(.admin-login) {
   gap: 1rem;
 }
 
+.admin-form-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1rem;
+}
+
 .admin-field {
   display: grid;
   gap: 0.35rem;
@@ -1103,6 +1109,19 @@ body:has(.admin-login) {
 
 .admin-field--narrow {
   max-width: 18rem;
+}
+
+.admin-field--wide {
+  grid-column: 1 / -1;
+}
+
+.admin-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  color: var(--admin-ink);
+  font-size: 0.86rem;
+  font-weight: 700;
 }
 
 .admin-field__label {
@@ -2231,6 +2250,10 @@ body:has(.admin-login) {
   }
 
   .admin-form-columns {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-form-grid {
     grid-template-columns: 1fr;
   }
 

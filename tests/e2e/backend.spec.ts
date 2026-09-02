@@ -137,12 +137,22 @@ function bookingPayload(overrides: Record<string, unknown> = {}): Record<string,
   };
 }
 
+async function departureLocationId(api: APIRequestContext, slug: string) {
+  const rows = await serviceSelect(api, 'departure_locations', 'id,slug,active,surcharge_amount', `slug=eq.${slug}`);
+  expect(rows).toHaveLength(1);
+  return rows[0].id as string;
+}
+
 async function createBooking(
   api: APIRequestContext,
   overrides: Record<string, unknown> = {},
   ip = uniqueIp(),
 ): Promise<{ status: number; body: any }> {
-  return fn(api, 'create-booking', bookingPayload(overrides), anonHeaders({ 'X-Forwarded-For': ip }));
+  const payload = bookingPayload({
+    departureLocationId: await departureLocationId(api, 'playas-del-coco'),
+    ...overrides,
+  });
+  return fn(api, 'create-booking', payload, anonHeaders({ 'X-Forwarded-For': ip }));
 }
 
 async function cancelBooking(api: APIRequestContext, bookingId: string, note = 'cancelled_by_test') {
@@ -202,6 +212,28 @@ test.describe('backend flows', () => {
       expect(res.body.custom_quote).toBe(false);
       expect(res.body.total).toBe(expected);
       expect(res.body.currency).toBe('USD');
+    }
+  });
+
+  test('pricing: departure locations apply configured surcharges', async ({ request }) => {
+    const cases: Array<[string, number, number]> = [
+      ['playas-del-coco', 0, 650],
+      ['tamarindo', 50, 700],
+      ['las-catalinas', 50, 700],
+      ['playa-conchal', 50, 700],
+      ['flamingo', 50, 700],
+    ];
+    for (const [slug, surcharge, total] of cases) {
+      const res = await fn(request, 'calculate-booking-price', {
+        tourPackageId: HALF_DAY_PACKAGE,
+        guests: 5,
+        boatId: BOAT_ID,
+        tourId: TOUR_ID,
+        departureLocationId: await departureLocationId(request, slug),
+      });
+      expect(res.status).toBe(200);
+      expect(res.body.departure_surcharge).toBe(surcharge);
+      expect(res.body.total).toBe(total);
     }
   });
 
@@ -310,17 +342,37 @@ test.describe('backend flows', () => {
     expect(res.body.total).toBe(650);
   });
 
+  test('booking: nonexistent and inactive departure locations are rejected', async ({ request }) => {
+    const missing = await createBooking(request, { departureLocationId: '00000000-0000-4000-8000-000000000000' });
+    expect(missing.status).toBe(400);
+    expect(missing.body.message).toContain('departure location');
+
+    const inactiveId = crypto.randomUUID();
+    const insert = await request.post(`${REST_URL}/departure_locations`, {
+      headers: serviceHeaders({ 'Content-Type': 'application/json', Prefer: 'return=minimal' }),
+      data: { id: inactiveId, name: 'Inactive Test', slug: `inactive-${inactiveId}`, surcharge_amount: 25, active: false },
+    });
+    expect([200, 201]).toContain(insert.status());
+    const inactive = await createBooking(request, { departureLocationId: inactiveId });
+    expect(inactive.status).toBe(400);
+    expect(inactive.body.message).toContain('departure location');
+  });
+
   test('booking: valid booking returns 201 with reference, pending statuses and snapshot', async ({ request }) => {
-    const res = await createBooking(request);
+    const res = await createBooking(request, { departureLocationId: await departureLocationId(request, 'flamingo') });
     expect(res.status).toBe(201);
     expect(res.body.booking_reference).toMatch(/^PFT-[A-Z0-9]{8}$/);
-    expect(res.body.total_snapshot).toBe(650);
+    expect(res.body.total_snapshot).toBe(700);
+    expect(res.body.departure_location_name_snapshot).toBe('Flamingo');
+    expect(res.body.departure_surcharge_snapshot).toBe(50);
     expect(res.body.payment_status).toBe('not_required_yet');
     expect(res.body.booking_status).toBe('pending_confirmation');
 
-    const rows = await serviceSelect(request, 'bookings', 'id,booking_reference', `id=eq.${res.body.booking_id}`);
+    const rows = await serviceSelect(request, 'bookings', 'id,booking_reference,departure_location_name_snapshot,departure_surcharge_snapshot', `id=eq.${res.body.booking_id}`);
     expect(rows).toHaveLength(1);
     expect(rows[0].booking_reference).toBe(res.body.booking_reference);
+    expect(rows[0].departure_location_name_snapshot).toBe('Flamingo');
+    expect(Number(rows[0].departure_surcharge_snapshot)).toBe(50);
   });
 
   test('booking: missing required fields are rejected', async ({ request }) => {

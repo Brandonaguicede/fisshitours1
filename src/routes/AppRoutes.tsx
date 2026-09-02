@@ -20,6 +20,7 @@ const AdminGalleryPage = lazy(() => import('../pages/admin/AdminGalleryPage'));
 const AdminDestinationsPage = lazy(() => import('../pages/admin/AdminDestinationsPage'));
 const AdminContentPage = lazy(() => import('../pages/admin/AdminContentPage'));
 const AdminPaymentMethodsPage = lazy(() => import('../pages/admin/AdminPaymentMethodsPage'));
+const AdminDepartureLocationsPage = lazy(() => import('../pages/admin/AdminDepartureLocationsPage'));
 const AdminSettingsPage = lazy(() => import('../pages/admin/AdminSettingsPage'));
 
 export function AppRoutes() {
@@ -37,6 +38,7 @@ export function AppRoutes() {
         <Route path="destinations" element={<AdminDestinationsPage />} />
         <Route path="content" element={<AdminContentPage />} />
         <Route path="payment-methods" element={<AdminPaymentMethodsPage />} />
+        <Route path="departure-locations" element={<AdminDepartureLocationsPage />} />
         <Route path="settings" element={<AdminSettingsPage />} />
       </Route>
       <Route element={<MainLayout />}>
