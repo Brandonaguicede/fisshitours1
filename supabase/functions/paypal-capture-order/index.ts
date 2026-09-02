@@ -11,60 +11,64 @@ const headers = {
 };
 
 serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers });
-  if (req.method !== 'POST') return Response.json({ message: 'Method not allowed' }, { status: 405, headers });
-  const parsed = schema.safeParse(await req.json().catch(() => null));
-  if (!parsed.success) return Response.json({ message: 'Invalid capture payload', issues: parsed.error.issues }, { status: 400, headers });
+  try {
+    if (req.method === 'OPTIONS') return new Response('ok', { headers });
+    if (req.method !== 'POST') return Response.json({ message: 'Method not allowed' }, { status: 405, headers });
+    const parsed = schema.safeParse(await req.json().catch(() => null));
+    if (!parsed.success) return Response.json({ message: 'Invalid capture payload', issues: parsed.error.issues }, { status: 400, headers });
 
-  const supabase = getSupabase();
-  const { data: booking, error } = await supabase
-    .from('bookings')
-    .select('id, total_snapshot, currency, paypal_order_id')
-    .eq('id', parsed.data.bookingId)
-    .single();
+    const supabase = getSupabase();
+    const { data: booking, error } = await supabase
+      .from('bookings')
+      .select('id, total_snapshot, currency, paypal_order_id')
+      .eq('id', parsed.data.bookingId)
+      .single();
 
-  if (error || !booking) return Response.json({ message: 'Booking not found' }, { status: 404, headers });
-  if (!booking.paypal_order_id || booking.paypal_order_id !== parsed.data.orderId) {
-    return Response.json({ message: 'PayPal order does not match booking' }, { status: 400, headers });
-  }
+    if (error || !booking) return Response.json({ message: 'Booking not found' }, { status: 404, headers });
+    if (!booking.paypal_order_id || booking.paypal_order_id !== parsed.data.orderId) {
+      return Response.json({ message: 'PayPal order does not match booking' }, { status: 400, headers });
+    }
 
-  const accessToken = await getPayPalAccessToken();
-  const response = await fetchWithTimeout(`${getPayPalBaseUrl()}/v2/checkout/orders/${encodeURIComponent(parsed.data.orderId)}/capture`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-    },
-  }, 15000, Number(booking.total_snapshot).toFixed(2));
-  const data = await response.json();
-  if (!response.ok) return Response.json({ message: 'PayPal payment could not be captured' }, { status: 400, headers });
+    const accessToken = await getPayPalAccessToken();
+    const response = await fetchWithTimeout(`${getPayPalBaseUrl()}/v2/checkout/orders/${encodeURIComponent(parsed.data.orderId)}/capture`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+    }, 15000, Number(booking.total_snapshot).toFixed(2));
+    const data = await response.json();
+    if (!response.ok) return Response.json({ message: data?.message ?? data?.error_description ?? data?.error ?? 'PayPal payment could not be captured' }, { status: 400, headers });
 
-  const capture = data.purchase_units?.[0]?.payments?.captures?.[0];
-  const amount = capture?.amount?.value;
-  const currency = capture?.amount?.currency_code;
-  const expectedAmount = Number(booking.total_snapshot).toFixed(2);
+    const capture = data.purchase_units?.[0]?.payments?.captures?.[0];
+    const amount = capture?.amount?.value;
+    const currency = capture?.amount?.currency_code;
+    const expectedAmount = Number(booking.total_snapshot).toFixed(2);
 
-  if (data.status !== 'COMPLETED' || capture?.status !== 'COMPLETED' || amount !== expectedAmount || currency !== booking.currency) {
-    await supabase.rpc('mark_paypal_payment_unsuccessful', {
+    if (data.status !== 'COMPLETED' || capture?.status !== 'COMPLETED' || amount !== expectedAmount || currency !== booking.currency) {
+      await supabase.rpc('mark_paypal_payment_unsuccessful', {
+        p_booking_id: booking.id,
+        p_paypal_order_id: parsed.data.orderId,
+        p_status: capture?.status ?? data.status ?? 'PayPal verification failed',
+        p_raw_response: data,
+      });
+      return Response.json({ message: 'PayPal payment verification failed' }, { status: 400, headers });
+    }
+
+    const { data: result, error: rpcError } = await supabase.rpc('mark_paypal_payment_paid', {
       p_booking_id: booking.id,
       p_paypal_order_id: parsed.data.orderId,
-      p_status: capture?.status ?? data.status ?? 'PayPal verification failed',
+      p_paypal_capture_id: capture.id,
+      p_amount: amount,
+      p_currency: currency,
       p_raw_response: data,
     });
-    return Response.json({ message: 'PayPal payment verification failed' }, { status: 400, headers });
+    if (rpcError) return Response.json({ message: rpcError.message }, { status: 400, headers });
+
+    return Response.json(result, { headers });
+  } catch (error) {
+    return Response.json({ message: error instanceof Error ? error.message : 'PayPal request could not be completed' }, { status: 500, headers });
   }
-
-  const { data: result, error: rpcError } = await supabase.rpc('mark_paypal_payment_paid', {
-    p_booking_id: booking.id,
-    p_paypal_order_id: parsed.data.orderId,
-    p_paypal_capture_id: capture.id,
-    p_amount: amount,
-    p_currency: currency,
-    p_raw_response: data,
-  });
-  if (rpcError) return Response.json({ message: rpcError.message }, { status: 400, headers });
-
-  return Response.json(result, { headers });
 });
 
 function getSupabase() {

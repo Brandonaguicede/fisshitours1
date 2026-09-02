@@ -891,6 +891,7 @@ function CustomerStep(props: {
   const { language } = useLanguage();
 
   function handlePaymentMethodAction(method: BookingPaymentMethod) {
+    if (props.isSubmitting) return;
     props.onPaymentMethodChange(method);
     if (method === 'paypal') props.onPayPalRequest();
     if (method === 'whatsapp-link') props.onPaymentLinkRequest();
