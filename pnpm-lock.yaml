@@ -12,8 +12,8 @@ importers:
         specifier: ^3.1.1
         version: 3.10.0(react-hook-form@7.85.0(react@18.3.1))
       '@supabase/supabase-js':
-        specifier: ^2.112.3
-        version: 2.113.0
+        specifier: 2.112.3
+        version: 2.112.3
       '@tanstack/react-query':
         specifier: ^5.6.0
         version: 5.101.4(react@18.3.1)
@@ -509,8 +509,8 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@supabase/auth-js@2.113.0':
-    resolution: {integrity: sha512-mvHr5yeC9ZD/OY9C24Kzp6kJkpJiofs8vpszkjLP0F8CuZJ2NobI03Y2y5zzsHZ3BBx9qh9GtJLIVHKSRB7FuQ==}
+  '@supabase/auth-js@2.112.3':
+    resolution: {integrity: sha512-NA0rsgAlWZPvbhw8aUdmgfpHVgUAcd8zK5ov43l++o1bLIPXZhRiAlRobhwF5AatQuovpqxsMH50F4oyyV4XZw==}
     engines: {node: '>=22.0.0'}
 
   '@supabase/cli-darwin-arm64@2.116.0':
@@ -553,27 +553,27 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@supabase/functions-js@2.113.0':
-    resolution: {integrity: sha512-4HV3PS6GIWxpcFfyDP9cMIzAoYoBG5/BKdHrVV9F28poMmL/KJEftwlYVXrFFYyNN/Hd+XsphG+8yVDDm7rjWg==}
+  '@supabase/functions-js@2.112.3':
+    resolution: {integrity: sha512-gfv481mTOVWtZIJgXupxZpni2V2UWPf6jeF/jOK7HdMHdH+mt6sU0sHHwf0POsPip8ltlulu9OUHgwVzl5ddRw==}
     engines: {node: '>=22.0.0'}
 
   '@supabase/phoenix@0.4.5':
     resolution: {integrity: sha512-aAn9H9ovVyeApKy11OWOrrOGq8DV68yWeH4ud2lN9fzn4aO8Zb5GLL9m1pUg9nLqIcT+ZDfAcsZe0E/nqdv2lw==}
 
-  '@supabase/postgrest-js@2.113.0':
-    resolution: {integrity: sha512-iOuWEGHSuBynebmEhO/18y2RiAbELleoH63zQA2qLiy2BatJ4FiC1nQpPvDs1JDd8MKtEFadarkrqfDUAOOdsQ==}
+  '@supabase/postgrest-js@2.112.3':
+    resolution: {integrity: sha512-+Mf6uCpzr00bqxwX8hTK2X2L9eAL/1vuOjdEjx6upz9ulb0RmQT16XeU/JkMUlVHw/B46ZnPa2busY4Kd9YCzw==}
     engines: {node: '>=22.0.0'}
 
-  '@supabase/realtime-js@2.113.0':
-    resolution: {integrity: sha512-tcKg+nmuQF/vjYDHcYE6WnIVhRXO7wllV0v8t18awNoQur3qYgPMnkAiECSLxgnGDjtObNYjF1ZEgM1zzrPdvg==}
+  '@supabase/realtime-js@2.112.3':
+    resolution: {integrity: sha512-E6wljXWs7DUOloyIB69i3YFInWE6IyCvgTAbQ0KYxOHv26FdA1KzEXTuzxrYEdf70t406Z9BRwUlGyclGF2FXA==}
     engines: {node: '>=22.0.0'}
 
-  '@supabase/storage-js@2.113.0':
-    resolution: {integrity: sha512-dGKyqpr3aIZaGbh036q8GzlqZe04CexX9UwDJCbhADrxL4eMMHJTxj7LrzRGCn6Hm/2/2E5OEfT75YFQw+z6Pw==}
+  '@supabase/storage-js@2.112.3':
+    resolution: {integrity: sha512-oSK61tzlUvg+BWPqpKQCu9qqonsO26btaoAR9D6Gest2aj7xUqToj9rKyaoYOJczkhg9BjqA1REbYy9tPI4bDA==}
     engines: {node: '>=22.0.0'}
 
-  '@supabase/supabase-js@2.113.0':
-    resolution: {integrity: sha512-TZgdcDLeShUmf/XpXTmEKCmIpv6mqHgyDemiBh3fxeMOYE23oYz576ArbOB3Sa0lG9yTj+ofh52IauxIKENAOw==}
+  '@supabase/supabase-js@2.112.3':
+    resolution: {integrity: sha512-Jv1bxVQmEJNkjvPEhFaKjPzsh+Ozyew6lWGD+SoYcsclDEP1z7yEvKvfUQfzy0DkxRIQnZNxmmWtAzw5XLTQoA==}
     engines: {node: '>=22.0.0'}
     peerDependencies:
       '@opentelemetry/api': '>=1.0.0'
@@ -1465,7 +1465,7 @@ snapshots:
   '@rollup/rollup-win32-x64-msvc@4.62.4':
     optional: true
 
-  '@supabase/auth-js@2.113.0':
+  '@supabase/auth-js@2.112.3':
     dependencies:
       tslib: 2.8.1
 
@@ -1493,33 +1493,33 @@ snapshots:
   '@supabase/cli-windows-x64@2.116.0':
     optional: true
 
-  '@supabase/functions-js@2.113.0':
+  '@supabase/functions-js@2.112.3':
     dependencies:
       tslib: 2.8.1
 
   '@supabase/phoenix@0.4.5': {}
 
-  '@supabase/postgrest-js@2.113.0':
+  '@supabase/postgrest-js@2.112.3':
     dependencies:
       tslib: 2.8.1
 
-  '@supabase/realtime-js@2.113.0':
+  '@supabase/realtime-js@2.112.3':
     dependencies:
       '@supabase/phoenix': 0.4.5
       tslib: 2.8.1
 
-  '@supabase/storage-js@2.113.0':
+  '@supabase/storage-js@2.112.3':
     dependencies:
       iceberg-js: 0.8.1
       tslib: 2.8.1
 
-  '@supabase/supabase-js@2.113.0':
+  '@supabase/supabase-js@2.112.3':
     dependencies:
-      '@supabase/auth-js': 2.113.0
-      '@supabase/functions-js': 2.113.0
-      '@supabase/postgrest-js': 2.113.0
-      '@supabase/realtime-js': 2.113.0
-      '@supabase/storage-js': 2.113.0
+      '@supabase/auth-js': 2.112.3
+      '@supabase/functions-js': 2.112.3
+      '@supabase/postgrest-js': 2.112.3
+      '@supabase/realtime-js': 2.112.3
+      '@supabase/storage-js': 2.112.3
 
   '@tanstack/query-core@5.101.4': {}
 
