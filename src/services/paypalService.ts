@@ -9,7 +9,7 @@ declare global {
 }
 
 interface PayPalButtonOptions {
-  style?: Record<string, string | boolean>;
+  style?: Record<string, string | number | boolean>;
   createOrder: () => Promise<string>;
   onApprove: (data: { orderID: string }) => Promise<void>;
   onCancel?: () => void;

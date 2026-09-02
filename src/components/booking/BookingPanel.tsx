@@ -1067,7 +1067,14 @@ function PayPalCheckoutBox(props: {
   }, [onSuccess, onError, onCancel]);
 
   const buttonStyle = useMemo(
-    () => ({ layout: 'vertical', color: 'blue', shape: 'rect', label: 'paypal' }),
+    () => ({
+      layout: 'vertical',
+      color: 'gold',
+      shape: 'rect',
+      label: 'paypal',
+      height: 44,
+      tagline: false,
+    }),
     [],
   );
 
@@ -1119,9 +1126,14 @@ function PayPalCheckoutBox(props: {
   }, [buttonStyle, clientId, containerId, createdBooking.booking_id, createdBooking.booking_reference]);
 
   return (
-    <div className="mt-4 rounded-xl border border-ocean-400/25 bg-ocean-500/8 p-4">
-      <p className="mb-3 text-sm font-bold text-ocean-100">PayPal Sandbox checkout</p>
-      <div id={containerId} />
+    <div className="mt-4 rounded-lg border border-ocean-400/20 bg-ocean-900/35 px-3 py-3 sm:px-4">
+      <div className="mx-auto w-full max-w-md">
+        <div className="mb-3">
+          <p className="text-sm font-extrabold text-white">Pago seguro con PayPal</p>
+          <p className="mt-0.5 text-xs font-medium text-ocean-300">Completa tu pago de forma segura.</p>
+        </div>
+        <div id={containerId} className="w-full" />
+      </div>
     </div>
   );
 }
