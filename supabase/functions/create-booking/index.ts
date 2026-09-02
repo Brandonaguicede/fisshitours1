@@ -64,6 +64,10 @@ serve(async (req) => {
     return Response.json({ message }, { status, headers });
   }
 
+  await sendBookingEmails(supabase, data, payload).catch((emailError) => {
+    console.error('Booking email notification failed', emailError);
+  });
+
   return Response.json(data, { status: 201, headers });
 });
 
@@ -146,4 +150,86 @@ function sanitizePayload(value: z.infer<typeof schema>) {
       quantity: extra.quantity,
     })),
   };
+}
+
+async function sendBookingEmails(supabase: ReturnType<typeof createClient>, booking: any, payload: ReturnType<typeof sanitizePayload>) {
+  const apiKey = Deno.env.get('RESEND_API_KEY');
+  const from = Deno.env.get('BOOKING_EMAIL_FROM');
+  const adminEmail = Deno.env.get('BOOKING_ADMIN_EMAIL');
+  const customerEmail = payload.customer.email;
+  if (!booking?.booking_id || !customerEmail) return;
+
+  const summary = [
+    `Reserva: ${booking.booking_reference}`,
+    `Cliente: ${payload.customer.fullName}`,
+    `Email: ${customerEmail}`,
+    `WhatsApp: ${payload.customer.whatsapp}`,
+    `Bote: ${booking.boat_id}`,
+    `Tour: ${booking.tour_id}`,
+    `Paquete: ${booking.tour_package_id}`,
+    `Fecha: ${booking.tour_date}`,
+    `Hora: ${booking.time_slot_id}`,
+    `Personas: ${booking.guests}`,
+    `Lugar de salida: ${booking.departure_location_name_snapshot ?? '-'}`,
+    `Cargo salida: ${formatUsd(Number(booking.departure_surcharge_snapshot ?? 0))}`,
+    `Total: ${formatUsd(Number(booking.total_snapshot ?? 0))}`,
+    `Metodo de pago: ${payload.paymentMethodKey}`,
+    `Estado reserva: ${booking.booking_status}`,
+    `Estado pago: ${booking.payment_status}`,
+    `Notas: ${payload.specialRequests ?? 'None'}`,
+  ].join('\n');
+
+  const messages = [
+    {
+      to: customerEmail,
+      subject: `Recibimos tu reserva ${booking.booking_reference}`,
+      text: `Hola ${payload.customer.fullName},\n\nRecibimos tu solicitud de reserva en Papagayo Fishing Tours.\n\n${summary}\n\nTe contactaremos para confirmar disponibilidad y los siguientes pasos.\n\nPapagayo Fishing Tours`,
+      dedupe: `booking:${booking.booking_id}:customer-email`,
+    },
+    adminEmail ? {
+      to: adminEmail,
+      subject: `Nueva reserva ${booking.booking_reference}`,
+      text: `Nueva reserva recibida.\n\n${summary}`,
+      dedupe: `booking:${booking.booking_id}:admin-email`,
+    } : null,
+  ].filter(Boolean) as Array<{ to: string; subject: string; text: string; dedupe: string }>;
+
+  for (const message of messages) {
+    if (!apiKey || !from) {
+      await recordEmailNotification(supabase, booking.booking_id, message, false);
+      continue;
+    }
+
+    const response = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ from, to: message.to, subject: message.subject, text: message.text }),
+    });
+
+    await recordEmailNotification(supabase, booking.booking_id, message, response.ok);
+    if (!response.ok) console.error('Resend email failed', await response.text());
+  }
+}
+
+async function recordEmailNotification(
+  supabase: ReturnType<typeof createClient>,
+  bookingId: string,
+  message: { to: string; subject: string; text: string; dedupe: string },
+  sent: boolean,
+) {
+  await supabase.from('booking_notifications').insert({
+    booking_id: bookingId,
+    type: 'email',
+    channel: 'email',
+    dedupe_key: message.dedupe,
+    payload: { to: message.to, subject: message.subject, text: message.text },
+    sent_at: sent ? new Date().toISOString() : null,
+  });
+}
+
+function formatUsd(value: number) {
+  return `USD ${value.toLocaleString('en-US', { maximumFractionDigits: 2, minimumFractionDigits: 0 })}`;
 }

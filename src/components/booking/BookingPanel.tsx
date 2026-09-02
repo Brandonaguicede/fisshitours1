@@ -87,6 +87,7 @@ export function BookingPanel({ selectedBoat, selectedTour, boats, tours, catalog
   const [paypalVisible, setPaypalVisible] = useState(false);
   const [paypalError, setPaypalError] = useState('');
   const [paypalSuccess, setPaypalSuccess] = useState<PayPalCaptureResult | null>(null);
+  const [successNotice, setSuccessNotice] = useState<{ title: string; message: string; reference?: string } | null>(null);
   const [createdBooking, setCreatedBooking] = useState<BookingResult | null>(null);
   const [turnstileToken, setTurnstileToken] = useState('');
   const [turnstileResetKey, setTurnstileResetKey] = useState(0);
@@ -315,7 +316,13 @@ const bookingPayload = selectedTour
       setBookingStatus('pending_confirmation');
       setPaymentStatus('pending');
       setPaypalVisible(false);
+      setSuccessNotice(null);
       openWhatsAppBooking({ ...bookingPayload, bookingReference: result.booking_reference, total: result.total_snapshot }, 'payment_link');
+      setSuccessNotice({
+        title: language === 'es' ? 'Reserva creada' : 'Booking created',
+        message: language === 'es' ? 'Recibimos tu reserva. Abre WhatsApp para solicitar el enlace de pago.' : 'We received your booking. Open WhatsApp to request the payment link.',
+        reference: result.booking_reference,
+      });
     }).catch(() => undefined);
   }
 
@@ -335,6 +342,11 @@ const bookingPayload = selectedTour
       setPaymentStatus('not_required_yet');
       setIsPayOnDayOpen(false);
       openWhatsAppBooking({ ...bookingPayload, bookingReference: result.booking_reference, total: result.total_snapshot }, 'pay_on_day');
+      setSuccessNotice({
+        title: language === 'es' ? 'Reserva recibida' : 'Booking received',
+        message: language === 'es' ? 'Tu solicitud fue creada y queda pendiente de confirmacion.' : 'Your request was created and is pending confirmation.',
+        reference: result.booking_reference,
+      });
     }).catch(() => undefined);
   }
 
@@ -471,6 +483,11 @@ const bookingPayload = selectedTour
                   setBookingStatus('confirmed');
                   setPaymentStatus('paid');
                 }
+                setSuccessNotice({
+                  title: language === 'es' ? 'Pago completado' : 'Payment completed',
+                  message: language === 'es' ? 'Tu pago fue procesado y recibimos tu reserva.' : 'Your payment was processed and we received your booking.',
+                  reference: result.bookingReference,
+                });
               }}
               onPayPalError={(message) => {
                 setPaypalError(message);
@@ -539,6 +556,10 @@ const bookingPayload = selectedTour
           onBack={() => setIsPayOnDayOpen(false)}
           onConfirm={handleConfirmPayOnDay}
         />
+      ) : null}
+
+      {successNotice ? (
+        <BookingSuccessModal notice={successNotice} onClose={() => setSuccessNotice(null)} />
       ) : null}
     </GlassPanel>
   );
@@ -1308,6 +1329,32 @@ function ReviewModal(props: {
             {language === 'es' ? 'Confirmar reserva' : 'Confirm reservation'}
           </Button>
         </div>
+    </ModalShell>
+  );
+}
+
+function BookingSuccessModal(props: {
+  notice: { title: string; message: string; reference?: string };
+  onClose: () => void;
+}) {
+  return (
+    <ModalShell open onClose={props.onClose} titleId="booking-success-title" className="max-w-md p-5 text-white sm:p-6">
+      <div className="flex items-start gap-3">
+        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-seafoam-400/15 text-seafoam-200">
+          <Info size={20} />
+        </span>
+        <div className="min-w-0">
+          <h3 id="booking-success-title" className="text-xl font-extrabold text-white">{props.notice.title}</h3>
+          <p className="mt-2 text-sm leading-6 text-ocean-200">{props.notice.message}</p>
+          {props.notice.reference ? (
+            <div className="mt-4 rounded-lg border border-ocean-400/20 bg-ocean-900/35 p-3 text-sm">
+              <span className="block text-xs font-extrabold uppercase tracking-[0.12em] text-ocean-400">Referencia</span>
+              <span className="mt-1 block font-extrabold text-white">{props.notice.reference}</span>
+            </div>
+          ) : null}
+        </div>
+      </div>
+      <Button className="mt-5" fullWidth type="button" onClick={props.onClose}>Cerrar</Button>
     </ModalShell>
   );
 }
