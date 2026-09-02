@@ -54,13 +54,16 @@ serve(async (req) => {
   let departureLocation = null;
 
   if (parsed.data.departureLocationId) {
-    const { data: location } = await supabase
+    const { data: location, error: locationError } = await supabase
       .from('departure_locations')
       .select('id, name, slug, description, surcharge_amount, currency, active, sort_order, is_default')
       .eq('id', parsed.data.departureLocationId)
       .eq('active', true)
       .single();
 
+    if (locationError) {
+      return Response.json({ message: `Departure location lookup failed: ${locationError.message}` }, { status: 400, headers });
+    }
     if (!location) return Response.json({ message: 'Departure location not found' }, { status: 404, headers });
     departureLocation = location;
     departureSurcharge = Number(location.surcharge_amount);
