@@ -1244,13 +1244,13 @@ function ReviewModal(props: {
   const terms = getBookingTerms(language);
   const selectedTourName = props.selectedTour ? `${getTourText(props.selectedTour, language).title} - ${getPackageLabel(props.selectedTour, language)}` : (language === 'es' ? 'No seleccionado' : 'Not selected');
   return (
-    <ModalShell open onClose={props.onBack} titleId="booking-review-title" className="max-w-2xl p-4 text-white sm:p-8">
-        <img className="mb-5 aspect-[16/7] w-full rounded-2xl object-cover" src={props.selectedBoat.image} alt={props.selectedBoat.name} loading="lazy" />
-        <h3 id="booking-review-title" className="text-3xl font-extrabold text-white">{language === 'es' ? 'Revisar reserva' : 'Review reservation'}</h3>
-        <p className="mt-3 leading-7 text-ocean-200">
+    <ModalShell open onClose={props.onBack} titleId="booking-review-title" className="max-h-[calc(100dvh-1.5rem)] max-w-2xl overflow-y-auto p-4 text-white sm:max-h-[calc(100dvh-3rem)] sm:p-6">
+        <img className="mb-4 aspect-[16/6] w-full rounded-xl object-cover sm:mb-5" src={props.selectedBoat.image} alt={props.selectedBoat.name} loading="lazy" />
+        <h3 id="booking-review-title" className="text-2xl font-extrabold text-white sm:text-3xl">{language === 'es' ? 'Revisar reserva' : 'Review reservation'}</h3>
+        <p className="mt-2 text-sm leading-6 text-ocean-200 sm:mt-3 sm:text-base sm:leading-7">
           {language === 'es' ? 'Revisa los detalles antes de confirmar la solicitud. La disponibilidad y el metodo de pago seleccionado se validan al crear la reserva.' : 'Review your reservation details before confirming this request. Availability and the selected payment method are validated when the booking is created.'}
         </p>
-        <GlassPanel className="mt-6 grid gap-3 p-4 text-sm" variant="subtle">
+        <GlassPanel className="mt-4 grid gap-2.5 p-3 text-sm sm:mt-5 sm:gap-3 sm:p-4" variant="subtle">
           <SummaryLine label={language === 'es' ? 'Barco' : 'Boat'} value={props.selectedBoat.name} />
           <SummaryLine label="Tour" value={selectedTourName} />
           <SummaryLine label={language === 'es' ? 'Fecha' : 'Date'} value={formatDisplayDate(props.date)} />
@@ -1267,12 +1267,12 @@ function ReviewModal(props: {
           <SummaryLine label="Special requests" value={props.specialRequests || 'None'} />
           <SummaryLine label={language === 'es' ? 'Metodo de pago' : 'Payment method'} value={props.paymentMethod} />
         </GlassPanel>
-        <GlassPanel className="mt-4 grid gap-2 p-4 text-xs leading-5 text-ocean-200" variant="subtle">
+        <GlassPanel className="mt-3 grid gap-2 p-3 text-xs leading-5 text-ocean-200 sm:mt-4 sm:p-4" variant="subtle">
           {terms.map((term) => (
             <p key={term}>{term}</p>
           ))}
         </GlassPanel>
-        <div className="mt-7 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+        <div className="sticky -bottom-4 mt-5 flex flex-col-reverse gap-3 border-t border-white/10 bg-ocean-950/95 pt-3 backdrop-blur sm:-bottom-6 sm:flex-row sm:justify-end">
           <Button variant="glass" type="button" onClick={props.onBack}>
             {language === 'es' ? 'Volver' : 'Go Back'}
           </Button>
