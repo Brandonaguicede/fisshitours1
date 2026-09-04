@@ -311,6 +311,39 @@ body:has(.admin-login) {
   outline-offset: 2px;
 }
 
+.admin-icon-action--success {
+  color: var(--admin-success);
+}
+
+.admin-icon-action--success:hover {
+  color: var(--admin-success);
+  background: color-mix(in srgb, var(--admin-success) 14%, transparent);
+}
+
+.admin-icon-action--warning {
+  color: var(--admin-warning);
+}
+
+.admin-icon-action--warning:hover {
+  color: var(--admin-warning);
+  background: color-mix(in srgb, var(--admin-warning) 14%, transparent);
+}
+
+.admin-icon-action--danger {
+  color: var(--admin-danger);
+}
+
+.admin-icon-action--danger:hover {
+  color: var(--admin-danger);
+  background: color-mix(in srgb, var(--admin-danger) 14%, transparent);
+}
+
+.admin-row-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
 .admin-topbar__menu {
   display: none;
 }

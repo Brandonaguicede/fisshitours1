@@ -310,10 +310,19 @@ export default function AdminToursPage() {
         <AdminToolbar embedded><div className="admin-search-field"><Search aria-hidden="true" size={16} /><input className="admin-input" aria-label="Buscar tours" placeholder="Buscar tour por nombre o ubicación" value={search} onChange={(event) => setSearch(event.target.value)} /></div><div className="admin-toolbar__actions"><button className="admin-btn" type="button" onClick={() => void createTour()}><Plus size={16} /> Crear tour</button></div></AdminToolbar>
         {error && !editing ? <div className="admin-alert admin-alert--danger">{error}</div> : null}
         {notice && !editing ? <div className="admin-alert admin-alert--success">{notice}</div> : null}
-        {loading ? <p className="admin-muted">Cargando tours...</p> : <AdminTable embedded headers={['Tour', 'Ubicaciones', 'Publicación', 'Orden', 'Acciones']}>{visibleTours.map((tour) => <tr key={tour.id}><td>{tour.title}<div className="admin-muted">{tour.description || tour.slug}</div></td><td>{(locationsByTour.get(tour.id) ?? [tour.location ?? '']).filter(Boolean).join(', ') || '-'}</td><td><AdminBadge value={publicationStatus(tour) === 'draft' ? 'Borrador' : publicationStatus(tour) === 'published' ? 'Activo' : 'Inactivo'} /></td><td>{tour.sort_order}</td><td><div className="admin-actions">
+        {loading ? <p className="admin-muted">Cargando tours...</p> : <AdminTable embedded headers={['Tour', 'Ubicaciones', 'Publicación', 'Orden', 'Acciones']}>{visibleTours.map((tour) => <tr key={tour.id}><td>{tour.title}<div className="admin-muted">{tour.description || tour.slug}</div></td><td>{(locationsByTour.get(tour.id) ?? [tour.location ?? '']).filter(Boolean).join(', ') || '-'}</td><td><AdminBadge value={publicationStatus(tour) === 'draft' ? 'Borrador' : publicationStatus(tour) === 'published' ? 'Activo' : 'Inactivo'} /></td><td>{tour.sort_order}</td><td><div className="admin-row-actions">
           <button className="admin-icon-action" type="button" title="Editar tour" aria-label={`Editar tour ${tour.title}`} onClick={() => openEditor(tour)}><Pencil size={17} /></button>
-          <button className="admin-icon-action" type="button" title={publicationStatus(tour) === 'published' ? 'Desactivar tour' : 'Activar tour'} aria-label={publicationStatus(tour) === 'published' ? `Desactivar tour ${tour.title}` : `Activar tour ${tour.title}`} disabled={togglingTourId === tour.id} onClick={() => void toggleTourPublication(tour)}>{togglingTourId === tour.id ? <Loader2 className="animate-spin" size={17} /> : publicationStatus(tour) === 'published' ? <Eye size={17} /> : <EyeOff size={17} />}</button>
-          <button className="admin-icon-action" type="button" title="Eliminar tour" aria-label={`Eliminar tour ${tour.title}`} onClick={() => setPendingTourDelete(tour)}><Trash2 size={17} /></button>
+          <button
+            className={`admin-icon-action ${publicationStatus(tour) === 'published' ? 'admin-icon-action--success' : 'admin-icon-action--warning'}`}
+            type="button"
+            title={publicationStatus(tour) === 'published' ? 'Desactivar tour' : 'Activar tour'}
+            aria-label={publicationStatus(tour) === 'published' ? `Desactivar tour ${tour.title}` : `Activar tour ${tour.title}`}
+            disabled={togglingTourId === tour.id}
+            onClick={() => void toggleTourPublication(tour)}
+          >
+            {togglingTourId === tour.id ? <Loader2 className="animate-spin" size={17} /> : publicationStatus(tour) === 'published' ? <Eye size={17} /> : <EyeOff size={17} />}
+          </button>
+          <button className="admin-icon-action admin-icon-action--danger" type="button" title="Eliminar tour" aria-label={`Eliminar tour ${tour.title}`} onClick={() => setPendingTourDelete(tour)}><Trash2 size={17} /></button>
         </div></td></tr>)}{visibleTours.length === 0 ? <tr><td colSpan={5} className="admin-muted">No hay tours para esta búsqueda.</td></tr> : null}</AdminTable>}
       </AdminModuleSurface>
 
