@@ -1,5 +1,5 @@
 import { Check, Eye, EyeOff, Loader2, Package, Pencil, Plus, Trash2 } from 'lucide-react';
-import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import {
   deletePackage,
@@ -8,7 +8,6 @@ import {
   loadBoatToursPackages,
   packageSlug,
   savePackageForBoatTour,
-  setPackageActive,
   type AdminPackageRow,
   type AdminTourOption,
   type BoatToursPackagesData,
@@ -79,7 +78,7 @@ function newDraft(tourId: string, boatMaxGuests: number, sortOrder: number): Dra
   };
 }
 
-function validate(draft: DraftPackage, boatMaxGuests: number): FieldErrors {
+function validateDraft(draft: DraftPackage, boatMaxGuests: number): FieldErrors {
   const errors: FieldErrors = {};
   const key = `pkg-${draft.id}`;
   if (!draft.name.trim()) errors[`${key}-name`] = 'El nombre es obligatorio.';
@@ -99,6 +98,147 @@ function validate(draft: DraftPackage, boatMaxGuests: number): FieldErrors {
     errors[`${key}-extra`] = 'El extra no puede ser negativo.';
   }
   return errors;
+}
+
+interface PackageDraftEditorProps {
+  draft: DraftPackage;
+  fieldErrors: FieldErrors;
+  busy: boolean;
+  boatMaxGuests: number;
+  onChange: (changes: Partial<DraftPackage>) => void;
+  onCancel: () => void;
+  onSave: () => void;
+  onDelete: () => void;
+}
+
+function PackageDraftEditor({ draft, fieldErrors, busy, boatMaxGuests, onChange, onCancel, onSave, onDelete }: PackageDraftEditorProps) {
+  const key = `pkg-${draft.id}`;
+  return (
+    <div className="admin-package-compact-editor">
+      <div className="admin-package-editor__heading">
+        <h3>{draft.isNew ? 'Agregar paquete' : `Editar ${draft.name || 'paquete'}`}</h3>
+        <div className="admin-package-editor__actions">
+          <button
+            className="admin-icon-btn"
+            type="button"
+            title={draft.active ? 'Desactivar' : 'Activar'}
+            aria-label={draft.active ? 'Desactivar paquete' : 'Activar paquete'}
+            onClick={() => onChange({ active: !draft.active })}
+          >
+            {draft.active ? <Eye size={16} /> : <EyeOff size={16} />}
+          </button>
+          {!draft.isNew ? (
+            <button
+              className="admin-icon-btn admin-icon-btn--danger"
+              type="button"
+              title="Eliminar"
+              aria-label="Eliminar paquete"
+              disabled={busy}
+              onClick={onDelete}
+            >
+              <Trash2 size={16} />
+            </button>
+          ) : null}
+        </div>
+      </div>
+      <div className="admin-form-columns">
+        <label className="admin-field">
+          <span className="admin-field__label">Nombre</span>
+          <input
+            className="admin-input"
+            value={draft.name}
+            onChange={(event) => onChange({ name: event.target.value, packageType: packageSlug(event.target.value) })}
+          />
+          {fieldErrors[`${key}-name`] ? <span className="admin-field-error">{fieldErrors[`${key}-name`]}</span> : null}
+        </label>
+        <label className="admin-field">
+          <span className="admin-field__label">Cantidad de horas (opcional)</span>
+          <input
+            className="admin-input"
+            type="number"
+            min={0.5}
+            step={0.5}
+            value={draft.durationHours}
+            onChange={(event) => onChange({ durationHours: event.target.value })}
+          />
+          {fieldErrors[`${key}-duration`] ? <span className="admin-field-error">{fieldErrors[`${key}-duration`]}</span> : null}
+        </label>
+        <label className="admin-field">
+          <span className="admin-field__label">Precio base (USD)</span>
+          <input
+            className="admin-input admin-input--manual-number"
+            type="number"
+            min={0}
+            step="any"
+            value={draft.basePrice}
+            onChange={(event) => onChange({ basePrice: event.target.value })}
+          />
+          {fieldErrors[`${key}-price`] ? <span className="admin-field-error">{fieldErrors[`${key}-price`]}</span> : null}
+        </label>
+        <label className="admin-field">
+          <span className="admin-field__label">Personas incluidas</span>
+          <input
+            className="admin-input"
+            type="number"
+            min={1}
+            max={boatMaxGuests}
+            value={draft.includedGuests}
+            onChange={(event) => onChange({ includedGuests: Number(event.target.value) })}
+          />
+          {fieldErrors[`${key}-included`] ? <span className="admin-field-error">{fieldErrors[`${key}-included`]}</span> : null}
+        </label>
+        <label className="admin-field">
+          <span className="admin-field__label">Máximo del paquete</span>
+          <input
+            className="admin-input"
+            type="number"
+            min={1}
+            max={boatMaxGuests}
+            value={draft.maxGuests}
+            onChange={(event) => onChange({ maxGuests: Number(event.target.value) })}
+          />
+          <span className="admin-field-help">Se limita al techo físico del bote ({boatMaxGuests}).</span>
+        </label>
+        <label className="admin-field">
+          <span className="admin-field__label">Extra por persona adicional (USD)</span>
+          <input
+            className="admin-input"
+            type="number"
+            min={0}
+            value={draft.extraGuestPrice}
+            onChange={(event) => onChange({ extraGuestPrice: Number(event.target.value) })}
+          />
+          {fieldErrors[`${key}-extra`] ? <span className="admin-field-error">{fieldErrors[`${key}-extra`]}</span> : null}
+        </label>
+      </div>
+      <label className="admin-field">
+        <span className="admin-field__label">Descripción</span>
+        <textarea
+          className="admin-input admin-textarea-list"
+          value={draft.description}
+          onChange={(event) => onChange({ description: event.target.value })}
+        />
+      </label>
+      <label className="admin-field admin-field--narrow">
+        <span className="admin-field__label">
+          <input
+            type="checkbox"
+            checked={draft.customQuote}
+            onChange={(event) => onChange({ customQuote: event.target.checked })}
+          />{' '}
+          Cotización personalizada (sin precio automático)
+        </span>
+      </label>
+      <div className="admin-actions">
+        <button className="admin-btn admin-btn--secondary" type="button" onClick={onCancel}>
+          Cancelar
+        </button>
+        <button className="admin-btn" type="button" disabled={busy} onClick={onSave}>
+          {busy ? <Loader2 className="animate-spin" size={15} /> : <Check size={15} />} Guardar paquete
+        </button>
+      </div>
+    </div>
+  );
 }
 
 export default function BoatToursPackagesEditor({ boatId, boatName, boatMaxGuests }: Props) {
@@ -171,6 +311,12 @@ export default function BoatToursPackagesEditor({ boatId, boatName, boatMaxGuest
     }
   }
 
+  function closeEditor() {
+    setEditingId(null);
+    setDraft(null);
+    setFieldErrors({});
+  }
+
   function startEditing(row: AdminPackageRow, tourId: string) {
     setDraft(rowToDraft(row, tourId));
     setEditingId(row.id);
@@ -185,9 +331,13 @@ export default function BoatToursPackagesEditor({ boatId, boatName, boatMaxGuest
     setFieldErrors({});
   }
 
+  function updateDraft(changes: Partial<DraftPackage>) {
+    setDraft((current) => (current ? { ...current, ...changes } : current));
+  }
+
   async function persistDraft() {
     if (!draft) return;
-    const errors = validate(draft, boatMaxGuests);
+    const errors = validateDraft(draft, boatMaxGuests);
     setFieldErrors(errors);
     if (Object.keys(errors).length) return;
 
@@ -207,9 +357,16 @@ export default function BoatToursPackagesEditor({ boatId, boatName, boatMaxGuest
     };
     await run(async () => {
       await savePackageForBoatTour(boatId, draft.tourId, input, boatMaxGuests);
-      setEditingId(null);
-      setDraft(null);
+      closeEditor();
     }, 'Paquete guardado.');
+  }
+
+  async function removeDraft() {
+    if (!draft) return;
+    await run(async () => {
+      await deletePackage(draft.id);
+      closeEditor();
+    }, 'Paquete eliminado.');
   }
 
   if (loading) return <p className="admin-muted">Cargando tours y paquetes...</p>;
@@ -262,7 +419,7 @@ export default function BoatToursPackagesEditor({ boatId, boatName, boatMaxGuest
         >
           <div className="admin-package-previews">
             {(packagesByTour.get(tour.id) ?? []).map((row) => (
-              <Fragment key={row.id}>
+              <div key={row.id}>
                 <article className="admin-package-preview">
                   <strong>
                     {row.name || 'Paquete sin nombre'}
@@ -273,15 +430,37 @@ export default function BoatToursPackagesEditor({ boatId, boatName, boatMaxGuest
                     type="button"
                     title="Editar paquete"
                     aria-label={`Editar ${row.name || 'paquete'}`}
-                    onClick={() => (editingId === row.id ? (setEditingId(null), setDraft(null)) : startEditing(row, tour.id))}
+                    onClick={() => (editingId === row.id ? closeEditor() : startEditing(row, tour.id))}
                   >
                     <Pencil size={17} />
                   </button>
                 </article>
-                {editingId === row.id && draft ? renderDraftEditor() : null}
-              </Fragment>
+                {editingId === row.id && draft ? (
+                  <PackageDraftEditor
+                    draft={draft}
+                    fieldErrors={fieldErrors}
+                    busy={busy}
+                    boatMaxGuests={boatMaxGuests}
+                    onChange={updateDraft}
+                    onCancel={closeEditor}
+                    onSave={() => void persistDraft()}
+                    onDelete={() => void removeDraft()}
+                  />
+                ) : null}
+              </div>
             ))}
-            {editingId && draft?.isNew && draft.tourId === tour.id ? renderDraftEditor() : null}
+            {editingId && draft?.isNew && draft.tourId === tour.id ? (
+              <PackageDraftEditor
+                draft={draft}
+                fieldErrors={fieldErrors}
+                busy={busy}
+                boatMaxGuests={boatMaxGuests}
+                onChange={updateDraft}
+                onCancel={closeEditor}
+                onSave={() => void persistDraft()}
+                onDelete={() => void removeDraft()}
+              />
+            ) : null}
           </div>
           <button className="admin-btn admin-btn--secondary" type="button" disabled={busy} onClick={() => startCreating(tour)}>
             <Plus size={15} /> Agregar paquete
@@ -294,150 +473,4 @@ export default function BoatToursPackagesEditor({ boatId, boatName, boatMaxGuest
       ) : null}
     </div>
   );
-
-  function renderDraftEditor() {
-    if (!draft) return null;
-    const key = `pkg-${draft.id}`;
-    const update = (changes: Partial<DraftPackage>) => setDraft((current) => (current ? { ...current, ...changes } : current));
-    return (
-      <div className="admin-package-compact-editor">
-        <div className="admin-package-editor__heading">
-          <h3>{draft.isNew ? 'Agregar paquete' : `Editar ${draft.name || 'paquete'}`}</h3>
-          <div className="admin-package-editor__actions">
-            <button
-              className="admin-icon-btn"
-              type="button"
-              title={draft.active ? 'Desactivar' : 'Activar'}
-              aria-label={draft.active ? 'Desactivar paquete' : 'Activar paquete'}
-              onClick={() => update({ active: !draft.active })}
-            >
-              {draft.active ? <Eye size={16} /> : <EyeOff size={16} />}
-            </button>
-            {!draft.isNew ? (
-              <button
-                className="admin-icon-btn admin-icon-btn--danger"
-                type="button"
-                title="Eliminar"
-                aria-label="Eliminar paquete"
-                disabled={busy}
-                onClick={() =>
-                  void run(async () => {
-                    await deletePackage(draft.id);
-                    setEditingId(null);
-                    setDraft(null);
-                  }, 'Paquete eliminado.')
-                }
-              >
-                <Trash2 size={16} />
-              </button>
-            ) : null}
-          </div>
-        </div>
-        <div className="admin-form-columns">
-          <label className="admin-field">
-            <span className="admin-field__label">Nombre</span>
-            <input
-              className="admin-input"
-              value={draft.name}
-              onChange={(event) => update({ name: event.target.value, packageType: packageSlug(event.target.value) })}
-            />
-            {fieldErrors[`${key}-name`] ? <span className="admin-field-error">{fieldErrors[`${key}-name`]}</span> : null}
-          </label>
-          <label className="admin-field">
-            <span className="admin-field__label">Cantidad de horas (opcional)</span>
-            <input
-              className="admin-input"
-              type="number"
-              min={0.5}
-              step={0.5}
-              value={draft.durationHours}
-              onChange={(event) => update({ durationHours: event.target.value })}
-            />
-            {fieldErrors[`${key}-duration`] ? <span className="admin-field-error">{fieldErrors[`${key}-duration`]}</span> : null}
-          </label>
-          <label className="admin-field">
-            <span className="admin-field__label">Precio base (USD)</span>
-            <input
-              className="admin-input admin-input--manual-number"
-              type="number"
-              min={0}
-              step="any"
-              value={draft.basePrice}
-              onChange={(event) => update({ basePrice: event.target.value })}
-            />
-            {fieldErrors[`${key}-price`] ? <span className="admin-field-error">{fieldErrors[`${key}-price`]}</span> : null}
-          </label>
-          <label className="admin-field">
-            <span className="admin-field__label">Personas incluidas</span>
-            <input
-              className="admin-input"
-              type="number"
-              min={1}
-              max={boatMaxGuests}
-              value={draft.includedGuests}
-              onChange={(event) => update({ includedGuests: Number(event.target.value) })}
-            />
-            {fieldErrors[`${key}-included`] ? <span className="admin-field-error">{fieldErrors[`${key}-included`]}</span> : null}
-          </label>
-          <label className="admin-field">
-            <span className="admin-field__label">Máximo del paquete</span>
-            <input
-              className="admin-input"
-              type="number"
-              min={1}
-              max={boatMaxGuests}
-              value={draft.maxGuests}
-              onChange={(event) => update({ maxGuests: Number(event.target.value) })}
-            />
-            <span className="admin-field-help">Se limita al techo físico del bote ({boatMaxGuests}).</span>
-          </label>
-          <label className="admin-field">
-            <span className="admin-field__label">Extra por persona adicional (USD)</span>
-            <input
-              className="admin-input"
-              type="number"
-              min={0}
-              value={draft.extraGuestPrice}
-              onChange={(event) => update({ extraGuestPrice: Number(event.target.value) })}
-            />
-            {fieldErrors[`${key}-extra`] ? <span className="admin-field-error">{fieldErrors[`${key}-extra`]}</span> : null}
-          </label>
-        </div>
-        <label className="admin-field">
-          <span className="admin-field__label">Descripción</span>
-          <textarea
-            className="admin-input admin-textarea-list"
-            value={draft.description}
-            onChange={(event) => update({ description: event.target.value })}
-          />
-        </label>
-        <label className="admin-field admin-field--narrow">
-          <span className="admin-field__label">
-            <input
-              type="checkbox"
-              checked={draft.customQuote}
-              onChange={(event) => update({ customQuote: event.target.checked })}
-            />{' '}
-            Cotización personalizada (sin precio automático)
-          </span>
-        </label>
-        <div className="admin-actions">
-          <button
-            className="admin-btn admin-btn--secondary"
-            type="button"
-            onClick={() => {
-              setEditingId(null);
-              setDraft(null);
-              setFieldErrors({});
-            }}
-          >
-            Cancelar
-          </button>
-          <button className="admin-btn" type="button" disabled={busy} onClick={() => void persistDraft()}>
-            {busy ? <Loader2 className="animate-spin" size={15} /> : <Check size={15} />} Guardar paquete
-          </button>
-        </div>
-      </div>
-    );
-  }
 }
