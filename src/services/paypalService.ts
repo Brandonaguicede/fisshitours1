@@ -77,6 +77,10 @@ export async function createPayPalOrder(bookingId: string) {
   return data.id;
 }
 
+export async function cancelPayPalOrder(bookingId: string, orderId?: string) {
+  return callPayPalFunction<{ payment_status: string; booking_status: string; attempt_status: string }>('paypal-cancel-order', { bookingId, orderId });
+}
+
 export async function capturePayPalOrder(orderId: string, bookingId: string, bookingReference: string) {
   const data = await callPayPalFunction<{
     booking_id: string;

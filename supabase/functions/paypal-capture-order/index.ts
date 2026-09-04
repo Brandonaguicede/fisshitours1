@@ -65,6 +65,10 @@ serve(async (req) => {
     });
     if (rpcError) return Response.json({ message: rpcError.message }, { status: 400, headers });
 
+    await sendPayPalConfirmationEmails(supabase, booking.id).catch((emailError) => {
+      console.error('PayPal confirmation email failed', emailError);
+    });
+
     return Response.json(result, { headers });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'PayPal request could not be completed';
@@ -72,6 +76,86 @@ serve(async (req) => {
     return Response.json({ message }, { status, headers });
   }
 });
+
+async function sendPayPalConfirmationEmails(supabase: ReturnType<typeof createClient>, bookingId: string) {
+  const { data: booking } = await supabase
+    .from('bookings')
+    .select(`
+      id,
+      booking_reference,
+      tour_date,
+      guests,
+      total_snapshot,
+      departure_location_name_snapshot,
+      departure_surcharge_snapshot,
+      customers(full_name, email, whatsapp),
+      boats(name),
+      tours(title),
+      time_slots(label)
+    `)
+    .eq('id', bookingId)
+    .single();
+  if (!booking?.customers?.email) return;
+
+  const apiKey = Deno.env.get('RESEND_API_KEY');
+  const from = Deno.env.get('BOOKING_EMAIL_FROM');
+  const adminEmail = Deno.env.get('BOOKING_ADMIN_EMAIL');
+  const summary = [
+    `Reserva: ${booking.booking_reference}`,
+    `Cliente: ${booking.customers.full_name}`,
+    `Email: ${booking.customers.email}`,
+    `WhatsApp: ${booking.customers.whatsapp}`,
+    `Bote: ${booking.boats?.name ?? '-'}`,
+    `Tour: ${booking.tours?.title ?? '-'}`,
+    `Fecha: ${booking.tour_date}`,
+    `Hora: ${booking.time_slots?.label ?? '-'}`,
+    `Personas: ${booking.guests}`,
+    `Lugar de salida: ${booking.departure_location_name_snapshot ?? '-'}`,
+    `Cargo salida: ${formatUsd(Number(booking.departure_surcharge_snapshot ?? 0))}`,
+    `Total pagado: ${formatUsd(Number(booking.total_snapshot ?? 0))}`,
+  ].join('\n');
+
+  const messages = [
+    {
+      to: booking.customers.email,
+      subject: `Reserva confirmada ${booking.booking_reference}`,
+      text: `Hola ${booking.customers.full_name},\n\nTu pago fue confirmado y tu reserva queda confirmada.\n\n${summary}\n\nPapagayo Fishing Tours`,
+      dedupe: `booking:${booking.id}:paypal-confirmation-customer-email`,
+    },
+    adminEmail ? {
+      to: adminEmail,
+      subject: `Pago PayPal confirmado ${booking.booking_reference}`,
+      text: `Pago PayPal confirmado.\n\n${summary}`,
+      dedupe: `booking:${booking.id}:paypal-confirmation-admin-email`,
+    } : null,
+  ].filter(Boolean) as Array<{ to: string; subject: string; text: string; dedupe: string }>;
+
+  for (const message of messages) {
+    const sent = apiKey && from ? await sendEmail(apiKey, from, message) : false;
+    await supabase.from('booking_notifications').insert({
+      booking_id: booking.id,
+      type: 'email',
+      channel: 'email',
+      dedupe_key: message.dedupe,
+      payload: { to: message.to, subject: message.subject, text: message.text },
+      sent_at: sent ? new Date().toISOString() : null,
+    }).select('id').single().then(() => undefined, () => undefined);
+  }
+}
+
+async function sendEmail(apiKey: string, from: string, message: { to: string; subject: string; text: string }) {
+  const response = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ from, to: message.to, subject: message.subject, text: message.text }),
+  });
+  if (!response.ok) console.error('Resend email failed', await response.text());
+  return response.ok;
+}
+
+function formatUsd(value: number) {
+  return `USD ${value.toLocaleString('en-US', { maximumFractionDigits: 2, minimumFractionDigits: 0 })}`;
+}
 
 function getSupabase() {
   const url = Deno.env.get('SUPABASE_URL');

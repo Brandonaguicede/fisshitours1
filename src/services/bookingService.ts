@@ -55,6 +55,11 @@ export interface CreateBookingRequest {
   turnstileToken?: string;
 }
 
+export interface AdminCreateBookingRequest extends Omit<CreateBookingRequest, 'turnstileToken'> {
+  markAsPaid?: boolean;
+  adminNote?: string;
+}
+
 export interface BookingResult {
   booking_id: string;
   booking_reference: string;
@@ -105,6 +110,10 @@ export function calculateBookingPrice(input: PriceRequest) {
 
 export function createBooking(input: CreateBookingRequest) {
   return callFunction<BookingResult>('create-booking', input);
+}
+
+export function adminCreateBooking(input: AdminCreateBookingRequest) {
+  return callFunction<BookingResult>('admin-create-booking', input);
 }
 
 export async function getActiveDepartureLocations() {

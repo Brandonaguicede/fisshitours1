@@ -53,7 +53,15 @@ serve(async (req) => {
     });
 
     const data = await orderResponse.json();
-    if (!orderResponse.ok) return Response.json({ message: data?.message ?? data?.error_description ?? data?.error ?? 'PayPal order could not be created' }, { status: 400, headers });
+    if (!orderResponse.ok) {
+      await supabase.rpc('mark_paypal_payment_unsuccessful', {
+        p_booking_id: booking.id,
+        p_paypal_order_id: data?.id ?? '',
+        p_status: data?.message ?? data?.error_description ?? data?.error ?? 'PayPal order creation failed',
+        p_raw_response: data,
+      });
+      return Response.json({ message: data?.message ?? data?.error_description ?? data?.error ?? 'PayPal order could not be created' }, { status: 400, headers });
+    }
 
     const { error: rpcError } = await supabase.rpc('mark_paypal_order_created', {
       p_booking_id: booking.id,
@@ -105,7 +113,7 @@ async function getPayPalAccessToken() {
 async function fetchWithTimeout(input: string, init: RequestInit, ms = 15000) {
   if (areExternalProviderMocksAllowed() && input.includes('/v2/checkout/orders')) {
     const body = JSON.parse(String(init.body ?? '{}'));
-    return Response.json({ id: `MOCK-${body.purchase_units?.[0]?.invoice_id ?? crypto.randomUUID()}`, status: 'CREATED' });
+    return Response.json({ id: `MOCK-${body.purchase_units?.[0]?.invoice_id ?? 'ORDER'}-${crypto.randomUUID()}`, status: 'CREATED' });
   }
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), ms);
