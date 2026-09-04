@@ -108,9 +108,9 @@ export default function HomePage() {
           </div>
         </Container>
       </section>
+      <Testimonials />
       <GallerySection />
       <AboutPreview />
-      <Testimonials />
     </>
   );
 }
