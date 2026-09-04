@@ -14,6 +14,7 @@ export type BoatTourCatalogRow = PackageRow & {
     boat_id: string;
     tour_id: string;
     active: boolean;
+    boats: Pick<BoatRow, 'active' | 'max_guests'>;
     tours: TourRow;
   };
 };
@@ -55,6 +56,7 @@ export function mapBoatTour(
   return {
     id: row.id,
     boatId: row.boat_tours.boat_id,
+    boatMaxGuests: row.boat_tours.boats?.max_guests,
     boatTourId: row.boat_tours.id,
     tourId: row.boat_tours.tour_id,
     tourTitle: tour.title,

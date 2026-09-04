@@ -155,12 +155,16 @@ async function createBooking(
   return fn(api, 'create-booking', payload, anonHeaders({ 'X-Forwarded-For': ip }));
 }
 
-async function cancelBooking(api: APIRequestContext, bookingId: string, note = 'cancelled_by_test') {
+async function markPayPalAttemptUnsuccessful(api: APIRequestContext, bookingId: string, orderId = '', note = 'failed_by_test') {
   const res = await api.post(`${REST_URL}/rpc/mark_paypal_payment_unsuccessful`, {
     headers: serviceHeaders(),
-    data: { p_booking_id: bookingId, p_paypal_order_id: '', p_status: note, p_raw_response: {} },
+    data: { p_booking_id: bookingId, p_paypal_order_id: orderId, p_status: note, p_raw_response: {} },
   });
   return { status: res.status(), body: await res.json() };
+}
+
+async function cancelBooking(api: APIRequestContext, bookingId: string, note = 'cancelled_by_test') {
+  return markPayPalAttemptUnsuccessful(api, bookingId, '', note);
 }
 
 async function signupUser(api: APIRequestContext, email: string) {
@@ -1073,7 +1077,7 @@ test.describe('backend flows', () => {
     expect(res.body.bookingId).toBe(booking.body.booking_id);
   });
 
-  test('paypal: capture marks the booking paid but never sets booking_status to paid', async ({ request }) => {
+  test('paypal: capture marks the booking paid and confirms the reservation', async ({ request }) => {
     const booking = await createBooking(request, { paymentMethodKey: 'paypal' });
     expect(booking.status).toBe(201);
     const order = await fn(request, 'paypal-create-order', { bookingId: booking.body.booking_id });
@@ -1082,18 +1086,70 @@ test.describe('backend flows', () => {
     const capture = await fn(request, 'paypal-capture-order', { bookingId: booking.body.booking_id, orderId: order.body.id });
     expect(capture.status).toBe(200);
     expect(capture.body.payment_status).toBe('paid');
-    expect(capture.body.booking_status).toBe('pending_confirmation');
+    expect(capture.body.booking_status).toBe('confirmed');
     expect(capture.body.booking_status).not.toBe('paid');
 
     const rows = await serviceSelect(request, 'bookings', 'payment_status,booking_status,expires_at', `id=eq.${booking.body.booking_id}`);
     expect(rows[0].payment_status).toBe('paid');
-    expect(rows[0].booking_status).toBe('pending_confirmation');
+    expect(rows[0].booking_status).toBe('confirmed');
     expect(rows[0].expires_at).toBeNull();
 
     const payments = await serviceSelect(request, 'payments', 'status,provider_capture_id', `booking_id=eq.${booking.body.booking_id}`);
     expect(payments).toHaveLength(1);
     expect(payments[0].status).toBe('paid');
     expect(payments[0].provider_capture_id).toContain('CAP-');
+  });
+
+  test('paypal: customer cancel keeps booking pending and records cancelled attempt', async ({ request }) => {
+    const booking = await createBooking(request, { paymentMethodKey: 'paypal' });
+    expect(booking.status).toBe(201);
+    const order = await fn(request, 'paypal-create-order', { bookingId: booking.body.booking_id });
+    expect(order.status).toBe(200);
+
+    const cancel = await fn(request, 'paypal-cancel-order', { bookingId: booking.body.booking_id, orderId: order.body.id });
+    expect(cancel.status).toBe(200);
+    expect(cancel.body.payment_status).toBe('pending');
+    expect(cancel.body.booking_status).toBe('pending_payment');
+    expect(cancel.body.attempt_status).toBe('cancelled');
+
+    const rows = await serviceSelect(request, 'bookings', 'payment_status,booking_status', `id=eq.${booking.body.booking_id}`);
+    expect(rows[0].payment_status).toBe('pending');
+    expect(rows[0].booking_status).toBe('pending_payment');
+
+    const payments = await serviceSelect(request, 'payments', 'status', `booking_id=eq.${booking.body.booking_id}`);
+    expect(payments.some((payment) => payment.status === 'cancelled')).toBe(true);
+  });
+
+  test('paypal: technical payment error keeps booking pending and allows retry', async ({ request }) => {
+    const booking = await createBooking(request, { paymentMethodKey: 'paypal' });
+    expect(booking.status).toBe(201);
+    const order = await fn(request, 'paypal-create-order', { bookingId: booking.body.booking_id });
+    expect(order.status).toBe(200);
+
+    const failed = await markPayPalAttemptUnsuccessful(request, booking.body.booking_id, order.body.id, 'technical capture failure');
+    expect(failed.status).toBe(200);
+    expect(failed.body.attempt_status).toBe('failed');
+
+    const rowsAfterFailure = await serviceSelect(request, 'bookings', 'payment_status,booking_status', `id=eq.${booking.body.booking_id}`);
+    expect(rowsAfterFailure[0].payment_status).toBe('pending');
+    expect(rowsAfterFailure[0].booking_status).toBe('pending_payment');
+
+    const retryOrder = await fn(request, 'paypal-create-order', { bookingId: booking.body.booking_id });
+    expect(retryOrder.status).toBe(200);
+    expect(retryOrder.body.bookingId).toBe(booking.body.booking_id);
+
+    const capture = await fn(request, 'paypal-capture-order', { bookingId: booking.body.booking_id, orderId: retryOrder.body.id });
+    expect(capture.status).toBe(200);
+    expect(capture.body.payment_status).toBe('paid');
+    expect(capture.body.booking_status).toBe('confirmed');
+
+    const rowsAfterRetry = await serviceSelect(request, 'bookings', 'payment_status,booking_status', `id=eq.${booking.body.booking_id}`);
+    expect(rowsAfterRetry[0].payment_status).toBe('paid');
+    expect(rowsAfterRetry[0].booking_status).toBe('confirmed');
+
+    const payments = await serviceSelect(request, 'payments', 'status,provider_capture_id', `booking_id=eq.${booking.body.booking_id}`);
+    expect(payments.filter((payment) => payment.status === 'paid')).toHaveLength(1);
+    expect(payments.filter((payment) => payment.provider_capture_id?.startsWith('CAP-'))).toHaveLength(1);
   });
 
   test('paypal: capturing with an order that does not belong to the booking is rejected', async ({ request }) => {
@@ -1240,5 +1296,181 @@ test.describe('backend flows', () => {
     const out = execSync('git check-ignore .env supabase/functions/.env.local', { encoding: 'utf8' });
     expect(out).toContain('.env');
     expect(out).toContain('.env.local');
+  });
+});
+
+test.describe('boat / tour / package model', () => {
+  const SECOND_BOAT = 'audit-boat-b';
+  const SECOND_BOAT_MAX = 4; // deliberately lower than the package cap below
+
+  async function servicePost(request: APIRequestContext, table: string, rows: unknown, prefer = 'return=representation,resolution=merge-duplicates') {
+    const res = await request.post(`${REST_URL}/${table}`, {
+      headers: serviceHeaders({ 'Content-Type': 'application/json', Prefer: prefer }),
+      data: rows,
+    });
+    return { status: res.status(), body: await res.json().catch(() => null) };
+  }
+
+  async function servicePatch(request: APIRequestContext, table: string, filter: string, patch: unknown) {
+    const res = await request.patch(`${REST_URL}/${table}?${filter}`, {
+      headers: serviceHeaders({ 'Content-Type': 'application/json', Prefer: 'return=representation' }),
+      data: patch,
+    });
+    return { status: res.status(), body: await res.json().catch(() => null) };
+  }
+
+  async function ensureSecondBoat(request: APIRequestContext, active = true) {
+    await servicePost(request, 'boats', {
+      id: SECOND_BOAT,
+      slug: SECOND_BOAT,
+      name: 'Audit Boat B',
+      included_guests: 1,
+      max_guests: SECOND_BOAT_MAX,
+      extra_guest_price: 0,
+      active,
+      sort_order: 99,
+    });
+    await servicePatch(request, 'boats', `id=eq.${SECOND_BOAT}`, { active, max_guests: SECOND_BOAT_MAX });
+  }
+
+  async function ensureLink(request: APIRequestContext, boatId: string, tourId: string) {
+    await servicePost(request, 'boat_tours', { boat_id: boatId, tour_id: tourId, active: true, sort_order: 99 });
+    const rows = await serviceSelect(request, 'boat_tours', 'id,boat_id,tour_id', `boat_id=eq.${boatId}&tour_id=eq.${tourId}`);
+    expect(rows).toHaveLength(1);
+    return rows[0].id as string;
+  }
+
+  async function ensurePackage(request: APIRequestContext, id: string, boatTourId: string, overrides: Record<string, unknown> = {}) {
+    await servicePost(request, 'tour_packages', {
+      id,
+      boat_tour_id: boatTourId,
+      name: id,
+      package_type: 'audit',
+      base_price: 500,
+      included_guests: 2,
+      max_guests: 10, // higher than SECOND_BOAT_MAX on purpose
+      extra_guest_price: 0,
+      custom_quote: false,
+      active: true,
+      sort_order: 99,
+      ...overrides,
+    });
+  }
+
+  test('capacity: booking is capped at least(package.max_guests, boats.max_guests)', async ({ request }) => {
+    await ensureSecondBoat(request, true);
+    const linkId = await ensureLink(request, SECOND_BOAT, 'fishing');
+    await ensurePackage(request, 'audit-cap-pkg', linkId, { max_guests: 10 });
+
+    // package cap = 10, boat cap = 4 -> effective 4
+    const overPrice = await fn(request, 'calculate-booking-price', {
+      tourPackageId: 'audit-cap-pkg', guests: 5, boatId: SECOND_BOAT, tourId: 'fishing',
+    });
+    expect(overPrice.status).toBe(400);
+    expect(overPrice.body.message).toContain('capacity');
+
+    const okPrice = await fn(request, 'calculate-booking-price', {
+      tourPackageId: 'audit-cap-pkg', guests: 4, boatId: SECOND_BOAT, tourId: 'fishing',
+    });
+    expect(okPrice.status).toBe(200);
+    expect(okPrice.body.max_guests).toBe(SECOND_BOAT_MAX);
+
+    const overBooking = await createBooking(request, {
+      boatId: SECOND_BOAT, tourId: 'fishing', tourPackageId: 'audit-cap-pkg', guests: 5,
+    });
+    expect(overBooking.status).toBe(400);
+    expect(overBooking.body.message).toContain('capacity');
+
+    const okBooking = await createBooking(request, {
+      boatId: SECOND_BOAT, tourId: 'fishing', tourPackageId: 'audit-cap-pkg', guests: 4,
+    });
+    expect(okBooking.status).toBe(201);
+    expect(okBooking.body.total_snapshot).toBe(500);
+  });
+
+  test('capacity: admin-create-booking is capped by the physical boat too', async ({ request }) => {
+    await ensureSecondBoat(request, true);
+    const linkId = await ensureLink(request, SECOND_BOAT, 'fishing');
+    await ensurePackage(request, 'audit-admin-pkg', linkId, { max_guests: 10 });
+
+    const admin = await signupUser(request, uniqueEmail());
+    await setProfileRole(request, admin.user.id, admin.user.email, 'admin');
+    const headers = anonHeaders({ Authorization: `Bearer ${admin.access_token}` });
+
+    const base = {
+      customer: { fullName: 'Audit Admin', email: uniqueEmail(), whatsapp: '50600000001' },
+      boatId: SECOND_BOAT,
+      tourId: 'fishing',
+      tourPackageId: 'audit-admin-pkg',
+      timeSlotId: 'morning',
+      departureLocationId: await departureLocationId(request, 'playas-del-coco'),
+      paymentMethodKey: 'whatsapp-link' as const,
+    };
+
+    const over = await fn(request, 'admin-create-booking', { ...base, tourDate: uniqueDate(), guests: 6 }, headers);
+    expect(over.status).toBe(400);
+    expect(over.body.message).toContain('capacity');
+
+    const ok = await fn(request, 'admin-create-booking', { ...base, tourDate: uniqueDate(), guests: 4 }, headers);
+    expect(ok.status).toBe(201);
+    expect(ok.body.total_snapshot).toBe(500);
+  });
+
+  test('inactive boat: not priceable and not bookable', async ({ request }) => {
+    await ensureSecondBoat(request, true);
+    const linkId = await ensureLink(request, SECOND_BOAT, 'fishing');
+    await ensurePackage(request, 'audit-inactive-pkg', linkId, { max_guests: 4 });
+    await servicePatch(request, 'boats', `id=eq.${SECOND_BOAT}`, { active: false });
+
+    try {
+      const price = await fn(request, 'calculate-booking-price', {
+        tourPackageId: 'audit-inactive-pkg', guests: 2, boatId: SECOND_BOAT, tourId: 'fishing',
+      });
+      expect(price.status).toBe(404);
+
+      const booking = await createBooking(request, {
+        boatId: SECOND_BOAT, tourId: 'fishing', tourPackageId: 'audit-inactive-pkg', guests: 2,
+      });
+      expect(booking.status).toBe(400);
+      expect(booking.body.message).toContain('boat is not available');
+    } finally {
+      await servicePatch(request, 'boats', `id=eq.${SECOND_BOAT}`, { active: true });
+    }
+  });
+
+  test('boat_tours.active resyncs BOTH relations when a package moves between boats', async ({ request }) => {
+    await ensureSecondBoat(request, true);
+    const linkB = await ensureLink(request, SECOND_BOAT, 'fishing');
+    await ensurePackage(request, 'audit-move-pkg', linkB, { max_guests: 4 });
+
+    const linkA = await ensureLink(request, BOAT_ID, 'fishing');
+
+    let rows = await serviceSelect(request, 'boat_tours', 'id,active', `id=eq.${linkB}`);
+    expect(rows[0].active).toBe(true); // has one active package
+
+    // Simulate the (now impossible from the UI) reassignment directly on the row.
+    await servicePatch(request, 'tour_packages', 'id=eq.audit-move-pkg', { boat_tour_id: linkA });
+
+    rows = await serviceSelect(request, 'boat_tours', 'id,active', `id=eq.${linkB}`);
+    expect(rows[0].active).toBe(false); // source relation must be resynced, not left stale
+
+    // Restore so the row can be cleaned up / re-run.
+    await servicePatch(request, 'tour_packages', 'id=eq.audit-move-pkg', { boat_tour_id: linkB, active: false });
+  });
+
+  test('delete guard: a package with bookings cannot be hard-deleted', async ({ request }) => {
+    await ensureSecondBoat(request, true);
+    const linkId = await ensureLink(request, SECOND_BOAT, 'fishing');
+    await ensurePackage(request, 'audit-guard-pkg', linkId, { max_guests: 4 });
+
+    const booking = await createBooking(request, {
+      boatId: SECOND_BOAT, tourId: 'fishing', tourPackageId: 'audit-guard-pkg', guests: 2,
+    });
+    expect(booking.status).toBe(201);
+
+    const del = await request.delete(`${REST_URL}/tour_packages?id=eq.audit-guard-pkg`, { headers: serviceHeaders() });
+    expect(del.status()).toBeGreaterThanOrEqual(400);
+    const rows = await serviceSelect(request, 'tour_packages', 'id', `id=eq.audit-guard-pkg`);
+    expect(rows).toHaveLength(1);
   });
 });

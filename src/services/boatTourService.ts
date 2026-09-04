@@ -18,9 +18,10 @@ export async function getActiveBoatTours(): Promise<BoatTour[]> {
     getActiveTimeSlots(),
     supabase
       .from('tour_packages')
-      .select('*, boat_tours!inner(id, boat_id, tour_id, active, tours!inner(*))')
+      .select('*, boat_tours!inner(id, boat_id, tour_id, active, boats!inner(active, max_guests), tours!inner(*))')
       .eq('active', true)
       .eq('boat_tours.active', true)
+      .eq('boat_tours.boats.active', true)
       .eq('boat_tours.tours.active', true)
       .order('sort_order'),
     supabase.from('tour_images').select('*').eq('active', true).order('sort_order'),

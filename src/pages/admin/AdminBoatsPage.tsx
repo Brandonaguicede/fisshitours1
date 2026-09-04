@@ -1,8 +1,10 @@
 import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Copy, Image as ImageIcon, ImagePlus, Info, Loader2, Pencil, Plus, Save, Settings2, Star, Trash2, Users, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 
 import AdminImageManager from '../../components/admin/AdminImageManager';
 import { AdminBadge, AdminPageHeader, AdminTable } from '../../components/admin/AdminPrimitives';
+import BoatToursPackagesEditor from '../../components/admin/BoatToursPackagesEditor';
 import FormSection from '../../components/admin/FormSection';
 import ModalFooter from '../../components/admin/ModalFooter';
 import ToggleSwitch from '../../components/admin/ToggleSwitch';
@@ -77,6 +79,7 @@ function equipmentStorageToTextarea(value?: string | null) {
 
 export default function AdminBoatsPage() {
   const db = supabase as any;
+  const [searchParams, setSearchParams] = useSearchParams();
   const [boats, setBoats] = useState<BoatRow[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -85,6 +88,7 @@ export default function AdminBoatsPage() {
   const [selectedImageId, setSelectedImageId] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<BoatImageRow | null>(null);
   const [pendingBoatDelete, setPendingBoatDelete] = useState<BoatRow | null>(null);
+  const [boatTab, setBoatTab] = useState<'general' | 'tours'>('general');
   const [saving, setSaving] = useState(false);
   const [startingPrices, setStartingPrices] = useState<Record<string, number>>({});
   const [fieldErrors, setFieldErrors] = useState<{ id?: string; slug?: string; name?: string; maxGuests?: string; images?: string }>({});
@@ -153,8 +157,25 @@ export default function AdminBoatsPage() {
     void loadBoats();
   }, []);
 
+  // Deep link from Tours / Paquetes: /admin/boats?boatId=<id> opens the boat on its
+  // "Tours y paquetes" tab.
+  useEffect(() => {
+    const requestedId = searchParams.get('boatId');
+    if (!requestedId || !boats || editing) return;
+    const target = boats.find((boat) => boat.id === requestedId);
+    if (!target) return;
+    openEditor(target);
+    setBoatTab('tours');
+    setSearchParams((current) => {
+      current.delete('boatId');
+      return current;
+    }, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [boats, searchParams]);
+
   function openEditor(boat: BoatRow) {
     setEditing(boat);
+    setBoatTab('general');
     setFieldErrors({});
     const images = boat.boat_images?.length ? boat.boat_images : fallbackBoatImages(boat);
     setSelectedImageId((images.find((image) => image.is_primary) ?? images[0])?.id ?? null);
@@ -164,6 +185,7 @@ export default function AdminBoatsPage() {
     setNotice('');
     setError('');
     setFieldErrors({});
+    setBoatTab('general');
     const id = `nuevo-bote-${Date.now()}`;
     setEditing({
       id,
@@ -495,6 +517,17 @@ export default function AdminBoatsPage() {
                 </div>
               ) : null}
 
+              {isExistingBoat ? (
+                <div className="admin-actions" role="tablist" aria-label="Secciones del bote">
+                  <button type="button" className={boatTab === 'general' ? 'admin-btn' : 'admin-btn admin-btn--ghost'} onClick={() => setBoatTab('general')}>General</button>
+                  <button type="button" className={boatTab === 'tours' ? 'admin-btn' : 'admin-btn admin-btn--ghost'} onClick={() => setBoatTab('tours')}>Tours y paquetes</button>
+                </div>
+              ) : null}
+
+              {isExistingBoat && boatTab === 'tours' ? (
+                <BoatToursPackagesEditor boatId={editing.id} boatName={editing.name} boatMaxGuests={editing.max_guests} />
+              ) : (
+              <>
               <FormSection
                 title="Imagen del bote"
                 description={isExistingBoat ? 'Sube nuevas fotos, ordena la galeria y elige la imagen principal.' : 'Guarda la informacion del bote para habilitar la carga de imagenes.'}
@@ -649,6 +682,8 @@ export default function AdminBoatsPage() {
                   <input id="boat-sort-order" name="sort_order" className="admin-input" type="number" value={editing.sort_order} onChange={(event) => setEditing({ ...editing, sort_order: Number(event.target.value) })} />
                 </label>
               </FormSection>
+              </>
+              )}
             </div>
 
             <ModalFooter>

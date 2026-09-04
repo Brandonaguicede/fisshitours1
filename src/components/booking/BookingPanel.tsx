@@ -6,7 +6,7 @@ import { getBoatText, getPackageLabel, getTourGroupKey, getTourText } from '../.
 import { useLanguage } from '../../i18n/LanguageContext';
 import { text, tr } from '../../i18n/translations';
 import { MOCK_TURNSTILE_TOKEN, USE_LOCAL_TURNSTILE_MOCK } from '../../lib/turnstile';
-import { capturePayPalOrder, createPayPalOrder, getPayPalErrorMessage, loadPayPalSdk, type PayPalCaptureResult } from '../../services/paypalService';
+import { cancelPayPalOrder, capturePayPalOrder, createPayPalOrder, getPayPalErrorMessage, loadPayPalSdk, type PayPalCaptureResult } from '../../services/paypalService';
 import { getBookingAvailability, type AvailabilitySlot } from '../../services/availabilityService';
 import { calculateBookingPrice, createBooking, getActiveDepartureLocations, type BookingResult, type DepartureLocation, type PriceResult } from '../../services/bookingService';
 import { getActivePaymentMethods } from '../../services/paymentService';
@@ -116,7 +116,7 @@ export function BookingPanel({ selectedBoat, selectedTour, boats, tours, catalog
     queryKey: ['bookingPrice', selectedBoat.id, selectedTour?.tourId, selectedTour?.id, guests, departureLocationId],
     queryFn: () => calculateBookingPrice({
       boatId: selectedBoat.id,
-      tourId: selectedTour?.tourId ?? selectedTour?.category ?? '',
+      tourId: selectedTour?.tourId ?? '',
       boatTourId: selectedTour?.boatTourId,
       tourPackageId: selectedTour?.id ?? '',
       guests,
@@ -285,10 +285,14 @@ const bookingPayload = selectedTour
   async function submitBooking(method: BookingPaymentMethod) {
     const booking = validateBookingForPayment();
     if (!booking || !selectedTour || !selectedTimeSlot) return null;
+    if (!selectedTour.tourId) {
+      setValidationMessage(language === 'es' ? 'Este tour no está disponible para reservar.' : 'This tour is not available to book.');
+      return null;
+    }
     const result = await createBookingMutation.mutateAsync({
       customer: { fullName: customerName, email: customerEmail, whatsapp: customerWhatsapp },
       boatId: selectedBoat.id,
-      tourId: selectedTour.tourId ?? selectedTour.category,
+      tourId: selectedTour.tourId,
       tourPackageId: selectedTour.id,
       tourDate: date,
       timeSlotId,
@@ -492,12 +496,12 @@ const bookingPayload = selectedTour
               onPayPalError={(message) => {
                 setPaypalError(message);
                 setBookingStatus('pending_payment');
-                setPaymentStatus('failed');
+                setPaymentStatus('pending');
               }}
               onPayPalCancel={() => {
                 setPaypalError('Payment was cancelled. You can try again or select another payment method.');
                 setBookingStatus('pending_payment');
-                setPaymentStatus('failed');
+                setPaymentStatus('pending');
               }}
               onSendPaidConfirmation={() => {
                 const booking = validateBookingForPayment();
@@ -1082,6 +1086,7 @@ function PayPalCheckoutBox(props: {
   const clientId = import.meta.env.VITE_PAYPAL_CLIENT_ID;
   const containerId = `paypal-button-container-${createdBooking.booking_id}`;
   const callbacksRef = useRef({ onSuccess, onError, onCancel });
+  const activeOrderIdRef = useRef<string>('');
 
   useEffect(() => {
     callbacksRef.current = { onSuccess, onError, onCancel };
@@ -1126,12 +1131,19 @@ function PayPalCheckoutBox(props: {
         rendered = true;
         return window.paypal.Buttons({
           style: buttonStyle,
-          createOrder: () => createPayPalOrder(createdBooking.booking_id),
+          createOrder: async () => {
+            const orderId = await createPayPalOrder(createdBooking.booking_id);
+            activeOrderIdRef.current = orderId;
+            return orderId;
+          },
           onApprove: async (data) => {
             const result = await capturePayPalOrder(data.orderID, createdBooking.booking_id, createdBooking.booking_reference);
             callbacksRef.current.onSuccess(result);
           },
-          onCancel: () => callbacksRef.current.onCancel(),
+          onCancel: () => {
+            void cancelPayPalOrder(createdBooking.booking_id, activeOrderIdRef.current).catch(() => undefined);
+            callbacksRef.current.onCancel();
+          },
           onError: (error) => callbacksRef.current.onError(getPayPalErrorMessage(error)),
         }).render(`#${containerId}`);
       })

@@ -21,9 +21,9 @@ interface PackageRow {
 }
 
 // Read-only overview across every tour + boat combination. tour_packages is the single
-// source of truth for commercial terms; editing happens exclusively from the "Paquetes"
-// tab inside each tour (Tours > editar tour > Paquetes) to avoid two divergent editors
-// writing the same rows.
+// source of truth for commercial terms; editing happens exclusively from the
+// "Tours y paquetes" tab inside each boat (Botes > editar bote > Tours y paquetes) so a
+// package can never be reassigned to another boat.
 export default function AdminBoatToursPage() {
   const navigate = useNavigate();
   const [packages, setPackages] = useState<PackageRow[]>([]);
@@ -61,14 +61,14 @@ export default function AdminBoatToursPage() {
   );
 
   function editInTour(item: PackageRow) {
-    const tourId = item.boat_tours?.tour_id;
-    if (!tourId) return;
-    navigate(`/admin/tours?tourId=${tourId}&tab=packages`);
+    const boatId = item.boat_tours?.boat_id;
+    if (!boatId) return;
+    navigate(`/admin/boats?boatId=${boatId}`);
   }
 
   return (
     <div className="admin-page">
-      <AdminPageHeader title="Paquetes (todos los tours)" description="Vista de solo lectura de todos los paquetes reservables. Para crear o editar, entra al tour correspondiente y usa su pestana Paquetes." />
+      <AdminPageHeader title="Paquetes (todos los tours)" description="Vista de solo lectura de todos los paquetes reservables. Para crear o editar, entra al bote correspondiente y usa su pestana Tours y paquetes." />
       <AdminToolbar>
         <select className="admin-select" value={boatFilter} onChange={(event) => setBoatFilter(event.target.value)}>
           <option value="all">Todos los botes</option>
@@ -90,7 +90,7 @@ export default function AdminBoatToursPage() {
               <td>{item.included_guests} incluidos / {item.max_guests} max</td>
               <td><AdminBadge value={item.active} /></td>
               <td>
-                <button className="admin-btn admin-btn--ghost" type="button" onClick={() => editInTour(item)}><Pencil size={14} /> Editar en el tour</button>
+                <button className="admin-btn admin-btn--ghost" type="button" onClick={() => editInTour(item)}><Pencil size={14} /> Editar en el bote</button>
               </td>
             </tr>
           ))}

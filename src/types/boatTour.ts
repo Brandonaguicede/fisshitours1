@@ -15,6 +15,8 @@ export interface TourTimeSlot {
 export interface BoatTour {
   id: string;
   boatId: string;
+  /** Physical capacity of the boat that offers this package. Absolute safety ceiling. */
+  boatMaxGuests?: number;
   boatTourId?: string;
   tourId?: string;
   tourTitle?: string;

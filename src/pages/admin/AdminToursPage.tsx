@@ -1,5 +1,6 @@
-import { Check, ChevronLeft, ChevronRight, Eye, EyeOff, Image as ImageIcon, Info, Loader2, Package, Pencil, Plus, Save, Search, Trash2, X } from 'lucide-react';
-import { Fragment, useEffect, useMemo, useState } from 'react';
+import { Check, ChevronLeft, ChevronRight, Image as ImageIcon, Info, Loader2, Package, Pencil, Plus, Save, Search, Trash2, X } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 import AdminImageManager from '../../components/admin/AdminImageManager';
 import { AdminBadge, AdminModuleSurface, AdminTable, AdminToolbar } from '../../components/admin/AdminPrimitives';
@@ -23,6 +24,7 @@ type EditorStep = 'info' | 'gallery' | 'experience' | 'packages';
 interface EditablePackage {
   id: string;
   boatTourId: string | null;
+  boatId: string | null;
   name: string;
   packageType: string;
   durationHours: string;
@@ -61,7 +63,6 @@ interface TourEditor {
   publicationStatus: PublicationStatus;
   featured: boolean;
   sortOrder: number;
-  boatId: string;
   activities: string[];
   images: TourImageRow[];
   inclusions: EditableInclusion[];
@@ -91,26 +92,17 @@ function publicationStatus(tour: TourRow): PublicationStatus {
     : tour.active ? 'published' : 'inactive';
 }
 
-function packageDraft(boat: BoatRow | undefined, sortOrder: number): EditablePackage {
-  return {
-    id: `package-${crypto.randomUUID().slice(0, 8)}`, boatTourId: null, name: '', packageType: '', durationHours: '',
-    basePrice: '', includedGuests: 1, maxGuests: boat?.max_guests ?? 1, extraGuestPrice: 0, description: '', imageUrl: null,
-    imagePublicId: null, sortOrder, active: true, customQuote: false, isNew: true,
-  };
-}
-
 function createEditor(tour: TourRow, packages: PackageRow[], relations: BoatTourRow[], images: TourImageRow[], inclusions: TourInclusionRow[], locations: TourLocationRow[]): TourEditor {
-  const firstRelation = relations.find((relation) => relation.tour_id === tour.id && packages.some((item) => item.boat_tour_id === relation.id))
-    ?? relations.find((relation) => relation.tour_id === tour.id);
+  const boatByBoatTour = new Map(relations.map((relation) => [relation.id, relation.boat_id]));
   return {
     id: tour.id, title: tour.title, slug: tour.slug,
     locations: locations.filter((item) => item.tour_id === tour.id).sort((a, b) => a.sort_order - b.sort_order).map((item) => item.location).concat(locations.some((item) => item.tour_id === tour.id) || !tour.location?.trim() ? [] : [tour.location.trim()]),
     description: tour.description ?? '',
     longDescription: tour.long_description ?? '', category: tour.category, publicationStatus: publicationStatus(tour), featured: tour.featured,
-    sortOrder: tour.sort_order, boatId: firstRelation?.boat_id ?? '', activities: stringList(tour.highlights),
+    sortOrder: tour.sort_order, activities: stringList(tour.highlights),
     images: [...images].sort((a, b) => a.sort_order - b.sort_order),
     packages: packages.map((item) => ({
-      id: item.id, boatTourId: item.boat_tour_id, name: item.name, packageType: item.package_type,
+      id: item.id, boatTourId: item.boat_tour_id, boatId: boatByBoatTour.get(item.boat_tour_id) ?? null, name: item.name, packageType: item.package_type,
       durationHours: item.duration_minutes == null ? '' : String(item.duration_minutes / 60), basePrice: String(item.base_price),
       includedGuests: item.included_guests, maxGuests: item.max_guests, extraGuestPrice: Number(item.extra_guest_price),
       description: item.description ?? '', imageUrl: item.image_url, imagePublicId: item.image_public_id,
@@ -121,6 +113,7 @@ function createEditor(tour: TourRow, packages: PackageRow[], relations: BoatTour
 }
 
 export default function AdminToursPage() {
+  const navigate = useNavigate();
   const [tours, setTours] = useState<TourRow[]>([]);
   const [boats, setBoats] = useState<BoatRow[]>([]);
   const [locationRows, setLocationRows] = useState<TourLocationRow[]>([]);
@@ -130,9 +123,7 @@ export default function AdminToursPage() {
   const [inclusionRows, setInclusionRows] = useState<TourInclusionRow[]>([]);
   const [editing, setEditing] = useState<TourEditor | null>(null);
   const [step, setStep] = useState<EditorStep>('info');
-  const [editingPackageId, setEditingPackageId] = useState<string | null>(null);
   const [gallerySlot, setGallerySlot] = useState<number | null>(null);
-  const [deletePackage, setDeletePackage] = useState<EditablePackage | null>(null);
   const [deleteImage, setDeleteImage] = useState<TourImageRow | null>(null);
   const [activityInput, setActivityInput] = useState('');
   const [inclusionInput, setInclusionInput] = useState('');
@@ -170,7 +161,7 @@ export default function AdminToursPage() {
   function openEditor(tour: TourRow) {
     const tourRelations = relations.filter((item) => item.tour_id === tour.id);
     setEditing(createEditor(tour, packageRows.filter((item) => tourRelations.some((relation) => relation.id === item.boat_tour_id)), tourRelations, imageRows.filter((item) => item.tour_id === tour.id), inclusionRows.filter((item) => item.tour_id === tour.id), locationRows));
-    setStep('info'); setFieldErrors({}); setEditingPackageId(null); setGallerySlot(null); setLocationInput(''); setDirty(false); setError('');
+    setStep('info'); setFieldErrors({}); setGallerySlot(null); setLocationInput(''); setDirty(false); setError('');
   }
 
   async function createTour() {
@@ -185,37 +176,11 @@ export default function AdminToursPage() {
     setEditing(null); setFieldErrors({}); setDirty(false); setError('');
   }
 
-  function validatePackage(editor: TourEditor, item: EditablePackage) {
-    const errors: FieldErrors = {};
-    if (!item.name.trim()) errors[`package-${item.id}-name`] = 'El nombre es obligatorio.';
-    if (item.durationHours.trim() && (!Number.isFinite(Number(item.durationHours)) || Number(item.durationHours) <= 0)) errors[`package-${item.id}-duration`] = 'Si indicas horas, deben ser mayores que cero.';
-    if (!item.basePrice.trim() || !Number.isFinite(Number(item.basePrice)) || Number(item.basePrice) < 0) errors[`package-${item.id}-price`] = 'Ingresa un precio válido.';
-    if (!Number.isFinite(item.includedGuests) || item.includedGuests < 1) errors[`package-${item.id}-included`] = 'Debe incluir al menos una persona.';
-    if (!Number.isFinite(item.extraGuestPrice) || item.extraGuestPrice < 0) errors[`package-${item.id}-extra`] = 'El extra no puede ser negativo.';
-    const boat = boats.find((candidate) => candidate.id === editor.boatId);
-    if (boat && item.includedGuests > boat.max_guests) errors[`package-${item.id}-included`] = `El bote admite máximo ${boat.max_guests} personas.`;
-    return errors;
-  }
-
   function validateFinal(editor: TourEditor) {
     const errors: FieldErrors = {};
     if (!editor.title.trim()) errors.title = 'El nombre del tour es obligatorio.';
     if (![3, 6, 9].includes(editor.images.length)) errors.images = 'Para finalizar se requieren exactamente 3, 6 o 9 fotografías.';
-    if (!editor.boatId) errors.boat = 'Selecciona el bote asociado al Tour.';
-    if (!editor.packages.some((item) => item.active)) errors.packages = 'Para finalizar se requiere al menos un paquete activo.';
-    editor.packages.forEach((item) => Object.assign(errors, validatePackage(editor, item)));
     return errors;
-  }
-
-  async function ensureBoatTour(tourId: string, boatId: string) {
-    const known = relations.find((item) => item.tour_id === tourId && item.boat_id === boatId);
-    if (known) return known.id;
-    const { data: existing, error: selectError } = await supabase.from('boat_tours').select('id').eq('tour_id', tourId).eq('boat_id', boatId).maybeSingle();
-    if (selectError) throw new Error(selectError.message);
-    if (existing) return existing.id;
-    const { data, error: insertError } = await supabase.from('boat_tours').insert({ tour_id: tourId, boat_id: boatId, active: false, sort_order: relations.length + 1 }).select('id').single();
-    if (insertError) throw new Error(insertError.message);
-    return data.id;
   }
 
   async function persistInfo(editor: TourEditor) {
@@ -242,22 +207,6 @@ export default function AdminToursPage() {
     }
   }
 
-  async function persistPackage(item: EditablePackage) {
-    if (!editing) return;
-    const errors = validatePackage(editing, item);
-    if (!editing.boatId) errors.boat = 'Selecciona el bote asociado al Tour.';
-    setFieldErrors(errors); if (Object.keys(errors).length) return;
-    setSaving(true); setError('');
-    try {
-      const boatTourId = await ensureBoatTour(editing.id, editing.boatId);
-      const boat = boats.find((candidate) => candidate.id === editing.boatId);
-      const { error: packageError } = await supabase.from('tour_packages').upsert({ id: item.id, boat_tour_id: boatTourId, name: item.name.trim(), package_type: item.packageType || slugify(item.name), description: item.description || null, duration_minutes: item.durationHours.trim() ? Math.round(Number(item.durationHours) * 60) : null, base_price: Number(item.basePrice), included_guests: item.includedGuests, max_guests: Math.max(item.includedGuests, Math.min(item.maxGuests, boat?.max_guests ?? item.maxGuests)), extra_guest_price: item.extraGuestPrice, custom_quote: item.customQuote, image_url: item.imageUrl, image_public_id: item.imagePublicId, active: item.active, sort_order: item.sortOrder, updated_at: new Date().toISOString() });
-      if (packageError) throw new Error(packageError.message);
-      markEditing({ ...editing, packages: editing.packages.map((candidate) => candidate.id === item.id ? { ...candidate, boatTourId, isNew: false } : candidate) });
-      setEditingPackageId(null); setDirty(false); setSaving(false); await loadTours();
-    } catch (caught) { setSaving(false); setError(caught instanceof Error ? caught.message : 'No se pudo guardar el paquete.'); }
-  }
-
   async function persistStep() {
     if (!editing) return false;
     setSaving(true); setError('');
@@ -271,7 +220,7 @@ export default function AdminToursPage() {
   async function finishTour() {
     if (!editing || saving) return;
     const errors = validateFinal(editing); setFieldErrors(errors);
-    if (Object.keys(errors).length) { setError('El borrador se conserva. Completa los campos marcados antes de finalizar.'); setStep(errors.images ? 'gallery' : errors.packages || errors.boat || Object.keys(errors).some((key) => key.startsWith('package-')) ? 'packages' : 'info'); return; }
+    if (Object.keys(errors).length) { setError('El borrador se conserva. Completa los campos marcados antes de finalizar.'); setStep(errors.images ? 'gallery' : 'info'); return; }
     setSaving(true); setError('');
     try {
       await persistInfo(editing); await persistExperience(editing);
@@ -308,7 +257,6 @@ export default function AdminToursPage() {
 
   function addActivity() { if (!editing || !activityInput.trim()) return; markEditing({ ...editing, activities: [...editing.activities, activityInput.trim()] }); setActivityInput(''); }
   function addInclusion() { if (!editing || !inclusionInput.trim()) return; markEditing({ ...editing, inclusions: [...editing.inclusions, { id: crypto.randomUUID(), label: inclusionInput.trim(), packageId: null, sortOrder: editing.inclusions.length + 1, active: true, isNew: true }] }); setInclusionInput(''); }
-  function addPackage() { if (!editing) return; const boat = boats.find((item) => item.id === editing.boatId) ?? boats[0]; const item = packageDraft(boat, editing.packages.length + 1); markEditing({ ...editing, boatId: editing.boatId || boat?.id || '', packages: [...editing.packages, item] }); setEditingPackageId(item.id); }
   async function navigateStep(direction: -1 | 1) {
     if (!editing || saving) return;
     if (direction === 1) {
@@ -320,16 +268,6 @@ export default function AdminToursPage() {
     }
     const index = steps.findIndex((item) => item.id === step);
     setStep(steps[Math.max(0, Math.min(3, index + direction))].id);
-  }
-
-  async function removePackage(item: EditablePackage) {
-    if (!editing) return;
-    if (!item.isNew) {
-      const { error: removeError } = await supabase.from('tour_packages').delete().eq('id', item.id);
-      if (removeError) { setError(removeError.message); return; }
-    }
-    markEditing({ ...editing, packages: editing.packages.filter((candidate) => candidate.id !== item.id) });
-    setEditingPackageId(null); setDeletePackage(null); await loadTours();
   }
 
   const locationsByTour = useMemo(() => new Map(tours.map((tour) => [tour.id, locationRows.filter((item) => item.tour_id === tour.id).sort((a, b) => a.sort_order - b.sort_order).map((item) => item.location)])), [tours, locationRows]);
@@ -353,13 +291,12 @@ export default function AdminToursPage() {
             {step === 'info' ? <InfoStep editing={editing} locationInput={locationInput} setLocationInput={setLocationInput} errors={fieldErrors} onChange={markEditing} /> : null}
             {step === 'gallery' ? <GalleryStep editing={editing} errors={fieldErrors} selectedSlot={gallerySlot} setSelectedSlot={setGallerySlot} setDeleteImage={setDeleteImage} saveImage={saveGalleryImage} /> : null}
             {step === 'experience' ? <ExperienceStep editing={editing} activityInput={activityInput} inclusionInput={inclusionInput} setActivityInput={setActivityInput} setInclusionInput={setInclusionInput} addActivity={addActivity} addInclusion={addInclusion} onChange={markEditing} /> : null}
-            {step === 'packages' ? <PackagesStep editing={editing} boats={boats} packages={visiblePackages} errors={fieldErrors} editingPackageId={editingPackageId} setEditingPackageId={setEditingPackageId} onChange={markEditing} addPackage={addPackage} setDeletePackage={setDeletePackage} savePackage={persistPackage} saving={saving} /> : null}
+            {step === 'packages' ? <PackagesStep boats={boats} packages={visiblePackages} onManageBoat={(boatId) => navigate(boatId ? `/admin/boats?boatId=${boatId}` : '/admin/boats')} /> : null}
           </div>
           <ModalFooter><button className="admin-btn admin-btn--secondary" type="button" onClick={requestClose}>Cancelar</button>{step !== 'info' ? <button className="admin-btn admin-btn--ghost" type="button" onClick={() => void navigateStep(-1)}><ChevronLeft size={15} /> Anterior</button> : null}{step !== 'packages' ? <button className="admin-btn" type="button" disabled={saving} onClick={() => void navigateStep(1)}>{saving ? <Loader2 className="animate-spin" size={15} /> : null} Siguiente <ChevronRight size={15} /></button> : <button className="admin-btn" type="submit" disabled={saving}>{saving ? <Loader2 className="animate-spin" size={15} /> : <Save size={15} />} Finalizar</button>}</ModalFooter>
         </form> : null}
       </Modal>
 
-      <Modal open={Boolean(deletePackage)} onClose={() => setDeletePackage(null)} titleId="package-delete-title" className="max-w-md">{deletePackage ? <div className="admin-modal-card"><h2 id="package-delete-title" className="admin-card__title"><Trash2 size={18} /> Eliminar paquete</h2><p className="admin-muted mt-2">Se eliminará “{deletePackage.name}”.</p><div className="admin-actions mt-5"><button className="admin-btn admin-btn--secondary" type="button" onClick={() => setDeletePackage(null)}>Cancelar</button><button className="admin-btn admin-btn--danger" type="button" onClick={() => void removePackage(deletePackage)}><Trash2 size={15} /> Eliminar</button></div></div> : null}</Modal>
       <Modal open={Boolean(deleteImage)} onClose={() => setDeleteImage(null)} titleId="image-delete-title" className="max-w-md">{deleteImage ? <div className="admin-modal-card"><h2 id="image-delete-title" className="admin-card__title"><Trash2 size={18} /> Eliminar fotografía</h2><p className="admin-muted mt-2">Las siguientes fotografías se reordenarán automáticamente.</p><div className="admin-actions mt-5"><button className="admin-btn admin-btn--secondary" type="button" onClick={() => setDeleteImage(null)}>Cancelar</button><button className="admin-btn admin-btn--danger" type="button" onClick={() => void removeGalleryImage(deleteImage)}>Eliminar</button></div></div> : null}</Modal>
     </div>
   );
@@ -382,7 +319,49 @@ function ExperienceStep({ editing, activityInput, inclusionInput, setActivityInp
   return <FormSection title="Actividades e incluye" description="Listas editables sin un máximo artificial." icon={<Check size={16} />}><div className="admin-dynamic-list"><h3>Actividades del Tour</h3>{editing.activities.map((item, index) => <div className="admin-dynamic-list__row" key={index}><input className="admin-input" value={item} onChange={(event) => onChange({ ...editing, activities: editing.activities.map((current, currentIndex) => currentIndex === index ? event.target.value : current) })} /><button className="admin-icon-btn" type="button" aria-label={`Eliminar actividad ${index + 1}`} onClick={() => onChange({ ...editing, activities: editing.activities.filter((_, currentIndex) => currentIndex !== index) })}><Trash2 size={15} /></button></div>)}<div className="admin-list-editor__add"><input className="admin-input" value={activityInput} onChange={(event) => setActivityInput(event.target.value)} /><button className="admin-btn admin-btn--secondary" type="button" onClick={addActivity}><Plus size={14} /> Agregar actividad</button></div></div><div className="admin-dynamic-list"><h3>Incluye</h3>{editing.inclusions.filter((item) => !item.pendingDelete).map((item) => <div className="admin-dynamic-list__row" key={item.id}><input className="admin-input" value={item.label} onChange={(event) => onChange({ ...editing, inclusions: editing.inclusions.map((current) => current.id === item.id ? { ...current, label: event.target.value } : current) })} /><button className="admin-icon-btn" type="button" aria-label={`Eliminar ${item.label}`} onClick={() => onChange({ ...editing, inclusions: editing.inclusions.map((current) => current.id === item.id ? { ...current, pendingDelete: true } : current) })}><Trash2 size={15} /></button></div>)}<div className="admin-list-editor__add"><input className="admin-input" value={inclusionInput} onChange={(event) => setInclusionInput(event.target.value)} /><button className="admin-btn admin-btn--secondary" type="button" onClick={addInclusion}><Plus size={14} /> Agregar</button></div></div></FormSection>;
 }
 
-function PackagesStep({ editing, boats, packages, errors, editingPackageId, setEditingPackageId, onChange, addPackage, setDeletePackage, savePackage, saving }: { editing: TourEditor; boats: BoatRow[]; packages: EditablePackage[]; errors: FieldErrors; editingPackageId: string | null; setEditingPackageId: (value: string | null) => void; onChange: (value: TourEditor) => void; addPackage: () => void; setDeletePackage: (value: EditablePackage | null) => void; savePackage: (item: EditablePackage) => Promise<void>; saving: boolean }) {
-  const updatePackage = (id: string, changes: Partial<EditablePackage>) => onChange({ ...editing, packages: editing.packages.map((item) => item.id === id ? { ...item, ...changes } : item) });
-  return <FormSection title="Paquetes" description="El bote se asocia al Tour y cada paquete conserva sus condiciones comerciales." icon={<Package size={16} />}><label className="admin-field"><span className="admin-field__label">Bote asociado al Tour</span><select className="admin-select" aria-invalid={Boolean(errors.boat) || undefined} value={editing.boatId} onChange={(event) => { const boat = boats.find((item) => item.id === event.target.value); onChange({ ...editing, boatId: event.target.value, packages: editing.packages.map((item) => ({ ...item, maxGuests: boat ? boat.max_guests : item.maxGuests })) }); }}><option value="">Selecciona un bote</option>{boats.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select>{errors.boat ? <span className="admin-field-error">{errors.boat}</span> : null}</label>{errors.packages ? <div className="admin-alert admin-alert--danger">{errors.packages}</div> : null}<div className="admin-package-previews">{packages.map((item) => <Fragment key={item.id}><article className="admin-package-preview"><strong>{item.name || 'Paquete sin nombre'}</strong><button className="admin-icon-action" type="button" title="Editar paquete" aria-label={`Editar ${item.name || 'paquete'}`} onClick={() => setEditingPackageId(editingPackageId === item.id ? null : item.id)}><Pencil size={17} /></button></article>{editingPackageId === item.id ? <div className="admin-package-compact-editor"><div className="admin-package-editor__heading"><h3>{item.isNew ? 'Agregar paquete' : `Editar ${item.name}`}</h3><div className="admin-package-editor__actions"><button className="admin-icon-btn" type="button" title={item.active ? 'Desactivar' : 'Activar'} aria-label={item.active ? `Desactivar ${item.name}` : `Activar ${item.name}`} onClick={() => updatePackage(item.id, { active: !item.active })}>{item.active ? <Eye size={16} /> : <EyeOff size={16} />}</button><button className="admin-icon-btn admin-icon-btn--danger" type="button" title="Eliminar" aria-label={`Eliminar ${item.name}`} onClick={() => setDeletePackage(item)}><Trash2 size={16} /></button></div></div><div className="admin-form-columns"><label className="admin-field"><span className="admin-field__label">Nombre</span><input className="admin-input" value={item.name} onChange={(event) => updatePackage(item.id, { name: event.target.value, packageType: slugify(event.target.value) })} />{errors[`package-${item.id}-name`] ? <span className="admin-field-error">{errors[`package-${item.id}-name`]}</span> : null}</label><label className="admin-field"><span className="admin-field__label">Cantidad de horas (opcional)</span><input className="admin-input" type="number" min={0.5} step={0.5} value={item.durationHours} onChange={(event) => updatePackage(item.id, { durationHours: event.target.value })} />{errors[`package-${item.id}-duration`] ? <span className="admin-field-error">{errors[`package-${item.id}-duration`]}</span> : null}</label><label className="admin-field"><span className="admin-field__label">Precio (USD)</span><input className="admin-input admin-input--manual-number" type="number" min={0} step="any" value={item.basePrice} onChange={(event) => updatePackage(item.id, { basePrice: event.target.value })} />{errors[`package-${item.id}-price`] ? <span className="admin-field-error">{errors[`package-${item.id}-price`]}</span> : null}</label><label className="admin-field"><span className="admin-field__label">Personas incluidas</span><input className="admin-input" type="number" min={1} value={item.includedGuests} onChange={(event) => updatePackage(item.id, { includedGuests: Number(event.target.value) })} />{errors[`package-${item.id}-included`] ? <span className="admin-field-error">{errors[`package-${item.id}-included`]}</span> : null}</label><label className="admin-field"><span className="admin-field__label">Extra por persona adicional (USD)</span><input className="admin-input" type="number" min={0} value={item.extraGuestPrice} onChange={(event) => updatePackage(item.id, { extraGuestPrice: Number(event.target.value) })} />{errors[`package-${item.id}-extra`] ? <span className="admin-field-error">{errors[`package-${item.id}-extra`]}</span> : null}</label></div><div className="admin-actions"><button className="admin-btn admin-btn--secondary" type="button" onClick={() => setEditingPackageId(null)}>Cancelar</button><button className="admin-btn" type="button" disabled={saving} onClick={() => void savePackage(item)}>{saving ? <Loader2 className="animate-spin" size={15} /> : <Check size={15} />} Guardar paquete</button></div></div> : null}</Fragment>)}</div><button className="admin-btn admin-btn--secondary" type="button" onClick={addPackage}><Plus size={15} /> Agregar paquete</button></FormSection>;
+function PackagesStep({ boats, packages, onManageBoat }: { boats: BoatRow[]; packages: EditablePackage[]; onManageBoat: (boatId: string | null) => void }) {
+  const boatName = (boatId: string | null) => boats.find((item) => item.id === boatId)?.name ?? boatId ?? 'Sin bote asignado';
+  const groups = new Map<string | null, EditablePackage[]>();
+  for (const item of packages) {
+    const list = groups.get(item.boatId) ?? [];
+    list.push(item);
+    groups.set(item.boatId, list);
+  }
+  return (
+    <FormSection
+      title="Paquetes (solo lectura)"
+      description="Los precios y paquetes se administran por bote. Abre Botes › Tours y paquetes para editarlos."
+      icon={<Package size={16} />}
+    >
+      {packages.length === 0 ? (
+        <p className="admin-muted">Este tour todavía no tiene paquetes en ningún bote.</p>
+      ) : null}
+      {[...groups.entries()].map(([boatId, list]) => (
+        <div className="admin-dynamic-list" key={boatId ?? 'none'}>
+          <h3>{boatName(boatId)}</h3>
+          <div className="admin-package-previews">
+            {list.map((item) => (
+              <article className="admin-package-preview" key={item.id}>
+                <strong>
+                  {item.name || 'Paquete sin nombre'}
+                  {!item.active ? <span className="admin-muted"> · inactivo</span> : null}
+                </strong>
+                <span className="admin-muted">
+                  {item.customQuote ? 'Cotizar' : `$${item.basePrice}`} · {item.includedGuests} incl. / {item.maxGuests} máx.
+                </span>
+              </article>
+            ))}
+          </div>
+          <button className="admin-btn admin-btn--secondary" type="button" onClick={() => onManageBoat(boatId)}>
+            <Pencil size={15} /> Editar paquetes en {boatName(boatId)}
+          </button>
+        </div>
+      ))}
+      {boats.length === 0 ? null : (
+        <button className="admin-btn admin-btn--ghost" type="button" onClick={() => onManageBoat(null)}>
+          <Plus size={15} /> Añadir este tour a otro bote
+        </button>
+      )}
+    </FormSection>
+  );
 }
