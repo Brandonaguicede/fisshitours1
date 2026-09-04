@@ -5,7 +5,7 @@ import AdminImageManager from '../../components/admin/AdminImageManager';
 import AdminVideoManager from '../../components/admin/AdminVideoManager';
 import { AdminBadge, AdminPageHeader, AdminTable } from '../../components/admin/AdminPrimitives';
 import { supabase } from '../../lib/supabase';
-import type { StorageImage } from '../../services/imageService';
+import { deleteStorageImage, type StorageImage } from '../../services/imageService';
 
 interface SiteSettingRow {
   key: string;
@@ -54,8 +54,8 @@ const HERO_FIELDS: ContentField[] = [
   { key: 'home.hero.secondary_href', label: 'Enlace boton secundario', type: 'url', fallback: '#tours' },
   { key: 'home.hero.image_alt.es', label: 'Texto alternativo imagen ES', type: 'text', fallback: 'Bote privado navegando en el Pacifico de Costa Rica' },
   { key: 'home.hero.image_alt.en', label: 'Texto alternativo imagen EN', type: 'text', fallback: 'Private boat sailing Costa Rica Pacific waters' },
-  { key: 'home.hero.video', label: 'Video de fondo (opcional, reemplaza las diapositivas)', type: 'video', fallback: '' },
-  { key: 'home.hero.video_poster', label: 'Imagen de respaldo del video', type: 'image', fallback: '', aspect: 16 / 9, maxWidth: 1920, maxHeight: 1080 },
+  { key: 'home.hero.video', label: 'Video de fondo', type: 'video', fallback: '' },
+  { key: 'home.hero.video_poster', label: 'Imagen mientras carga el video', type: 'image', fallback: '', aspect: 16 / 9, maxWidth: 1920, maxHeight: 1080 },
   ...HERO_IMAGE_FIELDS,
   { key: 'home.hero.primary_enabled', label: 'Activar boton principal', type: 'boolean', fallback: 'true' },
   { key: 'home.hero.secondary_enabled', label: 'Activar boton secundario', type: 'boolean', fallback: 'true' },
@@ -125,12 +125,15 @@ function ContentSection({ title, description, fields, saveLabel, imageRequireRep
   const [langFilter, setLangFilter] = useState<LangFilter>('all');
   const [showExtraSlides, setShowExtraSlides] = useState(false);
   const [showTable, setShowTable] = useState(false);
+  const [heroMediaMode, setHeroMediaMode] = useState<'image' | 'video'>('image');
+  const [switchingMediaMode, setSwitchingMediaMode] = useState(false);
 
   const rowsByKey = useMemo(() => new Map(settings.map((setting) => [setting.key, setting])), [settings]);
   const imageFields = useMemo(() => fields.filter((field) => field.type === 'image'), [fields]);
-  const primaryImageFields = useMemo(() => imageFields.filter((field) => !field.key.includes('.slide_')), [imageFields]);
+  const primaryImageFields = useMemo(() => imageFields.filter((field) => !field.key.includes('.slide_') && field.key !== 'home.hero.video_poster'), [imageFields]);
   const extraImageFields = useMemo(() => imageFields.filter((field) => field.key.includes('.slide_')), [imageFields]);
   const videoFields = useMemo(() => fields.filter((field) => field.type === 'video'), [fields]);
+  const videoPosterField = useMemo(() => fields.find((field) => field.key === 'home.hero.video_poster'), [fields]);
   const textFields = useMemo(
     () => fields.filter((field) => field.type !== 'image' && field.type !== 'video' && (langFilter === 'all' || fieldLang(field.key) === null || fieldLang(field.key) === langFilter)),
     [fields, langFilter],
@@ -160,6 +163,7 @@ function ContentSection({ title, description, fields, saveLabel, imageRequireRep
     });
     setSettings(rows);
     setDraft(nextDraft);
+    if (videoFields.length) setHeroMediaMode(nextDraft[videoFields[0].key] ? 'video' : 'image');
   }
 
   useEffect(() => {
@@ -243,6 +247,32 @@ function ContentSection({ title, description, fields, saveLabel, imageRequireRep
     setDraft((current) => ({ ...current, [key]: value }));
   }
 
+  async function switchHeroMediaMode(mode: 'image' | 'video') {
+    if (mode === heroMediaMode) return;
+    const videoField = videoFields[0];
+    const currentVideoUrl = videoField ? draft[videoField.key] : '';
+    if (mode === 'image' && videoField && currentVideoUrl) {
+      // The Hero always prefers a configured video over the image slideshow, so
+      // switching back to "Imágenes" has to actually clear it, not just hide the field.
+      setSwitchingMediaMode(true);
+      try {
+        await upsertKey(videoField.key, videoField.fallback, 'video');
+        const storagePath = storagePathFromPublicUrl(currentVideoUrl);
+        if (storagePath) {
+          await deleteStorageImage({ storagePath, resourceTable: 'site_settings', resourceId: videoField.key }).catch(() => undefined);
+        }
+        setNotice('Video eliminado. El Hero vuelve a mostrar las imágenes.');
+        await loadSettings();
+      } catch (switchError) {
+        setError(switchError instanceof Error ? switchError.message : 'No se pudo quitar el video actual.');
+        setSwitchingMediaMode(false);
+        return;
+      }
+      setSwitchingMediaMode(false);
+    }
+    setHeroMediaMode(mode);
+  }
+
   return (
     <section className="admin-card">
       <h2 className="admin-card__title"><FileText size={18} /> {title}</h2>
@@ -253,7 +283,31 @@ function ContentSection({ title, description, fields, saveLabel, imageRequireRep
         <p className="admin-muted">Cargando contenido...</p>
       ) : (
         <div className="grid gap-5">
-          {primaryImageFields.length > 0 ? (
+          {videoFields.length > 0 ? (
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="admin-muted font-extrabold">Fondo del Hero</p>
+              <div className="admin-segmented" role="group" aria-label="Tipo de fondo del Hero">
+                <button
+                  type="button"
+                  className={heroMediaMode === 'image' ? 'admin-segmented__option--active' : ''}
+                  disabled={switchingMediaMode}
+                  onClick={() => void switchHeroMediaMode('image')}
+                >
+                  Imágenes
+                </button>
+                <button
+                  type="button"
+                  className={heroMediaMode === 'video' ? 'admin-segmented__option--active' : ''}
+                  disabled={switchingMediaMode}
+                  onClick={() => void switchHeroMediaMode('video')}
+                >
+                  Video
+                </button>
+              </div>
+            </div>
+          ) : null}
+
+          {(videoFields.length === 0 || heroMediaMode === 'image') && primaryImageFields.length > 0 ? (
             <div className="grid gap-5 lg:grid-cols-2">
               {primaryImageFields.map((imageField) => (
                 <div className="grid gap-2" key={imageField.key}>
@@ -279,7 +333,7 @@ function ContentSection({ title, description, fields, saveLabel, imageRequireRep
             </div>
           ) : null}
 
-          {extraImageFields.length > 0 ? (
+          {(videoFields.length === 0 || heroMediaMode === 'image') && extraImageFields.length > 0 ? (
             <div className="grid gap-3">
               <button
                 className="admin-btn admin-btn--ghost"
@@ -318,7 +372,7 @@ function ContentSection({ title, description, fields, saveLabel, imageRequireRep
             </div>
           ) : null}
 
-          {videoFields.length > 0 ? (
+          {videoFields.length > 0 && heroMediaMode === 'video' ? (
             <div className="grid gap-5 lg:grid-cols-2">
               {videoFields.map((videoField) => (
                 <div className="grid gap-2" key={videoField.key}>
@@ -335,6 +389,26 @@ function ContentSection({ title, description, fields, saveLabel, imageRequireRep
                   />
                 </div>
               ))}
+              {videoPosterField ? (
+                <div className="grid gap-2" key={videoPosterField.key}>
+                  <p className="admin-muted font-extrabold">{videoPosterField.label}</p>
+                  <AdminImageManager
+                    resourceTable="site_settings"
+                    resourceId={videoPosterField.key}
+                    folder="general"
+                    currentImageUrl={draft[videoPosterField.key]}
+                    currentStoragePath={storagePathFromPublicUrl(draft[videoPosterField.key])}
+                    label={videoPosterField.label}
+                    aspect={videoPosterField.aspect ?? 16 / 9}
+                    previewAspect={videoPosterField.aspect ?? 16 / 9}
+                    maxWidth={videoPosterField.maxWidth ?? 1920}
+                    maxHeight={videoPosterField.maxHeight ?? 1080}
+                    maxSizeMB={0.9}
+                    onImageSaved={(image) => handleImageSaved(videoPosterField, image)}
+                    onImageDeleted={(storagePath) => handleImageDeleted(videoPosterField, storagePath)}
+                  />
+                </div>
+              ) : null}
             </div>
           ) : null}
 
