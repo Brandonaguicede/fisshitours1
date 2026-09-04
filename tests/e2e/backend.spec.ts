@@ -192,6 +192,13 @@ function pngBuffer(size: number): Buffer {
   return buf;
 }
 
+function mp4Buffer(size: number): Buffer {
+  const buf = Buffer.alloc(size);
+  // Bytes 4-7 spell the ISO-BMFF "ftyp" box type, which is all the detector checks.
+  Buffer.from([0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70]).copy(buf, 0);
+  return buf;
+}
+
 function reviewPayload(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     name: 'Backend Reviewer',
@@ -673,6 +680,47 @@ test.describe('backend flows', () => {
     expect(webp.status).toBe(201);
     expect(webp.body.mime_type).toBe('image/webp');
     expect(webp.body.storage_path).toMatch(/\.webp$/);
+  });
+
+  test('storage: MP4 hero video upload is accepted, WebM by extension is rejected on a fake payload', async ({ request }) => {
+    const editor = await signupUser(request, uniqueEmail());
+    await setProfileRole(request, editor.user.id, editor.user.email, 'editor');
+    const headers = anonHeaders({ Authorization: `Bearer ${editor.access_token}` });
+
+    const mp4 = await fnUpload(request, 'storage-upload-image', {
+      file: { name: 'hero.mp4', mimeType: 'video/mp4', buffer: mp4Buffer(4096) },
+      resourceTable: 'site_settings',
+      resourceId: 'home.hero.video',
+      folder: 'general',
+    }, headers);
+    expect(mp4.status).toBe(201);
+    expect(mp4.body.mime_type).toBe('video/mp4');
+    expect(mp4.body.storage_path).toMatch(/\.mp4$/);
+
+    // A WebM extension over a payload with no real EBML header must not slip through.
+    const fakeWebm = await fnUpload(request, 'storage-upload-image', {
+      file: { name: 'hero.webm', mimeType: 'video/webm', buffer: mp4Buffer(4096) },
+      resourceTable: 'site_settings',
+      resourceId: 'home.hero.video',
+      folder: 'general',
+    }, headers);
+    expect(fakeWebm.status).toBe(400);
+    expect(fakeWebm.body.message).toContain('Invalid video content');
+  });
+
+  test('storage: oversized hero video is rejected', async ({ request }) => {
+    const editor = await signupUser(request, uniqueEmail());
+    await setProfileRole(request, editor.user.id, editor.user.email, 'editor');
+    const headers = anonHeaders({ Authorization: `Bearer ${editor.access_token}` });
+
+    const res = await fnUpload(request, 'storage-upload-image', {
+      file: { name: 'huge.mp4', mimeType: 'video/mp4', buffer: mp4Buffer(41 * 1024 * 1024) },
+      resourceTable: 'site_settings',
+      resourceId: 'home.hero.video',
+      folder: 'general',
+    }, headers);
+    expect(res.status).toBe(413);
+    expect(res.body.message).toContain('too large');
   });
 
   test('storage: SVG is rejected even when declared as another MIME type', async ({ request }) => {

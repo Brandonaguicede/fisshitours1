@@ -1,5 +1,5 @@
 import { ArrowDown, Facebook, Instagram } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { motion, useReducedMotion } from 'framer-motion';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 
@@ -29,6 +29,8 @@ const DEFAULT_HERO_SETTINGS = {
   'home.hero.secondary_enabled': 'true',
   'home.hero.image': FALLBACK_HERO_IMAGE,
   'home.hero.mobile_image': '',
+  'home.hero.video': '',
+  'home.hero.video_poster': '',
   'home.hero.slide_2.image': '',
   'home.hero.slide_2.mobile_image': '',
   'home.hero.slide_3.image': '',
@@ -79,6 +81,14 @@ export function Hero() {
   const locale = language === 'es' ? 'es' : 'en';
   const slides = useMemo(() => getHeroSlides(heroQuery.data), [heroQuery.data]);
   const [activeSlide, setActiveSlide] = useState(0);
+  const reduceMotion = useReducedMotion();
+  const [videoFailed, setVideoFailed] = useState(false);
+  const videoUrl = hero['home.hero.video'];
+  const posterUrl = hero['home.hero.video_poster'] || hero['home.hero.image'] || FALLBACK_HERO_IMAGE;
+  // A looping background video replaces the image slideshow outright rather than
+  // mixing two independent motion sources; respect prefers-reduced-motion by
+  // falling back to a static poster frame instead of autoplaying.
+  const showVideo = Boolean(videoUrl) && !reduceMotion && !videoFailed;
   const title = splitTitle(hero[`home.hero.title.${locale}` as keyof HeroSettings]);
   const primaryEnabled = hero['home.hero.primary_enabled'] !== 'false';
   const secondaryEnabled = hero['home.hero.secondary_enabled'] !== 'false';
@@ -86,6 +96,10 @@ export function Hero() {
   useEffect(() => {
     setActiveSlide(0);
   }, [slides.length]);
+
+  useEffect(() => {
+    setVideoFailed(false);
+  }, [videoUrl]);
 
   useEffect(() => {
     if (slides.length < 2) return undefined;
@@ -106,39 +120,54 @@ export function Hero() {
       data-home-section
       data-nav-href="/"
     >
-      {slides.map((slide, index) => (
-        <div
-          className={`absolute inset-0 transition-opacity duration-1000 ease-out ${index === activeSlide ? 'opacity-100' : 'opacity-0'}`}
-          key={`${slide.image}-${index}`}
-        >
-          {slide.mobileImage ? (
-            <img
-              className="h-full w-full object-cover object-center sm:hidden"
-              src={slide.mobileImage}
-              alt={hero[`home.hero.image_alt.${locale}` as keyof HeroSettings]}
-              width={1200}
-              height={1500}
-              sizes="100vw"
-              fetchPriority={index === 0 ? 'high' : 'auto'}
-              loading={index === 0 ? 'eager' : 'lazy'}
-              decoding="async"
-            />
-          ) : null}
-          {slide.image ? (
-            <img
-              className="hidden h-full w-full object-cover object-center sm:block"
-              src={slide.image}
-              alt={hero[`home.hero.image_alt.${locale}` as keyof HeroSettings]}
-              width={1920}
-              height={1080}
-              sizes="100vw"
-              fetchPriority={index === 0 ? 'high' : 'auto'}
-              loading={index === 0 ? 'eager' : 'lazy'}
-              decoding="async"
-            />
-          ) : null}
-        </div>
-      ))}
+      {showVideo ? (
+        <video
+          className="absolute inset-0 h-full w-full object-cover object-center"
+          src={videoUrl}
+          poster={posterUrl}
+          autoPlay
+          muted
+          loop
+          playsInline
+          preload="auto"
+          aria-hidden="true"
+          onError={() => setVideoFailed(true)}
+        />
+      ) : (
+        slides.map((slide, index) => (
+          <div
+            className={`absolute inset-0 transition-opacity duration-1000 ease-out ${index === activeSlide ? 'opacity-100' : 'opacity-0'}`}
+            key={`${slide.image}-${index}`}
+          >
+            {slide.mobileImage ? (
+              <img
+                className="h-full w-full object-cover object-center sm:hidden"
+                src={slide.mobileImage}
+                alt={hero[`home.hero.image_alt.${locale}` as keyof HeroSettings]}
+                width={1200}
+                height={1500}
+                sizes="100vw"
+                fetchPriority={index === 0 ? 'high' : 'auto'}
+                loading={index === 0 ? 'eager' : 'lazy'}
+                decoding="async"
+              />
+            ) : null}
+            {slide.image ? (
+              <img
+                className="hidden h-full w-full object-cover object-center sm:block"
+                src={slide.image}
+                alt={hero[`home.hero.image_alt.${locale}` as keyof HeroSettings]}
+                width={1920}
+                height={1080}
+                sizes="100vw"
+                fetchPriority={index === 0 ? 'high' : 'auto'}
+                loading={index === 0 ? 'eager' : 'lazy'}
+                decoding="async"
+              />
+            ) : null}
+          </div>
+        ))
+      )}
       <div className="absolute inset-0 bg-ocean-950/45" />
       <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-black/80 to-transparent" />
 

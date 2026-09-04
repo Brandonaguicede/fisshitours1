@@ -2,6 +2,7 @@ import { ChevronDown, ChevronRight, Eye, FileText, Image as ImageIcon, Save } fr
 import { useEffect, useMemo, useState } from 'react';
 
 import AdminImageManager from '../../components/admin/AdminImageManager';
+import AdminVideoManager from '../../components/admin/AdminVideoManager';
 import { AdminBadge, AdminPageHeader, AdminTable } from '../../components/admin/AdminPrimitives';
 import { supabase } from '../../lib/supabase';
 import type { StorageImage } from '../../services/imageService';
@@ -16,7 +17,7 @@ interface SiteSettingRow {
 interface ContentField {
   key: string;
   label: string;
-  type: 'text' | 'textarea' | 'url' | 'boolean' | 'image';
+  type: 'text' | 'textarea' | 'url' | 'boolean' | 'image' | 'video';
   fallback: string;
   aspect?: number;
   maxWidth?: number;
@@ -53,6 +54,8 @@ const HERO_FIELDS: ContentField[] = [
   { key: 'home.hero.secondary_href', label: 'Enlace boton secundario', type: 'url', fallback: '#tours' },
   { key: 'home.hero.image_alt.es', label: 'Texto alternativo imagen ES', type: 'text', fallback: 'Bote privado navegando en el Pacifico de Costa Rica' },
   { key: 'home.hero.image_alt.en', label: 'Texto alternativo imagen EN', type: 'text', fallback: 'Private boat sailing Costa Rica Pacific waters' },
+  { key: 'home.hero.video', label: 'Video de fondo (opcional, reemplaza las diapositivas)', type: 'video', fallback: '' },
+  { key: 'home.hero.video_poster', label: 'Imagen de respaldo del video', type: 'image', fallback: '', aspect: 16 / 9, maxWidth: 1920, maxHeight: 1080 },
   ...HERO_IMAGE_FIELDS,
   { key: 'home.hero.primary_enabled', label: 'Activar boton principal', type: 'boolean', fallback: 'true' },
   { key: 'home.hero.secondary_enabled', label: 'Activar boton secundario', type: 'boolean', fallback: 'true' },
@@ -127,8 +130,9 @@ function ContentSection({ title, description, fields, saveLabel, imageRequireRep
   const imageFields = useMemo(() => fields.filter((field) => field.type === 'image'), [fields]);
   const primaryImageFields = useMemo(() => imageFields.filter((field) => !field.key.includes('.slide_')), [imageFields]);
   const extraImageFields = useMemo(() => imageFields.filter((field) => field.key.includes('.slide_')), [imageFields]);
+  const videoFields = useMemo(() => fields.filter((field) => field.type === 'video'), [fields]);
   const textFields = useMemo(
-    () => fields.filter((field) => field.type !== 'image' && (langFilter === 'all' || fieldLang(field.key) === null || fieldLang(field.key) === langFilter)),
+    () => fields.filter((field) => field.type !== 'image' && field.type !== 'video' && (langFilter === 'all' || fieldLang(field.key) === null || fieldLang(field.key) === langFilter)),
     [fields, langFilter],
   );
 
@@ -215,6 +219,26 @@ function ContentSection({ title, description, fields, saveLabel, imageRequireRep
     }
   }
 
+  async function handleVideoSaved(field: ContentField, video: StorageImage) {
+    try {
+      await upsertKey(field.key, video.public_url, 'video');
+      setNotice('Video actualizado.');
+      await loadSettings();
+    } catch (videoError) {
+      throw new Error(videoError instanceof Error ? videoError.message : 'No se pudo guardar el video.');
+    }
+  }
+
+  async function handleVideoDeleted(field: ContentField, storagePath: string) {
+    try {
+      await upsertKey(field.key, field.fallback, 'video');
+      setNotice('Video eliminado. El sitio vuelve al contenido por defecto.');
+      await loadSettings();
+    } catch {
+      setNotice(`No se pudo actualizar la referencia del video eliminado: ${storagePath}`);
+    }
+  }
+
   function updateDraft(key: string, value: string) {
     setDraft((current) => ({ ...current, [key]: value }));
   }
@@ -291,6 +315,26 @@ function ContentSection({ title, description, fields, saveLabel, imageRequireRep
                   ))}
                 </div>
               ) : null}
+            </div>
+          ) : null}
+
+          {videoFields.length > 0 ? (
+            <div className="grid gap-5 lg:grid-cols-2">
+              {videoFields.map((videoField) => (
+                <div className="grid gap-2" key={videoField.key}>
+                  <p className="admin-muted font-extrabold">{videoField.label}</p>
+                  <AdminVideoManager
+                    resourceTable="site_settings"
+                    resourceId={videoField.key}
+                    folder="general"
+                    currentVideoUrl={draft[videoField.key]}
+                    currentStoragePath={storagePathFromPublicUrl(draft[videoField.key])}
+                    label={videoField.label}
+                    onVideoSaved={(video) => handleVideoSaved(videoField, video)}
+                    onVideoDeleted={(storagePath) => handleVideoDeleted(videoField, storagePath)}
+                  />
+                </div>
+              ))}
             </div>
           ) : null}
 

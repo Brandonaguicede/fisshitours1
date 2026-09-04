@@ -1408,7 +1408,8 @@ body:has(.admin-login) {
   background: var(--admin-primary-soft);
 }
 
-.admin-image-manager__preview img {
+.admin-image-manager__preview img,
+.admin-image-manager__preview video {
   display: block;
   width: 100%;
   aspect-ratio: var(--admin-image-preview-aspect, 16 / 9);

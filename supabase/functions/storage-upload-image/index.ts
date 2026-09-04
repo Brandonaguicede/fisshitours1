@@ -4,7 +4,8 @@ import { corsHeaders as getCorsHeaders } from '../_shared/cors.ts';
 
 const ALLOWED_FOLDERS = new Set(['boats', 'tours', 'gallery', 'destinations', 'reviews', 'general']);
 const ALLOWED_TABLES = new Set(['boats', 'boat_images', 'tours', 'tour_packages', 'gallery_images', 'reviews', 'destinations', 'editable_content', 'site_settings']);
-const ALLOWED_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
+const ALLOWED_IMAGE_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
+const ALLOWED_VIDEO_MIME_TYPES = new Set(['video/mp4', 'video/webm']);
 const FOLDER_BY_TABLE: Record<string, string> = {
   boats: 'boats',
   boat_images: 'boats',
@@ -16,7 +17,10 @@ const FOLDER_BY_TABLE: Record<string, string> = {
   editable_content: 'general',
   site_settings: 'general',
 };
-const MAX_BYTES = 10 * 1024 * 1024;
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+// Hero background loops are meant to be short (a few seconds) and compressed, not
+// full-length promo videos; 40MB is generous headroom without inviting huge uploads.
+const MAX_VIDEO_BYTES = 40 * 1024 * 1024;
 const RESOURCE_ID_PATTERN = /^[A-Za-z0-9_.-]+$/;
 
 serve(async (req) => {
@@ -46,16 +50,20 @@ serve(async (req) => {
       : FOLDER_BY_TABLE[resourceTable];
     if (!folder) return json({ message: 'Invalid destination folder' }, 400);
 
-    if (file.size === 0) return json({ message: 'Image file is empty' }, 400);
-    if (file.size > MAX_BYTES) return json({ message: 'Image is too large' }, 413);
-    if (!ALLOWED_MIME_TYPES.has(file.type)) return json({ message: 'Unsupported image MIME type' }, 415);
+    const isVideo = ALLOWED_VIDEO_MIME_TYPES.has(file.type);
+    const isImage = ALLOWED_IMAGE_MIME_TYPES.has(file.type);
+    if (!isVideo && !isImage) return json({ message: 'Unsupported file MIME type' }, 415);
+
+    if (file.size === 0) return json({ message: 'File is empty' }, 400);
+    const maxBytes = isVideo ? MAX_VIDEO_BYTES : MAX_IMAGE_BYTES;
+    if (file.size > maxBytes) return json({ message: isVideo ? 'Video is too large' : 'Image is too large' }, 413);
 
     const bytes = new Uint8Array(await file.slice(0, 16).arrayBuffer());
-    const detected = detectImageType(bytes);
-    if (!detected) return json({ message: 'Invalid image content' }, 400);
-    if (detected.mime !== file.type) return json({ message: 'Image content does not match declared type' }, 415);
+    const detected = isVideo ? detectVideoType(bytes) : detectImageType(bytes);
+    if (!detected) return json({ message: isVideo ? 'Invalid video content' : 'Invalid image content' }, 400);
+    if (detected.mime !== file.type) return json({ message: 'File content does not match declared type' }, 415);
     if (!filenameMatchesType(file.name, detected.extension)) {
-      return json({ message: 'Image extension does not match detected type' }, 400);
+      return json({ message: 'File extension does not match detected type' }, 400);
     }
 
     const supabase = getServiceClient();
@@ -158,6 +166,18 @@ function detectImageType(bytes: Uint8Array): { mime: string; extension: string }
   if (bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46
     && bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50) {
     return { mime: 'image/webp', extension: 'webp' };
+  }
+  return null;
+}
+
+function detectVideoType(bytes: Uint8Array): { mime: string; extension: string } | null {
+  // MP4/ISO-BMFF: bytes 4-7 spell "ftyp" regardless of the specific brand.
+  if (bytes[4] === 0x66 && bytes[5] === 0x74 && bytes[6] === 0x79 && bytes[7] === 0x70) {
+    return { mime: 'video/mp4', extension: 'mp4' };
+  }
+  // WebM/Matroska: EBML header.
+  if (bytes[0] === 0x1a && bytes[1] === 0x45 && bytes[2] === 0xdf && bytes[3] === 0xa3) {
+    return { mime: 'video/webm', extension: 'webm' };
   }
   return null;
 }
