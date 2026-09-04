@@ -1,4 +1,4 @@
-import { Check, ChevronLeft, ChevronRight, Image as ImageIcon, Info, Loader2, Package, Pencil, Plus, Save, Search, Trash2, X } from 'lucide-react';
+import { Check, ChevronLeft, ChevronRight, Eye, EyeOff, Image as ImageIcon, Info, Loader2, Package, Pencil, Plus, Save, Search, Trash2, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
@@ -125,6 +125,9 @@ export default function AdminToursPage() {
   const [step, setStep] = useState<EditorStep>('info');
   const [gallerySlot, setGallerySlot] = useState<number | null>(null);
   const [deleteImage, setDeleteImage] = useState<TourImageRow | null>(null);
+  const [pendingTourDelete, setPendingTourDelete] = useState<TourRow | null>(null);
+  const [togglingTourId, setTogglingTourId] = useState<string | null>(null);
+  const [deletingTour, setDeletingTour] = useState(false);
   const [activityInput, setActivityInput] = useState('');
   const [inclusionInput, setInclusionInput] = useState('');
   const [locationInput, setLocationInput] = useState('');
@@ -169,6 +172,33 @@ export default function AdminToursPage() {
     const { data, error: insertError } = await supabase.from('tours').insert({ id, title: 'Nuevo tour', slug: id, category: 'Snorkeling & Beach', publication_status: 'draft', active: false, featured: false, rating: 5, sort_order: tours.length + 1, description: '', long_description: '', highlights: [], included: [] }).select('*').single();
     if (insertError) { setError(insertError.message); return; }
     await loadTours(); setEditing(createEditor(data, [], [], [], [], [])); setStep('info'); setDirty(true);
+  }
+
+  async function toggleTourPublication(tour: TourRow) {
+    setTogglingTourId(tour.id);
+    setError(''); setNotice('');
+    const nextStatus: PublicationStatus = publicationStatus(tour) === 'published' ? 'inactive' : 'published';
+    const { error: updateError } = await supabase.from('tours').update({ publication_status: nextStatus, updated_at: new Date().toISOString() }).eq('id', tour.id);
+    setTogglingTourId(null);
+    if (updateError) { setError(updateError.message); return; }
+    setNotice(nextStatus === 'published' ? 'Tour activado.' : 'Tour desactivado.');
+    await loadTours();
+  }
+
+  async function deleteTour(tour: TourRow) {
+    setDeletingTour(true);
+    setError('');
+    const { error: deleteError } = await supabase.from('tours').delete().eq('id', tour.id);
+    setDeletingTour(false);
+    if (deleteError) {
+      setPendingTourDelete(null);
+      setError(`${deleteError.message}. Si el tour tiene reservas o paquetes con historial, desactívalo en lugar de eliminarlo.`);
+      return;
+    }
+    setPendingTourDelete(null);
+    if (editing?.id === tour.id) setEditing(null);
+    setNotice('Tour eliminado.');
+    await loadTours();
   }
 
   function requestClose() {
@@ -280,7 +310,11 @@ export default function AdminToursPage() {
         <AdminToolbar embedded><div className="admin-search-field"><Search aria-hidden="true" size={16} /><input className="admin-input" aria-label="Buscar tours" placeholder="Buscar tour por nombre o ubicación" value={search} onChange={(event) => setSearch(event.target.value)} /></div><div className="admin-toolbar__actions"><button className="admin-btn" type="button" onClick={() => void createTour()}><Plus size={16} /> Crear tour</button></div></AdminToolbar>
         {error && !editing ? <div className="admin-alert admin-alert--danger">{error}</div> : null}
         {notice && !editing ? <div className="admin-alert admin-alert--success">{notice}</div> : null}
-        {loading ? <p className="admin-muted">Cargando tours...</p> : <AdminTable embedded headers={['Tour', 'Ubicaciones', 'Publicación', 'Orden', 'Acciones']}>{visibleTours.map((tour) => <tr key={tour.id}><td>{tour.title}<div className="admin-muted">{tour.description || tour.slug}</div></td><td>{(locationsByTour.get(tour.id) ?? [tour.location ?? '']).filter(Boolean).join(', ') || '-'}</td><td><AdminBadge value={publicationStatus(tour) === 'draft' ? 'Borrador' : publicationStatus(tour) === 'published' ? 'Activo' : 'Inactivo'} /></td><td>{tour.sort_order}</td><td><button className="admin-icon-action" type="button" title="Editar tour" aria-label={`Editar tour ${tour.title}`} onClick={() => openEditor(tour)}><Pencil size={17} /></button></td></tr>)}{visibleTours.length === 0 ? <tr><td colSpan={5} className="admin-muted">No hay tours para esta búsqueda.</td></tr> : null}</AdminTable>}
+        {loading ? <p className="admin-muted">Cargando tours...</p> : <AdminTable embedded headers={['Tour', 'Ubicaciones', 'Publicación', 'Orden', 'Acciones']}>{visibleTours.map((tour) => <tr key={tour.id}><td>{tour.title}<div className="admin-muted">{tour.description || tour.slug}</div></td><td>{(locationsByTour.get(tour.id) ?? [tour.location ?? '']).filter(Boolean).join(', ') || '-'}</td><td><AdminBadge value={publicationStatus(tour) === 'draft' ? 'Borrador' : publicationStatus(tour) === 'published' ? 'Activo' : 'Inactivo'} /></td><td>{tour.sort_order}</td><td><div className="admin-actions">
+          <button className="admin-icon-action" type="button" title="Editar tour" aria-label={`Editar tour ${tour.title}`} onClick={() => openEditor(tour)}><Pencil size={17} /></button>
+          <button className="admin-icon-action" type="button" title={publicationStatus(tour) === 'published' ? 'Desactivar tour' : 'Activar tour'} aria-label={publicationStatus(tour) === 'published' ? `Desactivar tour ${tour.title}` : `Activar tour ${tour.title}`} disabled={togglingTourId === tour.id} onClick={() => void toggleTourPublication(tour)}>{togglingTourId === tour.id ? <Loader2 className="animate-spin" size={17} /> : publicationStatus(tour) === 'published' ? <Eye size={17} /> : <EyeOff size={17} />}</button>
+          <button className="admin-icon-action" type="button" title="Eliminar tour" aria-label={`Eliminar tour ${tour.title}`} onClick={() => setPendingTourDelete(tour)}><Trash2 size={17} /></button>
+        </div></td></tr>)}{visibleTours.length === 0 ? <tr><td colSpan={5} className="admin-muted">No hay tours para esta búsqueda.</td></tr> : null}</AdminTable>}
       </AdminModuleSurface>
 
       <Modal open={Boolean(editing)} onClose={requestClose} titleId="tour-edit-title" className="admin-tour-modal">
@@ -298,6 +332,17 @@ export default function AdminToursPage() {
       </Modal>
 
       <Modal open={Boolean(deleteImage)} onClose={() => setDeleteImage(null)} titleId="image-delete-title" className="max-w-md">{deleteImage ? <div className="admin-modal-card"><h2 id="image-delete-title" className="admin-card__title"><Trash2 size={18} /> Eliminar fotografía</h2><p className="admin-muted mt-2">Las siguientes fotografías se reordenarán automáticamente.</p><div className="admin-actions mt-5"><button className="admin-btn admin-btn--secondary" type="button" onClick={() => setDeleteImage(null)}>Cancelar</button><button className="admin-btn admin-btn--danger" type="button" onClick={() => void removeGalleryImage(deleteImage)}>Eliminar</button></div></div> : null}</Modal>
+
+      <Modal open={Boolean(pendingTourDelete)} onClose={() => setPendingTourDelete(null)} titleId="tour-delete-title" className="max-w-md">
+        {pendingTourDelete ? <div className="admin-modal-card">
+          <h2 id="tour-delete-title" className="admin-card__title"><Trash2 size={18} /> Eliminar tour</h2>
+          <p className="admin-muted mt-2">Esta acción elimina "{pendingTourDelete.title}" y sus paquetes asociados. Si tiene reservas históricas, la base de datos bloqueará la eliminación.</p>
+          <div className="admin-actions mt-5">
+            <button className="admin-btn admin-btn--secondary" type="button" disabled={deletingTour} onClick={() => setPendingTourDelete(null)}>Cancelar</button>
+            <button className="admin-btn admin-btn--danger" type="button" disabled={deletingTour} onClick={() => void deleteTour(pendingTourDelete)}>{deletingTour ? <Loader2 className="animate-spin" size={15} /> : <Trash2 size={15} />} Eliminar</button>
+          </div>
+        </div> : null}
+      </Modal>
     </div>
   );
 }
