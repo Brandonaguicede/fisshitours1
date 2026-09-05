@@ -67,14 +67,15 @@ export default function AdminLoginPage() {
 
   return (
     <main className="admin-login">
-      <section className="admin-login__card">
-        <span className="admin-brand-logo admin-brand-logo--login">
+      <div className="admin-login__stack">
+        <span className="admin-login__brand">
           <img src="/images/papagayo-logo.png" alt="Papagayo Fishing Tours" />
         </span>
-        <h1>Admin Fishing Tours</h1>
-        <p className="admin-muted">Inicia sesion con tu usuario administrativo.</p>
-        {checking ? <p className="admin-muted">Validando sesion existente...</p> : null}
-        <form className="admin-login__form" onSubmit={handleSubmit}>
+        <section className="admin-login__card">
+          <h1>Panel de administración</h1>
+          <p className="admin-muted">Inicia sesion con tu cuenta de staff.</p>
+          {checking ? <p className="admin-muted">Validando sesion existente...</p> : null}
+          <form className="admin-login__form" onSubmit={handleSubmit}>
           <label className="admin-login__field">
             <span className="admin-login__label">Email</span>
             <input
@@ -105,8 +106,9 @@ export default function AdminLoginPage() {
             {submitting ? 'Entrando...' : 'Entrar al panel'}
           </button>
           <Link className="admin-btn admin-btn--secondary" to="/">Volver al sitio</Link>
-        </form>
-      </section>
+          </form>
+        </section>
+      </div>
     </main>
   );
 }
