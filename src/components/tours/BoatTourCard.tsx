@@ -1,5 +1,6 @@
 import { ArrowRight, CheckCircle, Clock, Users, X } from 'lucide-react';
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 
 import type { Boat } from '../../types/boat';
 import type { BoatTour } from '../../types/boatTour';
@@ -62,6 +63,9 @@ export function BoatTourCard({ boat, tour, relatedTours, isSelected, onSelect }:
             <div className="min-w-0">
               <p className="text-[0.65rem] font-bold uppercase tracking-[0.12em] text-ocean-300">{language === 'es' ? 'Desde' : 'From'}</p>
               <p className="text-xl font-extrabold leading-tight text-ocean-400 sm:text-2xl">{formatCurrency(lowestPrice)}</p>
+              <Link to={`/tours/${tour.id}`} className="mt-1 inline-block text-[0.68rem] font-bold text-ocean-400 underline-offset-4 hover:underline sm:text-xs">
+                {language === 'es' ? 'Ver detalle' : 'View details'}
+              </Link>
             </div>
             <Button type="button" variant="secondary" className="group/button min-h-9 shrink-0 px-3 text-xs sm:min-h-10 sm:px-4 sm:text-sm" onClick={() => setIsModalOpen(true)}>
               {language === 'es' ? 'Ver Tour' : 'View Tour'}

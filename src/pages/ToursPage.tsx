@@ -1,4 +1,5 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 
 import { BoatCard } from '../components/boats/BoatCard';
 import { BookingPanel } from '../components/booking/BookingPanel';
@@ -13,10 +14,23 @@ import type { BoatTour } from '../types/boatTour';
 
 export default function ToursPage() {
   const { language } = useLanguage();
+  const location = useLocation();
   const [selectedBoat, setSelectedBoat] = useState<Boat>(boats[0]);
   const [selectedTour, setSelectedTour] = useState<BoatTour | undefined>(boatTours.find((tour) => tour.boatId === boats[0].id));
   const toursRef = useRef<HTMLElement | null>(null);
   const bookingRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    const tourId = (location.state as { tourId?: string } | null)?.tourId;
+    if (!tourId) return;
+    const tour = boatTours.find((item) => item.id === tourId);
+    if (!tour) return;
+    const boat = boats.find((candidate) => candidate.id === tour.boatId) ?? boats[0];
+    setSelectedBoat(boat);
+    setSelectedTour(tour);
+    window.history.replaceState({}, '');
+    window.setTimeout(() => bookingRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 120);
+  }, [location.state]);
 
   const availableTours = useMemo(() => boatTours.filter((tour) => tour.boatId === selectedBoat.id), [selectedBoat.id]);
   const groupedTours = useMemo(() => groupToursForCards(availableTours), [availableTours]);

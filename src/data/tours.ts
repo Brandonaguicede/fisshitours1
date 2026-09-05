@@ -73,7 +73,7 @@ export const tours: Tour[] = [
     description: 'Discover the magical phenomenon of bioluminescence as night turns the ocean into a sea of stars.',
     longDescription:
       'Discover the magical phenomenon of bioluminescence in the Gulf of Papagayo. As night falls, every movement creates shimmering blue sparks, transforming the ocean into a sea of stars. The Classic Experience includes alcoholic and non-alcoholic beverages, chips with guacamole and seasonal fruits. The Deluxe Experience includes a cheese board, ceviche, sparkling wine and alcoholic and non-alcoholic beverages.',
-    image: '/images/placeholder-image.jpg',
+    image: '/galeria/IMG_9017.jpeg',
     price: 650,
     rating: 4.9,
     category: 'Bioluminescence',

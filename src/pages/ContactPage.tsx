@@ -9,6 +9,7 @@ import { DISPLAY_PHONE, WHATSAPP_NUMBER } from '../constants/contact';
 import { departureTimes } from '../data/departureTimes';
 import { tours } from '../data/tours';
 import { useLanguage } from '../i18n/LanguageContext';
+import { getWhatsAppContactUrl, submitContactRequest } from '../services/contactService';
 
 const contactText = {
   es: {
@@ -88,6 +89,7 @@ const contactText = {
 type ContactFormValues = {
   name: string;
   email: string;
+  phone: string;
   tourType: string;
   departureTime: string;
   message: string;
@@ -99,6 +101,7 @@ export default function ContactPage() {
   const contactSchema = z.object({
     name: z.string().min(2, copy.errors.name),
     email: z.string().email(copy.errors.email),
+    phone: z.string().optional(),
     tourType: z.string().min(1, copy.errors.tourType),
     departureTime: z.string().min(1, copy.errors.departureTime),
     message: z.string().min(10, copy.errors.message),
@@ -112,13 +115,19 @@ export default function ContactPage() {
     reset,
   } = useForm<ContactFormValues>({
     resolver: zodResolver(contactSchema),
-    defaultValues: { name: '', email: '', tourType: '', departureTime: 'morning', message: '' },
+    defaultValues: { name: '', email: '', phone: '', tourType: '', departureTime: 'morning', message: '' },
   });
 
   const selectedTime = watch('departureTime');
 
-  function onSubmit(values: ContactFormValues) {
-    console.info('Reserva solicitada', values);
+  async function onSubmit(values: ContactFormValues) {
+    try {
+      await submitContactRequest(values);
+    } catch {
+      window.open(getWhatsAppContactUrl(values), '_blank', 'noopener,noreferrer');
+      return;
+    }
+    window.open(getWhatsAppContactUrl(values), '_blank', 'noopener,noreferrer');
     reset();
   }
 
@@ -177,7 +186,7 @@ export default function ContactPage() {
                 </label>
                 <label className="grid gap-2 text-xs font-extrabold text-ocean-100">
                   {copy.phone}
-                  <input className={inputClass} placeholder={copy.phonePlaceholder} autoComplete="tel" />
+                  <input className={inputClass} placeholder={copy.phonePlaceholder} autoComplete="tel" inputMode="tel" {...register('phone')} />
                 </label>
               </div>
 
