@@ -37,6 +37,7 @@ export function AppRoutes() {
         <Route path="gallery" element={<AdminGalleryPage />} />
         <Route path="destinations" element={<AdminDestinationsPage />} />
         <Route path="content" element={<AdminContentPage />} />
+        <Route path="videos" element={<AdminContentPage />} />
         <Route path="payment-methods" element={<AdminPaymentMethodsPage />} />
         <Route path="departure-locations" element={<AdminDepartureLocationsPage />} />
         <Route path="settings" element={<AdminSettingsPage />} />

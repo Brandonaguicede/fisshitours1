@@ -1,4 +1,4 @@
-import { Bell, CalendarDays, CreditCard, FileText, Gauge, Globe2, Image, LayoutDashboard, LifeBuoy, LogOut, MapPin, Menu, MessageSquare, Package, Settings, Ship, Star, Users, X } from 'lucide-react';
+import { Bell, CalendarDays, CreditCard, FileText, Film, Gauge, Globe2, Image, LayoutDashboard, LifeBuoy, LogOut, MapPin, Menu, MessageSquare, Package, Settings, Ship, Star, Users, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, NavLink, Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom';
 
@@ -26,6 +26,7 @@ const navGroups = [
     caption: 'Contenido',
     items: [
       { label: 'Textos editables', to: '/admin/content', icon: FileText },
+      { label: 'Videos', to: '/admin/videos', icon: Film },
       { label: 'Galeria', to: '/admin/gallery', icon: Image },
       { label: 'Destinos', to: '/admin/destinations', icon: MapPin },
       { label: 'Comentarios', to: '/admin/reviews', icon: MessageSquare },
@@ -51,6 +52,7 @@ const titles: Record<string, string> = {
   '/admin/gallery': 'Galeria',
   '/admin/destinations': 'Destinos',
   '/admin/content': 'Textos editables',
+  '/admin/videos': 'Videos del hero',
   '/admin/payment-methods': 'Metodos de pago',
   '/admin/departure-locations': 'Lugares de salida',
   '/admin/settings': 'Settings',
