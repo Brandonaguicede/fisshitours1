@@ -72,12 +72,18 @@ async function signedRequest(method: string, objectPath: string, body?: Uint8Arr
 
 export async function putR2Object(path: string, body: Uint8Array, contentType: string): Promise<void> {
   const response = await signedRequest('PUT', path, body, contentType);
-  if (!response.ok) throw new Error(`R2 upload failed (${response.status})`);
+  if (!response.ok) {
+    const detail = (await response.text()).match(/<(?:Code|Message)>([^<]+)</)?.[1] ?? 'unknown';
+    throw new Error(`R2 upload failed (${response.status}): ${detail}`);
+  }
 }
 
 export async function deleteR2Object(path: string): Promise<void> {
   const response = await signedRequest('DELETE', path);
-  if (!response.ok && response.status !== 404) throw new Error(`R2 delete failed (${response.status})`);
+  if (!response.ok && response.status !== 404) {
+    const detail = (await response.text()).match(/<(?:Code|Message)>([^<]+)</)?.[1] ?? 'unknown';
+    throw new Error(`R2 delete failed (${response.status}): ${detail}`);
+  }
 }
 
 export function r2Bucket(): string {
