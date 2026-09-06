@@ -55,6 +55,7 @@ const HERO_FIELDS: ContentField[] = [
   { key: 'home.hero.image_alt.es', label: 'Texto alternativo imagen ES', type: 'text', fallback: 'Bote privado navegando en el Pacifico de Costa Rica' },
   { key: 'home.hero.image_alt.en', label: 'Texto alternativo imagen EN', type: 'text', fallback: 'Private boat sailing Costa Rica Pacific waters' },
   { key: 'home.hero.video', label: 'Video de fondo', type: 'video', fallback: '' },
+  { key: 'home.hero.mobile_video', label: 'Video de fondo - celular', type: 'video', fallback: '' },
   { key: 'home.hero.video_poster', label: 'Imagen mientras carga el video', type: 'image', fallback: '', aspect: 16 / 9, maxWidth: 1920, maxHeight: 1080 },
   ...HERO_IMAGE_FIELDS,
   { key: 'home.hero.primary_enabled', label: 'Activar boton principal', type: 'boolean', fallback: 'true' },
@@ -169,7 +170,7 @@ function ContentSection({ title, description, fields, saveLabel, imageRequireRep
     });
     setSettings(rows);
     setDraft(nextDraft);
-    if (videoFields.length) setHeroMediaMode(nextDraft[videoFields[0].key] ? 'video' : 'image');
+    if (videoFields.length) setHeroMediaMode(videoFields.some((field) => Boolean(nextDraft[field.key])) ? 'video' : 'image');
   }
 
   useEffect(() => {
@@ -255,17 +256,16 @@ function ContentSection({ title, description, fields, saveLabel, imageRequireRep
 
   async function switchHeroMediaMode(mode: 'image' | 'video') {
     if (mode === heroMediaMode) return;
-    const videoField = videoFields[0];
-    const currentVideoUrl = videoField ? draft[videoField.key] : '';
-    if (mode === 'image' && videoField && currentVideoUrl) {
+    const configuredVideoFields = videoFields.filter((field) => draft[field.key]);
+    if (mode === 'image' && configuredVideoFields.length > 0) {
       // The Hero always prefers a configured video over the image slideshow, so
       // switching back to "Imágenes" has to actually clear it, not just hide the field.
       setSwitchingMediaMode(true);
       try {
-        await upsertKey(videoField.key, videoField.fallback, 'video');
-        const storagePath = storagePathFromPublicUrl(currentVideoUrl);
-        if (storagePath) {
-          await deleteStorageImage({ storagePath, resourceTable: 'site_settings', resourceId: videoField.key }).catch(() => undefined);
+        for (const videoField of configuredVideoFields) {
+          await upsertKey(videoField.key, videoField.fallback, 'video');
+          const storagePath = storagePathFromPublicUrl(draft[videoField.key]);
+          if (storagePath) await deleteStorageImage({ storagePath, resourceTable: 'site_settings', resourceId: videoField.key }).catch(() => undefined);
         }
         setNotice('Video eliminado. El Hero vuelve a mostrar las imágenes.');
         await loadSettings();

@@ -30,6 +30,7 @@ const DEFAULT_HERO_SETTINGS = {
   'home.hero.image': FALLBACK_HERO_IMAGE,
   'home.hero.mobile_image': '',
   'home.hero.video': '',
+  'home.hero.mobile_video': '',
   'home.hero.video_poster': '',
   'home.hero.slide_2.image': '',
   'home.hero.slide_2.mobile_image': '',
@@ -84,11 +85,12 @@ export function Hero() {
   const reduceMotion = useReducedMotion();
   const [videoFailed, setVideoFailed] = useState(false);
   const videoUrl = hero['home.hero.video'];
+  const mobileVideoUrl = hero['home.hero.mobile_video'] || videoUrl;
   const posterUrl = hero['home.hero.video_poster'] || hero['home.hero.image'] || FALLBACK_HERO_IMAGE;
   // A looping background video replaces the image slideshow outright rather than
   // mixing two independent motion sources; respect prefers-reduced-motion by
   // falling back to a static poster frame instead of autoplaying.
-  const showVideo = Boolean(videoUrl) && !reduceMotion && !videoFailed;
+  const showVideo = Boolean(videoUrl || mobileVideoUrl) && !reduceMotion && !videoFailed;
   const title = splitTitle(hero[`home.hero.title.${locale}` as keyof HeroSettings]);
   const primaryEnabled = hero['home.hero.primary_enabled'] !== 'false';
   const secondaryEnabled = hero['home.hero.secondary_enabled'] !== 'false';
@@ -99,7 +101,7 @@ export function Hero() {
 
   useEffect(() => {
     setVideoFailed(false);
-  }, [videoUrl]);
+  }, [videoUrl, mobileVideoUrl]);
 
   useEffect(() => {
     if (slides.length < 2) return undefined;
@@ -121,18 +123,10 @@ export function Hero() {
       data-nav-href="/"
     >
       {showVideo ? (
-        <video
-          className="absolute inset-0 h-full w-full object-cover object-center"
-          src={videoUrl}
-          poster={posterUrl}
-          autoPlay
-          muted
-          loop
-          playsInline
-          preload="auto"
-          aria-hidden="true"
-          onError={() => setVideoFailed(true)}
-        />
+        <>
+          <video className="absolute inset-0 hidden h-full w-full object-cover object-center sm:block" src={videoUrl || mobileVideoUrl} poster={posterUrl} autoPlay muted loop playsInline preload="auto" aria-hidden="true" onError={() => setVideoFailed(true)} />
+          <video className="absolute inset-0 h-full w-full object-cover object-center sm:hidden" src={mobileVideoUrl} poster={posterUrl} autoPlay muted loop playsInline preload="auto" aria-hidden="true" onError={() => setVideoFailed(true)} />
+        </>
       ) : (
         slides.map((slide, index) => (
           <div
