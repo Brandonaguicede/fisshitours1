@@ -45,6 +45,46 @@ export default function AdminVideoManager({
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [progress, setProgress] = useState(0);
   const [message, setMessage] = useState<{ kind: 'error' | 'success' | 'warning'; text: string } | null>(null);
+  const [manualUrl, setManualUrl] = useState('');
+  const [isManualUrl, setIsManualUrl] = useState(() => Boolean(currentVideoUrl?.includes('.r2.dev/')));
+
+  async function saveR2Url() {
+    const publicUrl = manualUrl.trim();
+    let parsed: URL;
+    try {
+      parsed = new URL(publicUrl);
+      if (parsed.protocol !== 'https:') throw new Error('La URL debe usar HTTPS.');
+    } catch (error) {
+      setMessage({ kind: 'error', text: error instanceof Error ? error.message : 'URL de R2 no válida.' });
+      return;
+    }
+    const path = decodeURIComponent(parsed.pathname.replace(/^\//, ''));
+    if (!path || path.split('/').length < 2) {
+      setMessage({ kind: 'error', text: 'La URL debe apuntar a un archivo dentro del bucket R2.' });
+      return;
+    }
+    setMessage(null);
+    try {
+      await onVideoSaved?.({
+        image_url: publicUrl,
+        public_url: publicUrl,
+        image_public_id: path,
+        storage_bucket: 'papagayo',
+        storage_path: path,
+        mime_type: path.toLowerCase().endsWith('.webm') ? 'video/webm' : 'video/mp4',
+        size_bytes: 0,
+        width: null,
+        height: null,
+      });
+      setVideoUrl(publicUrl);
+      setStoragePath(path);
+      setIsManualUrl(true);
+      setManualUrl('');
+      setMessage({ kind: 'success', text: 'URL de Cloudflare R2 guardada.' });
+    } catch (error) {
+      setMessage({ kind: 'error', text: error instanceof Error ? error.message : 'No se pudo guardar la URL.' });
+    }
+  }
 
   async function acceptFile(file: File | null) {
     if (disabled || !file) return;
@@ -182,13 +222,22 @@ export default function AdminVideoManager({
             onChange={(event) => void acceptFile(event.target.files?.[0] ?? null)}
           />
         </label>
-        {videoUrl && storagePath ? (
+        {videoUrl && storagePath && !isManualUrl ? (
           <button className="admin-btn admin-btn--danger admin-image-manager__delete" type="button" onClick={() => void handleDelete()} disabled={deleting || uploading}>
             {deleting ? <Loader2 className="animate-spin" size={16} /> : <Trash2 size={16} />}
             {confirmDelete ? '¿Confirmar eliminar?' : 'Eliminar'}
           </button>
         ) : null}
         {confirmDelete ? <button className="admin-btn admin-btn--ghost" type="button" onClick={() => setConfirmDelete(false)}>Cancelar</button> : null}
+      </div>
+
+      <div className="mt-3 grid gap-2">
+        <label className="admin-muted" htmlFor={`${resourceId}-r2-url`}>O usa un video ya subido a R2</label>
+        <div className="flex gap-2">
+          <input id={`${resourceId}-r2-url`} className="admin-input" type="url" placeholder="https://pub-...r2.dev/videos/hero.mp4" value={manualUrl} onChange={(event) => setManualUrl(event.target.value)} disabled={disabled || uploading} />
+          <button className="admin-btn admin-btn--secondary" type="button" onClick={() => void saveR2Url()} disabled={disabled || !manualUrl.trim()}>Usar URL</button>
+        </div>
+        <p className="admin-muted">Sube primero el archivo en R2 y pega aquí su URL pública. Esto evita pasar archivos grandes por la función.</p>
       </div>
 
       {message ? (
