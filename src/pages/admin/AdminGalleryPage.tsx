@@ -160,7 +160,7 @@ export default function AdminGalleryPage() {
 
   return (
     <div className="admin-page">
-      <AdminPageHeader title="Galeria" description="Imagenes publicas gestionadas con Supabase Storage." actions={<button className="admin-btn" type="button" onClick={() => void createImage()}><Plus size={16} /> Nueva imagen</button>} />
+      <AdminPageHeader title="Galeria" description="Imagenes publicas gestionadas con Cloudflare R2." actions={<button className="admin-btn" type="button" onClick={() => void createImage()}><Plus size={16} /> Nueva imagen</button>} />
 
       <AdminToolbar>
         <select className="admin-select" value={filter} onChange={(event) => setFilter(event.target.value)}>

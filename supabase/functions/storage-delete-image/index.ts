@@ -2,6 +2,7 @@ import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { z } from 'npm:zod@3.23.8';
 import { corsHeaders as getCorsHeaders, corsPreflight } from '../_shared/cors.ts';
+import { deleteR2Object, r2Bucket } from '../_shared/r2.ts';
 
 const ALLOWED_FOLDERS = new Set(['boats', 'tours', 'gallery', 'destinations', 'reviews', 'general']);
 const SAFE_PATH_PATTERN = /^[a-z]+\/[A-Za-z0-9_-]+\/[A-Za-z0-9_-]+\.[a-z0-9]+$/;
@@ -51,8 +52,8 @@ serve(async (req) => {
     }
     if (!asset) return json({ message: 'Image asset not found' }, 404);
 
-    if (asset.provider !== 'supabase_storage' || asset.storage_bucket !== 'site-images') {
-      return json({ message: 'Image is not managed by Supabase Storage' }, 400);
+    if (asset.provider !== 'cloudflare_r2' || asset.storage_bucket !== r2Bucket()) {
+      return json({ message: 'Media is not managed by Cloudflare R2' }, 400);
     }
     const storagePath = asset.storage_path;
     if (!storagePath || !SAFE_PATH_PATTERN.test(storagePath)) {
@@ -64,8 +65,9 @@ serve(async (req) => {
     const inUse = await imageIsInUse(supabase, storagePath, asset.public_url, parsed.data.resourceTable, parsed.data.resourceId);
     if (inUse) return json({ message: 'Image is still referenced by one or more resources' }, 409);
 
-    const { error: removeError } = await supabase.storage.from('site-images').remove([storagePath]);
-    if (removeError) {
+    try {
+      await deleteR2Object(storagePath);
+    } catch {
       await markPendingDeletion(supabase, asset.id, auth.profile.id, storagePath, 'Storage delete failed');
       return json({ message: 'Storage delete failed. The image was left pending cleanup.' }, 500);
     }

@@ -1,6 +1,7 @@
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { corsHeaders as getCorsHeaders } from '../_shared/cors.ts';
+import { deleteR2Object, putR2Object, r2Bucket, r2PublicUrl } from '../_shared/r2.ts';
 
 const ALLOWED_FOLDERS = new Set(['boats', 'tours', 'gallery', 'destinations', 'reviews', 'general']);
 const ALLOWED_TABLES = new Set(['boats', 'boat_images', 'tours', 'tour_packages', 'gallery_images', 'reviews', 'destinations', 'editable_content', 'site_settings']);
@@ -20,7 +21,7 @@ const FOLDER_BY_TABLE: Record<string, string> = {
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 // Hero background loops are meant to be short (a few seconds) and compressed, not
 // full-length promo videos; 40MB is generous headroom without inviting huge uploads.
-const MAX_VIDEO_BYTES = 40 * 1024 * 1024;
+const MAX_VIDEO_BYTES = 300 * 1024 * 1024;
 const RESOURCE_ID_PATTERN = /^[A-Za-z0-9_.-]+$/;
 
 serve(async (req) => {
@@ -75,15 +76,12 @@ serve(async (req) => {
     const storagePath = `${folder}/${resourceSegment}/${objectName}`;
     const originalFilename = sanitizeFilename(file.name);
 
-    const { error: uploadError } = await supabase.storage
-      .from('site-images')
-      .upload(storagePath, file, { contentType: detected.mime, cacheControl: '31536000', upsert: false });
-    if (uploadError) return json({ message: 'Storage upload failed' }, 500);
-
-    const publicUrl = normalizePublicUrl(req, supabase.storage.from('site-images').getPublicUrl(storagePath).data.publicUrl);
+    const bytesToUpload = new Uint8Array(await file.arrayBuffer());
+    await putR2Object(storagePath, bytesToUpload, detected.mime);
+    const publicUrl = r2PublicUrl(storagePath);
 
     const { error: insertError } = await supabase.from('media_assets').insert({
-      provider: 'supabase_storage',
+      provider: 'cloudflare_r2',
       provider_id: storagePath,
       url: publicUrl,
       mime_type: detected.mime,
@@ -91,7 +89,7 @@ serve(async (req) => {
       size_bytes: file.size,
       width,
       height,
-      storage_bucket: 'site-images',
+      storage_bucket: r2Bucket(),
       storage_path: storagePath,
       public_url: publicUrl,
       original_filename: originalFilename,
@@ -102,7 +100,7 @@ serve(async (req) => {
     });
 
     if (insertError) {
-      await supabase.storage.from('site-images').remove([storagePath]);
+      await deleteR2Object(storagePath).catch(() => undefined);
       return json({ message: 'Failed to register image metadata' }, 500);
     }
 
@@ -118,7 +116,7 @@ serve(async (req) => {
       image_url: publicUrl,
       public_url: publicUrl,
       image_public_id: storagePath,
-      storage_bucket: 'site-images',
+      storage_bucket: r2Bucket(),
       storage_path: storagePath,
       mime_type: detected.mime,
       size_bytes: file.size,

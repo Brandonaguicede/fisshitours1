@@ -6,7 +6,7 @@ import { isSupabaseConfigured, supabase } from '../../lib/supabase';
 import { formatBytes } from '../../utils/format';
 
 const ALLOWED_TYPES = ['video/mp4', 'video/webm'];
-const MAX_BYTES = 40 * 1024 * 1024;
+const MAX_BYTES = 300 * 1024 * 1024;
 
 interface AdminVideoManagerProps {
   resourceTable: string;
@@ -116,7 +116,7 @@ export default function AdminVideoManager({
         }
       }
 
-      setMessage({ kind: 'success', text: `Video guardado en Supabase Storage (${formatBytes(file.size)}).` });
+      setMessage({ kind: 'success', text: `Video guardado en Cloudflare R2 (${formatBytes(file.size)}).` });
     } catch (error) {
       setMessage({ kind: 'error', text: error instanceof Error ? error.message : 'Error al subir el video.' });
     } finally {
@@ -138,7 +138,7 @@ export default function AdminVideoManager({
       setVideoUrl(null);
       setStoragePath(null);
       setConfirmDelete(false);
-      setMessage({ kind: 'success', text: 'Video eliminado de Supabase Storage.' });
+      setMessage({ kind: 'success', text: 'Video eliminado de Cloudflare R2.' });
     } catch (error) {
       setMessage({ kind: 'error', text: error instanceof Error ? error.message : 'No se pudo eliminar el video. La referencia actual se conserva.' });
     } finally {

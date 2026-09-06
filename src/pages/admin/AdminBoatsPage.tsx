@@ -47,13 +47,23 @@ function needsEditorNotice(message: string) {
   return /permission denied|denied for table|must be logged in|jwt/i.test(message);
 }
 
+function publicStoragePath(value: string): string | null {
+  if (value.includes('/site-images/')) return value.split('/site-images/')[1] ?? null;
+  try {
+    const path = decodeURIComponent(new URL(value).pathname.replace(/^\//, ''));
+    return /^(boats|tours|gallery|destinations|reviews|general)\/[A-Za-z0-9_-]+\/[A-Za-z0-9_-]+\.[a-z0-9]+$/.test(path) ? path : null;
+  } catch {
+    return null;
+  }
+}
+
 function fallbackBoatImages(boat: BoatRow): BoatImageRow[] {
   const urls = Array.from(new Set([boat.image_url, ...(boat.images ?? [])].filter(Boolean))) as string[];
   return urls.map((url, index) => ({
     id: `legacy-${boat.id}-${index}`,
     boat_id: boat.id,
     image_url: url,
-    storage_path: index === 0 ? boat.image_public_id : url.includes('/site-images/') ? url.split('/site-images/')[1] : null,
+    storage_path: index === 0 ? boat.image_public_id : publicStoragePath(url),
     alt_text: `${boat.name} ${index + 1}`,
     is_primary: index === 0,
     sort_order: index,

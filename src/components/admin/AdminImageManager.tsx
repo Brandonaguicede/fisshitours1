@@ -214,10 +214,10 @@ export default function AdminImageManager({
       if (originalSize > 0) {
         setMessage({
           kind: 'success',
-          text: `Imagen guardada en Supabase Storage. Original: ${formatBytes(originalSize)} -> WebP: ${formatBytes(blob.size)}.`,
+          text: `Imagen guardada en Cloudflare R2. Original: ${formatBytes(originalSize)} -> WebP: ${formatBytes(blob.size)}.`,
         });
       } else {
-        setMessage({ kind: 'success', text: 'Imagen guardada en Supabase Storage.' });
+        setMessage({ kind: 'success', text: 'Imagen guardada en Cloudflare R2.' });
       }
     } catch (error) {
       setMessage({ kind: 'error', text: error instanceof Error ? error.message : 'Error al subir la imagen.' });
@@ -244,7 +244,7 @@ export default function AdminImageManager({
       setImageUrl(null);
       setStoragePath(null);
       setConfirmDelete(false);
-      setMessage({ kind: 'success', text: 'Imagen eliminada de Supabase Storage.' });
+      setMessage({ kind: 'success', text: 'Imagen eliminada de Cloudflare R2.' });
     } catch (error) {
       setMessage({ kind: 'error', text: error instanceof Error ? error.message : 'No se pudo eliminar la imagen. La referencia actual se conserva.' });
     } finally {

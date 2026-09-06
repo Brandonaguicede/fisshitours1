@@ -86,8 +86,14 @@ const ABOUT_FIELDS: ContentField[] = [
 ];
 
 function storagePathFromPublicUrl(value?: string | null) {
-  if (!value?.includes('/site-images/')) return null;
-  return value.split('/site-images/')[1] ?? null;
+  if (!value) return null;
+  if (value.includes('/site-images/')) return value.split('/site-images/')[1] ?? null;
+  try {
+    const path = decodeURIComponent(new URL(value).pathname.replace(/^\//, ''));
+    return /^(boats|tours|gallery|destinations|reviews|general)\/[A-Za-z0-9_-]+\/[A-Za-z0-9_-]+\.[a-z0-9]+$/.test(path) ? path : null;
+  } catch {
+    return null;
+  }
 }
 
 type LangFilter = 'all' | 'es' | 'en';

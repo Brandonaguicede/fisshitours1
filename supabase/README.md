@@ -222,13 +222,14 @@ Limitaciones pendientes:
 - La doble reserva se bloquea en PostgreSQL con indice unico parcial en `availability_blocks(boat_id, tour_date, time_slot_id)`.
 - Las reservas PayPal pendientes pueden expirar mediante `expire_pending_paypal_bookings()`.
 
-## Supabase Storage
+## Cloudflare R2 media storage
 
 - Upload y delete exigen bearer token Supabase.
 - Solo perfiles activos `admin` o `editor`.
 - No se acepta un rol enviado por body.
-- Se valida MIME, firma binaria (JPEG/PNG/WebP, se rechaza SVG/GIF aunque se declare otro MIME), tamano (max 10 MB), recurso asociado, carpeta permitida y traversal antes de subir o eliminar.
-- Las rutas son `<carpeta>/<resource-id>/<uuid>.ext` en el bucket publico `site-images`.
+- Se valida MIME, firma binaria (JPEG/PNG/WebP/MP4/WebM), tamano (max 10 MB para imagen y 300 MB para video), recurso asociado, carpeta permitida y traversal antes de subir o eliminar.
+- Las rutas son `<carpeta>/<resource-id>/<uuid>.ext` en el bucket R2 definido por `STORAGE_BUCKET`; el endpoint S3 no lleva el nombre del bucket.
+- Las URLs públicas se generan con `STORAGE_PUBLIC_BASE_URL`; nunca se devuelve el endpoint privado S3.
 - Una imagen en uso por algun recurso no se puede eliminar (409).
 - Las subidas nunca sobrescriben: se crea un asset nuevo y se elimina el anterior solo despues de confirmar la nueva referencia.
 - La auditoria se guarda en `audit_log`.
