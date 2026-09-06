@@ -1,12 +1,25 @@
 import { ArrowDown, Facebook, Instagram } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { useEffect, useState } from 'react';
 
 import { Container } from '../common/Container';
 import { FACEBOOK_URL, INSTAGRAM_URL, WHATSAPP_NUMBER } from '../../constants/contact';
 import { useLanguage } from '../../i18n/LanguageContext';
+import { getActiveHeroVideo } from '../../services/heroVideoService';
 
 export function Hero() {
   const { language } = useLanguage();
+  const [heroVideoUrl, setHeroVideoUrl] = useState(() => getActiveHeroVideo().url);
+
+  useEffect(() => {
+    const updateVideo = () => setHeroVideoUrl(getActiveHeroVideo().url);
+    window.addEventListener('hero-video-change', updateVideo);
+    window.addEventListener('storage', updateVideo);
+    return () => {
+      window.removeEventListener('hero-video-change', updateVideo);
+      window.removeEventListener('storage', updateVideo);
+    };
+  }, []);
 
   function scrollToFleet() {
     document.getElementById('fleet')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -22,7 +35,7 @@ export function Hero() {
         playsInline
         preload="metadata"
       >
-        <source src="/videos/hero-ocean-charter.mp4" type="video/mp4" />
+        <source src={heroVideoUrl} type="video/mp4" />
       </video>
       <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-black/80 to-transparent" />
 

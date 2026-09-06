@@ -9,10 +9,12 @@ const TourDetailPage = lazy(() => import('../pages/TourDetailPage'));
 const AboutPage = lazy(() => import('../pages/AboutPage'));
 const ContactPage = lazy(() => import('../pages/ContactPage'));
 const NotFoundPage = lazy(() => import('../pages/NotFoundPage'));
+const AdminVideosPage = lazy(() => import('../pages/AdminVideosPage'));
 
 export function AppRoutes() {
   return (
     <Routes>
+      <Route path="admin/videos" element={<AdminVideosPage />} />
       <Route element={<MainLayout />}>
         <Route index element={<HomePage />} />
         <Route path="tours" element={<ToursPage />} />
