@@ -301,7 +301,15 @@ export default function AdminToursPage() {
   }
 
   const locationsByTour = useMemo(() => new Map(tours.map((tour) => [tour.id, locationRows.filter((item) => item.tour_id === tour.id).sort((a, b) => a.sort_order - b.sort_order).map((item) => item.location)])), [tours, locationRows]);
-  const visibleTours = tours.filter((tour) => `${tour.title} ${(locationsByTour.get(tour.id) ?? [tour.location ?? '']).join(' ')}`.toLowerCase().includes(search.toLowerCase()));
+  const boatNamesByTour = useMemo(() => {
+    const names = new Map<string, string[]>();
+    for (const relation of relations) {
+      const boat = boats.find((item) => item.id === relation.boat_id);
+      if (boat) names.set(relation.tour_id, [...(names.get(relation.tour_id) ?? []), boat.name]);
+    }
+    return names;
+  }, [boats, relations]);
+  const visibleTours = tours.filter((tour) => `${tour.title} ${(locationsByTour.get(tour.id) ?? [tour.location ?? '']).join(' ')} ${(boatNamesByTour.get(tour.id) ?? []).join(' ')}`.toLowerCase().includes(search.toLowerCase()));
   const visiblePackages = useMemo(() => editing?.packages.slice().sort((a, b) => a.sortOrder - b.sortOrder) ?? [], [editing]);
 
   return (
@@ -310,7 +318,7 @@ export default function AdminToursPage() {
         <AdminToolbar embedded><div className="admin-search-field"><Search aria-hidden="true" size={16} /><input className="admin-input" aria-label="Buscar tours" placeholder="Buscar tour por nombre o ubicación" value={search} onChange={(event) => setSearch(event.target.value)} /></div><div className="admin-toolbar__actions"><button className="admin-btn" type="button" onClick={() => void createTour()}><Plus size={16} /> Crear tour</button></div></AdminToolbar>
         {error && !editing ? <div className="admin-alert admin-alert--danger">{error}</div> : null}
         {notice && !editing ? <div className="admin-alert admin-alert--success">{notice}</div> : null}
-        {loading ? <p className="admin-muted">Cargando tours...</p> : <AdminTable embedded headers={['Tour', 'Ubicaciones', 'Publicación', 'Orden', 'Acciones']}>{visibleTours.map((tour) => <tr key={tour.id}><td>{tour.title}<div className="admin-muted">{tour.description || tour.slug}</div></td><td>{(locationsByTour.get(tour.id) ?? [tour.location ?? '']).filter(Boolean).join(', ') || '-'}</td><td><AdminBadge value={publicationStatus(tour) === 'draft' ? 'Borrador' : publicationStatus(tour) === 'published' ? 'Activo' : 'Inactivo'} /></td><td>{tour.sort_order}</td><td><div className="admin-row-actions">
+        {loading ? <p className="admin-muted">Cargando tours...</p> : <AdminTable embedded headers={['Tour', 'Ubicaciones', 'Botes', 'Publicación', 'Orden', 'Acciones']}>{visibleTours.map((tour) => <tr key={tour.id}><td>{tour.title}<div className="admin-muted">{tour.description || tour.slug}</div></td><td>{(locationsByTour.get(tour.id) ?? [tour.location ?? '']).filter(Boolean).join(', ') || '-'}</td><td>{(boatNamesByTour.get(tour.id) ?? []).length ? (boatNamesByTour.get(tour.id) ?? []).join(', ') : <span className="admin-muted">Sin bote asignado</span>}</td><td><AdminBadge value={publicationStatus(tour) === 'draft' ? 'Borrador' : publicationStatus(tour) === 'published' ? 'Activo' : 'Inactivo'} /></td><td>{tour.sort_order}</td><td><div className="admin-row-actions">
           <button className="admin-icon-action" type="button" title="Editar tour" aria-label={`Editar tour ${tour.title}`} onClick={() => openEditor(tour)}><Pencil size={17} /></button>
           <button
             className={`admin-icon-action ${publicationStatus(tour) === 'published' ? 'admin-icon-action--success' : 'admin-icon-action--warning'}`}
@@ -323,7 +331,7 @@ export default function AdminToursPage() {
             {togglingTourId === tour.id ? <Loader2 className="animate-spin" size={17} /> : publicationStatus(tour) === 'published' ? <Eye size={17} /> : <EyeOff size={17} />}
           </button>
           <button className="admin-icon-action admin-icon-action--danger" type="button" title="Eliminar tour" aria-label={`Eliminar tour ${tour.title}`} onClick={() => setPendingTourDelete(tour)}><Trash2 size={17} /></button>
-        </div></td></tr>)}{visibleTours.length === 0 ? <tr><td colSpan={5} className="admin-muted">No hay tours para esta búsqueda.</td></tr> : null}</AdminTable>}
+        </div></td></tr>)}{visibleTours.length === 0 ? <tr><td colSpan={6} className="admin-muted">No hay tours para esta búsqueda.</td></tr> : null}</AdminTable>}
       </AdminModuleSurface>
 
       <Modal open={Boolean(editing)} onClose={requestClose} titleId="tour-edit-title" className="admin-tour-modal">
@@ -334,7 +342,7 @@ export default function AdminToursPage() {
             {step === 'info' ? <InfoStep editing={editing} locationInput={locationInput} setLocationInput={setLocationInput} errors={fieldErrors} onChange={markEditing} /> : null}
             {step === 'gallery' ? <GalleryStep editing={editing} errors={fieldErrors} selectedSlot={gallerySlot} setSelectedSlot={setGallerySlot} setDeleteImage={setDeleteImage} saveImage={saveGalleryImage} /> : null}
             {step === 'experience' ? <ExperienceStep editing={editing} activityInput={activityInput} inclusionInput={inclusionInput} setActivityInput={setActivityInput} setInclusionInput={setInclusionInput} addActivity={addActivity} addInclusion={addInclusion} onChange={markEditing} /> : null}
-            {step === 'packages' ? <PackagesStep boats={boats} packages={visiblePackages} onManageBoat={(boatId) => navigate(boatId ? `/admin/boats?boatId=${boatId}` : '/admin/boats')} /> : null}
+            {step === 'packages' ? <PackagesStep boats={boats} relations={relations.filter((relation) => relation.tour_id === editing.id)} packages={visiblePackages} onManageBoat={(boatId) => navigate(boatId ? `/admin/boats?boatId=${boatId}` : '/admin/boats')} /> : null}
           </div>
           <ModalFooter><button className="admin-btn admin-btn--secondary" type="button" onClick={requestClose}>Cancelar</button>{step !== 'info' ? <button className="admin-btn admin-btn--ghost" type="button" onClick={() => void navigateStep(-1)}><ChevronLeft size={15} /> Anterior</button> : null}{step !== 'packages' ? <button className="admin-btn" type="button" disabled={saving} onClick={() => void navigateStep(1)}>{saving ? <Loader2 className="animate-spin" size={15} /> : null} Siguiente <ChevronRight size={15} /></button> : <button className="admin-btn" type="submit" disabled={saving}>{saving ? <Loader2 className="animate-spin" size={15} /> : <Save size={15} />} Finalizar</button>}</ModalFooter>
         </form> : null}
@@ -373,9 +381,10 @@ function ExperienceStep({ editing, activityInput, inclusionInput, setActivityInp
   return <FormSection title="Actividades e incluye" description="Listas editables sin un máximo artificial." icon={<Check size={16} />}><div className="admin-dynamic-list"><h3>Actividades del Tour</h3>{editing.activities.map((item, index) => <div className="admin-dynamic-list__row" key={index}><input className="admin-input" value={item} onChange={(event) => onChange({ ...editing, activities: editing.activities.map((current, currentIndex) => currentIndex === index ? event.target.value : current) })} /><button className="admin-icon-btn" type="button" aria-label={`Eliminar actividad ${index + 1}`} onClick={() => onChange({ ...editing, activities: editing.activities.filter((_, currentIndex) => currentIndex !== index) })}><Trash2 size={15} /></button></div>)}<div className="admin-list-editor__add"><input className="admin-input" value={activityInput} onChange={(event) => setActivityInput(event.target.value)} /><button className="admin-btn admin-btn--secondary" type="button" onClick={addActivity}><Plus size={14} /> Agregar actividad</button></div></div><div className="admin-dynamic-list"><h3>Incluye</h3>{editing.inclusions.filter((item) => !item.pendingDelete).map((item) => <div className="admin-dynamic-list__row" key={item.id}><input className="admin-input" value={item.label} onChange={(event) => onChange({ ...editing, inclusions: editing.inclusions.map((current) => current.id === item.id ? { ...current, label: event.target.value } : current) })} /><button className="admin-icon-btn" type="button" aria-label={`Eliminar ${item.label}`} onClick={() => onChange({ ...editing, inclusions: editing.inclusions.map((current) => current.id === item.id ? { ...current, pendingDelete: true } : current) })}><Trash2 size={15} /></button></div>)}<div className="admin-list-editor__add"><input className="admin-input" value={inclusionInput} onChange={(event) => setInclusionInput(event.target.value)} /><button className="admin-btn admin-btn--secondary" type="button" onClick={addInclusion}><Plus size={14} /> Agregar</button></div></div></FormSection>;
 }
 
-function PackagesStep({ boats, packages, onManageBoat }: { boats: BoatRow[]; packages: EditablePackage[]; onManageBoat: (boatId: string | null) => void }) {
+function PackagesStep({ boats, relations, packages, onManageBoat }: { boats: BoatRow[]; relations: BoatTourRow[]; packages: EditablePackage[]; onManageBoat: (boatId: string | null) => void }) {
   const boatName = (boatId: string | null) => boats.find((item) => item.id === boatId)?.name ?? boatId ?? 'Sin bote asignado';
   const groups = new Map<string | null, EditablePackage[]>();
+  for (const relation of relations) groups.set(relation.boat_id, []);
   for (const item of packages) {
     const list = groups.get(item.boatId) ?? [];
     list.push(item);
