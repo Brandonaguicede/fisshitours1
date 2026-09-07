@@ -383,7 +383,7 @@ export default function BoatToursPackagesEditor({ boatId, boatName, boatMaxGuest
       >
         <div className="admin-dynamic-list">
           {(data?.tours ?? []).map((tour) => {
-            const enabled = linkByTour.has(tour.id);
+            const enabled = linkByTour.get(tour.id)?.active === true;
             const activeCount = (packagesByTour.get(tour.id) ?? []).filter((row) => row.active).length;
             return (
               <label className="admin-dynamic-list__row" key={tour.id} style={{ alignItems: 'center' }}>

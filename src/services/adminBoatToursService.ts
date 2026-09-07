@@ -129,6 +129,11 @@ export async function deletePackage(packageId: string): Promise<void> {
 /** Enable a tour for a boat: ensure the link and reactivate any existing packages. */
 export async function enableTourForBoat(boatId: string, tourId: string, sortOrderHint = 0): Promise<void> {
   const boatTourId = await ensureBoatTourLink(boatId, tourId, sortOrderHint);
+  const link = await supabase
+    .from('boat_tours')
+    .update({ active: true })
+    .eq('id', boatTourId);
+  if (link.error) throw new Error(link.error.message);
   const { error } = await supabase
     .from('tour_packages')
     .update({ active: true, updated_at: new Date().toISOString() })
@@ -146,6 +151,12 @@ export async function disableTourForBoat(boatId: string, tourId: string): Promis
     .maybeSingle();
   if (link.error) throw new Error(link.error.message);
   if (!link.data) return;
+
+  const deactivateLink = await supabase
+    .from('boat_tours')
+    .update({ active: false })
+    .eq('id', link.data.id);
+  if (deactivateLink.error) throw new Error(deactivateLink.error.message);
 
   const deactivate = await supabase
     .from('tour_packages')
