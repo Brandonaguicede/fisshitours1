@@ -88,7 +88,6 @@ export function Hero() {
   const [videoReady, setVideoReady] = useState(false);
   const videoUrl = hero['home.hero.video'];
   const mobileVideoUrl = hero['home.hero.mobile_video'] || videoUrl;
-  const posterUrl = hero['home.hero.video_poster'] || hero['home.hero.image'] || FALLBACK_HERO_IMAGE;
   // A looping background video replaces the image slideshow outright rather than
   // mixing two independent motion sources; respect prefers-reduced-motion by
   // falling back to a static poster frame instead of autoplaying.
@@ -127,12 +126,14 @@ export function Hero() {
     >
       {showVideo ? (
         <>
-          <picture className="absolute inset-0 block">
-            <source media="(max-width: 639px)" srcSet={hero['home.hero.mobile_image'] || hero['home.hero.image'] || FALLBACK_HERO_IMAGE} />
-            <img className="h-full w-full object-cover object-center" src={hero['home.hero.image'] || FALLBACK_HERO_IMAGE} alt="" aria-hidden="true" />
-          </picture>
-          <video className="absolute inset-0 hidden h-full w-full object-cover object-center transition-opacity duration-150 ease-linear sm:block" style={{ opacity: videoReady ? 1 : 0 }} src={videoUrl || mobileVideoUrl} poster={posterUrl} autoPlay muted loop playsInline preload="auto" aria-hidden="true" onCanPlay={() => setVideoReady(true)} onError={() => setVideoFailed(true)} />
-          <video className="absolute inset-0 h-full w-full object-cover object-center transition-opacity duration-150 ease-linear sm:hidden" style={{ opacity: videoReady ? 1 : 0 }} src={mobileVideoUrl} poster={posterUrl} autoPlay muted loop playsInline preload="auto" aria-hidden="true" onCanPlay={() => setVideoReady(true)} onError={() => setVideoFailed(true)} />
+          <div className="absolute inset-0 bg-ocean-950" aria-hidden="true" />
+          {!videoReady ? (
+            <div className="absolute inset-0 z-[1] grid place-items-center" role="status" aria-label="Cargando video">
+              <span className="h-9 w-9 animate-spin rounded-full border-2 border-white/25 border-t-white/90" />
+            </div>
+          ) : null}
+          <video className="absolute inset-0 hidden h-full w-full object-cover object-center transition-opacity duration-150 ease-linear sm:block" style={{ opacity: videoReady ? 1 : 0 }} src={videoUrl || mobileVideoUrl} autoPlay muted loop playsInline preload="auto" aria-hidden="true" onCanPlay={() => setVideoReady(true)} onError={() => setVideoFailed(true)} />
+          <video className="absolute inset-0 h-full w-full object-cover object-center transition-opacity duration-150 ease-linear sm:hidden" style={{ opacity: videoReady ? 1 : 0 }} src={mobileVideoUrl} autoPlay muted loop playsInline preload="auto" aria-hidden="true" onCanPlay={() => setVideoReady(true)} onError={() => setVideoFailed(true)} />
         </>
       ) : (
         slides.map((slide, index) => (
