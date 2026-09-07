@@ -13,6 +13,7 @@ import { scrollToHomeSection } from '../../utils/homeNavigation';
 const FALLBACK_HERO_IMAGE = '/images/placeholder-image.jpg';
 
 const DEFAULT_HERO_SETTINGS = {
+  'home.hero.media_mode': 'image',
   'home.hero.title.es': 'Experimenta el oceano',
   'home.hero.title.en': 'Experience the Ocean',
   'home.hero.eyebrow.es': 'Charters privados - Costa Rica',
@@ -90,7 +91,7 @@ export function Hero() {
   // A looping background video replaces the image slideshow outright rather than
   // mixing two independent motion sources; respect prefers-reduced-motion by
   // falling back to a static poster frame instead of autoplaying.
-  const showVideo = Boolean(videoUrl || mobileVideoUrl) && !reduceMotion && !videoFailed;
+  const showVideo = hero['home.hero.media_mode'] === 'video' && Boolean(videoUrl || mobileVideoUrl) && !reduceMotion && !videoFailed;
   const title = splitTitle(hero[`home.hero.title.${locale}` as keyof HeroSettings]);
   const primaryEnabled = hero['home.hero.primary_enabled'] !== 'false';
   const secondaryEnabled = hero['home.hero.secondary_enabled'] !== 'false';

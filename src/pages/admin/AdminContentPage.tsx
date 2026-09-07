@@ -17,7 +17,7 @@ interface SiteSettingRow {
 interface ContentField {
   key: string;
   label: string;
-  type: 'text' | 'textarea' | 'url' | 'boolean' | 'image' | 'video';
+  type: 'text' | 'textarea' | 'url' | 'boolean' | 'image' | 'video' | 'media_mode';
   fallback: string;
   aspect?: number;
   maxWidth?: number;
@@ -40,6 +40,7 @@ const HERO_IMAGE_FIELDS: ContentField[] = [
 ];
 
 const HERO_FIELDS: ContentField[] = [
+  { key: 'home.hero.media_mode', label: 'Modo del hero', type: 'media_mode', fallback: 'image' },
   { key: 'home.hero.title.es', label: 'Titulo principal ES', type: 'text', fallback: 'Experimenta el oceano' },
   { key: 'home.hero.title.en', label: 'Titulo principal EN', type: 'text', fallback: 'Experience the Ocean' },
   { key: 'home.hero.eyebrow.es', label: 'Etiqueta ES', type: 'text', fallback: 'Charters privados - Costa Rica' },
@@ -142,7 +143,7 @@ function ContentSection({ title, description, fields, saveLabel, imageRequireRep
   const videoFields = useMemo(() => fields.filter((field) => field.type === 'video'), [fields]);
   const videoPosterField = useMemo(() => fields.find((field) => field.key === 'home.hero.video_poster'), [fields]);
   const textFields = useMemo(
-    () => fields.filter((field) => field.type !== 'image' && field.type !== 'video' && (langFilter === 'all' || fieldLang(field.key) === null || fieldLang(field.key) === langFilter)),
+    () => fields.filter((field) => !['image', 'video', 'media_mode'].includes(field.type) && (langFilter === 'all' || fieldLang(field.key) === null || fieldLang(field.key) === langFilter)),
     [fields, langFilter],
   );
 
@@ -170,7 +171,7 @@ function ContentSection({ title, description, fields, saveLabel, imageRequireRep
     });
     setSettings(rows);
     setDraft(nextDraft);
-    if (videoFields.length) setHeroMediaMode(videoFields.some((field) => Boolean(nextDraft[field.key])) ? 'video' : 'image');
+    if (videoFields.length) setHeroMediaMode(nextDraft['home.hero.media_mode'] === 'video' ? 'video' : 'image');
   }
 
   useEffect(() => {
@@ -256,8 +257,18 @@ function ContentSection({ title, description, fields, saveLabel, imageRequireRep
 
   async function switchHeroMediaMode(mode: 'image' | 'video') {
     if (mode === heroMediaMode) return;
-    const configuredVideoFields = videoFields.filter((field) => draft[field.key]);
-    if (mode === 'image' && configuredVideoFields.length > 0) {
+    setSwitchingMediaMode(true);
+    try {
+      await upsertKey('home.hero.media_mode', mode, 'media_mode');
+      setDraft((current) => ({ ...current, 'home.hero.media_mode': mode }));
+      setHeroMediaMode(mode);
+      setNotice(`Modo del Hero cambiado a ${mode === 'video' ? 'video' : 'imagenes'}. Los videos guardados se conservaron.`);
+    } catch (switchError) {
+      setError(switchError instanceof Error ? switchError.message : 'No se pudo cambiar el modo del Hero.');
+    } finally {
+      setSwitchingMediaMode(false);
+    }
+    /*
       // The Hero always prefers a configured video over the image slideshow, so
       // switching back to "Imágenes" has to actually clear it, not just hide the field.
       setSwitchingMediaMode(true);
@@ -276,7 +287,7 @@ function ContentSection({ title, description, fields, saveLabel, imageRequireRep
       }
       setSwitchingMediaMode(false);
     }
-    setHeroMediaMode(mode);
+    */
   }
 
   return (
