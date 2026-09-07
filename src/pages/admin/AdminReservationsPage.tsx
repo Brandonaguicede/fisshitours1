@@ -550,5 +550,7 @@ export default function AdminReservationsPage() {
 }
 
 function csvCell(value: string) {
-  return `"${String(value ?? '').replace(/"/g, '""')}"`;
+  const text = String(value ?? '');
+  const safeText = /^[=+\-@]/.test(text) ? `'${text}` : text;
+  return `"${safeText.replace(/"/g, '""')}"`;
 }

@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 
 import { BookingPanel } from '../components/booking/BookingPanel';
 import { Container } from '../components/common/Container';
+import { SectionReveal } from '../components/common/SectionReveal';
 import { SectionHeader } from '../components/ui';
 import { AboutPreview } from '../components/home/AboutPreview';
 import { FleetSection } from '../components/home/FleetSection';
@@ -82,9 +83,9 @@ export default function HomePage() {
   return (
     <>
       <Hero />
-      <FleetSection boats={catalogBoats} tours={catalogTours} selectedBoat={selectedBoat} onSelectBoat={selectBoat} onViewTourType={viewTourOnHome} onViewAllTours={viewAllToursOnHome} />
-      <TourCarouselSection boats={catalogBoats} tours={toursWithKnownBoats} selectedTour={selectedTour} onSelectTour={selectTour} />
-      <section className="home-section bg-ocean-950 py-10 sm:py-14 lg:py-16" data-home-section id="booking">
+      <SectionReveal><FleetSection boats={catalogBoats} tours={catalogTours} selectedBoat={selectedBoat} onSelectBoat={selectBoat} onViewTourType={viewTourOnHome} onViewAllTours={viewAllToursOnHome} /></SectionReveal>
+      <SectionReveal><TourCarouselSection boats={catalogBoats} tours={toursWithKnownBoats} selectedTour={selectedTour} onSelectTour={selectTour} /></SectionReveal>
+      <SectionReveal><section className="home-section bg-ocean-950 py-10 sm:py-14 lg:py-16" data-home-section id="booking">
         <Container>
           <div className="mx-auto max-w-4xl" data-section-anchor>
             <SectionHeader
@@ -107,10 +108,10 @@ export default function HomePage() {
             />
           </div>
         </Container>
-      </section>
-      <Testimonials />
-      <GallerySection />
-      <AboutPreview />
+      </section></SectionReveal>
+      <SectionReveal><Testimonials /></SectionReveal>
+      <SectionReveal><GallerySection /></SectionReveal>
+      <SectionReveal><AboutPreview /></SectionReveal>
     </>
   );
 }

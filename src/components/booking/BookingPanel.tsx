@@ -92,6 +92,7 @@ export function BookingPanel({ selectedBoat, selectedTour, boats, tours, catalog
   const [turnstileToken, setTurnstileToken] = useState('');
   const [turnstileResetKey, setTurnstileResetKey] = useState(0);
   const headingRef = useRef<HTMLHeadingElement | null>(null);
+  const availabilityAlertKey = useRef('');
 
   const availableTours = useMemo(() => tours.filter((tour) => tour.boatId === selectedBoat.id), [selectedBoat.id, tours]);
   const availabilityQuery = useQuery({
@@ -163,6 +164,18 @@ const bookingPayload = selectedTour
       setTimeSlotId(slots.find((slot) => slot.available !== false)?.id ?? '');
     }
   }, [availabilityQuery.data, selectedTour, timeSlotId]);
+
+  useEffect(() => {
+    if (!selectedTour || availabilityQuery.isFetching || availabilityQuery.isError || !availabilityQuery.data) return;
+    const unavailableKey = selectedBoat.id + ':' + date + ':' + selectedTour.id;
+    const allUnavailable = availabilityQuery.data.length > 0 && availabilityQuery.data.every((slot) => slot.available === false);
+    if (allUnavailable && availabilityAlertKey.current !== unavailableKey) {
+      availabilityAlertKey.current = unavailableKey;
+      window.alert(language === 'es'
+        ? 'No hay horarios disponibles para este bote en la fecha seleccionada.'
+        : 'There are no departure times available for this boat on the selected date.');
+    }
+  }, [availabilityQuery.data, availabilityQuery.isError, availabilityQuery.isFetching, date, language, selectedBoat.id, selectedTour]);
 
   useEffect(() => {
     headingRef.current?.focus();
@@ -427,7 +440,14 @@ const bookingPayload = selectedTour
               onDateChange={setDate}
               onGuestsChange={setGuests}
               onMealOptionChange={setMealOption}
-              onTimeSlotChange={setTimeSlotId}
+              onTimeSlotChange={(slotId) => {
+                const slot = currentSlots.find((item) => item.id === slotId);
+                if (slot?.available === false) {
+                  window.alert(language === 'es' ? 'Ese horario ya no está disponible para este bote.' : 'That departure time is no longer available for this boat.');
+                  return;
+                }
+                setTimeSlotId(slotId);
+              }}
               onBack={() => setActiveStep(0)}
               onNext={() => setActiveStep(2)}
             />
@@ -710,10 +730,10 @@ function TourDetailsStep(props: {
           <legend className="text-sm font-bold text-ocean-100">{tr(text.booking.departure, language)}</legend>
           <div className="mt-3 grid grid-cols-2 gap-2 min-[520px]:grid-cols-3">
             {(props.availabilitySlots.length ? props.availabilitySlots : props.selectedTour.timeSlots.map((slot) => ({ ...slot, available: true }))).map((slot) => (
-              <ChoiceCard as="label" key={slot.id} className="cursor-pointer p-3 text-center" disabled={slot.available === false} selected={props.timeSlotId === slot.id}>
+                <ChoiceCard as="label" key={slot.id} className="group cursor-pointer p-3 text-center transition-colors hover:border-ocean-300/70 hover:bg-ocean-500/15" disabled={slot.available === false} selected={props.timeSlotId === slot.id}>
                 <input className="sr-only" type="radio" name="timeSlot" value={slot.id} checked={props.timeSlotId === slot.id} disabled={slot.available === false} onChange={() => props.onTimeSlotChange(slot.id)} />
                 <span className="block truncate text-xs font-extrabold text-white">{slot.label}</span>
-                <span className="mt-1 block text-base font-extrabold text-ocean-600 sm:text-lg">{slot.time}</span>
+                <span className="mt-1 block text-base font-extrabold text-white sm:text-lg">{slot.time}</span>
                 {slot.available === false ? <span className="mt-1 block text-[0.65rem] font-bold text-red-200">Unavailable</span> : null}
               </ChoiceCard>
             ))}

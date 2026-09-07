@@ -270,6 +270,15 @@ export default function AdminToursPage() {
       : await supabase.from('tour_images').insert(payload).select('*').single();
     if (result.error) throw new Error(result.error.message);
     if (slot === 0) { await supabase.from('tour_images').update({ is_primary: false }).eq('tour_id', editing.id).neq('id', result.data.id); }
+    if (slot === 0) {
+      const { error: coverError } = await supabase.from('tours').update({
+        image_url: result.data.image_url,
+        image_public_id: result.data.storage_path,
+        image_alt: result.data.alt_text || editing.title,
+        updated_at: new Date().toISOString(),
+      }).eq('id', editing.id);
+      if (coverError) throw new Error(coverError.message);
+    }
     const images = [...editing.images]; images[slot] = result.data;
     markEditing({ ...editing, images: images.filter(Boolean).map((item, index) => ({ ...item, sort_order: index + 1, is_primary: index === 0 })) });
     setGallerySlot(null); await loadTours();

@@ -303,7 +303,11 @@ export default function AdminImageManager({
             className="sr-only"
             aria-label="Elegir archivo de imagen"
             disabled={disabled}
-            onChange={(event) => acceptFile(event.target.files?.[0] ?? null)}
+            onChange={(event) => {
+              acceptFile(event.target.files?.[0] ?? null);
+              // Allow selecting the same file again after replacing an image.
+              event.currentTarget.value = '';
+            }}
           />
         </label>
         {imageUrl && storagePath && !requireReplacementToDelete ? (

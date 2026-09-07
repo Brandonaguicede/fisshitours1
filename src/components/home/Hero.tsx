@@ -85,6 +85,7 @@ export function Hero() {
   const [activeSlide, setActiveSlide] = useState(0);
   const reduceMotion = useReducedMotion();
   const [videoFailed, setVideoFailed] = useState(false);
+  const [videoReady, setVideoReady] = useState(false);
   const videoUrl = hero['home.hero.video'];
   const mobileVideoUrl = hero['home.hero.mobile_video'] || videoUrl;
   const posterUrl = hero['home.hero.video_poster'] || hero['home.hero.image'] || FALLBACK_HERO_IMAGE;
@@ -102,6 +103,7 @@ export function Hero() {
 
   useEffect(() => {
     setVideoFailed(false);
+    setVideoReady(false);
   }, [videoUrl, mobileVideoUrl]);
 
   useEffect(() => {
@@ -125,8 +127,12 @@ export function Hero() {
     >
       {showVideo ? (
         <>
-          <video className="absolute inset-0 hidden h-full w-full object-cover object-center sm:block" src={videoUrl || mobileVideoUrl} poster={posterUrl} autoPlay muted loop playsInline preload="auto" aria-hidden="true" onError={() => setVideoFailed(true)} />
-          <video className="absolute inset-0 h-full w-full object-cover object-center sm:hidden" src={mobileVideoUrl} poster={posterUrl} autoPlay muted loop playsInline preload="auto" aria-hidden="true" onError={() => setVideoFailed(true)} />
+          <picture className="absolute inset-0 block">
+            <source media="(max-width: 639px)" srcSet={hero['home.hero.mobile_image'] || hero['home.hero.image'] || FALLBACK_HERO_IMAGE} />
+            <img className="h-full w-full object-cover object-center" src={hero['home.hero.image'] || FALLBACK_HERO_IMAGE} alt="" aria-hidden="true" />
+          </picture>
+          <video className="absolute inset-0 hidden h-full w-full object-cover object-center transition-opacity duration-150 ease-linear sm:block" style={{ opacity: videoReady ? 1 : 0 }} src={videoUrl || mobileVideoUrl} poster={posterUrl} autoPlay muted loop playsInline preload="auto" aria-hidden="true" onCanPlay={() => setVideoReady(true)} onError={() => setVideoFailed(true)} />
+          <video className="absolute inset-0 h-full w-full object-cover object-center transition-opacity duration-150 ease-linear sm:hidden" style={{ opacity: videoReady ? 1 : 0 }} src={mobileVideoUrl} poster={posterUrl} autoPlay muted loop playsInline preload="auto" aria-hidden="true" onCanPlay={() => setVideoReady(true)} onError={() => setVideoFailed(true)} />
         </>
       ) : (
         slides.map((slide, index) => (

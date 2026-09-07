@@ -28,9 +28,9 @@ interface DraftPackage {
   packageType: string;
   durationHours: string;
   basePrice: string;
-  includedGuests: number;
-  maxGuests: number;
-  extraGuestPrice: number;
+  includedGuests: string;
+  maxGuests: string;
+  extraGuestPrice: string;
   description: string;
   customQuote: boolean;
   active: boolean;
@@ -48,9 +48,9 @@ function rowToDraft(row: AdminPackageRow, tourId: string): DraftPackage {
     packageType: row.package_type,
     durationHours: row.duration_minutes == null ? '' : String(row.duration_minutes / 60),
     basePrice: String(row.base_price),
-    includedGuests: row.included_guests,
-    maxGuests: row.max_guests,
-    extraGuestPrice: Number(row.extra_guest_price),
+    includedGuests: String(row.included_guests),
+    maxGuests: String(row.max_guests),
+    extraGuestPrice: String(row.extra_guest_price),
     description: row.description ?? '',
     customQuote: row.custom_quote,
     active: row.active,
@@ -67,9 +67,9 @@ function newDraft(tourId: string, boatMaxGuests: number, sortOrder: number): Dra
     packageType: '',
     durationHours: '',
     basePrice: '',
-    includedGuests: 1,
-    maxGuests: boatMaxGuests,
-    extraGuestPrice: 0,
+    includedGuests: '1',
+    maxGuests: String(boatMaxGuests),
+    extraGuestPrice: '0',
     description: '',
     customQuote: false,
     active: true,
@@ -88,13 +88,15 @@ function validateDraft(draft: DraftPackage, boatMaxGuests: number): FieldErrors 
   if (!draft.basePrice.trim() || !Number.isFinite(Number(draft.basePrice)) || Number(draft.basePrice) < 0) {
     errors[`${key}-price`] = 'Ingresa un precio válido.';
   }
-  if (!Number.isFinite(draft.includedGuests) || draft.includedGuests < 1) {
+  const includedGuests = Number(draft.includedGuests);
+  const extraGuestPrice = Number(draft.extraGuestPrice);
+  if (!Number.isFinite(includedGuests) || includedGuests < 1) {
     errors[`${key}-included`] = 'Debe incluir al menos una persona.';
   }
-  if (draft.includedGuests > boatMaxGuests) {
+  if (includedGuests > boatMaxGuests) {
     errors[`${key}-included`] = `El bote admite máximo ${boatMaxGuests} personas.`;
   }
-  if (!Number.isFinite(draft.extraGuestPrice) || draft.extraGuestPrice < 0) {
+  if (!Number.isFinite(extraGuestPrice) || extraGuestPrice < 0) {
     errors[`${key}-extra`] = 'El extra no puede ser negativo.';
   }
   return errors;
@@ -155,7 +157,8 @@ function PackageDraftEditor({ draft, fieldErrors, busy, boatMaxGuests, onChange,
           <span className="admin-field__label">Cantidad de horas (opcional)</span>
           <input
             className="admin-input"
-            type="number"
+            type="text"
+            inputMode="decimal"
             min={0.5}
             step={0.5}
             value={draft.durationHours}
@@ -167,7 +170,8 @@ function PackageDraftEditor({ draft, fieldErrors, busy, boatMaxGuests, onChange,
           <span className="admin-field__label">Precio base (USD)</span>
           <input
             className="admin-input admin-input--manual-number"
-            type="number"
+            type="text"
+            inputMode="decimal"
             min={0}
             step="any"
             value={draft.basePrice}
@@ -183,7 +187,7 @@ function PackageDraftEditor({ draft, fieldErrors, busy, boatMaxGuests, onChange,
             min={1}
             max={boatMaxGuests}
             value={draft.includedGuests}
-            onChange={(event) => onChange({ includedGuests: Number(event.target.value) })}
+            onChange={(event) => onChange({ includedGuests: event.target.value })}
           />
           {fieldErrors[`${key}-included`] ? <span className="admin-field-error">{fieldErrors[`${key}-included`]}</span> : null}
         </label>
@@ -195,7 +199,7 @@ function PackageDraftEditor({ draft, fieldErrors, busy, boatMaxGuests, onChange,
             min={1}
             max={boatMaxGuests}
             value={draft.maxGuests}
-            onChange={(event) => onChange({ maxGuests: Number(event.target.value) })}
+            onChange={(event) => onChange({ maxGuests: event.target.value })}
           />
           <span className="admin-field-help">Se limita al techo físico del bote ({boatMaxGuests}).</span>
         </label>
@@ -203,10 +207,11 @@ function PackageDraftEditor({ draft, fieldErrors, busy, boatMaxGuests, onChange,
           <span className="admin-field__label">Extra por persona adicional (USD)</span>
           <input
             className="admin-input"
-            type="number"
+            type="text"
+            inputMode="decimal"
             min={0}
             value={draft.extraGuestPrice}
-            onChange={(event) => onChange({ extraGuestPrice: Number(event.target.value) })}
+            onChange={(event) => onChange({ extraGuestPrice: event.target.value })}
           />
           {fieldErrors[`${key}-extra`] ? <span className="admin-field-error">{fieldErrors[`${key}-extra`]}</span> : null}
         </label>
@@ -273,6 +278,11 @@ export default function BoatToursPackagesEditor({ boatId, boatName, boatMaxGuest
     return map;
   }, [data]);
 
+  const catalogTours = useMemo(
+    () => Array.from(new Map((data?.tours ?? []).map((tour) => [tour.id, tour])).values()),
+    [data],
+  );
+
   const packagesByTour = useMemo(() => {
     const map = new Map<string, AdminPackageRow[]>();
     const linkTour = new Map((data?.links ?? []).map((link) => [link.id, link.tour_id]));
@@ -288,12 +298,12 @@ export default function BoatToursPackagesEditor({ boatId, boatName, boatMaxGuest
   }, [data]);
 
   const assignedTours = useMemo(
-    () => (data?.tours ?? []).filter((tour) => linkByTour.has(tour.id)),
-    [data, linkByTour],
+    () => catalogTours.filter((tour) => linkByTour.has(tour.id)),
+    [catalogTours, linkByTour],
   );
   const availableTours = useMemo(
-    () => (data?.tours ?? []).filter((tour) => !linkByTour.has(tour.id)),
-    [data, linkByTour],
+    () => catalogTours.filter((tour) => !linkByTour.has(tour.id)),
+    [catalogTours, linkByTour],
   );
 
   async function run(action: () => Promise<void>, okMessage?: string) {
@@ -347,9 +357,9 @@ export default function BoatToursPackagesEditor({ boatId, boatName, boatMaxGuest
       packageType: draft.packageType || packageSlug(draft.name),
       durationMinutes: draft.durationHours.trim() ? Math.round(Number(draft.durationHours) * 60) : null,
       basePrice: Number(draft.basePrice),
-      includedGuests: draft.includedGuests,
-      maxGuests: draft.maxGuests,
-      extraGuestPrice: draft.extraGuestPrice,
+      includedGuests: Number(draft.includedGuests),
+      maxGuests: Number(draft.maxGuests),
+      extraGuestPrice: Number(draft.extraGuestPrice),
       description: draft.description.trim() || null,
       customQuote: draft.customQuote,
       active: draft.active,
@@ -382,7 +392,7 @@ export default function BoatToursPackagesEditor({ boatId, boatName, boatMaxGuest
         icon={<Check size={16} />}
       >
         <div className="admin-dynamic-list">
-          {(data?.tours ?? []).map((tour) => {
+          {catalogTours.map((tour) => {
             const enabled = linkByTour.get(tour.id)?.active === true;
             const activeCount = (packagesByTour.get(tour.id) ?? []).filter((row) => row.active).length;
             return (

@@ -4,6 +4,28 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer utilities {
+  .section-reveal {
+    opacity: 0;
+    transform: translate3d(0, 14px, 0);
+    transition: opacity 420ms ease-out, transform 420ms ease-out;
+  }
+
+  .section-reveal--visible {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .section-reveal,
+    .section-reveal--visible {
+      opacity: 1;
+      transform: none;
+      transition: none;
+    }
+  }
+}
+
 @layer base {
   :root {
     color-scheme: dark;
