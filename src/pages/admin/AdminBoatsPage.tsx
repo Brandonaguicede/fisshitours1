@@ -103,7 +103,7 @@ export default function AdminBoatsPage() {
   const [startingPrices, setStartingPrices] = useState<Record<string, number>>({});
   const [fieldErrors, setFieldErrors] = useState<{ id?: string; slug?: string; name?: string; maxGuests?: string; images?: string }>({});
 
-  const isValidActiveImageCount = (count: number) => count >= 3 && count <= 9 && count % 3 === 0;
+  const isValidActiveImageCount = (count: number) => count === 3 || count === 6;
 
   async function loadBoats() {
     setLoading(true);
@@ -287,7 +287,7 @@ export default function AdminBoatsPage() {
     }
     const activeImageCount = (editing.boat_images?.length ? editing.boat_images : fallbackBoatImages(editing)).filter((image) => image.active).length;
     if (editing.active && !isValidActiveImageCount(activeImageCount)) {
-      nextFieldErrors.images = 'Para activar el bote necesitas exactamente 3, 6 o 9 imagenes.';
+      nextFieldErrors.images = 'Para activar el bote necesitas exactamente 3 o 6 imagenes.';
     }
     setFieldErrors(nextFieldErrors);
     if (Object.keys(nextFieldErrors).length > 0) {
@@ -354,7 +354,7 @@ export default function AdminBoatsPage() {
   async function onGalleryImageSaved(image: StorageImage) {
     if (!editing) return;
     const currentImages = editing.boat_images ?? [];
-    if (currentImages.length >= 9) throw new Error('El bote ya alcanzo el maximo de 9 imagenes.');
+    if (currentImages.length >= 6) throw new Error('El bote ya alcanzo el maximo de 6 imagenes.');
     const nextImageCount = currentImages.length + 1;
     const deactivatedForImageCount = editing.active && !isValidActiveImageCount(nextImageCount);
     if (deactivatedForImageCount) {
@@ -592,12 +592,12 @@ export default function AdminBoatsPage() {
                         maxWidth={1600}
                         maxHeight={900}
                         maxSizeMB={0.6}
-                        disabled={editorImages.length >= 9}
+                      disabled={editorImages.length >= 6}
                         retainPreviousOnUpload
                         onImageSaved={onGalleryImageSaved}
                       />
                       <p className="admin-field-help" aria-live="polite">
-                        {editorImages.length} / 9 imagenes. Para activar el bote necesitas 3, 6 o 9 imagenes. Maximo 9 imagenes.
+                        {editorImages.length} / 6 imagenes. Para activar el bote necesitas 3 o 6 imagenes. Maximo 6 imagenes.
                       </p>
                       {fieldErrors.images ? <span className="admin-field-error">{fieldErrors.images}</span> : null}
                     </>
@@ -673,7 +673,7 @@ export default function AdminBoatsPage() {
                   checked={editing.active}
                   onChange={(active) => {
                     if (active && !isValidActiveImageCount(editorImages.length)) {
-                      setFieldErrors((current) => ({ ...current, images: 'Para activar el bote necesitas exactamente 3, 6 o 9 imagenes.' }));
+                      setFieldErrors((current) => ({ ...current, images: 'Para activar el bote necesitas exactamente 3 o 6 imagenes.' }));
                       return;
                     }
                     setFieldErrors((current) => {

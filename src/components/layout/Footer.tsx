@@ -93,6 +93,12 @@ export function Footer() {
             <span className="flex items-center gap-2">
               <Mail size={16} /> info@papagayofishingtours.com
             </span>
+            <div className="mt-4">
+              <p className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-ocean-300">
+                {language === 'es' ? 'Métodos de pago' : 'Payment methods'}
+              </p>
+              <img className="h-auto w-full max-w-[250px] rounded-lg bg-white object-contain" src="/about/image.png" alt={language === 'es' ? 'Visa, Mastercard y American Express' : 'Visa, Mastercard and American Express'} />
+            </div>
           </div>
         </div>
       </Container>
