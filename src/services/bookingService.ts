@@ -55,9 +55,17 @@ export interface CreateBookingRequest {
   turnstileToken?: string;
 }
 
-export interface AdminCreateBookingRequest extends Omit<CreateBookingRequest, 'turnstileToken'> {
-  markAsPaid?: boolean;
+export interface AdminCreateBookingRequest extends Omit<CreateBookingRequest, 'turnstileToken' | 'customer'> {
+  customer: Omit<CreateBookingRequest['customer'], 'email'> & { email?: string };
   adminNote?: string;
+}
+
+export interface AdminConfirmBookingResult {
+  booking_id: string;
+  booking_status: string;
+  payment_status: string;
+  customerEmailPresent: boolean;
+  emailQueued: boolean;
 }
 
 export interface BookingResult {
@@ -114,6 +122,28 @@ export function createBooking(input: CreateBookingRequest) {
 
 export function adminCreateBooking(input: AdminCreateBookingRequest) {
   return callFunction<BookingResult>('admin-create-booking', input);
+}
+
+export function confirmBooking(bookingId: string) {
+  return callFunction<AdminConfirmBookingResult>('admin-confirm-booking', { bookingId });
+}
+
+export function retryConfirmationEmail(bookingId: string) {
+  return callFunction<{ customerEmailPresent: boolean; queued: number }>('admin-retry-confirmation-email', { bookingId });
+}
+
+export function updateBooking(input: {
+  bookingId: string;
+  customer: { fullName: string; email?: string; whatsapp: string; country?: string };
+  boatId: string;
+  tourId: string;
+  tourPackageId: string;
+  tourDate: string;
+  timeSlotId: string;
+  guests: number;
+  specialRequests?: string;
+}) {
+  return callFunction<{ booking_id: string; booking_status: string; payment_status: string }>('admin-update-booking', input);
 }
 
 export async function getActiveDepartureLocations() {

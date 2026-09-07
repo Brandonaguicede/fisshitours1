@@ -103,6 +103,10 @@ Estructura actual:
 - `paypal-create-order`
 - `paypal-capture-order`
 - `paypal-webhook`
+- `admin-confirm-booking`
+- `admin-update-booking`
+- `admin-retry-confirmation-email`
+- `process-booking-emails`
 - `storage-upload-image`
 - `storage-delete-image`
 - `create-review`

@@ -5,12 +5,17 @@ import { AdminBadge, AdminModuleSurface, AdminTable, AdminToolbar } from '../../
 import { Modal } from '../../components/common/Modal';
 import { supabase } from '../../lib/supabase';
 import { getActiveBoatTours, getActiveTimeSlots } from '../../services/boatTourService';
-import { adminCreateBooking, getActiveDepartureLocations, type DepartureLocation } from '../../services/bookingService';
+import { adminCreateBooking, confirmBooking, getActiveDepartureLocations, retryConfirmationEmail, updateBooking, type DepartureLocation } from '../../services/bookingService';
 import type { BoatTour, TourTimeSlot } from '../../types/boatTour';
 import { money } from './adminMockData';
 
 interface AdminReservation {
   id: string;
+  boat_id: string;
+  tour_id: string;
+  tour_package_id: string;
+  time_slot_id: string;
+  special_requests: string | null;
   booking_reference: string;
   tour_date: string;
   guests: number;
@@ -23,7 +28,7 @@ interface AdminReservation {
   created_at: string;
   customers: {
     full_name: string;
-    email: string;
+    email: string | null;
     whatsapp: string;
   } | null;
   boats: {
@@ -70,11 +75,22 @@ const emptyManualBooking = {
   timeSlotId: '',
   guests: 1,
   departureLocationId: '',
-  markAsPaid: true,
   specialRequests: '',
 };
 
 type ManualBookingForm = typeof emptyManualBooking;
+
+type EditBookingForm = {
+  fullName: string;
+  email: string;
+  whatsapp: string;
+  country: string;
+  tourPackageId: string;
+  tourDate: string;
+  timeSlotId: string;
+  guests: number;
+  specialRequests: string;
+};
 
 export default function AdminReservationsPage() {
   const db = supabase as any;
@@ -90,10 +106,15 @@ export default function AdminReservationsPage() {
   const [catalogLoading, setCatalogLoading] = useState(true);
   const [busyId, setBusyId] = useState('');
   const [manualOpen, setManualOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editSaving, setEditSaving] = useState(false);
+  const [editingReservation, setEditingReservation] = useState<AdminReservation | null>(null);
+  const [editForm, setEditForm] = useState<EditBookingForm | null>(null);
   const [manualSaving, setManualSaving] = useState(false);
   const [manualForm, setManualForm] = useState<ManualBookingForm>(emptyManualBooking);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [confirmationSentByBooking, setConfirmationSentByBooking] = useState<Record<string, boolean>>({});
   const [filtersOpen, setFiltersOpen] = useState(false);
   const filterTriggerRef = useRef<HTMLButtonElement>(null);
   const filterPanelRef = useRef<HTMLDivElement>(null);
@@ -131,10 +152,16 @@ export default function AdminReservationsPage() {
     setLoading(true);
     setError('');
 
-    const { data, error } = await db
+    const [{ data, error }, { data: notificationRows }] = await Promise.all([
+      db
       .from('bookings')
       .select(`
         id,
+        boat_id,
+        tour_id,
+        tour_package_id,
+        time_slot_id,
+        special_requests,
         booking_reference,
         tour_date,
         guests,
@@ -151,7 +178,10 @@ export default function AdminReservationsPage() {
         time_slots (label)
       `)
       .order('tour_date', { ascending: true })
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false }),
+      db.from('booking_notifications').select('booking_id, dedupe_key, sent_at')
+        .like('dedupe_key', 'booking:%:paypal-confirmation-customer-email'),
+    ]);
 
     setLoading(false);
     if (error) {
@@ -161,6 +191,7 @@ export default function AdminReservationsPage() {
     }
 
     setReservations((data ?? []) as AdminReservation[]);
+    setConfirmationSentByBooking(Object.fromEntries((notificationRows ?? []).map((row: { booking_id: string; sent_at: string | null }) => [row.booking_id, Boolean(row.sent_at)])));
   }
 
   useEffect(() => {
@@ -214,14 +245,19 @@ export default function AdminReservationsPage() {
         ? 'failed'
         : reservation.payment_status;
 
-    const { error } = await db.rpc('update_booking_status', {
-      p_booking_id: reservation.id,
-      p_booking_status: nextBookingStatus,
-      p_payment_status: nextPaymentStatus,
-      p_note: nextBookingStatus === 'confirmed'
-        ? 'Reserva confirmada desde admin. Bote bloqueado en disponibilidad.'
-        : 'Reserva cancelada desde admin. Bloqueo liberado.',
-    });
+    let confirmationResult = { customerEmailPresent: false, emailQueued: false };
+    const { error } = nextBookingStatus === 'confirmed'
+      ? await confirmBooking(reservation.id)
+        .then((result) => {
+          confirmationResult = result;
+          return { error: null };
+        }, (confirmError) => ({ error: confirmError }))
+      : await db.rpc('update_booking_status', {
+        p_booking_id: reservation.id,
+        p_booking_status: nextBookingStatus,
+        p_payment_status: nextPaymentStatus,
+        p_note: 'Reserva cancelada desde admin. Bloqueo liberado.',
+      });
 
     setBusyId('');
     if (error) {
@@ -229,10 +265,35 @@ export default function AdminReservationsPage() {
       return;
     }
 
-    setNotice(nextBookingStatus === 'confirmed'
-      ? 'Reserva confirmada. El bote queda bloqueado para esa fecha y horario.'
-      : 'Reserva cancelada. El bloqueo de disponibilidad fue liberado.');
+    if (nextBookingStatus === 'confirmed') {
+      const customerEmailPresent = confirmationResult.customerEmailPresent;
+      const emailQueued = confirmationResult.emailQueued;
+      setNotice(!customerEmailPresent
+        ? 'Reserva confirmada. El cliente no tiene email; no se envió correo. El bote queda bloqueado.'
+        : emailQueued
+          ? 'Reserva confirmada. El correo de confirmación quedó encolado y el bote queda bloqueado.'
+          : 'Reserva confirmada, pero el correo no pudo encolarse. El bote queda bloqueado.');
+    } else {
+      setNotice('Reserva cancelada. El bloqueo de disponibilidad fue liberado.');
+    }
     await loadReservations();
+  }
+
+  async function retryReservationConfirmation(reservation: AdminReservation) {
+    setBusyId(reservation.id);
+    setNotice('');
+    setError('');
+    try {
+      const result = await retryConfirmationEmail(reservation.id);
+      setNotice(result.customerEmailPresent
+        ? 'La confirmación quedó encolada para reintento.'
+        : 'La reserva no tiene email; no se encoló ningún correo.');
+      await loadReservations();
+    } catch (retryError) {
+      setError(retryError instanceof Error ? retryError.message : 'No se pudo reintentar el correo.');
+    } finally {
+      setBusyId('');
+    }
   }
 
   const visibleReservations = useMemo(() => {
@@ -267,6 +328,61 @@ export default function AdminReservationsPage() {
 
   function updateManualForm<K extends keyof ManualBookingForm>(key: K, value: ManualBookingForm[K]) {
     setManualForm((current) => ({ ...current, [key]: value }));
+  }
+
+  function openEdit(reservation: AdminReservation) {
+    const tour = tours.find((item) => item.id === reservation.tour_package_id);
+    setEditingReservation(reservation);
+    setEditForm({
+      fullName: reservation.customers?.full_name ?? '',
+      email: reservation.customers?.email ?? '',
+      whatsapp: reservation.customers?.whatsapp ?? '',
+      country: '',
+      tourPackageId: tour?.id ?? reservation.tour_package_id ?? tours[0]?.id ?? '',
+      tourDate: reservation.tour_date,
+      timeSlotId: reservation.time_slot_id ?? timeSlots[0]?.id ?? '',
+      guests: reservation.guests,
+      specialRequests: reservation.special_requests ?? '',
+    });
+    setEditOpen(true);
+  }
+
+  function updateEditForm<K extends keyof EditBookingForm>(key: K, value: EditBookingForm[K]) {
+    setEditForm((current) => current ? { ...current, [key]: value } : current);
+  }
+
+  async function saveEdit() {
+    if (!editingReservation || !editForm) return;
+    const selectedEditTour = tours.find((tour) => tour.id === editForm.tourPackageId);
+    if (!selectedEditTour?.boatId || !selectedEditTour.tourId) {
+      setError('Selecciona un tour y paquete válidos.');
+      return;
+    }
+    setEditSaving(true);
+    setError('');
+    setNotice('');
+    try {
+      await updateBooking({
+        bookingId: editingReservation.id,
+        customer: { fullName: editForm.fullName, email: editForm.email, whatsapp: editForm.whatsapp, country: editForm.country },
+        boatId: selectedEditTour.boatId,
+        tourId: selectedEditTour.tourId,
+        tourPackageId: selectedEditTour.id,
+        tourDate: editForm.tourDate,
+        timeSlotId: editForm.timeSlotId,
+        guests: Number(editForm.guests),
+        specialRequests: editForm.specialRequests,
+      });
+      setEditOpen(false);
+      setEditingReservation(null);
+      setEditForm(null);
+      setNotice('Cambios guardados. El estado y el pago de la reserva se conservaron; no se envió confirmación.');
+      await loadReservations();
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : 'No se pudo guardar la reserva.');
+    } finally {
+      setEditSaving(false);
+    }
   }
 
   function exportCsv() {
@@ -325,14 +441,11 @@ export default function AdminReservationsPage() {
         paymentMethodKey: 'whatsapp-link',
         extras: [],
         specialRequests: manualForm.specialRequests,
-        markAsPaid: manualForm.markAsPaid,
-        adminNote: manualForm.markAsPaid
-          ? 'Reserva manual creada desde WhatsApp/link y marcada como pagada.'
-          : 'Reserva manual creada desde WhatsApp/link pendiente de pago.',
+        adminNote: 'Reserva manual guardada desde WhatsApp/link. Pendiente de confirmación administrativa.',
       });
       setManualOpen(false);
       setManualForm(emptyManualBooking);
-      setNotice(`Reserva ${result.booking_reference} creada${manualForm.markAsPaid ? ' y marcada como pagada' : ''}.`);
+      setNotice(`Reserva ${result.booking_reference} guardada como pendiente. Usa "Confirmar" para confirmar y enviar el correo.`);
       await loadReservations();
     } catch (manualError) {
       setError(manualError instanceof Error ? manualError.message : 'No se pudo crear la reserva manual.');
@@ -433,6 +546,7 @@ export default function AdminReservationsPage() {
               <td><AdminBadge value={reservation.booking_status} /></td>
               <td>
                 <div className="flex flex-wrap gap-2">
+                  <button className="admin-btn admin-btn--secondary" type="button" disabled={busyId === reservation.id} onClick={() => openEdit(reservation)}>Editar</button>
                   <button
                     className="admin-btn admin-btn--success"
                     type="button"
@@ -441,6 +555,16 @@ export default function AdminReservationsPage() {
                   >
                     <Check size={14} /> Confirmar
                   </button>
+                  {reservation.booking_status === 'confirmed' && reservation.customers?.email && !confirmationSentByBooking[reservation.id] ? (
+                    <button
+                      className="admin-btn admin-btn--secondary"
+                      type="button"
+                      disabled={busyId === reservation.id}
+                      onClick={() => void retryReservationConfirmation(reservation)}
+                    >
+                      Reintentar email
+                    </button>
+                  ) : null}
                   <button
                     className="admin-btn admin-btn--danger"
                     type="button"
@@ -480,7 +604,7 @@ export default function AdminReservationsPage() {
                 </label>
                 <label className="admin-field">
                   <span className="admin-field__label">Email</span>
-                  <input className="admin-input" required type="email" value={manualForm.email} onChange={(event) => updateManualForm('email', event.target.value)} />
+                  <input className="admin-input" type="email" value={manualForm.email} onChange={(event) => updateManualForm('email', event.target.value)} />
                 </label>
                 <label className="admin-field">
                   <span className="admin-field__label">WhatsApp</span>
@@ -524,10 +648,6 @@ export default function AdminReservationsPage() {
                   <span className="admin-field__label">Notas</span>
                   <textarea className="admin-input admin-textarea-list" value={manualForm.specialRequests} onChange={(event) => updateManualForm('specialRequests', event.target.value)} />
                 </label>
-                <label className="admin-check admin-field--wide">
-                  <input type="checkbox" checked={manualForm.markAsPaid} onChange={(event) => updateManualForm('markAsPaid', event.target.checked)} />
-                  Marcar como pagada y confirmada
-                </label>
               </div>
               <div className="admin-reservation-total">
                 <span>Total estimado</span>
@@ -543,6 +663,28 @@ export default function AdminReservationsPage() {
               Crear reserva
             </button>
           </footer>
+        </form>
+      </Modal>
+      <Modal open={editOpen} onClose={() => setEditOpen(false)} titleId="edit-booking-title" className="admin-reservation-modal">
+        <form className="admin-modal-shell" onSubmit={(event) => { event.preventDefault(); void saveEdit(); }}>
+          <header className="admin-modal-header">
+            <div>
+              <h2 id="edit-booking-title" className="admin-card__title">Editar reserva</h2>
+              <p className="admin-muted">Guardar cambios no confirma ni vuelve a enviar el correo.</p>
+            </div>
+            <button className="admin-icon-btn" type="button" aria-label="Cerrar" onClick={() => setEditOpen(false)}><X size={18} /></button>
+          </header>
+          {editForm ? <div className="admin-modal-body"><div className="admin-form-section"><div className="admin-form-columns">
+            <label className="admin-field"><span className="admin-field__label">Nombre del cliente</span><input className="admin-input" required value={editForm.fullName} onChange={(event) => updateEditForm('fullName', event.target.value)} /></label>
+            <label className="admin-field"><span className="admin-field__label">Email</span><input className="admin-input" type="email" value={editForm.email} onChange={(event) => updateEditForm('email', event.target.value)} /></label>
+            <label className="admin-field"><span className="admin-field__label">WhatsApp</span><input className="admin-input" required value={editForm.whatsapp} onChange={(event) => updateEditForm('whatsapp', event.target.value)} /></label>
+            <label className="admin-field"><span className="admin-field__label">Tour / paquete</span><select className="admin-select" required value={editForm.tourPackageId} onChange={(event) => updateEditForm('tourPackageId', event.target.value)}>{tours.map((tour) => <option key={tour.id} value={tour.id}>{tour.tourTitle ?? tour.name} - {tour.name}</option>)}</select></label>
+            <label className="admin-field"><span className="admin-field__label">Fecha</span><input className="admin-input" required type="date" value={editForm.tourDate} onChange={(event) => updateEditForm('tourDate', event.target.value)} /></label>
+            <label className="admin-field"><span className="admin-field__label">Hora</span><select className="admin-select" required value={editForm.timeSlotId} onChange={(event) => updateEditForm('timeSlotId', event.target.value)}>{timeSlots.map((slot) => <option key={slot.id} value={slot.id}>{slot.label}</option>)}</select></label>
+            <label className="admin-field"><span className="admin-field__label">Personas</span><input className="admin-input" required type="number" min={1} value={editForm.guests} onChange={(event) => updateEditForm('guests', Number(event.target.value))} /></label>
+            <label className="admin-field admin-field--wide"><span className="admin-field__label">Notas</span><textarea className="admin-input admin-textarea-list" value={editForm.specialRequests} onChange={(event) => updateEditForm('specialRequests', event.target.value)} /></label>
+          </div></div></div> : null}
+          <footer className="admin-modal-footer"><button className="admin-btn admin-btn--secondary" type="button" onClick={() => setEditOpen(false)}>Cancelar</button><button className="admin-btn" type="submit" disabled={editSaving || !editForm}>{editSaving ? <Loader2 className="animate-spin" size={15} /> : <Check size={15} />} Guardar cambios</button></footer>
         </form>
       </Modal>
     </div>

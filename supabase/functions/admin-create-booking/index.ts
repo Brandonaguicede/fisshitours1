@@ -6,7 +6,7 @@ import { corsHeaders, corsPreflight } from '../_shared/cors.ts';
 const schema = z.object({
   customer: z.object({
     fullName: z.string().min(2).max(120),
-    email: z.string().email(),
+    email: z.union([z.string().email(), z.literal('')]).optional(),
     whatsapp: z.string().min(7).max(32),
     country: z.string().max(80).optional(),
   }),
@@ -21,7 +21,6 @@ const schema = z.object({
   specialRequests: z.string().max(1000).optional(),
   paymentMethodKey: z.enum(['whatsapp-link', 'pay-on-day']).default('whatsapp-link'),
   extras: z.array(z.object({ key: z.string().min(1).max(80), quantity: z.number().int().positive() })).default([]),
-  markAsPaid: z.boolean().default(false),
   adminNote: z.string().max(1000).optional(),
 });
 
@@ -64,17 +63,6 @@ serve(async (req) => {
   if (error) {
     const message = error.message || 'Booking could not be created';
     return Response.json({ message }, { status: message.includes('already reserved') ? 409 : 400, headers });
-  }
-
-  if (parsed.data.markAsPaid && data?.booking_id) {
-    const { data: statusData, error: statusError } = await userClient.rpc('update_booking_status', {
-      p_booking_id: data.booking_id,
-      p_booking_status: 'confirmed',
-      p_payment_status: 'paid',
-      p_note: clean(parsed.data.adminNote) ?? 'Reserva creada manualmente desde admin como pagada por WhatsApp/link.',
-    });
-    if (statusError) return Response.json({ message: statusError.message }, { status: 400, headers });
-    return Response.json({ ...data, ...statusData }, { status: 201, headers });
   }
 
   return Response.json(data, { status: 201, headers });

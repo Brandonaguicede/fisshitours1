@@ -1,6 +1,7 @@
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { areExternalProviderMocksAllowed } from '../_shared/environment.ts';
+import { enqueueBookingConfirmationEmails } from '../_shared/booking-confirmation-email.ts';
 
 serve(async (req) => {
   if (req.method !== 'POST') return Response.json({ message: 'Method not allowed' }, { status: 405 });
@@ -24,20 +25,38 @@ serve(async (req) => {
   const { data: inserted, error: insertError } = await supabase
     .from('payment_webhook_events')
     .insert({ provider: 'paypal', provider_event_id: providerEventId, event_type: eventType, payload })
-    .select('id')
+    .select('id, processed, payload')
     .single();
 
+  let event = inserted;
   if (insertError) {
-    if (insertError.code === '23505') return Response.json({ ok: true, duplicate: true });
-    return Response.json({ message: 'Webhook event could not be stored' }, { status: 400 });
+    if (insertError.code === '23505') {
+      const { data: existing, error: existingError } = await supabase
+        .from('payment_webhook_events')
+        .select('id, processed, payload')
+        .eq('provider', 'paypal')
+        .eq('provider_event_id', providerEventId)
+        .single();
+      if (existingError || !existing) return Response.json({ message: 'Webhook event could not be loaded' }, { status: 500 });
+      if (existing.processed) return Response.json({ ok: true, duplicate: true });
+      event = existing;
+    } else {
+      return Response.json({ message: 'Webhook event could not be stored' }, { status: 400 });
+    }
   }
 
-  await processPayPalEvent(supabase, payload);
+  try {
+    await processPayPalEvent(supabase, event.payload);
+  } catch (error) {
+    console.error('PayPal webhook processing failed', error);
+    return Response.json({ message: 'PayPal webhook processing failed' }, { status: 500 });
+  }
 
-  await supabase
+  const { error: processedError } = await supabase
     .from('payment_webhook_events')
     .update({ processed: true, processed_at: new Date().toISOString() })
-    .eq('id', inserted.id);
+    .eq('id', event.id);
+  if (processedError) return Response.json({ message: 'Webhook event could not be marked as processed' }, { status: 500 });
 
   return Response.json({ ok: true });
 });
@@ -122,7 +141,7 @@ async function processPayPalEvent(supabase: ReturnType<typeof createClient>, pay
   if (!payment?.booking_id) return;
 
   if (eventType === 'PAYMENT.CAPTURE.COMPLETED') {
-    await supabase.rpc('mark_paypal_payment_paid', {
+    const { error } = await supabase.rpc('mark_paypal_payment_paid', {
       p_booking_id: payment.booking_id,
       p_paypal_order_id: orderId,
       p_paypal_capture_id: captureId,
@@ -130,26 +149,30 @@ async function processPayPalEvent(supabase: ReturnType<typeof createClient>, pay
       p_currency: currency,
       p_raw_response: payload,
     });
+    if (error) throw error;
+    await enqueueBookingConfirmationEmails(supabase, payment.booking_id);
     return;
   }
 
   if (eventType === 'PAYMENT.CAPTURE.DENIED' || eventType === 'PAYMENT.CAPTURE.DECLINED') {
-    await supabase.rpc('mark_paypal_payment_unsuccessful', {
+    const { error } = await supabase.rpc('mark_paypal_payment_unsuccessful', {
       p_booking_id: payment.booking_id,
       p_paypal_order_id: orderId,
       p_status: eventType,
       p_raw_response: payload,
     });
+    if (error) throw error;
     return;
   }
 
   if (eventType === 'PAYMENT.CAPTURE.REFUNDED' || eventType === 'PAYMENT.CAPTURE.REVERSED') {
-    await supabase.rpc('mark_paypal_payment_refunded', {
+    const { error } = await supabase.rpc('mark_paypal_payment_refunded', {
       p_booking_id: payment.booking_id,
       p_paypal_order_id: orderId,
       p_amount: amount,
       p_currency: currency,
       p_raw_response: payload,
     });
+    if (error) throw error;
   }
 }
