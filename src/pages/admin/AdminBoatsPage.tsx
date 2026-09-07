@@ -103,7 +103,7 @@ export default function AdminBoatsPage() {
   const [startingPrices, setStartingPrices] = useState<Record<string, number>>({});
   const [fieldErrors, setFieldErrors] = useState<{ id?: string; slug?: string; name?: string; maxGuests?: string; images?: string }>({});
 
-  const isValidActiveImageCount = (count: number) => count === 3 || count === 6;
+  const isValidActiveImageCount = (count: number) => count >= 3 && count <= 6;
 
   async function loadBoats() {
     setLoading(true);
@@ -287,7 +287,7 @@ export default function AdminBoatsPage() {
     }
     const activeImageCount = (editing.boat_images?.length ? editing.boat_images : fallbackBoatImages(editing)).filter((image) => image.active).length;
     if (editing.active && !isValidActiveImageCount(activeImageCount)) {
-      nextFieldErrors.images = 'Para activar el bote necesitas exactamente 3 o 6 imagenes.';
+      nextFieldErrors.images = 'Para activar el bote necesitas al menos 3 imagenes.';
     }
     setFieldErrors(nextFieldErrors);
     if (Object.keys(nextFieldErrors).length > 0) {
@@ -597,7 +597,7 @@ export default function AdminBoatsPage() {
                         onImageSaved={onGalleryImageSaved}
                       />
                       <p className="admin-field-help" aria-live="polite">
-                        {editorImages.length} / 6 imagenes. Para activar el bote necesitas 3 o 6 imagenes. Maximo 6 imagenes.
+                        {editorImages.length} / 6 imagenes. Para activar el bote necesitas al menos 3 imagenes. Maximo 6 imagenes.
                       </p>
                       {fieldErrors.images ? <span className="admin-field-error">{fieldErrors.images}</span> : null}
                     </>
@@ -673,7 +673,7 @@ export default function AdminBoatsPage() {
                   checked={editing.active}
                   onChange={(active) => {
                     if (active && !isValidActiveImageCount(editorImages.length)) {
-                      setFieldErrors((current) => ({ ...current, images: 'Para activar el bote necesitas exactamente 3 o 6 imagenes.' }));
+                      setFieldErrors((current) => ({ ...current, images: 'Para activar el bote necesitas al menos 3 imagenes.' }));
                       return;
                     }
                     setFieldErrors((current) => {

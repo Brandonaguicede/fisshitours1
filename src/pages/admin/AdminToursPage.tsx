@@ -209,7 +209,7 @@ export default function AdminToursPage() {
   function validateFinal(editor: TourEditor) {
     const errors: FieldErrors = {};
     if (!editor.title.trim()) errors.title = 'El nombre del tour es obligatorio.';
-    if (![3, 6].includes(editor.images.length)) errors.images = 'Para finalizar se requieren exactamente 3 o 6 fotografías.';
+    if (editor.images.length < 3 || editor.images.length > 6) errors.images = 'Para finalizar se requieren entre 3 y 6 fotografías.';
     return errors;
   }
 
