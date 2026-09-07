@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Copy, Image as ImageIcon, ImagePlus, Info, Loader2, Pencil, Plus, Save, Settings2, Star, Trash2, Users, X } from 'lucide-react';
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Copy, Eye, EyeOff, Image as ImageIcon, ImagePlus, Info, Loader2, Pencil, Plus, Save, Settings2, Star, Trash2, Users, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 
@@ -100,6 +100,7 @@ export default function AdminBoatsPage() {
   const [pendingBoatDelete, setPendingBoatDelete] = useState<BoatRow | null>(null);
   const [boatTab, setBoatTab] = useState<'general' | 'tours'>('general');
   const [saving, setSaving] = useState(false);
+  const [togglingBoatId, setTogglingBoatId] = useState<string | null>(null);
   const [startingPrices, setStartingPrices] = useState<Record<string, number>>({});
   const [fieldErrors, setFieldErrors] = useState<{ id?: string; slug?: string; name?: string; maxGuests?: string; images?: string }>({});
 
@@ -351,6 +352,28 @@ export default function AdminBoatsPage() {
     await loadBoats();
   }
 
+  async function toggleBoatActive(boat: BoatRow) {
+    const nextActive = !boat.active;
+    if (nextActive) {
+      const imageCount = (boat.boat_images?.length ? boat.boat_images : fallbackBoatImages(boat)).filter((image) => image.active).length;
+      if (!isValidActiveImageCount(imageCount)) {
+        setError('Para activar el bote necesitas entre 3 y 6 imágenes.');
+        return;
+      }
+    }
+    setTogglingBoatId(boat.id);
+    setError('');
+    setNotice('');
+    const { error: updateError } = await supabase.from('boats').update({ active: nextActive, updated_at: new Date().toISOString() }).eq('id', boat.id);
+    setTogglingBoatId(null);
+    if (updateError) {
+      setError(updateError.message);
+      return;
+    }
+    setBoats((current) => current?.map((item) => item.id === boat.id ? { ...item, active: nextActive } : item) ?? current);
+    setNotice(nextActive ? 'Bote activado.' : 'Bote desactivado.');
+  }
+
   async function onGalleryImageSaved(image: StorageImage) {
     if (!editing) return;
     const currentImages = editing.boat_images ?? [];
@@ -491,6 +514,9 @@ export default function AdminBoatsPage() {
               <td>
                 <div className="admin-actions">
                   <button className="admin-btn admin-btn--ghost" type="button" onClick={() => openEditor(boat)}><Pencil size={14} /> Editar</button>
+                  <button className={`admin-icon-action ${boat.active ? 'admin-icon-action--success' : 'admin-icon-action--warning'}`} type="button" title={boat.active ? 'Desactivar bote' : 'Activar bote'} aria-label={boat.active ? `Desactivar bote ${boat.name}` : `Activar bote ${boat.name}`} disabled={togglingBoatId === boat.id} onClick={() => void toggleBoatActive(boat)}>
+                    {togglingBoatId === boat.id ? <Loader2 className="animate-spin" size={16} /> : boat.active ? <Eye size={16} /> : <EyeOff size={16} />}
+                  </button>
                   <button className="admin-btn admin-btn--danger" type="button" onClick={() => setPendingBoatDelete(boat)}><Trash2 size={14} /> Eliminar</button>
                 </div>
               </td>
