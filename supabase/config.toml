@@ -395,6 +395,21 @@ verify_jwt = false
 [functions.storage-delete-image]
 verify_jwt = false
 
+# These functions validate the bearer token and the active admin/editor profile
+# inside the Edge Function. Disabling gateway JWT verification lets the browser
+# preflight (OPTIONS) reach the function's CORS handler.
+[functions.admin-create-booking]
+verify_jwt = false
+
+[functions.admin-confirm-booking]
+verify_jwt = false
+
+[functions.admin-retry-confirmation-email]
+verify_jwt = false
+
+[functions.admin-update-booking]
+verify_jwt = false
+
 [analytics]
 enabled = false
 port = 54327
