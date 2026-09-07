@@ -44,8 +44,8 @@ serve(async (req) => {
     const { data, error } = await userClient.rpc('update_booking_status', {
       p_booking_id: parsed.data.bookingId,
       p_booking_status: 'confirmed',
-      p_payment_status: null,
-      p_note: 'Reserva confirmada desde admin. Bote bloqueado en disponibilidad.',
+      p_payment_status: 'paid',
+      p_note: 'Reserva confirmada desde admin; pago manual recibido. Bote bloqueado en disponibilidad.',
     });
     if (error) return Response.json({ message: error.message }, { status: 400, headers });
 
