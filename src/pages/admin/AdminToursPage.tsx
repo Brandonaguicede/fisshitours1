@@ -292,7 +292,7 @@ export default function AdminToursPage() {
     if (direction === 1) {
       const errors: FieldErrors = {};
       if (step === 'info' && !editing.title.trim()) errors.title = 'El nombre del tour es obligatorio.';
-      if (step === 'gallery' && editing.images.length < 3) errors.images = 'Agrega al menos 3 fotografías para continuar.';
+      // Las fotos son requisito para activar el tour, pero no deben bloquear el acceso a Paquetes.
       setFieldErrors(errors); if (Object.keys(errors).length) return;
       if (!(await persistStep())) return;
     }
@@ -383,7 +383,7 @@ function PackagesStep({ boats, packages, onManageBoat }: { boats: BoatRow[]; pac
   }
   return (
     <FormSection
-      title="Paquetes (solo lectura)"
+      title="Paquetes"
       description="Los precios y paquetes se administran por bote. Abre Botes › Tours y paquetes para editarlos."
       icon={<Package size={16} />}
     >
