@@ -9,6 +9,12 @@ serve(async (req) => {
   if (req.method !== 'POST') return Response.json({ message: 'Method not allowed' }, { status: 405 });
 
   try {
+    const expectedWorkerKey = getWorkerSecretKey();
+    const providedWorkerKey = req.headers.get('apikey');
+    if (!expectedWorkerKey || !providedWorkerKey || providedWorkerKey !== expectedWorkerKey) {
+      return Response.json({ message: 'Unauthorized worker request' }, { status: 401 });
+    }
+
     const supabase = getSupabase();
     const apiKey = Deno.env.get('RESEND_API_KEY');
     const from = Deno.env.get('BOOKING_EMAIL_FROM');
@@ -91,6 +97,17 @@ serve(async (req) => {
 async function acknowledge(supabase: ReturnType<typeof createClient>, messageId: number) {
   const { error } = await supabase.rpc('ack_booking_email', { p_msg_id: messageId });
   if (error) throw error;
+}
+
+function getWorkerSecretKey() {
+  try {
+    const secretKeys = JSON.parse(Deno.env.get('SUPABASE_SECRET_KEYS') ?? '{}') as Record<string, unknown>;
+    const namedKey = secretKeys['booking-email-worker'];
+    const defaultKey = secretKeys.default;
+    return typeof namedKey === 'string' ? namedKey : typeof defaultKey === 'string' ? defaultKey : null;
+  } catch {
+    return null;
+  }
 }
 
 async function sendEmail(
