@@ -158,6 +158,9 @@ async function sendBookingEmails(supabase: ReturnType<typeof createClient>, book
   const adminEmail = Deno.env.get('BOOKING_ADMIN_EMAIL');
   const customerEmail = payload.customer.email;
   if (!booking?.booking_id || !customerEmail) return;
+  // PayPal reservations are notified only after capture succeeds. The capture
+  // function queues the paid confirmation once PayPal returns COMPLETED.
+  if (payload.paymentMethodKey === 'paypal') return;
 
   const summary = [
     `Reserva: ${booking.booking_reference}`,

@@ -510,7 +510,9 @@ const bookingPayload = selectedTour
                 }
                 setSuccessNotice({
                   title: language === 'es' ? 'Pago completado' : 'Payment completed',
-                  message: language === 'es' ? 'Tu pago fue procesado y recibimos tu reserva.' : 'Your payment was processed and we received your booking.',
+                  message: language === 'es'
+                    ? 'Tu pago fue procesado. En unos momentos recibirás un correo en papagayofishingtourpague@gmail.com con la confirmación de tu reserva.'
+                    : 'Your payment was processed. In a few moments you will receive a confirmation email for your reservation.',
                   reference: result.bookingReference,
                 });
               }}

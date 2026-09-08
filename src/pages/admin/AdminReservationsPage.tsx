@@ -387,29 +387,29 @@ export default function AdminReservationsPage() {
 
   function exportCsv() {
     const rows = visibleReservations.map((reservation) => ({
-      Referencia: reservation.booking_reference,
-      Cliente: reservation.customers?.full_name ?? '',
-      Email: reservation.customers?.email ?? '',
+      'Referencia de reserva': reservation.booking_reference,
+      'Nombre del cliente': reservation.customers?.full_name ?? '',
+      'Correo electrónico': reservation.customers?.email ?? '',
       WhatsApp: reservation.customers?.whatsapp ?? '',
-      Fecha: reservation.tour_date,
-      Hora: reservation.time_slots?.label ?? '',
+      'Fecha del tour': reservation.tour_date,
+      Horario: reservation.time_slots?.label ?? '',
       Bote: reservation.boats?.name ?? '',
       Tour: reservation.tours?.title ?? '',
       Personas: String(reservation.guests),
-      Salida: reservation.departure_location_name_snapshot ?? '',
-      CargoSalida: String(Number(reservation.departure_surcharge_snapshot ?? 0)),
-      Total: String(Number(reservation.total_snapshot ?? 0)),
-      Metodo: reservation.payment_method_key,
-      Pago: reservation.payment_status,
-      Estado: reservation.booking_status,
-      Creada: reservation.created_at,
+      'Lugar de salida': reservation.departure_location_name_snapshot ?? '',
+      'Cargo de salida (USD)': Number(reservation.departure_surcharge_snapshot ?? 0).toFixed(2),
+      'Total (USD)': Number(reservation.total_snapshot ?? 0).toFixed(2),
+      'Método de pago': reservation.payment_method_key,
+      'Estado del pago': reservation.payment_status,
+      'Estado de reserva': reservation.booking_status,
+      'Creada el': new Date(reservation.created_at).toLocaleString('es-CR'),
     }));
-    const headers = Object.keys(rows[0] ?? { Referencia: '', Cliente: '', Email: '', WhatsApp: '', Fecha: '', Hora: '', Bote: '', Tour: '', Personas: '', Salida: '', CargoSalida: '', Total: '', Metodo: '', Pago: '', Estado: '', Creada: '' });
+    const headers = Object.keys(rows[0] ?? { 'Referencia de reserva': '', 'Nombre del cliente': '', 'Correo electrónico': '', WhatsApp: '', 'Fecha del tour': '', Horario: '', Bote: '', Tour: '', Personas: '', 'Lugar de salida': '', 'Cargo de salida (USD)': '', 'Total (USD)': '', 'Método de pago': '', 'Estado del pago': '', 'Estado de reserva': '', 'Creada el': '' });
     const csv = [
       headers.join(','),
       ...rows.map((row) => headers.map((header) => csvCell((row as Record<string, string>)[header])).join(',')),
-    ].join('\n');
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    ].join('\r\n');
+    const blob = new Blob([`\ufeff${csv}`], { type: 'text/csv;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
     anchor.href = url;

@@ -4,6 +4,7 @@ import { Outlet, useLocation } from 'react-router-dom';
 import { scrollToHomeSection } from '../../utils/homeNavigation';
 import { Footer } from './Footer';
 import { Navbar } from './Navbar';
+import { CookieNotice } from '../common/CookieNotice';
 
 export function MainLayout() {
   const location = useLocation();
@@ -30,6 +31,7 @@ export function MainLayout() {
         <Outlet />
       </main>
       <Footer />
+      <CookieNotice />
     </div>
   );
 }
