@@ -179,14 +179,7 @@ async function sendBookingEmails(supabase: ReturnType<typeof createClient>, book
     `Notas: ${payload.specialRequests ?? 'None'}`,
   ].join('\n');
 
-  const messages = [
-    {
-      to: customerEmail,
-      subject: `Recibimos tu reserva ${booking.booking_reference}`,
-      text: `Hola ${payload.customer.fullName},\n\nRecibimos tu solicitud de reserva en Papagayo Fishing Tours.\n\n${summary}\n\nTe contactaremos para confirmar disponibilidad y los siguientes pasos.\n\nPapagayo Fishing Tours`,
-      dedupe: `booking:${booking.booking_id}:customer-email`,
-    },
-    adminEmail ? {
+  const messages = [adminEmail ? {
       to: adminEmail,
       subject: `Nueva reserva ${booking.booking_reference}`,
       text: `Nueva reserva recibida.\n\n${summary}`,
