@@ -179,7 +179,14 @@ async function sendBookingEmails(supabase: ReturnType<typeof createClient>, book
     `Notas: ${payload.specialRequests ?? 'None'}`,
   ].join('\n');
 
-  const messages = [adminEmail ? {
+  const messages = [
+    {
+      to: customerEmail,
+      subject: `Solicitud de reserva ${booking.booking_reference}`,
+      text: `Hemos recibido tu solicitud de reserva.\n\n${summary}\n\nNuestro equipo confirmará la disponibilidad y te contactará pronto.`,
+      dedupe: `booking:${booking.booking_id}:customer-email`,
+    },
+    adminEmail ? {
       to: adminEmail,
       subject: `Nueva reserva ${booking.booking_reference}`,
       text: `Nueva reserva recibida.\n\n${summary}`,
