@@ -6,7 +6,7 @@ import { getBoatText, getPackageLabel, getTourGroupKey, getTourText } from '../.
 import { useLanguage } from '../../i18n/LanguageContext';
 import { text, tr } from '../../i18n/translations';
 import { MOCK_TURNSTILE_TOKEN, USE_LOCAL_TURNSTILE_MOCK } from '../../lib/turnstile';
-import { cancelPayPalOrder, capturePayPalOrder, createPayPalOrder, getPayPalClientId, getPayPalErrorMessage, loadPayPalSdk, type PayPalCaptureResult } from '../../services/paypalService';
+import { cancelPayPalOrder, capturePayPalOrder, createPayPalOrder, getPayPalErrorMessage, loadPayPalSdk, type PayPalCaptureResult } from '../../services/paypalService';
 import { getBookingAvailability, type AvailabilitySlot } from '../../services/availabilityService';
 import { calculateBookingPrice, createBooking, getActiveDepartureLocations, type BookingResult, type DepartureLocation, type PriceResult } from '../../services/bookingService';
 import { getActivePaymentMethods } from '../../services/paymentService';
@@ -1104,7 +1104,7 @@ function PayPalCheckoutBox(props: {
   onCancel: () => void;
 }) {
   const { createdBooking, onSuccess, onError, onCancel } = props;
-  const clientId = getPayPalClientId();
+  const clientId = import.meta.env.VITE_PAYPAL_CLIENT_ID;
   const containerId = `paypal-button-container-${createdBooking.booking_id}`;
   const callbacksRef = useRef({ onSuccess, onError, onCancel });
   const activeOrderIdRef = useRef<string>('');
