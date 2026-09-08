@@ -29,7 +29,16 @@ export interface PayPalCaptureResult {
 
 let paypalSdkPromise: Promise<void> | null = null;
 
+export function getPayPalClientId() {
+  return import.meta.env.VITE_PAYPAL_CLIENT_ID?.trim()
+    || import.meta.env.VITE_PayPal_CLIENT_ID?.trim()
+    || '';
+}
+
 export function loadPayPalSdk(clientId: string) {
+  if (!clientId.trim() || clientId === 'mock') {
+    return Promise.reject(new Error('Configure a valid PayPal Client ID before testing the SDK.'));
+  }
   if (window.paypal) return Promise.resolve();
   if (paypalSdkPromise) return paypalSdkPromise;
 
@@ -37,8 +46,24 @@ export function loadPayPalSdk(clientId: string) {
     const script = document.createElement('script');
     script.src = `https://www.paypal.com/sdk/js?client-id=${encodeURIComponent(clientId)}&currency=USD&intent=capture&components=buttons`;
     script.async = true;
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error('PayPal could not be loaded. Please try again.'));
+    const fail = (message: string) => {
+      window.clearTimeout(timeout);
+      script.onload = null;
+      script.onerror = null;
+      script.remove();
+      paypalSdkPromise = null;
+      reject(new Error(message));
+    };
+    const timeout = window.setTimeout(() => fail('PayPal took too long to load. Please try again.'), 15000);
+    script.onload = () => {
+      if (!window.paypal?.Buttons) {
+        fail('PayPal loaded without its checkout buttons. Please try again.');
+        return;
+      }
+      window.clearTimeout(timeout);
+      resolve();
+    };
+    script.onerror = () => fail('PayPal could not be loaded. Check your connection and try again.');
     document.head.appendChild(script);
   });
 
