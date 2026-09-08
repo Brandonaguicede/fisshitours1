@@ -166,7 +166,7 @@ export const boatTours: BoatTour[] = [
     category: 'Bioluminescence Basic',
     description: 'Discover the magical phenomenon of bioluminescence in the Gulf of Papagayo as every movement creates shimmering blue sparks across the ocean.',
     basePrice: 650,
-    image: '/images/placeholder-image.jpg',
+    image: '/galeria/IMG_9017.jpeg',
     timeSlots: [evening],
   },
   {
@@ -177,7 +177,7 @@ export const boatTours: BoatTour[] = [
     category: 'Bioluminescence Deluxe',
     description: 'A deluxe bioluminescence night experience with cheese board, ceviche, sparkling wine and beverages aboard Second Wind.',
     basePrice: 750,
-    image: '/images/placeholder-image.jpg',
+    image: '/galeria/IMG_9017.jpeg',
     timeSlots: [evening],
   },
 ];

@@ -10,6 +10,7 @@ import { DISPLAY_PHONE, WHATSAPP_NUMBER } from '../constants/contact';
 import { departureTimes } from '../data/departureTimes';
 import { useLanguage } from '../i18n/LanguageContext';
 import { getActiveBoatTours } from '../services/boatTourService';
+import { getWhatsAppContactUrl, submitContactRequest } from '../services/contactService';
 
 function uniqueTourOptions(tours: Array<{ tourId?: string; tourTitle?: string }>) {
   const seen = new Set<string>();
@@ -100,6 +101,7 @@ const contactText = {
 type ContactFormValues = {
   name: string;
   email: string;
+  phone: string;
   tourType: string;
   departureTime: string;
   message: string;
@@ -131,8 +133,14 @@ export default function ContactPage() {
 
   const selectedTime = watch('departureTime');
 
-  function onSubmit(values: ContactFormValues) {
-    console.info('Reserva solicitada', values);
+  async function onSubmit(values: ContactFormValues) {
+    try {
+      await submitContactRequest(values);
+    } catch {
+      window.open(getWhatsAppContactUrl(values), '_blank', 'noopener,noreferrer');
+      return;
+    }
+    window.open(getWhatsAppContactUrl(values), '_blank', 'noopener,noreferrer');
     reset();
   }
 
@@ -173,7 +181,7 @@ export default function ContactPage() {
                   </Select>
                 </Field>
                 <Field htmlFor="contact-phone" label={copy.phone}>
-                  <Input id="contact-phone" autoComplete="tel" className="font-semibold placeholder:text-ocean-400" placeholder={copy.phonePlaceholder} shape="pill" tone="deep" />
+                  <Input id="contact-phone" autoComplete="tel" className="font-semibold placeholder:text-ocean-400" placeholder={copy.phonePlaceholder} shape="pill" tone="deep" {...register('phone')} />
                 </Field>
               </div>
 
