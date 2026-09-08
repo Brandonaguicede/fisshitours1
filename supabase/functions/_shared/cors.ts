@@ -7,6 +7,8 @@ const LOCAL_ORIGIN_PATTERN = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
 const VERCEL_PREVIEW_PATTERN = /^https:\/\/(?:fishshitours1|fisshitours1)(?:-[a-z0-9]+|-git-[a-z0-9-]+)?-papagayo-fishingtour\.vercel\.app$/;
 
 const PRODUCTION_ORIGINS = new Set([
+  'https://fisshitours1.vercel.app',
+  'https://fisshitours1-papagayo-fishingtour.vercel.app',
   'https://papagayofishingtours.com',
   'https://www.papagayofishingtours.com',
 ]);
