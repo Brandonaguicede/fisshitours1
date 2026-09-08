@@ -95,7 +95,7 @@ export function Navbar() {
         <GlassPanel
           as="nav"
           className={cn(
-            'pointer-events-auto hidden items-center gap-0.5 border-0 p-1.5 transition-all duration-300 md:absolute md:left-1/2 md:flex md:-translate-x-1/2 lg:gap-1',
+            'navbar-nav-shell pointer-events-auto hidden items-center gap-0.5 p-1.5 transition-all duration-300 md:absolute md:left-1/2 md:flex md:-translate-x-1/2 lg:gap-1',
             isScrolled && 'brightness-110',
           )}
           shape="pill"

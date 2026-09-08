@@ -208,6 +208,12 @@
     background: var(--glass-panel-background);
   }
 
+  .navbar-nav-shell {
+    border: 0 !important;
+    outline: none;
+    box-shadow: 0 14px 35px rgba(var(--color-surface-ink), 0.2);
+  }
+
   .glass-control {
     position: relative;
     isolation: isolate;
