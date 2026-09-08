@@ -113,7 +113,7 @@ function getWorkerSecretKey() {
 async function sendEmail(
   apiKey: string,
   from: string,
-  message: { to: string; subject: string; text: string },
+  message: { to: string; subject: string; text: string; html: string },
   idempotencyKey: string,
 ) {
   return fetch('https://api.resend.com/emails', {
@@ -123,7 +123,7 @@ async function sendEmail(
       'Content-Type': 'application/json',
       'Idempotency-Key': idempotencyKey,
     },
-    body: JSON.stringify({ from, to: message.to, subject: message.subject, text: message.text }),
+    body: JSON.stringify({ from, to: message.to, subject: message.subject, text: message.text, html: message.html }),
   });
 }
 
