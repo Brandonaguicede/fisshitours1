@@ -86,6 +86,7 @@ export function BookingPanel({ selectedBoat, selectedTour, boats, tours, catalog
   const [validationMessage, setValidationMessage] = useState('');
   const [paypalVisible, setPaypalVisible] = useState(false);
   const [paypalError, setPaypalError] = useState('');
+  const [paypalInfo, setPaypalInfo] = useState('');
   const [paypalSuccess, setPaypalSuccess] = useState<PayPalCaptureResult | null>(null);
   const [successNotice, setSuccessNotice] = useState<{ title: string; message: string; reference?: string } | null>(null);
   const [createdBooking, setCreatedBooking] = useState<BookingResult | null>(null);
@@ -197,6 +198,7 @@ const bookingPayload = selectedTour
     setBookingStatus('pending');
     setPaymentStatus('pending');
     setPaypalVisible(false);
+    setPaypalInfo('');
     setPaypalSuccess(null);
     setCreatedBooking(null);
   }
@@ -210,6 +212,7 @@ const bookingPayload = selectedTour
     setBookingStatus('pending');
     setPaymentStatus('pending');
     setPaypalVisible(false);
+    setPaypalInfo('');
     setPaypalSuccess(null);
     setCreatedBooking(null);
   }
@@ -376,6 +379,7 @@ const bookingPayload = selectedTour
       setBookingStatus('pending_payment');
       setPaymentStatus('pending');
       setPaypalError('');
+      setPaypalInfo(language === 'es' ? 'Completa el pago en PayPal. Cuando el pago se confirme, en unos momentos recibirás un correo. Muchas gracias por reservar.' : 'Complete your PayPal payment. Once it is confirmed, you will receive an email in a few moments. Thank you for booking.');
       setPaypalVisible(true);
     }).catch(() => undefined);
   }
@@ -493,6 +497,7 @@ const bookingPayload = selectedTour
               onTurnstileTokenChange={setTurnstileToken}
               paypalVisible={paypalVisible}
               paypalError={paypalError}
+              paypalInfo={paypalInfo}
               paypalSuccess={paypalSuccess}
               onCustomerNameChange={setCustomerName}
               onCustomerEmailChange={setCustomerEmail}
@@ -920,6 +925,7 @@ function CustomerStep(props: {
   turnstileResetKey: number;
   paypalVisible: boolean;
   paypalError: string;
+  paypalInfo: string;
   paypalSuccess: PayPalCaptureResult | null;
   onCustomerNameChange: (name: string) => void;
   onCustomerEmailChange: (email: string) => void;
@@ -1014,6 +1020,10 @@ function CustomerStep(props: {
           ))}
         </div>
       </GlassPanel>
+
+      {props.paypalVisible && props.booking && props.createdBooking ? (
+        <div className="mb-4 rounded-2xl border border-ocean-300/30 bg-ocean-400/10 p-4 text-sm leading-6 text-ocean-100" role="status">{props.paypalInfo}</div>
+      ) : null}
 
       {props.paypalVisible && props.booking && props.createdBooking ? (
         <PayPalCheckoutBox booking={props.booking} createdBooking={props.createdBooking} onSuccess={props.onPayPalSuccess} onError={props.onPayPalError} onCancel={props.onPayPalCancel} />
