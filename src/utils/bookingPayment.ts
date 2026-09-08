@@ -151,7 +151,11 @@ export function formatMessageCurrency(value: number) {
 }
 
 function formatMessageDate(value: string) {
-  return new Intl.DateTimeFormat('en-US', { month: 'long', day: 'numeric', year: 'numeric' }).format(new Date(`${value}T00:00:00`));
+  if (!value) return 'Not selected';
+  const date = new Date(`${value}T00:00:00Z`);
+  return Number.isNaN(date.getTime())
+    ? value
+    : new Intl.DateTimeFormat('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' }).format(date);
 }
 
 function cleanText(value: string) {

@@ -323,7 +323,8 @@ const bookingPayload = selectedTour
   }
 
   function openWhatsAppBooking(booking: BookingPaymentPayload, variant: 'payment_link' | 'pay_on_day' | 'paid_confirmation') {
-    window.open(getWhatsAppBookingUrl(createWhatsAppBookingMessage(booking, variant)), '_blank', 'noopener,noreferrer');
+    const url = getWhatsAppBookingUrl(createWhatsAppBookingMessage(booking, variant));
+    window.location.assign(url);
   }
 
   function handlePaymentLinkRequest() {
@@ -334,7 +335,7 @@ const bookingPayload = selectedTour
       setPaymentStatus('pending');
       setPaypalVisible(false);
       setSuccessNotice(null);
-      openWhatsAppBooking({ ...bookingPayload, bookingReference: result.booking_reference, total: result.total_snapshot }, 'payment_link');
+      openWhatsAppBooking({ ...bookingPayload, bookingReference: result.booking_reference, total: result.total_snapshot, paymentMethod: 'WhatsApp payment link', paymentStatus: 'pending' }, 'payment_link');
       setSuccessNotice({
         title: language === 'es' ? 'Reserva creada' : 'Booking created',
         message: language === 'es' ? 'Recibimos tu reserva. Abre WhatsApp para solicitar el enlace de pago.' : 'We received your booking. Open WhatsApp to request the payment link.',
@@ -358,7 +359,7 @@ const bookingPayload = selectedTour
       setBookingStatus('pending_confirmation');
       setPaymentStatus('not_required_yet');
       setIsPayOnDayOpen(false);
-      openWhatsAppBooking({ ...bookingPayload, bookingReference: result.booking_reference, total: result.total_snapshot }, 'pay_on_day');
+      openWhatsAppBooking({ ...bookingPayload, bookingReference: result.booking_reference, total: result.total_snapshot, paymentMethod: 'Pay on the day of the tour', paymentStatus: 'not_required_yet' }, 'pay_on_day');
       setSuccessNotice({
         title: language === 'es' ? 'Reserva recibida' : 'Booking received',
         message: language === 'es' ? 'Tu solicitud fue creada y queda pendiente de confirmacion.' : 'Your request was created and is pending confirmation.',
@@ -525,7 +526,7 @@ const bookingPayload = selectedTour
               }}
               onSendPaidConfirmation={() => {
                 const booking = validateBookingForPayment();
-                if (booking) openWhatsAppBooking(booking, 'paid_confirmation');
+                if (booking) openWhatsAppBooking({ ...booking, paymentMethod: 'PayPal', paymentStatus: 'paid' }, 'paid_confirmation');
               }}
               onBack={() => setActiveStep(2)}
             />
