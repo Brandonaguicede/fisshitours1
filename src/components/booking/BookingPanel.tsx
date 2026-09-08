@@ -718,7 +718,7 @@ function TourDetailsStep(props: {
 
       <div className="grid gap-4 sm:grid-cols-2">
         <Field htmlFor="booking-date" label={tr(text.booking.date, language)} labelClassName="text-sm font-bold">
-          <Input id="booking-date" className="sm:px-4" tone="ocean" type="date" value={props.date} onChange={(event) => props.onDateChange(event.target.value)} />
+          <Input id="booking-date" className="min-w-0 max-w-full appearance-none px-3 text-[0.8rem] tracking-tight sm:px-4 sm:text-sm" tone="ocean" type="date" value={props.date} onChange={(event) => props.onDateChange(event.target.value)} />
         </Field>
         <Field error={props.hasCapacityError ? (language === 'es' ? `Este barco tiene capacidad maxima de ${props.effectiveMaxGuests} personas.` : `This boat has a maximum capacity of ${props.effectiveMaxGuests} guests.`) : undefined} errorId="booking-guests-error" htmlFor="booking-guests" label={tr(text.booking.guests, language)} labelClassName="text-sm font-bold">
           <Input id="booking-guests" aria-describedby={props.hasCapacityError ? 'booking-guests-error' : undefined} aria-invalid={props.hasCapacityError} className="sm:px-4" inputMode="numeric" max={props.effectiveMaxGuests} min={1} tone="ocean" type="number" value={props.guests} onChange={(event) => props.onGuestsChange(clampGuests(Number(event.target.value), props.effectiveMaxGuests))} />
@@ -986,12 +986,12 @@ function CustomerStep(props: {
           <legend className="text-xs font-extrabold uppercase tracking-[0.12em] text-ocean-400">Payment method</legend>
           <span className="text-xs font-semibold text-ocean-300">Choose one option to continue</span>
         </div>
-        <div className="mt-3 grid gap-2 lg:grid-cols-3">
+        <div className="mt-3 grid grid-cols-1 gap-2 min-[360px]:grid-cols-2 lg:grid-cols-3">
           {props.paymentMethods.map((method, index) => (
             <ChoiceCard
               key={method.id}
               data-payment-method={method.id}
-              className="group flex items-center gap-2.5 p-2.5 text-left hover:-translate-y-0.5 sm:p-3 lg:min-h-[5.25rem]"
+              className="group flex min-h-[4.75rem] min-w-0 items-center gap-2.5 p-2.5 text-left hover:-translate-y-0.5 sm:min-h-[5.25rem] sm:p-3"
               disabled={props.isSubmitting}
               selected={props.paymentMethod === method.id}
               onClick={() => handlePaymentMethodAction(method.id)}
@@ -1004,8 +1004,8 @@ function CustomerStep(props: {
                 )}
               </span>
               <span className="min-w-0 flex-1">
-                <span className="block text-[0.82rem] font-extrabold leading-tight text-white sm:text-sm">{method.title}</span>
-                <span className="mt-0.5 block text-[0.72rem] leading-4 text-ocean-200">{method.description}</span>
+                <span className="block break-words text-[0.78rem] font-extrabold leading-tight text-white sm:text-sm">{method.title}</span>
+                <span className="mt-0.5 block break-words text-[0.68rem] leading-4 text-ocean-200 sm:text-[0.72rem]">{method.description}</span>
               </span>
             </ChoiceCard>
           ))}
@@ -1410,5 +1410,9 @@ function SummaryLine({ label, value }: { label: string; value: string }) {
 }
 
 function formatDisplayDate(value: string) {
-  return new Intl.DateTimeFormat('en-US', { month: 'long', day: 'numeric', year: 'numeric' }).format(new Date(`${value}T00:00:00`));
+  if (!value) return 'Select a date';
+  const date = new Date(`${value}T00:00:00Z`);
+  return Number.isNaN(date.getTime())
+    ? value
+    : new Intl.DateTimeFormat('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' }).format(date);
 }
