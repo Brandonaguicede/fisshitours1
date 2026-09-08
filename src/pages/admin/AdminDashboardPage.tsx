@@ -1,5 +1,6 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { CalendarDays, CreditCard, DollarSign, MessageSquare, Ship, Star } from 'lucide-react';
+import { useEffect } from 'react';
 
 import { AdminBadge, AdminModuleSurface, AdminStatCard, AdminTable } from '../../components/admin/AdminPrimitives';
 import { supabase } from '../../lib/supabase';
@@ -17,6 +18,7 @@ type DashboardReservation = {
 };
 
 export default function AdminDashboardPage() {
+  const queryClient = useQueryClient();
   const pendingReviewsQuery = useQuery({
     queryKey: ['admin', 'pendingReviews'],
     queryFn: async () => {
@@ -41,6 +43,16 @@ export default function AdminDashboardPage() {
   const reservations = reservationsQuery.data ?? [];
   const paidReservations = reservations.filter((item) => item.payment_status === 'paid');
   const estimatedRevenue = 0;
+
+  useEffect(() => {
+    const channel = supabase
+      .channel('admin-dashboard-bookings')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings' }, () => {
+        void queryClient.invalidateQueries({ queryKey: ['admin', 'dashboardReservations'] });
+      })
+      .subscribe();
+    return () => { void supabase.removeChannel(channel); };
+  }, [queryClient]);
 
   return (
     <div className="admin-page">
