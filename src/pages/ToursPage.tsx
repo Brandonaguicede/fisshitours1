@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+﻿import { useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 
 import { BoatCard } from '../components/boats/BoatCard';
@@ -58,7 +58,7 @@ export default function ToursPage() {
           {catalogError ? (
             <div className="mb-6 rounded-2xl border border-amber-300/30 bg-amber-100 px-4 py-3 text-sm font-semibold text-amber-950 shadow-sm">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <p>We couldn’t load the booking information. Please try again.</p>
+                <p>{language === 'es' ? 'No pudimos cargar la información de la reserva. Inténtalo de nuevo.' : 'We could not load the booking information. Please try again.'}</p>
                 <Button
                   size="sm"
                   variant="secondary"
@@ -68,7 +68,7 @@ export default function ToursPage() {
                     void toursQuery.refetch();
                   }}
                 >
-                  Retry
+                  {language === 'es' ? 'Reintentar' : 'Retry'}
                 </Button>
               </div>
             </div>

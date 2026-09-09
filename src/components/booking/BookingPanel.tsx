@@ -36,6 +36,17 @@ const paymentMethods: Array<{ id: BookingPaymentMethod; title: string; descripti
   { id: 'pay-on-day', title: 'Pay on the Day of the Tour', description: 'Pay when the tour starts.', icon: WalletCards },
 ];
 
+function getPaymentMethodCopy(id: BookingPaymentMethod, language: 'es' | 'en') {
+  if (language === 'en') return paymentMethods.find((method) => method.id === id) ?? paymentMethods[0];
+  const copy: Record<BookingPaymentMethod, { title: string; description: string }> = {
+    paypal: { title: 'Pagar con PayPal', description: 'Checkout seguro en USD.' },
+    'whatsapp-link': { title: 'Solicitar enlace por WhatsApp', description: 'Solicita un enlace de pago.' },
+    'pay-on-day': { title: 'Pagar el día del tour', description: 'Paga cuando inicie el tour.' },
+  };
+  const method = paymentMethods.find((item) => item.id === id) ?? paymentMethods[0];
+  return { ...method, ...copy[id] };
+}
+
 const fullDayMealOptions = [
   { en: 'Chicken wrap', es: 'Wrap de pollo' },
   { en: 'Ham and cheese wrap', es: 'Wrap de jamon y queso' },
@@ -997,6 +1008,9 @@ function CustomerStep(props: {
         </div>
         <div className="mt-3 grid grid-cols-1 gap-2 min-[360px]:grid-cols-2 lg:grid-cols-3">
           {props.paymentMethods.map((method, index) => (
+            (() => {
+              const methodCopy = getPaymentMethodCopy(method.id, language);
+              return (
             <ChoiceCard
               key={method.id}
               data-payment-method={method.id}
@@ -1013,10 +1027,12 @@ function CustomerStep(props: {
                 )}
               </span>
               <span className="min-w-0 flex-1">
-                <span className="block break-words text-[0.78rem] font-extrabold leading-tight text-white sm:text-sm">{method.title}</span>
-                <span className="mt-0.5 block break-words text-[0.68rem] leading-4 text-ocean-200 sm:text-[0.72rem]">{method.description}</span>
+                <span className="block break-words text-[0.78rem] font-extrabold leading-tight text-white sm:text-sm">{methodCopy.title}</span>
+                <span className="mt-0.5 block break-words text-[0.68rem] leading-4 text-ocean-200 sm:text-[0.72rem]">{methodCopy.description}</span>
               </span>
             </ChoiceCard>
+              );
+            })()
           ))}
         </div>
       </GlassPanel>
@@ -1221,7 +1237,7 @@ function BookingSummary(props: {
   const terms = getBookingTerms(language);
   const coverImage = props.selectedBoat.image;
   const selectedTourName = props.selectedTour ? `${getTourText(props.selectedTour, language).title} - ${getPackageLabel(props.selectedTour, language)}` : tr(text.booking.selectTour, language);
-  const subtotal = props.selectedTour?.customQuote ? 'Custom quote' : formatCurrency(props.pricing.basePrice);
+  const subtotal = props.selectedTour?.customQuote ? (language === 'es' ? 'Cotización personalizada' : 'Custom quote') : formatCurrency(props.pricing.basePrice);
   const extrasTotal = props.selectedTour?.customQuote ? '-' : formatCurrency(Math.max(props.pricing.total - props.pricing.basePrice - props.pricing.extraGuestsTotal - props.pricing.departureSurcharge, 0));
 
   return (
@@ -1295,7 +1311,7 @@ function BookingProgressSummary(props: {
           <SummaryMini label={tr(text.booking.date, language)} value={formatDisplayDate(props.date)} />
           <SummaryMini label={language === 'es' ? 'Salida' : 'Departure'} value={props.selectedTimeSlot?.time ?? tr(text.booking.selectTime, language)} />
           {props.activeStep >= 2 ? <SummaryMini label={language === 'es' ? 'Lugar' : 'Location'} value={props.departureLocation?.name ?? (language === 'es' ? 'Pendiente' : 'Pending')} /> : null}
-          {isFullDayTour(props.selectedTour) ? <SummaryMini label="Meal" value={props.mealOption || 'Not selected'} /> : null}
+          {isFullDayTour(props.selectedTour) ? <SummaryMini label={language === 'es' ? 'Comida' : 'Meal'} value={props.mealOption || (language === 'es' ? 'No seleccionada' : 'Not selected')} /> : null}
         </div>
       ) : null}
 
@@ -1355,11 +1371,11 @@ function ReviewModal(props: {
           <SummaryLine label={language === 'es' ? 'Cargos por personas extra' : 'Additional guest charges'} value={props.pricing.extraGuests > 0 ? `${props.pricing.extraGuests} x ${formatCurrency(props.pricing.extraGuestPrice)} = ${formatCurrency(props.pricing.extraGuestsTotal)}` : '$0'} />
           <SummaryLine label={language === 'es' ? 'Lugar de salida' : 'Departure location'} value={props.departureLocation?.name ?? '-'} />
           <SummaryLine label={language === 'es' ? 'Cargo por salida' : 'Departure surcharge'} value={props.pricing.departureSurcharge > 0 ? formatCurrency(props.pricing.departureSurcharge) : (language === 'es' ? 'Sin costo' : 'No cost')} />
-          <SummaryLine label="Total" value={props.pricing.isCustomQuote ? 'Custom quote' : formatCurrency(props.pricing.total)} />
+          <SummaryLine label="Total" value={props.pricing.isCustomQuote ? (language === 'es' ? 'Cotización personalizada' : 'Custom quote') : formatCurrency(props.pricing.total)} />
           <SummaryLine label={language === 'es' ? 'Nombre' : 'Customer name'} value={props.customerName} />
-          <SummaryLine label="Email" value={props.customerEmail} />
+          <SummaryLine label={language === 'es' ? 'Correo' : 'Email'} value={props.customerEmail} />
           <SummaryLine label={language === 'es' ? 'Numero de WhatsApp' : 'WhatsApp number'} value={props.customerWhatsapp} />
-          <SummaryLine label="Special requests" value={props.specialRequests || 'None'} />
+          <SummaryLine label={language === 'es' ? 'Solicitudes especiales' : 'Special requests'} value={props.specialRequests || (language === 'es' ? 'Ninguna' : 'None')} />
           <SummaryLine label={language === 'es' ? 'Metodo de pago' : 'Payment method'} value={props.paymentMethod} />
         </GlassPanel>
         <GlassPanel className="mt-3 grid gap-1.5 p-3 text-[0.72rem] leading-5 text-ocean-200 sm:text-xs" variant="subtle">
