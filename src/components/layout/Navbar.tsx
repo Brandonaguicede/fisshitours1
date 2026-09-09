@@ -6,7 +6,7 @@ import { navigationItems } from '../../constants/navigation';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { scrollToHomeSection, getHomeAnchorOffset } from '../../utils/homeNavigation';
 import { cn } from '../../utils/cn';
-import { Button, GlassPanel, IconButton } from '../ui';
+import { Button, IconButton } from '../ui';
 import { Container } from '../common/Container';
 
 export function Navbar() {
@@ -92,14 +92,11 @@ export function Navbar() {
           </span>
         </NavLink>
 
-        <GlassPanel
-          as="nav"
+        <nav
           className={cn(
-            'navbar-nav-shell pointer-events-auto hidden items-center gap-0.5 p-1.5 transition-all duration-300 md:absolute md:left-1/2 md:flex md:-translate-x-1/2 lg:gap-1',
+            'navbar-nav-shell pointer-events-auto hidden items-center gap-0.5 rounded-full px-2 py-2 transition-all duration-300 md:absolute md:left-1/2 md:flex md:-translate-x-1/2 lg:gap-1 lg:px-2.5',
             isScrolled && 'brightness-110',
           )}
-          shape="pill"
-          variant="surface"
           aria-label="Navegacion principal"
         >
           {navigationItems.map((item) => {
@@ -108,10 +105,7 @@ export function Navbar() {
             return (
               <Link
                 key={item.href}
-                className={cn(
-                  'glass-focus-ring glass-interactive rounded-full px-2.5 py-2 text-xs font-semibold text-white/75 lg:px-4 lg:text-sm',
-                  isActive && 'text-white',
-                )}
+                className={cn('navbar-link rounded-full px-3 py-2 text-xs font-semibold text-white/72 lg:px-4 lg:text-sm', isActive && 'navbar-link-active')}
                 to={item.href}
                 aria-current={isActive ? 'page' : undefined}
                 onClick={(event) => handleNavigationClick(event, item.href)}
@@ -120,7 +114,7 @@ export function Navbar() {
               </Link>
             );
           })}
-        </GlassPanel>
+        </nav>
 
         <div className="pointer-events-auto hidden shrink-0 items-center gap-2 md:flex lg:gap-3">
           <Button
@@ -150,15 +144,12 @@ export function Navbar() {
       </Container>
 
       {isOpen ? (
-        <GlassPanel className="pointer-events-auto mx-4 mt-2 overflow-hidden md:hidden" variant="surface">
+        <div className="navbar-nav-shell pointer-events-auto mx-4 mt-2 overflow-hidden rounded-[var(--radius-panel)] md:hidden">
           <Container className="grid max-h-[calc(100dvh-5rem)] gap-2 overflow-y-auto py-3">
             {navigationItems.map((item) => (
               <Link
                 key={item.href}
-                className={cn(
-                  'glass-focus-ring glass-interactive rounded-2xl px-4 py-3 text-sm font-semibold text-white/80',
-                  activeHref === item.href && 'text-white',
-                )}
+                className={cn('navbar-link rounded-2xl px-4 py-3 text-sm font-semibold text-white/80', activeHref === item.href && 'navbar-link-active')}
                 to={item.href}
                 aria-current={activeHref === item.href ? 'page' : undefined}
                 onClick={(event) => handleNavigationClick(event, item.href)}
@@ -180,7 +171,7 @@ export function Navbar() {
               {language === 'es' ? 'Reservar' : 'Book Now'}
             </Button>
           </Container>
-        </GlassPanel>
+        </div>
       ) : null}
     </header>
   );
