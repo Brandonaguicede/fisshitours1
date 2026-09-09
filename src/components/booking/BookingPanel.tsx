@@ -610,7 +610,7 @@ function BoatStep(props: { boats: Boat[]; tours: BoatTour[]; selectedBoat: Boat;
         </div>
       </div>
       <div className="mt-4 grid gap-2 sm:mt-6 sm:gap-3">
-        {props.catalogLoading ? <p className="text-sm font-semibold text-ocean-200">Loading boats...</p> : null}
+        {props.catalogLoading ? <p className="text-sm font-semibold text-ocean-200">{language === 'es' ? 'Cargando barcos...' : 'Loading boats...'}</p> : null}
         {props.boats.map((boat) => (
           <ChoiceCard
             key={boat.id}
@@ -686,7 +686,7 @@ function TourDetailsStep(props: {
               onClick={() => props.onTourChange(group.tours[0].id)}
             >
               <span className="block truncate text-sm font-extrabold text-white">{group.label}</span>
-              <span className="mt-1 block text-xs font-bold text-ocean-400">From {formatCurrency(group.tours[0].basePrice)}</span>
+              <span className="mt-1 block text-xs font-bold text-ocean-400">{language === 'es' ? 'Desde' : 'From'} {formatCurrency(group.tours[0].basePrice)}</span>
             </ChoiceCard>
           ))}
         </div>
@@ -742,7 +742,7 @@ function TourDetailsStep(props: {
                 <input className="sr-only" type="radio" name="timeSlot" value={slot.id} checked={props.timeSlotId === slot.id} disabled={slot.available === false} onChange={() => props.onTimeSlotChange(slot.id)} />
                 <span className="block truncate text-xs font-extrabold text-white">{slot.label}</span>
                 <span className="mt-1 block text-base font-extrabold text-white sm:text-lg">{slot.time}</span>
-                {slot.available === false ? <span className="mt-1 block text-[0.65rem] font-bold text-red-200">Unavailable</span> : null}
+                {slot.available === false ? <span className="mt-1 block text-[0.65rem] font-bold text-red-200">{language === 'es' ? 'No disponible' : 'Unavailable'}</span> : null}
               </ChoiceCard>
             ))}
           </div>
@@ -752,8 +752,8 @@ function TourDetailsStep(props: {
       ) : null}
 
       <GlassPanel className="p-3 text-sm text-ocean-100 sm:p-4" variant="subtle">
-        <p className="text-xs font-extrabold uppercase tracking-[0.12em] text-ocean-400">Price</p>
-        {props.priceLoading ? <p className="mt-2 font-semibold">Calculating...</p> : null}
+        <p className="text-xs font-extrabold uppercase tracking-[0.12em] text-ocean-400">{language === 'es' ? 'Precio' : 'Price'}</p>
+        {props.priceLoading ? <p className="mt-2 font-semibold">{language === 'es' ? 'Calculando...' : 'Calculating...'}</p> : null}
         {props.priceError ? <p className="mt-2 font-semibold text-red-200">We couldn’t load the booking information. Please try again.</p> : null}
         {!props.priceLoading && !props.priceError ? (
           <div className="mt-2 grid gap-1.5">
@@ -763,10 +763,10 @@ function TourDetailsStep(props: {
               <>
                 <SummaryLine label={language === 'es' ? 'Precio base del bote' : 'Boat base price'} value={formatCurrency(props.pricing.basePrice)} />
                 <SummaryLine label={language === 'es' ? 'Incluye hasta' : 'Includes up to'} value={`${props.includedGuests} ${language === 'es' ? 'personas' : 'guests'}`} />
-                <SummaryLine label="Additional guests" value={`${props.pricing.extraGuests} x ${formatCurrency(props.extraGuestPrice)}`} />
-                <SummaryLine label="Additional guest charge" value={formatCurrency(props.pricing.extraGuestsTotal)} />
-                <SummaryLine label="Extras" value={formatCurrency(props.pricing.extrasTotal ?? 0)} />
-                <SummaryLine label="Total" value={formatCurrency(props.pricing.total)} />
+                <SummaryLine label={language === 'es' ? 'Personas extra' : 'Additional guests'} value={`${props.pricing.extraGuests} x ${formatCurrency(props.extraGuestPrice)}`} />
+                <SummaryLine label={language === 'es' ? 'Cargo por persona extra' : 'Additional guest charge'} value={formatCurrency(props.pricing.extraGuestsTotal)} />
+                <SummaryLine label={language === 'es' ? 'Extras' : 'Extras'} value={formatCurrency(props.pricing.extrasTotal ?? 0)} />
+                <SummaryLine label={language === 'es' ? 'Total' : 'Total'} value={formatCurrency(props.pricing.total)} />
               </>
             )}
           </div>
@@ -972,8 +972,8 @@ function CustomerStep(props: {
           <Input id="booking-phone" autoComplete="tel" inputMode="tel" placeholder="+506 0000 0000" startIcon={<Phone size={17} />} type="tel" value={props.customerWhatsapp} onChange={(event) => props.onCustomerWhatsappChange(event.target.value)} />
         </Field>
 
-        <Field htmlFor="booking-requests" label="Special requests" labelClassName="uppercase tracking-[0.12em] text-ocean-400">
-          <TextArea id="booking-requests" className="min-h-[5.5rem]" placeholder="Optional meal notes, celebration details, accessibility needs..." shape="rounded" value={props.specialRequests} onChange={(event) => props.onSpecialRequestsChange(event.target.value)} />
+        <Field htmlFor="booking-requests" label={language === 'es' ? 'Solicitudes especiales' : 'Special requests'} labelClassName="uppercase tracking-[0.12em] text-ocean-400">
+          <TextArea id="booking-requests" className="min-h-[5.5rem]" placeholder={language === 'es' ? 'Notas sobre comida, celebraciones o necesidades de accesibilidad...' : 'Optional meal notes, celebration details, accessibility needs...'} shape="rounded" value={props.specialRequests} onChange={(event) => props.onSpecialRequestsChange(event.target.value)} />
         </Field>
       </div>
 
@@ -992,8 +992,8 @@ function CustomerStep(props: {
 
       <GlassPanel as="fieldset" className="mt-5 p-3 sm:p-4" variant="subtle">
         <div className="flex flex-wrap items-end justify-between gap-2">
-          <legend className="text-xs font-extrabold uppercase tracking-[0.12em] text-ocean-400">Payment method</legend>
-          <span className="text-xs font-semibold text-ocean-300">Choose one option to continue</span>
+          <legend className="text-xs font-extrabold uppercase tracking-[0.12em] text-ocean-400">{language === 'es' ? 'Método de pago' : 'Payment method'}</legend>
+          <span className="text-xs font-semibold text-ocean-300">{language === 'es' ? 'Elige una opción para continuar' : 'Choose one option to continue'}</span>
         </div>
         <div className="mt-3 grid grid-cols-1 gap-2 min-[360px]:grid-cols-2 lg:grid-cols-3">
           {props.paymentMethods.map((method, index) => (
@@ -1031,78 +1031,79 @@ function CustomerStep(props: {
 
       {props.paypalError ? (
         <div className="mt-4 rounded-2xl border border-red-300/30 bg-red-500/10 p-4 text-sm text-red-100">
-          <p className="font-bold">Payment could not be completed</p>
+          <p className="font-bold">{language === 'es' ? 'No se pudo completar el pago' : 'Payment could not be completed'}</p>
           <p className="mt-1">{props.paypalError}</p>
         </div>
       ) : null}
 
       {props.paypalSuccess && props.booking ? (
         <div className="mt-4 rounded-2xl border border-seafoam-400/30 bg-seafoam-500/10 p-4 text-ocean-50">
-          <p className="text-lg font-extrabold">Payment Successful</p>
+          <p className="text-lg font-extrabold">{language === 'es' ? 'Pago exitoso' : 'Payment Successful'}</p>
           <div className="mt-3 grid gap-2 text-sm">
-            <SummaryLine label="Booking reference" value={props.paypalSuccess.bookingReference} />
-            <SummaryLine label="Amount paid" value={`${props.paypalSuccess.amount} ${props.paypalSuccess.currency}`} />
-            <SummaryLine label="PayPal order reference" value={props.paypalSuccess.orderId} />
-            <SummaryLine label="PayPal transaction reference" value={props.paypalSuccess.transactionId} />
-            <SummaryLine label="Tour information" value={`${getTourText(props.booking.tour, 'en').title} - ${props.booking.packageLabel}`} />
+            <SummaryLine label={language === 'es' ? 'Referencia de reserva' : 'Booking reference'} value={props.paypalSuccess.bookingReference} />
+            <SummaryLine label={language === 'es' ? 'Monto pagado' : 'Amount paid'} value={`${props.paypalSuccess.amount} ${props.paypalSuccess.currency}`} />
+            <SummaryLine label={language === 'es' ? 'Referencia de orden PayPal' : 'PayPal order reference'} value={props.paypalSuccess.orderId} />
+            <SummaryLine label={language === 'es' ? 'Referencia de transacción PayPal' : 'PayPal transaction reference'} value={props.paypalSuccess.transactionId} />
+            <SummaryLine label={language === 'es' ? 'Información del tour' : 'Tour information'} value={`${getTourText(props.booking.tour, language).title} - ${props.booking.packageLabel}`} />
           </div>
-          <Button className="mt-4" fullWidth type="button" onClick={props.onSendPaidConfirmation}>Send confirmation via WhatsApp</Button>
+          <Button className="mt-4" fullWidth type="button" onClick={props.onSendPaidConfirmation}>{language === 'es' ? 'Enviar confirmación por WhatsApp' : 'Send confirmation via WhatsApp'}</Button>
         </div>
       ) : null}
 
-      {props.isSubmitting ? <p className="mt-4 text-sm font-semibold text-ocean-300">Creating booking request...</p> : null}
+      {props.isSubmitting ? <p className="mt-4 text-sm font-semibold text-ocean-300">{language === 'es' ? 'Creando solicitud de reserva...' : 'Creating booking request...'}</p> : null}
 
       {props.bookingStatus === 'pending_confirmation' && props.paymentStatus === 'pending' ? (
         <div className="mt-5 rounded-2xl border border-ocean-400/30 bg-ocean-500/10 p-4 text-ocean-100">
-          <p className="font-bold">Booking Request Created</p>
-          <p className="mt-1 text-sm">Your booking request has been created. Send the prepared message to continue.</p>
+          <p className="font-bold">{language === 'es' ? 'Solicitud de reserva creada' : 'Booking Request Created'}</p>
+          <p className="mt-1 text-sm">{language === 'es' ? 'Tu solicitud fue creada. Envía el mensaje preparado para continuar.' : 'Your booking request has been created. Send the prepared message to continue.'}</p>
         </div>
       ) : null}
 
       {props.bookingStatus === 'pending_confirmation' && props.paymentStatus === 'not_required_yet' ? (
         <div className="mt-5 rounded-2xl border border-ocean-400/30 bg-ocean-500/10 p-4 text-ocean-100">
-          <p className="font-bold">Booking Request Received</p>
-          <p className="mt-1 text-sm">Your booking request has been received and is awaiting confirmation.</p>
+          <p className="font-bold">{language === 'es' ? 'Solicitud de reserva recibida' : 'Booking Request Received'}</p>
+          <p className="mt-1 text-sm">{language === 'es' ? 'Recibimos tu solicitud y está pendiente de confirmación.' : 'Your booking request has been received and is awaiting confirmation.'}</p>
         </div>
       ) : null}
 
       <div className="mt-auto flex flex-col-reverse gap-3 pt-7 sm:flex-row sm:items-center sm:justify-between">
-        <Button type="button" variant="glass" onClick={props.onBack}>Back</Button>
-        <span className="text-xs font-semibold text-ocean-400">Status: {props.bookingStatus.split('_').join(' ')} - Payment: {props.paymentStatus}</span>
+        <Button type="button" variant="glass" onClick={props.onBack}>{language === 'es' ? 'Volver' : 'Back'}</Button>
+        <span className="text-xs font-semibold text-ocean-400">{language === 'es' ? 'Estado' : 'Status'}: {props.bookingStatus.split('_').join(' ')} - {language === 'es' ? 'Pago' : 'Payment'}: {props.paymentStatus}</span>
       </div>
     </div>
   );
 }
 
 function BookingPaymentSummary({ booking }: { booking: BookingPaymentPayload | null }) {
+  const { language } = useLanguage();
   if (!booking) {
     return (
       <GlassPanel className="p-4 text-sm text-ocean-200" variant="subtle">
-        Complete the tour selection to review the reservation summary.
+        {language === 'es' ? 'Completa la selección del tour para revisar el resumen de la reserva.' : 'Complete the tour selection to review the reservation summary.'}
       </GlassPanel>
     );
   }
 
   return (
     <GlassPanel className="p-4 text-sm" variant="subtle">
-      <p className="text-xs font-extrabold uppercase tracking-[0.12em] text-ocean-400">Reservation summary</p>
+      <p className="text-xs font-extrabold uppercase tracking-[0.12em] text-ocean-400">{language === 'es' ? 'Resumen de la reserva' : 'Reservation summary'}</p>
       <div className="mt-3 grid gap-2 text-ocean-100">
-        <SummaryLine label="Customer name" value={booking.customerName || 'Required'} />
-        <SummaryLine label="Phone" value={booking.phone || 'Required'} />
-        <SummaryLine label="Email" value={booking.email || 'Required'} />
-        <SummaryLine label="Boat" value={booking.boat.name} />
-        <SummaryLine label="Tour" value={String(getTourText(booking.tour, 'en').title)} />
-        <SummaryLine label="Package or duration" value={booking.packageLabel} />
-        <SummaryLine label="Date" value={formatDisplayDate(booking.date)} />
-        <SummaryLine label="Time" value={booking.time || 'Required'} />
-        <SummaryLine label="Number of guests" value={String(booking.guests)} />
-        <SummaryLine label="Boat base price" value={formatCurrency(booking.basePrice)} />
-        <SummaryLine label="Additional guests" value={String(booking.additionalGuests)} />
-        <SummaryLine label="Additional guest charge" value={formatCurrency(booking.additionalGuestCharge)} />
-        <SummaryLine label="Departure location" value={booking.departureLocationName || 'Required'} />
-        <SummaryLine label="Departure surcharge" value={booking.departureSurcharge > 0 ? formatCurrency(booking.departureSurcharge) : 'No cost'} />
-        <SummaryLine label="Total price" value={formatCurrency(booking.total)} />
-        <SummaryLine label="Special requests" value={booking.specialRequests || 'None'} />
+        <SummaryLine label={language === 'es' ? 'Nombre' : 'Customer name'} value={booking.customerName || (language === 'es' ? 'Requerido' : 'Required')} />
+        <SummaryLine label={language === 'es' ? 'Teléfono' : 'Phone'} value={booking.phone || (language === 'es' ? 'Requerido' : 'Required')} />
+        <SummaryLine label={language === 'es' ? 'Correo' : 'Email'} value={booking.email || (language === 'es' ? 'Requerido' : 'Required')} />
+        <SummaryLine label={language === 'es' ? 'Barco' : 'Boat'} value={booking.boat.name} />
+        <SummaryLine label="Tour" value={String(getTourText(booking.tour, language).title)} />
+        <SummaryLine label={language === 'es' ? 'Paquete o duración' : 'Package or duration'} value={booking.packageLabel} />
+        <SummaryLine label={language === 'es' ? 'Fecha' : 'Date'} value={formatDisplayDate(booking.date)} />
+        <SummaryLine label={language === 'es' ? 'Hora' : 'Time'} value={booking.time || (language === 'es' ? 'Requerido' : 'Required')} />
+        <SummaryLine label={language === 'es' ? 'Número de personas' : 'Number of guests'} value={String(booking.guests)} />
+        <SummaryLine label={language === 'es' ? 'Precio base del barco' : 'Boat base price'} value={formatCurrency(booking.basePrice)} />
+        <SummaryLine label={language === 'es' ? 'Personas extra' : 'Additional guests'} value={String(booking.additionalGuests)} />
+        <SummaryLine label={language === 'es' ? 'Cargo por persona extra' : 'Additional guest charge'} value={formatCurrency(booking.additionalGuestCharge)} />
+        <SummaryLine label={language === 'es' ? 'Lugar de salida' : 'Departure location'} value={booking.departureLocationName || (language === 'es' ? 'Requerido' : 'Required')} />
+        <SummaryLine label={language === 'es' ? 'Recargo de salida' : 'Departure surcharge'} value={booking.departureSurcharge > 0 ? formatCurrency(booking.departureSurcharge) : (language === 'es' ? 'Sin costo' : 'No cost')} />
+        <SummaryLine label={language === 'es' ? 'Precio total' : 'Total price'} value={formatCurrency(booking.total)} />
+        <SummaryLine label={language === 'es' ? 'Solicitudes especiales' : 'Special requests'} value={booking.specialRequests || (language === 'es' ? 'Ninguna' : 'None')} />
       </div>
     </GlassPanel>
   );

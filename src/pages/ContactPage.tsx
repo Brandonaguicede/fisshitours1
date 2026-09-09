@@ -2,6 +2,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useQuery } from '@tanstack/react-query';
 import { Mail, MapPin, MessageCircle, Phone, Send } from 'lucide-react';
 import { useForm } from 'react-hook-form';
+import { useState } from 'react';
 import { z } from 'zod';
 
 import { Container } from '../components/common/Container';
@@ -9,6 +10,7 @@ import { Button, CardShell, ChoiceCard, Field, FieldError, GlassPanel, Input, Se
 import { DISPLAY_PHONE, WHATSAPP_NUMBER } from '../constants/contact';
 import { departureTimes } from '../data/departureTimes';
 import { useLanguage } from '../i18n/LanguageContext';
+import { supabase } from '../lib/supabase';
 import { getActiveBoatTours } from '../services/boatTourService';
 
 function uniqueTourOptions(tours: Array<{ tourId?: string; tourTitle?: string }>) {
@@ -43,6 +45,8 @@ const contactText = {
     success: 'Solicitud registrada. Te contactaremos pronto.',
     availability: 'Confirmamos disponibilidad antes de cualquier pago.',
     submit: 'Enviar mensaje',
+    sending: 'Enviando...',
+    error: 'No pudimos enviar tu mensaje. Inténtalo de nuevo.',
     asideTitle: 'Siempre estamos listos para ayudarte',
     asideDescription: 'Papagayo Fishing Tours coordina charters privados de pesca, snorkeling, playa y navegacion en Guanacaste.',
     phoneLabel: 'Telefono',
@@ -79,6 +83,8 @@ const contactText = {
     success: 'Request received. We will contact you soon.',
     availability: 'We confirm availability before any payment.',
     submit: 'Send message',
+    sending: 'Sending...',
+    error: 'We could not send your message. Please try again.',
     asideTitle: 'We are always ready to help',
     asideDescription: 'Papagayo Fishing Tours coordinates private fishing, snorkeling, beach and cruising charters in Guanacaste.',
     phoneLabel: 'Phone',
@@ -100,6 +106,7 @@ const contactText = {
 type ContactFormValues = {
   name: string;
   email: string;
+  phone: string;
   tourType: string;
   departureTime: string;
   message: string;
@@ -122,18 +129,32 @@ export default function ContactPage() {
     register,
     handleSubmit,
     watch,
-    formState: { errors, isSubmitSuccessful },
+    formState: { errors, isSubmitSuccessful, isSubmitting },
     reset,
   } = useForm<ContactFormValues>({
     resolver: zodResolver(contactSchema),
-    defaultValues: { name: '', email: '', tourType: '', departureTime: 'morning', message: '' },
+    defaultValues: { name: '', email: '', tourType: '', departureTime: 'morning', message: '', phone: '' },
   });
 
   const selectedTime = watch('departureTime');
+  const [submitError, setSubmitError] = useState(false);
 
-  function onSubmit(values: ContactFormValues) {
-    console.info('Reserva solicitada', values);
-    reset();
+  async function onSubmit(values: ContactFormValues) {
+    setSubmitError(false);
+    try {
+      const { error } = await supabase.functions.invoke('send-contact-message', {
+        body: {
+          ...values,
+          language,
+          tourType: tourOptions.find((tour) => tour.id === values.tourType)?.title ?? values.tourType,
+          departureTime: departureTimes.find((time) => time.id === values.departureTime)?.label ?? values.departureTime,
+        },
+      });
+      if (error) throw error;
+      reset();
+    } catch {
+      setSubmitError(true);
+    }
   }
 
   return (
@@ -173,7 +194,7 @@ export default function ContactPage() {
                   </Select>
                 </Field>
                 <Field htmlFor="contact-phone" label={copy.phone}>
-                  <Input id="contact-phone" autoComplete="tel" className="font-semibold placeholder:text-ocean-400" placeholder={copy.phonePlaceholder} shape="pill" tone="deep" />
+                  <Input id="contact-phone" autoComplete="tel" className="font-semibold placeholder:text-ocean-400" placeholder={copy.phonePlaceholder} shape="pill" tone="deep" {...register('phone')} />
                 </Field>
               </div>
 
@@ -216,11 +237,15 @@ export default function ContactPage() {
                   <p className="rounded-full border border-ocean-300/40 bg-ocean-500/15 px-4 py-2 text-xs font-extrabold text-ocean-100" aria-live="polite">
                     {copy.success}
                   </p>
+                ) : submitError ? (
+                  <p className="rounded-full border border-red-300/40 bg-red-500/15 px-4 py-2 text-xs font-extrabold text-red-100" aria-live="polite">
+                    {copy.error}
+                  </p>
                 ) : (
                   <span className="text-xs font-semibold text-ocean-300">{copy.availability}</span>
                 )}
-                <Button className="w-full sm:w-auto" type="submit">
-                  {copy.submit}
+                <Button className="w-full sm:w-auto" disabled={isSubmitting} type="submit">
+                  {isSubmitting ? copy.sending : copy.submit}
                 </Button>
               </div>
             </form>
