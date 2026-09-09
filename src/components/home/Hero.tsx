@@ -132,8 +132,8 @@ export function Hero() {
               <span className="h-9 w-9 animate-spin rounded-full border-2 border-white/25 border-t-white/90" />
             </div>
           ) : null}
-          <video className="absolute inset-0 hidden h-full w-full object-cover object-center transition-opacity duration-150 ease-linear sm:block" style={{ opacity: videoReady ? 1 : 0 }} src={videoUrl || mobileVideoUrl} autoPlay muted loop playsInline preload="auto" aria-hidden="true" onCanPlay={() => setVideoReady(true)} onError={() => setVideoFailed(true)} />
-          <video className="absolute inset-0 h-full w-full object-cover object-center transition-opacity duration-150 ease-linear sm:hidden" style={{ opacity: videoReady ? 1 : 0 }} src={mobileVideoUrl} autoPlay muted loop playsInline preload="auto" aria-hidden="true" onCanPlay={() => setVideoReady(true)} onError={() => setVideoFailed(true)} />
+          <video className="absolute inset-0 hidden h-full w-full object-cover object-center transition-opacity duration-150 ease-linear sm:block" style={{ opacity: videoReady ? 1 : 0 }} src={videoUrl || mobileVideoUrl} autoPlay muted loop playsInline preload="metadata" aria-hidden="true" onCanPlay={() => setVideoReady(true)} onError={() => setVideoFailed(true)} />
+          <video className="absolute inset-0 h-full w-full object-cover object-center transition-opacity duration-150 ease-linear sm:hidden" style={{ opacity: videoReady ? 1 : 0 }} src={mobileVideoUrl} autoPlay muted loop playsInline preload="metadata" aria-hidden="true" onCanPlay={() => setVideoReady(true)} onError={() => setVideoFailed(true)} />
         </>
       ) : (
         slides.map((slide, index) => (

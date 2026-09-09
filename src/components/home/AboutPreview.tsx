@@ -103,7 +103,7 @@ export function AboutPreview() {
                   src={image}
                   alt={index === 0 ? about[`about.image_alt.${locale}` as keyof AboutSettings] : ''}
                   aria-hidden={index === 0 ? undefined : true}
-                  loading="eager"
+                  loading={index === 0 ? 'eager' : 'lazy'}
                 />
               ))}
               <div className="absolute bottom-4 left-4 flex gap-1.5" aria-hidden="true">
