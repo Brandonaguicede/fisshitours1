@@ -81,7 +81,7 @@ export function FleetSection({ boats, tours, selectedBoat, onSelectBoat, onViewT
             title={tr(text.home.fleetTitle, language)}
             description={tr(text.home.fleetDescription, language)}
           />
-          <div className="flex shrink-0 gap-3" aria-label={language === 'es' ? 'Controles del carrusel de barcos' : 'Boat carousel controls'}>
+          <div className="hidden" aria-label={language === 'es' ? 'Controles del carrusel de barcos' : 'Boat carousel controls'}>
             <CarouselArrow
               direction="left"
               disabled={!canScrollLeft}
@@ -97,9 +97,24 @@ export function FleetSection({ boats, tours, selectedBoat, onSelectBoat, onViewT
           </div>
         </div>
 
+        <div className="mt-5 flex justify-center gap-3 sm:mt-6" aria-label={language === 'es' ? 'Controles del carrusel de barcos' : 'Boat carousel controls'}>
+          <CarouselArrow
+            direction="left"
+            disabled={!canScrollLeft}
+            label={language === 'es' ? 'Barcos anteriores' : 'Previous boats'}
+            onClick={() => scrollBoats(-1)}
+          />
+          <CarouselArrow
+            direction="right"
+            disabled={!canScrollRight}
+            label={language === 'es' ? 'Más barcos' : 'Next boats'}
+            onClick={() => scrollBoats(1)}
+          />
+        </div>
+
         <div
           ref={carouselRef}
-          className="mt-10 flex snap-x snap-mandatory gap-5 overflow-x-auto scroll-smooth pb-5 pr-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:gap-6"
+          className="mt-6 flex snap-x snap-mandatory gap-5 overflow-x-auto scroll-smooth pb-5 pr-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:mt-7 sm:gap-6"
           role="region"
           aria-label={language === 'es' ? 'Barcos disponibles' : 'Available boats'}
           onScroll={updateCarouselControls}
