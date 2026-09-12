@@ -3,30 +3,12 @@ import { supabase } from '../lib/supabase';
 export const DEFAULT_ABOUT_SETTINGS = {
   'about.eyebrow.es': 'Sobre nosotros',
   'about.eyebrow.en': 'About us',
-  'about.title.es': 'Pasion local y excelencia en el Pacifico de Costa Rica',
-  'about.title.en': 'Local passion and excellence on Costa Rica Pacific',
-  'about.description.es':
-    'Sube a bordo de Second Wind y descubre una experiencia sofisticada donde el lujo se encuentra con la naturaleza.',
-  'about.description.en':
-    'Step aboard Second Wind and discover a sophisticated ocean experience where luxury meets nature.',
+  'about.title.es': 'Pasión local y excelencia en el Pacífico de Costa Rica',
+  'about.title.en': "Local passion and excellence on Costa Rica's Pacific coast",
   'about.preview_text.es':
-    'Papagayo Fishing Tour es una empresa familiar fundada por los jovenes emprendedores locales Gabriel y Joshua, orgullosamente de Playas del Coco.\n\nCada salida esta disenada con cuidado para ofrecer exclusividad, comodidad y autenticidad en las aguas de la Peninsula de Papagayo.',
+    'Papagayo Fishing Tour es una empresa familiar fundada por Gabriel y Joshua, jóvenes emprendedores de Playas del Coco con una conexión profunda con el mar y la Península de Papagayo.\n\nCada experiencia combina conocimiento local, tripulación profesional y tours privados diseñados para pesca deportiva, snorkeling, playa y recorridos personalizados.',
   'about.preview_text.en':
-    'Papagayo Fishing Tour is a family-owned company founded by young local entrepreneurs Gabriel and Joshua, proudly from Playas del Coco.\n\nEvery journey is thoughtfully designed to deliver exclusivity, comfort and authenticity across the waters of the Papagayo Peninsula.',
-  'about.story.es':
-    'Papagayo Fishing Tour es una empresa familiar fundada por los jovenes emprendedores locales Gabriel y Joshua, orgullosamente de Playas del Coco. Su conexion profunda con el oceano redefine las experiencias de pesca en las aguas de la Peninsula de Papagayo.\n\nNavega por mares cristalinos reconocidos por pesca, surf y snorkeling de clase mundial. Cada viaje esta disenado para ofrecer exclusividad, comodidad y autenticidad.',
-  'about.story.en':
-    'Papagayo Fishing Tour is a family-owned company founded by young local entrepreneurs Gabriel and Joshua, proudly from Playas del Coco. Driven by a deep connection to the ocean, they have redefined fishing experiences in the waters of the Papagayo Peninsula.\n\nSail across crystal-clear seas renowned for world-class fishing, surfing and snorkeling. Every journey is thoughtfully designed to deliver exclusivity, comfort and authenticity.',
-  'about.cta_title.es': 'Listo para planear tu salida?',
-  'about.cta_title.en': 'Ready to plan your trip?',
-  'about.cta_text.es':
-    'Elige tu barco, horario y tipo de experiencia. Nosotros nos encargamos del resto.',
-  'about.cta_text.en':
-    'Choose your boat, time and experience. We handle the rest.',
-  'about.preview_button_label.es': 'Conocer la empresa',
-  'about.preview_button_label.en': 'Meet the company',
-  'about.cta_button_label.es': 'Reservar ahora',
-  'about.cta_button_label.en': 'Book now',
+    'Papagayo Fishing Tour is a family-run company founded by Gabriel and Joshua, young entrepreneurs from Playas del Coco with a deep connection to the sea and the Papagayo Peninsula.\n\nEvery experience blends local knowledge, a professional crew and private tours designed for sport fishing, snorkeling, beach days and fully personalized itineraries.',
   'about.image_alt.es': 'Tripulacion con pesca en aguas de Guanacaste',
   'about.image_alt.en': 'Crew with a catch in Guanacaste waters',
   'about.image': '',

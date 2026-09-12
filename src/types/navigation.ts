@@ -1,4 +1,4 @@
 export interface NavigationItem {
-  label: string;
+  label: { es: string; en: string };
   href: string;
 }

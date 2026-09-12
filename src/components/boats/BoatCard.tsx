@@ -17,7 +17,7 @@ export function BoatCard({ boat, startingPrice, isSelected, onSelect }: BoatCard
   const boatText = getBoatText(boat, language);
 
   return (
-    <article className="w-[min(88vw,22.5rem)] shrink-0 snap-start lg:w-[23rem]">
+    <article className="h-full w-full">
       <CardShell
         as="button"
         aria-label={`${language === 'es' ? 'Ver barco' : 'Explore boat'} ${boat.name}`}

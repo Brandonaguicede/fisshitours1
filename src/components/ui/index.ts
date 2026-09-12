@@ -10,6 +10,8 @@ export { GalleryPagination } from './GalleryPagination';
 export { Field, FieldError, FieldLabel } from './Field';
 export { Input, Select, TextArea } from './FormControls';
 export { FilterPill } from './FilterPill';
+export { FilterMenu } from './FilterMenu';
+export type { FilterMenuOption } from './FilterMenu';
 export { GlassPanel } from './GlassPanel';
 export type { GlassPanelVariant } from './GlassPanel';
 export { IconButton } from './IconButton';

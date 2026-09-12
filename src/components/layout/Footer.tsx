@@ -22,15 +22,6 @@ function uniqueTourTitles(tours: Array<{ tourId?: string; tourTitle?: string }>)
   return titles;
 }
 
-function navLabel(href: string, language: 'es' | 'en') {
-  if (href === '/') return tr(text.nav.home, language);
-  if (href === '/#fleet') return tr(text.nav.boats, language);
-  if (href === '/#tours') return tr(text.nav.tours, language);
-  if (href === '/#gallery') return tr(text.nav.gallery, language);
-  if (href === '/nosotros') return tr(text.nav.about, language);
-  return tr(text.nav.contact, language);
-}
-
 export function Footer() {
   const { language } = useLanguage();
   const toursQuery = useQuery({ queryKey: ['boatTours', 'active'], queryFn: getActiveBoatTours });
@@ -64,7 +55,7 @@ export function Footer() {
           <div className="mt-4 grid gap-2">
             {navigationItems.map((item) => (
               <Link className="text-sm text-ocean-200 transition hover:text-ocean-400" key={item.href} to={item.href}>
-                {navLabel(item.href, language)}
+                {tr(item.label, language)}
               </Link>
             ))}
           </div>

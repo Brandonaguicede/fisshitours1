@@ -56,9 +56,9 @@ export function BoatTourCard({ boat, tour, relatedTours, isSelected, onSelect }:
               <SpecItem icon={Compass} value={display.category} />
             </SpecsGrid>
 
-            <div className="mt-4 grid gap-1.5">
+            <div className="mt-2.5 grid gap-1">
               {packageTours.slice(0, 3).map((item) => (
-                <div className="flex items-center justify-between gap-3 text-xs font-bold text-ocean-200" key={item.id}>
+                <div className="flex items-center justify-between gap-3 text-[0.7rem] font-bold text-ocean-200" key={item.id}>
                   <span className="truncate">{item.name.replace(/^.* - /, '')}</span>
                   <span className="shrink-0 text-ocean-400">{formatCurrency(item.basePrice)}</span>
                 </div>

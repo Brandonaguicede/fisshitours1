@@ -1,67 +1,45 @@
-import { useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 
-import { BookingPanel } from '../components/booking/BookingPanel';
 import { Container } from '../components/common/Container';
-import { SectionReveal } from '../components/common/SectionReveal';
+import { reveal, SectionReveal } from '../components/common/SectionReveal';
 import { SectionHeader } from '../components/ui';
 import { AboutPreview } from '../components/home/AboutPreview';
+import { BookingTeaser } from '../components/home/BookingTeaser';
 import { FleetSection } from '../components/home/FleetSection';
 import { GallerySection } from '../components/home/GallerySection';
 import { Hero } from '../components/home/Hero';
 import { Testimonials } from '../components/home/Testimonials';
 import { TourCarouselSection } from '../components/home/TourCarouselSection';
-import { boatTours } from '../data/boatTours';
-import { boats } from '../data/boats';
+import { useBookingCatalog } from '../hooks/useBookingCatalog';
 import { useLanguage } from '../i18n/LanguageContext';
 import { text, tr } from '../i18n/translations';
 import type { Boat } from '../types/boat';
 import type { BoatTour } from '../types/boatTour';
-import { getActiveBoats } from '../services/boatService';
-import { getActiveBoatTours } from '../services/boatTourService';
 import { scrollToHomeSection } from '../utils/homeNavigation';
 
 export default function HomePage() {
   const { language } = useLanguage();
-  const boatsQuery = useQuery({ queryKey: ['boats', 'active'], queryFn: getActiveBoats });
-  const toursQuery = useQuery({ queryKey: ['boatTours', 'active'], queryFn: getActiveBoatTours });
-  const catalogBoats = boatsQuery.data?.length ? boatsQuery.data : boats;
-  const catalogTours = toursQuery.data?.length ? toursQuery.data : boatTours;
-  const [selectedBoatId, setSelectedBoatId] = useState(boats[0].id);
-  const [selectedTourId, setSelectedTourId] = useState<string | undefined>(boatTours.find((tour) => tour.boatId === boats[0].id)?.id);
-
-  const selectedBoat = useMemo(() => catalogBoats.find((boat) => boat.id === selectedBoatId) ?? catalogBoats[0], [catalogBoats, selectedBoatId]);
-  const selectedTour = useMemo(() => catalogTours.find((tour) => tour.id === selectedTourId && tour.boatId === selectedBoat?.id), [catalogTours, selectedBoat?.id, selectedTourId]);
-  const toursWithKnownBoats = useMemo(() => catalogTours.filter((tour) => catalogBoats.some((boat) => boat.id === tour.boatId)), [catalogBoats, catalogTours]);
-  const catalogLoading = boatsQuery.isLoading || toursQuery.isLoading;
+  const navigate = useNavigate();
+  const { catalogBoats, catalogTours, toursWithKnownBoats, selectedBoat, selectedTour, selectBoat: selectBoatId, selectBoatAndTour } = useBookingCatalog();
 
   function scrollToTours() {
     scrollToHomeSection('tours');
   }
 
-  function selectBoat(boat: Boat, shouldScrollToTours = true) {
-    setSelectedBoatId(boat.id);
-    setSelectedTourId(catalogTours.find((tour) => tour.boatId === boat.id)?.id);
-    if (shouldScrollToTours) {
-      window.setTimeout(scrollToTours, 80);
-    }
+  function selectBoat(boat: Boat) {
+    selectBoatId(boat);
   }
 
+  // The Tours cards' "Reserve" CTA (via TourDetailModal) is a clear intent
+  // to book — it goes straight to the dedicated booking flow with the
+  // selection preloaded, instead of the Home teaser.
   function selectTour(tour: BoatTour) {
-    const tourBoat = catalogBoats.find((boat) => boat.id === tour.boatId);
-    if (tourBoat) {
-      setSelectedBoatId(tourBoat.id);
-    }
-    setSelectedTourId(tour.id);
-    window.setTimeout(() => scrollToHomeSection('booking'), 80);
+    selectBoatAndTour(tour);
+    navigate('/reservar');
   }
 
   function viewTourOnHome(tour: BoatTour) {
-    const tourBoat = catalogBoats.find((boat) => boat.id === tour.boatId);
-    if (tourBoat) {
-      setSelectedBoatId(tourBoat.id);
-    }
-    setSelectedTourId(tour.id);
+    selectBoatAndTour(tour);
     window.setTimeout(scrollToTours, 80);
   }
 
@@ -69,48 +47,37 @@ export default function HomePage() {
     window.setTimeout(scrollToTours, 80);
   }
 
-  function changeBoatFromBooking(boat: Boat) {
-    setSelectedBoatId(boat.id);
-    setSelectedTourId(undefined);
-  }
-
-  function changeTourFromBooking(tour?: BoatTour) {
-    setSelectedTourId(tour?.id);
-  }
-
   if (!selectedBoat) return null;
 
   return (
     <>
       <Hero />
-      <SectionReveal><FleetSection boats={catalogBoats} tours={catalogTours} selectedBoat={selectedBoat} onSelectBoat={selectBoat} onViewTourType={viewTourOnHome} onViewAllTours={viewAllToursOnHome} /></SectionReveal>
-      <SectionReveal><TourCarouselSection boats={catalogBoats} tours={toursWithKnownBoats} selectedTour={selectedTour} onSelectTour={selectTour} /></SectionReveal>
-      <SectionReveal><section className="home-section bg-ocean-950 py-10 sm:py-14 lg:py-16" data-home-section id="booking">
-        <Container>
-          <div className="mx-auto max-w-4xl" data-section-anchor>
-            <SectionHeader
-              align="left"
-              description={tr(text.home.bookingDescription, language)}
-              eyebrow={tr(text.home.bookingEyebrow, language)}
-              title={tr(text.home.bookingTitle, language)}
-              variant="compact"
-            />
-          </div>
-          <div className="mx-auto mt-6 max-w-4xl lg:mt-7">
-            <BookingPanel
-              selectedBoat={selectedBoat}
-              selectedTour={selectedTour}
-              boats={catalogBoats}
-              tours={catalogTours}
-              catalogLoading={catalogLoading}
-              onBoatChange={changeBoatFromBooking}
-              onTourChange={changeTourFromBooking}
-            />
+      <FleetSection boats={catalogBoats} tours={catalogTours} selectedBoat={selectedBoat} onSelectBoat={selectBoat} onViewTourType={viewTourOnHome} onViewAllTours={viewAllToursOnHome} />
+      <TourCarouselSection boats={catalogBoats} tours={toursWithKnownBoats} selectedTour={selectedTour} onSelectTour={selectTour} />
+      <SectionReveal><section className="home-section booking-ocean-atmosphere relative overflow-hidden py-10 sm:py-12 lg:py-14" data-home-section data-nav-href="/#booking" id="booking">
+        <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-ocean-300/30 to-transparent" />
+        <span aria-hidden="true" className="atmosphere-drift-slow pointer-events-none absolute left-[13%] top-[20%] hidden size-2 rounded-full bg-ocean-200/30 blur-[1.5px] lg:block" />
+        <span aria-hidden="true" className="atmosphere-drift pointer-events-none absolute right-[15%] top-[64%] hidden size-1.5 rounded-full bg-seafoam-300/25 blur-[1px] lg:block" />
+        <span aria-hidden="true" className="atmosphere-drift-slow pointer-events-none absolute left-[24%] bottom-[16%] hidden size-3 rounded-full bg-ocean-300/[0.12] blur-[3px] lg:block" />
+        <Container className="relative">
+          <div data-nav-frame>
+            <div className="mx-auto max-w-2xl text-center" {...reveal(0)}>
+              <SectionHeader
+                align="center"
+                description={tr(text.home.bookingDescription, language)}
+                eyebrow={tr(text.home.bookingEyebrow, language)}
+                title={tr(text.home.bookingTitle, language)}
+                variant="compact"
+              />
+            </div>
+            <div className="mx-auto mt-6 sm:mt-7">
+              <BookingTeaser selectedBoat={selectedBoat} selectedTour={selectedTour} tours={catalogTours} />
+            </div>
           </div>
         </Container>
       </section></SectionReveal>
-      <SectionReveal><Testimonials /></SectionReveal>
-      <SectionReveal><GallerySection /></SectionReveal>
+      <SectionReveal variant="atmosphere"><Testimonials /></SectionReveal>
+      <SectionReveal variant="mask"><GallerySection /></SectionReveal>
       <SectionReveal><AboutPreview /></SectionReveal>
     </>
   );

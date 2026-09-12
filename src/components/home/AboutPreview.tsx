@@ -1,4 +1,4 @@
-import { Anchor, Compass, ShieldCheck, Users } from 'lucide-react';
+import { Anchor, Compass, Mail, ShieldCheck, Users } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 
@@ -66,11 +66,12 @@ export function AboutPreview() {
   const paragraphs = splitParagraphs(about[`about.preview_text.${locale}` as keyof AboutSettings]);
 
   return (
-    <section className="home-section relative overflow-hidden bg-ocean-950 py-16 text-white sm:py-20 lg:py-24" data-home-section id="about">
+    <section className="home-section relative overflow-hidden bg-ocean-950 py-16 text-white sm:py-20 lg:py-24" data-home-section data-nav-href="/#about" id="about">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_22%,rgba(110,172,201,0.16),transparent_34%),linear-gradient(180deg,rgba(11,40,66,0)_0%,rgba(19,62,98,0.32)_48%,rgba(11,40,66,0)_100%)]" aria-hidden="true" />
       <Container>
+        <div data-nav-frame>
         <div className="relative grid gap-9 lg:grid-cols-[minmax(0,0.82fr)_minmax(520px,1.18fr)] lg:items-center">
-          <div className="max-w-2xl" data-section-anchor>
+          <div className="max-w-2xl">
             <SectionHeader
               align="left"
               eyebrow={about[`about.eyebrow.${locale}` as keyof AboutSettings]}
@@ -82,12 +83,8 @@ export function AboutPreview() {
                 <p key={paragraph.slice(0, 32)}>{paragraph}</p>
               ))}
             </div>
-            <div className="mt-7 flex flex-col gap-3 sm:flex-row">
-              <Button className="gap-2.5" size="lg" variant="primary" to="/nosotros">
-                <Users size={18} />
-                {about[`about.preview_button_label.${locale}` as keyof AboutSettings]}
-              </Button>
-              <Button className="gap-2.5" size="lg" variant="glass" to="/tours">
+            <div className="mt-7">
+              <Button className="gap-2.5" size="lg" variant="primary" to="/tours">
                 <Compass size={18} />
                 {language === 'es' ? 'Explorar tours' : 'Explore our tours'}
               </Button>
@@ -118,6 +115,8 @@ export function AboutPreview() {
             </Chip>
           </div>
         </div>
+        <span aria-hidden="true" data-nav-frame-end />
+        </div>
 
         <div className="relative mt-5 grid gap-4 md:grid-cols-3 lg:mt-5">
           {valueCards.map((card) => (
@@ -132,6 +131,24 @@ export function AboutPreview() {
             </GlassPanel>
           ))}
         </div>
+
+        <GlassPanel className="mt-4 flex flex-col items-start gap-4 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6" variant="subtle">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.14em] text-ocean-400">{language === 'es' ? 'Contacto' : 'Contact'}</p>
+            <h3 className="mt-1.5 text-lg font-extrabold text-white">
+              {language === 'es' ? '¿Quieres hablar con nosotros?' : 'Want to talk with us?'}
+            </h3>
+            <p className="mt-1.5 max-w-md text-sm leading-6 text-ocean-100/88">
+              {language === 'es'
+                ? 'Si tienes preguntas sobre tours, horarios o reservas, escribenos y con gusto te ayudamos.'
+                : "If you have questions about tours, schedules or bookings, send us a message and we'll be happy to help."}
+            </p>
+          </div>
+          <Button className="w-full shrink-0 gap-2.5 sm:w-auto" size="lg" variant="glass" to="/contacto">
+            <Mail size={18} />
+            {language === 'es' ? 'Ver información de contacto' : 'View contact information'}
+          </Button>
+        </GlassPanel>
       </Container>
     </section>
   );

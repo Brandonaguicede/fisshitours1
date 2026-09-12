@@ -3,7 +3,8 @@ import { useQuery } from '@tanstack/react-query';
 
 import type { GalleryCategory } from '../../types/gallery';
 import { Container } from '../common/Container';
-import { Button, FilterPill, Gallery, GalleryGrid, GalleryImage, GlassPanel, SectionHeader } from '../ui';
+import { Button, FilterMenu, Gallery, GalleryGrid, GalleryImage, GlassPanel, SectionHeader } from '../ui';
+import { reveal } from '../common/SectionReveal';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { text, tr } from '../../i18n/translations';
 import { supabase } from '../../lib/supabase';
@@ -55,30 +56,29 @@ export function GallerySection() {
   }
 
   return (
-    <section className="home-section bg-ocean-950 pb-16 pt-0 sm:pb-20 sm:pt-8 lg:pb-24 lg:pt-10" data-home-section data-nav-href="/#gallery" id="gallery">
+    <section className="home-section bg-ocean-950 pb-10 pt-0 sm:pb-12 sm:pt-6 lg:pb-14 lg:pt-8" data-home-section data-nav-href="/#gallery" id="gallery">
       <Container>
-        <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between" data-section-anchor>
+        <div data-nav-frame>
+        <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between" {...reveal(0)}>
           <SectionHeader
             align="left"
             eyebrow={tr(text.home.galleryEyebrow, language)}
             title={tr(text.home.galleryTitle, language)}
             description={tr(text.home.galleryDescription, language)}
           />
-          <div className="flex flex-wrap gap-2">
-            {filters.map((filter) => (
-              <FilterPill
-                key={filter.value}
-                active={activeFilter === filter.value}
-                onClick={() => changeFilter(filter.value)}
-              >
-              {filter.label[language]}
-              </FilterPill>
-            ))}
-          </div>
+          <FilterMenu
+            label={language === 'es' ? 'Filtrar' : 'Filter'}
+            ariaLabel={language === 'es' ? 'Filtrar galería por categoría' : 'Filter gallery by category'}
+            clearLabel={language === 'es' ? 'Ver todo' : 'Clear filter'}
+            clearValue="all"
+            value={activeFilter}
+            onChange={(next) => changeFilter(next as GalleryCategory | 'all')}
+            options={filters.map((filter) => ({ value: filter.value, label: filter.label[language] }))}
+          />
         </div>
 
         <Gallery closeLabel={language === 'es' ? 'Cerrar galería' : 'Close gallery'}>
-          <GalleryGrid className="mt-10">
+          <GalleryGrid className="mt-7" {...reveal(1)}>
             {visibleImages.map((image) => (
               <GalleryImage
                 key={image.id}
@@ -103,6 +103,7 @@ export function GallerySection() {
             </div>
           ) : null}
         </Gallery>
+        </div>
       </Container>
     </section>
   );

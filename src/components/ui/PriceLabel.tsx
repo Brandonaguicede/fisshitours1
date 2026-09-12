@@ -9,5 +9,5 @@ interface PriceLabelProps {
 }
 
 export function PriceLabel({ className, label, value }: PriceLabelProps) {
-  return <span className={cn('text-sm font-semibold text-ocean-200', className)}>{label} {value}</span>;
+  return <span className={cn('text-[0.8rem] font-semibold text-ocean-200', className)}>{label} {value}</span>;
 }

@@ -12,6 +12,10 @@ import { scrollToHomeSection } from '../../utils/homeNavigation';
 
 const FALLBACK_HERO_IMAGE = '/images/placeholder-image.jpg';
 
+// React 18 doesn't recognize the camelCase `fetchPriority` prop (added in React 19) and
+// silently drops it — the lowercase `fetchpriority` HTML attribute reaches the DOM instead.
+type FetchPriorityAttr = { fetchpriority?: 'high' | 'low' | 'auto' };
+
 const DEFAULT_HERO_SETTINGS = {
   'home.hero.media_mode': 'image',
   'home.hero.title.es': 'Experimenta el oceano',
@@ -117,6 +121,17 @@ export function Hero() {
     scrollToHomeSection('fleet');
   }
 
+  // Hero's CTAs are `#booking` / `#tours` hash strings from settings, kept
+  // as a real `href` for right-click/middle-click/no-JS, but routed through
+  // the shared nav-frame scroll on a normal click — a plain anchor jump
+  // would skip the offset math and land the section under the navbar.
+  function handleHeroCta(event: { preventDefault: () => void }, hash: string) {
+    const id = hash.replace(/^#/, '');
+    if (!id) return;
+    event.preventDefault();
+    scrollToHomeSection(id);
+  }
+
   return (
     <section
       className="home-section relative min-h-[100svh] overflow-hidden bg-[radial-gradient(circle_at_50%_30%,rgba(73,134,167,0.34),transparent_22rem),linear-gradient(180deg,#0B2842_0%,#061B2F_56%,#020B14_100%)] lg:min-h-[100dvh]"
@@ -149,7 +164,7 @@ export function Hero() {
                 width={1200}
                 height={1500}
                 sizes="100vw"
-                fetchPriority={index === 0 ? 'high' : 'auto'}
+                {...({ fetchpriority: index === 0 ? 'high' : 'auto' } as FetchPriorityAttr)}
                 loading={index === 0 ? 'eager' : 'lazy'}
                 decoding="async"
               />
@@ -162,7 +177,7 @@ export function Hero() {
                 width={1920}
                 height={1080}
                 sizes="100vw"
-                fetchPriority={index === 0 ? 'high' : 'auto'}
+                {...({ fetchpriority: index === 0 ? 'high' : 'auto' } as FetchPriorityAttr)}
                 loading={index === 0 ? 'eager' : 'lazy'}
                 decoding="async"
               />
@@ -171,7 +186,9 @@ export function Hero() {
         ))
       )}
       <div className="absolute inset-0 bg-ocean-950/45" />
-      <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-black/80 to-transparent" />
+      {/* Fades to the exact solid color Fleet opens with (ocean-950), so the
+          two sections read as one continuous depth rather than a hard cut. */}
+      <div className="absolute inset-x-0 bottom-0 h-56 bg-gradient-to-t from-ocean-950 via-ocean-950/75 to-transparent sm:h-64" />
 
       <div className="absolute bottom-24 left-1/2 z-10 flex -translate-x-1/2 gap-3 sm:left-auto sm:right-32 sm:translate-x-0 md:bottom-24 lg:right-40">
         <IconButton href={INSTAGRAM_URL} icon={Instagram} label="Instagram" size="md" target="_blank" />
@@ -224,12 +241,12 @@ export function Hero() {
             transition={{ duration: 0.7, delay: 0.24, ease: [0.23, 1, 0.32, 1] }}
           >
             {primaryEnabled ? (
-              <Button href={hero['home.hero.primary_href']} size="lg">
+              <Button href={hero['home.hero.primary_href']} onClick={(event) => handleHeroCta(event, hero['home.hero.primary_href'])} size="lg">
                 {hero[`home.hero.primary_label.${locale}` as keyof HeroSettings]}
               </Button>
             ) : null}
             {secondaryEnabled ? (
-              <Button href={hero['home.hero.secondary_href']} size="lg" variant="glass">
+              <Button href={hero['home.hero.secondary_href']} onClick={(event) => handleHeroCta(event, hero['home.hero.secondary_href'])} size="lg" variant="glass">
                 {hero[`home.hero.secondary_label.${locale}` as keyof HeroSettings]}
               </Button>
             ) : null}

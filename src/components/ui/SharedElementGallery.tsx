@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useMemo, useRef, useState, type PropsWithChildren, type MouseEvent } from 'react';
+import { createContext, useCallback, useContext, useMemo, useRef, useState, type HTMLAttributes, type PropsWithChildren, type MouseEvent } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 
 import { cn } from '../../utils/cn';
@@ -47,8 +47,8 @@ export function Gallery({ children, closeLabel = 'Close gallery' }: GalleryProps
   );
 }
 
-export function GalleryGrid({ children, className }: PropsWithChildren<{ className?: string }>) {
-  return <div className={cn('columns-1 gap-4 sm:columns-2 lg:columns-4', className)}>{children}</div>;
+export function GalleryGrid({ children, className, ...rest }: PropsWithChildren<HTMLAttributes<HTMLDivElement>>) {
+  return <div className={cn('columns-2 gap-3 sm:columns-3 sm:gap-4 lg:columns-4', className)} {...rest}>{children}</div>;
 }
 
 interface GalleryImageProps {
@@ -65,12 +65,14 @@ export function GalleryImage({ alt, className, id, src }: GalleryImageProps) {
   return (
     <motion.button
       type="button"
-      className={cn('mb-4 block w-full cursor-zoom-in overflow-hidden rounded-2xl border border-white/10 bg-ocean-900/60 shadow-soft', className)}
+      className={cn('mb-3 block w-full cursor-zoom-in overflow-hidden rounded-2xl border border-white/10 bg-ocean-900/60 shadow-soft sm:mb-4', className)}
       aria-label={alt}
       whileHover={reduceMotion ? undefined : 'hover'}
       whileTap={reduceMotion ? undefined : 'tap'}
       onClick={() => setSelectedImage({ id, src, alt })}
     >
+      {/* No fixed aspect-ratio/object-cover box: the photo keeps its own
+          proportions instead of being cropped to fit a uniform cell. */}
       <motion.img
         layoutId={`gallery-image-${id}`}
         src={src}
@@ -78,7 +80,7 @@ export function GalleryImage({ alt, className, id, src }: GalleryImageProps) {
         loading="lazy"
         decoding="async"
         draggable={false}
-        className="w-full rounded-2xl object-cover"
+        className="block w-full rounded-2xl"
         variants={{ hover: { scale: 0.98 }, tap: { scale: 0.95 } }}
         transition={spring}
       />

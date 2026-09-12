@@ -17,7 +17,7 @@ import { calculateBookingTotal, getBoatStartingPrice, getEffectiveMaxGuests, get
 import { cn } from '../../utils/cn';
 import { formatCurrency } from '../../utils/formatCurrency';
 import { TurnstileBox } from '../common/TurnstileBox';
-import { Badge, Button, ChoiceCard, Field, FieldError, GlassPanel, Input, ModalShell, TextArea } from '../ui';
+import { Button, ChoiceCard, Field, FieldError, GlassPanel, Input, ModalShell, TextArea } from '../ui';
 
 interface BookingPanelProps {
   selectedBoat: Boat;
@@ -396,21 +396,24 @@ const bookingPayload = selectedTour
   }
 
   return (
-    <GlassPanel className="relative -mx-4 overflow-hidden !rounded-none p-3 text-white sm:mx-0 sm:!rounded-[var(--radius-panel)] sm:p-4 lg:p-5" variant="panel">
+    <GlassPanel className="relative -mx-4 overflow-hidden !rounded-none p-3 text-white sm:mx-0 sm:!rounded-[var(--radius-panel)] sm:p-3.5 lg:p-4" variant="panel">
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(135deg,rgba(110,172,201,0.10),transparent_32%),radial-gradient(circle_at_92%_12%,rgba(73,134,167,0.10),transparent_20rem)]" />
-      <div className="relative mx-auto max-w-xl text-center">
-        <Badge className="text-[0.6rem] font-extrabold uppercase tracking-[0.14em] sm:text-[0.66rem]" variant="subtle">{tr(text.booking.badge, language)}</Badge>
-        <h2 ref={headingRef} tabIndex={-1} className="mt-2 text-2xl font-extrabold leading-tight text-white outline-none min-[420px]:text-[1.75rem] sm:text-[1.9rem]">{tr(text.booking.title, language)}</h2>
-        <p className="mx-auto mt-1.5 max-w-md text-xs font-medium leading-5 text-ocean-200/90 sm:text-sm">{tr(text.booking.subtitle, language)}</p>
+      {/* Compact, not a second hero title: the section-level SectionHeader
+          above already carries eyebrow+title+description. This line keeps
+          the step-change focus target (a11y) and the trust reassurance
+          copy, without repeating the heading hierarchy. */}
+      <div className="relative mx-auto flex max-w-xl flex-wrap items-baseline justify-center gap-x-2 gap-y-0.5 text-center">
+        <h2 ref={headingRef} tabIndex={-1} className="text-base font-extrabold leading-tight text-white outline-none sm:text-lg">{tr(text.booking.title, language)}</h2>
+        <p className="text-xs font-medium leading-5 text-ocean-200/80"><span aria-hidden="true">· </span>{tr(text.booking.subtitle, language)}</p>
       </div>
 
-      <GlassPanel className="relative mx-auto mt-4 grid max-w-lg grid-cols-4 items-start gap-1 px-2 py-2 sm:mt-5 sm:gap-2" variant="subtle">
+      <GlassPanel className="relative mx-auto mt-2.5 grid max-w-lg grid-cols-4 items-start gap-1 px-2 py-1.5 sm:mt-3 sm:gap-1.5" variant="subtle">
         {steps.map((step, index) => (
           <button
             key={step}
             className={cn(
-              'glass-focus-ring group relative grid min-w-0 justify-items-center gap-1.5 rounded-xl px-1 py-1 text-center transition-colors duration-200 sm:px-2',
-              index < steps.length - 1 && 'after:absolute after:left-[calc(50%+1.15rem)] after:top-3.5 after:h-px after:w-[calc(100%-2.3rem)]',
+              'glass-focus-ring group relative grid min-w-0 justify-items-center gap-1 rounded-xl px-1 py-0.5 text-center transition-colors duration-200 sm:px-1.5',
+              index < steps.length - 1 && 'after:absolute after:left-[calc(50%+1rem)] after:top-3 after:h-px after:w-[calc(100%-2rem)]',
               index < activeStep ? 'after:bg-[var(--glass-accent-border)]' : 'after:bg-[var(--surface-border)]',
             )}
             type="button"
@@ -418,16 +421,21 @@ const bookingPayload = selectedTour
             aria-disabled={!canVisitStep(index)}
             onClick={() => goToStep(index)}
           >
-            <GlassPanel as="span" className={cn('grid h-6 w-6 place-items-center text-[0.68rem] font-extrabold transition-[background-color,border-color,color,box-shadow] duration-200 sm:h-7 sm:w-7 sm:text-xs', activeStep === index ? 'glass-selected text-white' : activeStep > index ? 'glass-accent text-ocean-100' : 'text-ocean-300')} shape="circle" variant="control">
+            <GlassPanel as="span" className={cn('grid h-6 w-6 place-items-center text-[0.68rem] font-extrabold transition-[background-color,border-color,color,box-shadow] duration-200', activeStep === index ? 'glass-selected text-white' : activeStep > index ? 'glass-accent text-ocean-100' : 'text-ocean-300')} shape="circle" variant="control">
               {index + 1}
             </GlassPanel>
-            <span className={cn('max-w-full text-[0.6rem] font-bold leading-tight sm:text-[0.66rem]', activeStep === index ? 'text-ocean-200' : 'text-ocean-500')}>{step}</span>
+            <span className={cn('max-w-full text-[0.6rem] font-bold leading-tight', activeStep === index ? 'text-ocean-200' : 'text-ocean-500')}>{step}</span>
           </button>
         ))}
       </GlassPanel>
 
-      <div className="relative mt-4 grid gap-3 xl:mt-5 xl:grid-cols-[minmax(0,1fr)_290px] xl:gap-4">
-        <GlassPanel className="p-3 min-[420px]:p-4" variant="surface">
+      {/* Landing composition (header + stepper, above) is judged for fit as
+          a unit; the boat list and pricing summary below remain fully
+          reachable by scroll but aren't forced to fit the first viewport. */}
+      <span data-nav-frame-end aria-hidden="true" />
+
+      <div className="relative mt-3 grid gap-3 xl:mt-4 xl:grid-cols-[minmax(0,1fr)_320px] xl:gap-4">
+        <GlassPanel className="p-3" variant="surface">
           {activeStep === 0 ? (
             <BoatStep boats={boats} tours={tours} selectedBoat={selectedBoat} catalogLoading={catalogLoading} onBoatChange={handleBoatChange} onNext={() => setActiveStep(1)} />
           ) : null}
@@ -565,7 +573,7 @@ const bookingPayload = selectedTour
           />
         </div>
 
-        <div className="hidden xl:block">
+        <div className="hidden xl:sticky xl:top-28 xl:block xl:self-start">
           <BookingSummary
             selectedBoat={selectedBoat}
             selectedTour={selectedTour}
@@ -614,33 +622,33 @@ function BoatStep(props: { boats: Boat[]; tours: BoatTour[]; selectedBoat: Boat;
   return (
     <div>
       <div className="flex items-center gap-3 text-white">
-        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-ocean-500/15 text-ocean-300 sm:h-10 sm:w-10"><Ship size={19} /></span>
+        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-ocean-500/15 text-ocean-300 sm:h-9 sm:w-9"><Ship size={17} /></span>
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.12em] text-ocean-400 sm:text-sm">{tr(text.booking.privateFleet, language)}</p>
-          <h3 className="text-lg font-extrabold text-white sm:text-xl">{tr(text.booking.chooseBoat, language)}</h3>
+          <h3 className="text-base font-extrabold text-white sm:text-lg">{tr(text.booking.chooseBoat, language)}</h3>
         </div>
       </div>
-      <div className="mt-4 grid gap-2 sm:mt-6 sm:gap-3">
+      <div className="mt-3 grid gap-1.5 sm:mt-4 sm:gap-2">
         {props.catalogLoading ? <p className="text-sm font-semibold text-ocean-200">{language === 'es' ? 'Cargando barcos...' : 'Loading boats...'}</p> : null}
         {props.boats.map((boat) => (
           <ChoiceCard
             key={boat.id}
-            className="grid grid-cols-[3.25rem_minmax(0,1fr)] items-center gap-3 p-2.5 text-left sm:grid-cols-[4rem_minmax(0,1fr)_auto] sm:gap-3 sm:p-2.5"
+            className="grid grid-cols-[2.75rem_minmax(0,1fr)] items-center gap-2.5 p-2 text-left sm:grid-cols-[3rem_minmax(0,1fr)_auto] sm:gap-2.5 sm:p-2"
             selected={props.selectedBoat.id === boat.id}
             onClick={() => props.onBoatChange(boat.id)}
           >
-            <img src={boat.image} alt={boat.name} className="h-12 w-12 rounded-xl object-cover sm:h-14 sm:w-14" />
+            <img src={boat.image} alt={boat.name} className="h-10 w-10 rounded-xl object-cover sm:h-11 sm:w-11" />
             <span className="min-w-0">
-              <span className="block truncate text-sm font-extrabold text-white sm:text-base">{boat.name}</span>
-              <span className="mt-1 block text-xs font-semibold text-ocean-200">{boat.length}</span>
-              <span className="mt-1 block text-xs font-medium text-ocean-400">{boat.featuredSpec}</span>
+              <span className="block truncate text-sm font-extrabold text-white">{boat.name}</span>
+              <span className="mt-0.5 block text-xs font-semibold text-ocean-200">{boat.length}</span>
+              <span className="mt-0.5 block text-xs font-medium text-ocean-400">{boat.featuredSpec}</span>
             </span>
             <span className="col-span-2 text-sm font-extrabold text-ocean-400 sm:col-span-1 sm:text-right">{formatCurrency(getBoatStartingPrice(boat.id, props.tours))}</span>
           </ChoiceCard>
         ))}
       </div>
-      <div className="mt-4 sm:mt-5">
-        <Button fullWidth type="button" onClick={props.onNext}>
+      <div className="mt-3 flex sm:mt-4 sm:justify-end">
+        <Button className="sm:w-auto sm:min-w-[170px]" fullWidth type="button" onClick={props.onNext}>
           {tr(text.booking.continue, language)}
         </Button>
       </div>
@@ -795,7 +803,7 @@ function TourDetailsStep(props: {
         <Button type="button" variant="glass" onClick={props.onBack}>
           {tr(text.booking.back, language)}
         </Button>
-        <Button type="button" disabled={!props.canContinue} onClick={props.onNext}>
+        <Button className="sm:min-w-[170px]" type="button" disabled={!props.canContinue} onClick={props.onNext}>
           {tr(text.booking.continueData, language)}
         </Button>
       </div>
@@ -899,7 +907,7 @@ function DepartureLocationStep(props: {
 
       <div className="mt-auto flex flex-col-reverse gap-3 pt-4 sm:flex-row sm:justify-between">
         <Button type="button" variant="glass" onClick={props.onBack}>Atrás</Button>
-        <Button type="button" disabled={!selected || props.loading || props.error || props.locations.length === 0} onClick={props.onNext}>Continuar</Button>
+        <Button className="sm:min-w-[170px]" type="button" disabled={!selected || props.loading || props.error || props.locations.length === 0} onClick={props.onNext}>Continuar</Button>
       </div>
     </div>
   );
@@ -1241,14 +1249,14 @@ function BookingSummary(props: {
   const extrasTotal = props.selectedTour?.customQuote ? '-' : formatCurrency(Math.max(props.pricing.total - props.pricing.basePrice - props.pricing.extraGuestsTotal - props.pricing.departureSurcharge, 0));
 
   return (
-    <GlassPanel as="aside" className="h-fit p-3 text-white min-[420px]:p-4 sm:p-4" variant="surface">
-      <p className="text-sm font-bold uppercase tracking-[0.14em] text-ocean-400">{tr(text.booking.summary, language)}</p>
-      <img src={coverImage} alt={props.selectedBoat.name} className="mt-3 hidden aspect-[16/7] w-full rounded-xl object-cover min-[520px]:block xl:aspect-[16/8]" loading="lazy" />
-      <div className="mt-3 sm:mt-4">
-        <h3 className="text-lg font-extrabold text-white sm:text-xl">{props.selectedBoat.name}</h3>
-        <p className="mt-1 text-sm font-semibold text-ocean-300">{props.selectedBoat.length} - {props.selectedBoat.engine}</p>
+    <GlassPanel as="aside" className="h-fit p-3 text-white" variant="surface">
+      <p className="text-xs font-bold uppercase tracking-[0.14em] text-ocean-400">{tr(text.booking.summary, language)}</p>
+      <img src={coverImage} alt={props.selectedBoat.name} className="mt-2.5 hidden aspect-[16/6] w-full rounded-xl object-cover min-[520px]:block" loading="lazy" />
+      <div className="mt-2.5 sm:mt-3">
+        <h3 className="text-base font-extrabold text-white sm:text-lg">{props.selectedBoat.name}</h3>
+        <p className="mt-0.5 text-xs font-semibold text-ocean-300">{props.selectedBoat.length} - {props.selectedBoat.engine}</p>
       </div>
-      <div className="mt-4 grid gap-2 text-sm text-ocean-100">
+      <div className="mt-3 grid gap-1.5 text-sm text-ocean-100">
         <SummaryRow label={tr(text.booking.tourType, language)} value={props.selectedTour ? `${selectedTourName}${props.selectedTour.duration ? ` (${props.selectedTour.duration}h)` : ''}` : tr(text.booking.selectTour, language)} />
         <SummaryRow label={tr(text.booking.date, language)} value={formatDisplayDate(props.date)} />
         <SummaryRow label={language === 'es' ? 'Salida' : 'Departure'} value={props.selectedTimeSlot?.time ?? tr(text.booking.selectTime, language)} />
@@ -1256,19 +1264,19 @@ function BookingSummary(props: {
         {isFullDayTour(props.selectedTour) ? <SummaryRow label={language === 'es' ? 'Comida' : 'Meal option'} value={props.mealOption || (language === 'es' ? 'No seleccionada' : 'Not selected')} /> : null}
         <SummaryRow label={language === 'es' ? 'Lugar de salida' : 'Departure location'} value={props.departureLocation?.name ?? (language === 'es' ? 'No seleccionado' : 'Not selected')} />
       </div>
-      <GlassPanel className="mt-4 p-3 sm:mt-5 sm:p-4" variant="subtle">
+      <GlassPanel className="mt-3 p-3" variant="subtle">
         <SummaryRow label={language === 'es' ? 'Precio base' : 'Base price'} value={subtotal} />
         <SummaryRow label={language === 'es' ? 'Incluye hasta' : 'Includes up to'} value={`${getTourIncludedGuests(props.selectedBoat, props.selectedTour)} ${language === 'es' ? 'personas' : 'guests'}`} />
         {props.pricing.extraGuests > 0 ? <SummaryRow label={tr(text.booking.extraPeople, language)} value={`${props.pricing.extraGuests} x ${formatCurrency(props.pricing.extraGuestPrice)}`} /> : null}
         <SummaryRow label={language === 'es' ? 'Cargo por salida' : 'Departure surcharge'} value={props.pricing.departureSurcharge > 0 ? formatCurrency(props.pricing.departureSurcharge) : (language === 'es' ? 'Sin costo' : 'No cost')} />
         <SummaryRow label={tr(text.booking.taxes, language)} value={extrasTotal} />
-        <div className="mt-4 flex flex-wrap items-end justify-between gap-3 border-t border-white/10 pt-4">
+        <div className="mt-3 flex flex-wrap items-end justify-between gap-3 border-t border-white/10 pt-3">
           <span className="font-extrabold text-white">Total</span>
-          <span className="text-2xl font-extrabold text-ocean-400">{props.selectedTour?.customQuote ? 'Cotizar' : formatCurrency(props.pricing.total)}</span>
+          <span className="text-xl font-extrabold text-ocean-400">{props.selectedTour?.customQuote ? 'Cotizar' : formatCurrency(props.pricing.total)}</span>
         </div>
       </GlassPanel>
-      <p className="mt-4 text-xs font-medium text-ocean-300">{tr(text.booking.secure, language)}</p>
-      <div className="mt-4 grid gap-2 border-t border-white/10 pt-4 text-xs leading-5 text-ocean-300">
+      <p className="mt-3 text-xs font-medium text-ocean-300">{tr(text.booking.secure, language)}</p>
+      <div className="mt-3 grid gap-1.5 border-t border-white/10 pt-3 text-xs leading-5 text-ocean-300">
         {terms.slice(0, 3).map((term) => (
           <p key={term}>{term}</p>
         ))}
@@ -1423,7 +1431,7 @@ function BookingSuccessModal(props: {
 
 function SummaryRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex flex-wrap justify-between gap-x-4 gap-y-1 border-b border-white/10 pb-2 last:border-b-0 last:pb-0">
+    <div className="flex flex-wrap justify-between gap-x-4 gap-y-0.5 border-b border-white/10 pb-1 last:border-b-0 last:pb-0">
       <span className="text-ocean-300">{label}</span>
       <span className="text-right font-bold text-white">{value}</span>
     </div>

@@ -43,7 +43,7 @@ interface CardMediaProps extends Pick<ImgHTMLAttributes<HTMLImageElement>, 'alt'
 
 export function CardMedia({ alt, className, decoding = 'async', imageClassName, loading = 'lazy', onError, src, title, variant = 'default' }: CardMediaProps) {
   return (
-    <span className={cn('relative block w-full shrink-0 overflow-hidden bg-ocean-900', variant === 'default' ? 'h-48 sm:h-52' : 'aspect-[4/3]', className)}>
+    <span className={cn('relative block w-full shrink-0 overflow-hidden bg-ocean-900', variant === 'default' ? 'h-36 sm:h-40' : 'aspect-[4/3]', className)}>
       <img
         alt={alt}
         className={cn('absolute inset-0 h-full w-full object-cover transition duration-500', variant === 'default' ? 'group-hover:scale-[1.025]' : 'duration-700 group-hover:scale-105', imageClassName)}
@@ -53,18 +53,18 @@ export function CardMedia({ alt, className, decoding = 'async', imageClassName, 
         src={src}
       />
       {variant === 'default' ? <span aria-hidden="true" className="absolute inset-0 bg-gradient-to-t from-ocean-950/75 via-transparent to-ocean-950/10" /> : null}
-      {title ? <span className="absolute inset-x-5 bottom-4"><span className="block font-display text-[1.75rem] font-semibold leading-none text-white">{title}</span></span> : null}
+      {title ? <span className="absolute inset-x-4 bottom-3"><span className="block font-display text-xl font-semibold leading-none text-white">{title}</span></span> : null}
     </span>
   );
 }
 
 export function CardContent({ children, className }: PropsWithChildren<{ className?: string }>) {
-  return <span className={cn('flex w-full flex-1 flex-col p-4 sm:p-5', className)}>{children}</span>;
+  return <span className={cn('flex w-full flex-1 flex-col p-3.5 sm:p-4', className)}>{children}</span>;
 }
 
 export function CardActions({ children, className }: PropsWithChildren<{ className?: string }>) {
   return (
-    <Button as="span" className={cn('mt-4', className)} fullWidth size="sm" variant="primary">
+    <Button as="span" className={cn('mt-3', className)} fullWidth size="xs" variant="primary">
       {children}
     </Button>
   );

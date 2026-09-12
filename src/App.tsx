@@ -2,6 +2,7 @@ import { Suspense } from 'react';
 import { BrowserRouter } from 'react-router-dom';
 
 import { AppErrorBoundary } from './components/common/AppErrorBoundary';
+import { BookingSelectionProvider } from './contexts/BookingSelectionContext';
 import { AppRoutes } from './routes/AppRoutes';
 
 function LoadingFallback() {
@@ -12,10 +13,12 @@ function LoadingFallback() {
 export default function App() {
   return (
     <AppErrorBoundary>
-      <BrowserRouter>
-        <Suspense fallback={<LoadingFallback />}>
-          <AppRoutes />
-        </Suspense>
+      <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <BookingSelectionProvider>
+          <Suspense fallback={<LoadingFallback />}>
+            <AppRoutes />
+          </Suspense>
+        </BookingSelectionProvider>
       </BrowserRouter>
     </AppErrorBoundary>
   );

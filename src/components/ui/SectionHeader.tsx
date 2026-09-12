@@ -30,20 +30,26 @@ const eyebrowStyles: Record<SectionHeaderVariant, string> = {
   heroWide: 'text-sm font-bold uppercase tracking-[0.16em] text-ocean-200',
 };
 
+/*
+ * Fluid clamp() scales instead of a single sm: breakpoint jump: the title
+ * grows smoothly with viewport width and caps at a moderate size, so it
+ * reads as "important" without dominating the viewport at 1366/1920 — and
+ * without a hard jump right at 640px either.
+ */
 const titleStyles: Record<SectionHeaderVariant, string> = {
-  default: 'mt-3 font-display text-3xl font-extrabold leading-tight text-white sm:text-5xl',
-  compact: 'mt-2 font-display text-2xl font-extrabold leading-tight text-white sm:text-3xl',
-  feature: 'mt-3 font-display text-4xl font-extrabold leading-tight text-white sm:text-5xl',
-  hero: 'mt-3 font-display text-5xl font-extrabold leading-none text-white sm:text-6xl',
-  heroWide: 'mt-4 font-display text-5xl font-extrabold leading-[0.95] text-white sm:text-6xl lg:text-7xl',
+  default: 'mt-2.5 font-display font-extrabold leading-[1.08] text-white [font-size:clamp(1.7rem,1.32rem+1.7vw,2.5rem)]',
+  compact: 'mt-2 font-display font-extrabold leading-tight text-white [font-size:clamp(1.4rem,1.22rem+0.8vw,1.75rem)]',
+  feature: 'mt-2.5 font-display font-extrabold leading-[1.06] text-white [font-size:clamp(1.9rem,1.5rem+1.8vw,2.75rem)]',
+  hero: 'mt-3 font-display font-extrabold leading-[1.02] text-white [font-size:clamp(2.25rem,1.7rem+2.4vw,3.25rem)]',
+  heroWide: 'mt-3.5 font-display font-extrabold leading-[0.98] text-white [font-size:clamp(2.5rem,1.8rem+3vw,3.75rem)]',
 };
 
 const descriptionStyles: Record<SectionHeaderVariant, string> = {
-  default: 'mt-4 text-base leading-7 text-ocean-200 sm:text-lg',
-  compact: 'mt-3 text-sm leading-6 text-ocean-200',
-  feature: 'mt-4 text-base leading-7 text-ocean-200 sm:text-lg',
+  default: 'mt-3 text-base leading-7 text-ocean-200 sm:text-lg',
+  compact: 'mt-2.5 text-sm leading-6 text-ocean-200',
+  feature: 'mt-3 text-base leading-7 text-ocean-200 sm:text-lg',
   hero: 'mt-3 max-w-xl text-sm font-semibold leading-6 text-ocean-200',
-  heroWide: 'mt-6 max-w-2xl text-lg font-semibold leading-8 text-ocean-100',
+  heroWide: 'mt-4 max-w-2xl text-lg font-semibold leading-8 text-ocean-100',
 };
 
 export function SectionHeader({ actions, align = 'center', className, description, eyebrow, level = 2, title, variant = 'default', ...props }: SectionHeaderProps) {

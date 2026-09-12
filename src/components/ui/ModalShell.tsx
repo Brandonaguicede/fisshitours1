@@ -73,8 +73,18 @@ export function ModalShell({ open, onClose, titleId, children, className, tone =
       document.body.style.width = previousBodyStyles.width;
       document.body.style.paddingRight = previousBodyStyles.paddingRight;
       document.removeEventListener('keydown', onKeyDown);
+      // Force layout to commit the just-restored (scrollable) body styles
+      // before scrolling, so this doesn't run while the browser still
+      // considers the document position:fixed-locked from the pre-mutation
+      // frame.
+      void document.body.offsetHeight;
+      // `behavior: 'instant'` is required, not optional: `html` has
+      // `scroll-behavior: smooth` globally, which the legacy two-argument
+      // form (and `behavior: 'auto'`) both inherit — so without this the
+      // "restore" visibly animates back into place over ~1s, reading as an
+      // unwanted scroll/redirect right after the modal closes.
+      window.scrollTo({ top: scrollY, left: 0, behavior: 'instant' });
       previousFocusRef.current?.focus({ preventScroll: true });
-      window.scrollTo(0, scrollY);
     };
   }, [open]);
 

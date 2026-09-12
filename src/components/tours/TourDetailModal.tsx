@@ -42,39 +42,39 @@ export function TourDetailModal({ boat, onClose, onSelect, open, packageTours, t
           <CloseButton className="absolute right-4 top-4 z-20" label={language === 'es' ? 'Cerrar detalles del tour' : 'Close tour details'} onClick={onClose} />
         </div>
 
-        <div className="p-4 sm:p-6">
+        <div className="p-4 sm:p-5">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.15em] text-ocean-300">{boat.name}</p>
-            <h3 id="tour-detail-title" className="mt-1 font-display text-3xl font-semibold leading-none text-white sm:text-4xl">{display.title}</h3>
+            <h3 id="tour-detail-title" className="mt-1 font-display text-2xl font-semibold leading-none text-white sm:text-3xl">{display.title}</h3>
           </div>
 
-          <p className="mt-5 text-base leading-7 text-ocean-200">{tour.shortDescription ?? tour.description}</p>
-          <div className="mt-5 grid gap-3 sm:grid-cols-3">
-            <GlassPanel className="p-4" variant="subtle">
+          <p className="mt-4 text-sm leading-6 text-ocean-200">{tour.shortDescription ?? tour.description}</p>
+          <div className="mt-4 grid gap-2.5 sm:grid-cols-3">
+            <GlassPanel className="p-3" variant="subtle">
               <p className="text-xs font-bold uppercase tracking-[0.12em] text-ocean-400">{language === 'es' ? 'Actividades' : 'Activities'}</p>
-              <p className="mt-1 font-extrabold text-white">{activities.slice(0, 3).join(', ')}</p>
+              <p className="mt-1 text-sm font-extrabold text-white">{activities.slice(0, 3).join(', ')}</p>
             </GlassPanel>
-            <GlassPanel className="p-4" variant="subtle">
+            <GlassPanel className="p-3" variant="subtle">
               <p className="text-xs font-bold uppercase tracking-[0.12em] text-ocean-400">{language === 'es' ? 'Capacidad' : 'Capacity'}</p>
-              <p className="mt-1 font-extrabold text-white">{language === 'es' ? `Hasta ${effectiveMaxGuests} personas` : `Up to ${effectiveMaxGuests} guests`}</p>
+              <p className="mt-1 text-sm font-extrabold text-white">{language === 'es' ? `Hasta ${effectiveMaxGuests} personas` : `Up to ${effectiveMaxGuests} guests`}</p>
             </GlassPanel>
-            <GlassPanel className="p-4" variant="subtle">
+            <GlassPanel className="p-3" variant="subtle">
               <p className="text-xs font-bold uppercase tracking-[0.12em] text-ocean-400">{language === 'es' ? 'Persona extra' : 'Additional guest'}</p>
-              <p className="mt-1 font-extrabold text-white">{formatCurrency(tour.extraGuestPrice)} {language === 'es' ? 'cada una' : 'each'}</p>
+              <p className="mt-1 text-sm font-extrabold text-white">{formatCurrency(tour.extraGuestPrice)} {language === 'es' ? 'cada una' : 'each'}</p>
             </GlassPanel>
           </div>
-          <div className="mt-5 grid gap-4 sm:grid-cols-2">
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
             <div>
               <p className="text-xs font-bold uppercase tracking-[0.12em] text-ocean-400">{language === 'es' ? 'Incluye' : 'Included'}</p>
-              <ul className="mt-3 grid gap-2 text-sm leading-6 text-ocean-200">
+              <ul className="mt-2.5 grid gap-1.5 text-sm leading-6 text-ocean-200">
                 {included.map((item) => <li key={item}>{item}</li>)}
               </ul>
             </div>
             <div>
               <p className="text-xs font-bold uppercase tracking-[0.12em] text-ocean-400">{language === 'es' ? 'Precios' : 'Prices'}</p>
-              <div className="mt-3 grid gap-2">
+              <div className="mt-2.5 grid gap-1.5">
                 {packageTours.map((item) => (
-                  <GlassPanel key={item.id} className="flex justify-between gap-4 px-3 py-2 text-sm" variant="subtle">
+                  <GlassPanel key={item.id} className="flex justify-between gap-4 px-3 py-1.5 text-sm" variant="subtle">
                     <span className="font-semibold text-ocean-200">{getPackageLabel(item, language)}</span>
                     <span className="font-extrabold text-ocean-400">{formatCurrency(item.basePrice)}</span>
                   </GlassPanel>
@@ -83,10 +83,11 @@ export function TourDetailModal({ boat, onClose, onSelect, open, packageTours, t
             </div>
           </div>
 
-          <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-end">
-            <Button type="button" variant="glass" onClick={onClose}>{language === 'es' ? 'Cerrar' : 'Close'}</Button>
+          <div className="mt-5 flex justify-end">
             <Button
               type="button"
+              fullWidth
+              className="sm:w-auto sm:min-w-[170px]"
               onClick={() => {
                 onClose();
                 onSelect(tour);

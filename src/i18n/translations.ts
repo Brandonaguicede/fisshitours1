@@ -9,6 +9,7 @@ export const text = {
     about: { es: 'Nosotros', en: 'About' },
     contact: { es: 'Contacto', en: 'Contact' },
     book: { es: 'Reservar', en: 'Book Now' },
+    reviews: { es: 'Comentarios', en: 'Reviews' },
   },
   home: {
     fleetEyebrow: { es: 'Nuestra flota', en: 'Our Fleet' },
@@ -21,11 +22,9 @@ export const text = {
     galleryDescription: { es: 'Usa los filtros para ver imágenes específicas sin hacer la página demasiado larga.', en: 'Use filters to browse a focused set of images without making the page too long.' },
     bookingEyebrow: { es: 'Reserva', en: 'Booking' },
     bookingTitle: { es: 'Reserva tu experiencia', en: 'Reserve Your Experience' },
-    bookingDescription: { es: 'Tu barco y tour seleccionados mantienen conectados capacidad, horarios, precio base del bote y resumen.', en: 'Your selected boat and tour stay connected through capacity, time slots, boat pricing and summary.' },
-    aboutEyebrow: { es: 'Sobre nosotros', en: 'About us' },
-    aboutTitle: { es: 'Creamos rutas con alma local y ejecución profesional', en: 'Local routes, professionally operated' },
-    aboutDescription: { es: 'Papagayo Fishing Tours conecta viajeros con el Pacífico costarricense: navegación privada, pesca deportiva, playas claras y experiencias bien coordinadas desde el primer contacto.', en: 'Papagayo Fishing Tours connects travelers with Costa Rica’s Pacific coast: private navigation, sport fishing, clear beaches and well-coordinated experiences from the first message.' },
-    aboutButton: { es: 'Conocer la empresa', en: 'Meet the company' },
+    bookingDescription: { es: 'Tu próxima experiencia en el mar comienza aquí.', en: 'Your next experience at sea starts here.' },
+    bookingNoSelection: { es: 'Empieza eligiendo tu bote y personaliza tu experiencia.', en: 'Start by choosing your boat and customize your experience.' },
+    bookingHelper: { es: 'Rápido, seguro y en solo unos pasos.', en: 'Fast, secure and just a few steps.' },
   },
   booking: {
     steps: {
@@ -61,6 +60,7 @@ export const text = {
     extraPeople: { es: 'Personas extra', en: 'Extra guests' },
     taxes: { es: 'Extras', en: 'Extras' },
     secure: { es: 'La reserva queda pendiente de confirmacion del equipo.', en: 'Your booking request remains pending confirmation by the team.' },
+    startBooking: { es: 'Empezar reserva', en: 'Start booking' },
   },
 } as const;
 

@@ -5,10 +5,18 @@
 @tailwind utilities;
 
 @layer utilities {
+  /*
+   * Section entrance language. `.section-reveal` alone is the plain
+   * fade+lift ("rise") used for utilitarian sections; each `--variant`
+   * gives a major section its own underwater-flavored arrival instead of
+   * one identical block-block-block effect everywhere. Children marked
+   * `[data-reveal]` inside a revealed section stagger in on top of it via
+   * `--reveal-order` (see per-section usage).
+   */
   .section-reveal {
     opacity: 0;
     transform: translate3d(0, 14px, 0);
-    transition: opacity 420ms ease-out, transform 420ms ease-out;
+    transition: opacity 480ms var(--ease-out-strong), transform 480ms var(--ease-out-strong);
   }
 
   .section-reveal--visible {
@@ -16,12 +24,100 @@
     transform: translate3d(0, 0, 0);
   }
 
+  /* Hero -> Fleet: the next section rises out of depth into soft focus. */
+  .section-reveal--emerge {
+    transform: translate3d(0, 46px, 0) scale(0.985);
+    filter: blur(7px);
+    transition: opacity 620ms var(--ease-out-strong), transform 640ms var(--ease-out-strong), filter 560ms var(--ease-out-strong);
+  }
+
+  .section-reveal--emerge.section-reveal--visible {
+    transform: none;
+    filter: blur(0);
+  }
+
+  /* Fleet -> Tours: content drifts up past the atmosphere, a layer change. */
+  .section-reveal--drift {
+    transform: translate3d(0, 34px, 0);
+    transition: opacity 560ms ease-out, transform 720ms var(--ease-out-strong);
+  }
+
+  .section-reveal--drift.section-reveal--visible {
+    transform: none;
+  }
+
+  /* Reveal through a soft mask, like light finding its way through water. */
+  .section-reveal--mask {
+    clip-path: inset(8% 0% 0% 0% round 1.75rem);
+    transform: translate3d(0, 20px, 0) scale(0.992);
+    filter: blur(5px);
+    transition: opacity 520ms var(--ease-out-strong), transform 640ms var(--ease-out-strong), filter 520ms var(--ease-out-strong), clip-path 680ms var(--ease-out-strong);
+  }
+
+  .section-reveal--mask.section-reveal--visible {
+    clip-path: inset(0% 0% 0% 0% round 1.75rem);
+    transform: none;
+    filter: blur(0);
+  }
+
+  /* A slower, atmospheric settle for reflective sections (testimonials). */
+  .section-reveal--atmosphere {
+    transform: translate3d(0, 12px, 0);
+    transition: opacity 900ms ease-out, transform 900ms var(--ease-out-strong);
+  }
+
+  .section-reveal--atmosphere.section-reveal--visible {
+    transform: none;
+  }
+
+  /* Per-section child stagger: title, media, controls arrive in sequence. */
+  .section-reveal [data-reveal] {
+    opacity: 0;
+    transform: translate3d(0, 12px, 0);
+    transition: opacity 520ms var(--ease-out-strong), transform 520ms var(--ease-out-strong);
+    transition-delay: calc(var(--reveal-order, 0) * 110ms);
+  }
+
+  .section-reveal--visible [data-reveal] {
+    opacity: 1;
+    transform: none;
+  }
+
+  /* Same stagger, plus a very light blur→sharp settle — for a single piece
+     (the booking teaser's card) that should read as materializing rather
+     than just sliding in, without giving every `[data-reveal]` child a blur
+     transition it doesn't need. */
+  .section-reveal [data-reveal-blur] {
+    opacity: 0;
+    transform: translate3d(0, 12px, 0);
+    filter: blur(6px);
+    transition: opacity 560ms var(--ease-out-strong), transform 560ms var(--ease-out-strong), filter 480ms var(--ease-out-strong);
+    transition-delay: calc(var(--reveal-order, 0) * 110ms);
+  }
+
+  .section-reveal--visible [data-reveal-blur] {
+    opacity: 1;
+    transform: none;
+    filter: blur(0);
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .section-reveal,
-    .section-reveal--visible {
+    .section-reveal--visible,
+    .section-reveal--emerge,
+    .section-reveal--drift,
+    .section-reveal--mask,
+    .section-reveal--atmosphere,
+    .section-reveal [data-reveal],
+    .section-reveal--visible [data-reveal],
+    .section-reveal [data-reveal-blur],
+    .section-reveal--visible [data-reveal-blur] {
       opacity: 1;
       transform: none;
+      filter: none;
+      clip-path: none;
       transition: none;
+      transition-delay: 0ms;
     }
   }
 }
@@ -55,7 +151,7 @@
     --glass-focus-border: rgba(var(--color-surface-highlight), 0.3);
     --glass-focus-outline: rgba(var(--color-surface-highlight), 0.5);
     --glass-accent-border: rgba(226, 168, 109, 0.46);
-    --glass-surface-background: rgba(var(--color-surface-ocean), 0.5);
+    --glass-surface-background: rgba(var(--color-surface-ocean), 0.4);
     --glass-panel-background: rgba(var(--color-surface-ocean), 0.5);
     --glass-control-background: rgba(var(--color-surface-light), 0.05);
     --glass-primary-background: rgba(188, 222, 236, 0.78);
@@ -65,10 +161,15 @@
     --glass-blur-control: 16px;
     --glass-saturation-surface: 120%;
     --glass-saturation-control: 120%;
+    /* Two soft layers instead of one hard-edged drop shadow: a small tight
+       contact shadow for grounding, plus a much larger, negatively-spread
+       ambient glow so the card reads as elevated/floating rather than a
+       silhouette cut out of the background. */
     --shadow-glass-surface:
       inset 0 1px 0 rgba(255, 255, 255, 0.05),
       inset 0 -1px 0 rgba(168, 211, 228, 0.018),
-      0 14px 35px rgba(var(--color-surface-ink), 0.2);
+      0 6px 14px -4px rgba(var(--color-surface-ink), 0.22),
+      0 32px 60px -20px rgba(var(--color-surface-ink), 0.45);
     --shadow-glass-control:
       inset 0 1px 0 rgba(255, 255, 255, 0.08),
       inset 0 -1px 0 rgba(168, 211, 228, 0.025),
@@ -101,7 +202,7 @@
     --transition-control: 180ms;
     --layout-container-max: 80rem;
     --layout-gutter: 1rem;
-    --section-space-block: 4rem;
+    --section-space-block: 3rem;
     background: var(--background);
     color: #133E62;
     --ease-out-strong: cubic-bezier(0.23, 1, 0.32, 1);
@@ -150,7 +251,7 @@
     --layout-gutter: 1.5rem;
     --header-safe-height: 96px;
     --nav-section-gap: 44px;
-    --section-space-block: 5rem;
+    --section-space-block: 3.75rem;
   }
 }
 
@@ -158,7 +259,7 @@
   :root {
     --layout-gutter: 2rem;
     --nav-section-gap: 56px;
-    --section-space-block: 6rem;
+    --section-space-block: 4.5rem;
   }
 }
 
@@ -219,33 +320,72 @@
     backdrop-filter: blur(14px);
   }
 
+  /*
+   * Navbar active state: no capsule/button, no glow, no gradient. Just the
+   * label in white plus a clean underline; the only creative touch lives in
+   * the underline's own motion (a slight overshoot as it grows from center).
+   */
   .navbar-link {
+    position: relative;
     border: 0;
     outline: none;
     background: transparent;
     box-shadow: none;
     transform: none;
-    transition: background-color 180ms ease, color 180ms ease;
+    transition: color 200ms ease;
+  }
+
+  .navbar-link::after {
+    content: '';
+    position: absolute;
+    left: 0.9rem;
+    right: 0.9rem;
+    bottom: 0.35rem;
+    height: 1.5px;
+    background: #fff;
+    transform: scaleX(0);
+    transform-origin: center;
+    transition: transform 460ms cubic-bezier(0.34, 1.56, 0.64, 1), opacity 220ms ease;
+    opacity: 0;
+    pointer-events: none;
   }
 
   .navbar-link:hover {
     border: 0;
-    background: rgba(221, 239, 246, 0.08);
+    background: transparent;
     box-shadow: none;
     transform: none;
+    color: #fff;
+  }
+
+  .navbar-link:hover::after {
+    opacity: 0.5;
+    transform: scaleX(0.5);
   }
 
   .navbar-link-active,
   .navbar-link-active:hover {
-    background: rgba(188, 222, 236, 0.2);
+    background: transparent;
     color: #fff;
     border: 0;
     box-shadow: none;
   }
 
+  .navbar-link-active::after {
+    opacity: 1;
+    transform: scaleX(1);
+  }
+
   .navbar-link:focus-visible {
     outline: 2px solid rgba(221, 239, 246, 0.58);
     outline-offset: 2px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .navbar-link,
+    .navbar-link::after {
+      transition: none;
+    }
   }
 
   .glass-control {
@@ -348,6 +488,24 @@
     scroll-margin-top: var(--home-anchor-offset);
   }
 
+  /* Slow decorative drift for atmosphere blobs between sections (transform-only, GPU-cheap; neutralized by the reduced-motion rule below). */
+  .atmosphere-drift {
+    animation: atmosphere-drift-y 11s ease-in-out infinite;
+  }
+
+  .atmosphere-drift-slow {
+    animation: atmosphere-drift-y 16s ease-in-out infinite;
+  }
+
+  @keyframes atmosphere-drift-y {
+    0%, 100% {
+      transform: translate3d(0, 0, 0);
+    }
+    50% {
+      transform: translate3d(0, -22px, 0);
+    }
+  }
+
   .tours-ocean-atmosphere {
     background-color: #0b2842;
     background-image:
@@ -355,8 +513,8 @@
         to right,
         #0b2842 0%,
         rgba(11, 40, 66, 0.5) 14%,
-        rgba(11, 40, 66, 0.06) 34%,
-        rgba(11, 40, 66, 0.06) 66%,
+        rgba(11, 40, 66, 0.04) 34%,
+        rgba(11, 40, 66, 0.04) 66%,
         rgba(11, 40, 66, 0.5) 86%,
         #0b2842 100%
       ),
@@ -364,16 +522,34 @@
         to bottom,
         #0b2842 0%,
         rgba(11, 40, 66, 0.94) 12%,
-        rgba(11, 40, 66, 0.12) 38%,
-        rgba(11, 40, 66, 0.12) 62%,
+        rgba(11, 40, 66, 0.08) 38%,
+        rgba(11, 40, 66, 0.08) 62%,
         rgba(11, 40, 66, 0.94) 88%,
         #0b2842 100%
       ),
-      linear-gradient(rgba(8, 34, 56, 0.38), rgba(8, 34, 56, 0.38)),
+      /* Darker but thinner tint than before: deepens the mood without
+         flattening the photo's own contrast the way the old lighter,
+         heavier wash did. */
+      linear-gradient(rgba(2, 11, 20, 0.28), rgba(2, 11, 20, 0.28)),
       url('/images/tours-ocean-background.png');
     background-position: center;
     background-repeat: no-repeat;
     background-size: cover;
+  }
+
+  /* Home's booking teaser: no photo, just layered gradients — a soft beam
+     of light from above (like sun through the surface), a glow pool
+     centered where the card sits, darker sides, and a deeper floor. Same
+     "underwater depth" idea as `.tours-ocean-atmosphere` above, built for a
+     section that doesn't have a background photo to lean on. */
+  .booking-ocean-atmosphere {
+    background-color: #0a2540;
+    background-image:
+      radial-gradient(ellipse 75% 60% at 50% -12%, rgba(180, 220, 235, 0.22), transparent 60%),
+      radial-gradient(ellipse 65% 55% at 50% 45%, rgba(120, 182, 210, 0.24), transparent 66%),
+      linear-gradient(115deg, transparent 30%, rgba(190, 225, 238, 0.05) 45%, transparent 60%),
+      linear-gradient(to right, rgba(2, 11, 20, 0.55), transparent 22%, transparent 78%, rgba(2, 11, 20, 0.55)),
+      linear-gradient(to bottom, transparent 45%, rgba(2, 11, 20, 0.38) 100%);
   }
 
   .about-glass-showcase {

@@ -1,10 +1,11 @@
 import { Check, ChevronRight, Gauge, Ruler, ShieldCheck, Users } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useState, type ReactNode } from 'react';
 
 import type { Boat } from '../../types/boat';
 import type { BoatTour } from '../../types/boatTour';
 import { getBoatText, getTourGroupKey, getTourText } from '../../i18n/content';
 import type { Language } from '../../i18n/LanguageContext';
+import { useCardCarousel } from '../../hooks/useCardCarousel';
 import { getBoatStartingPrice } from '../../utils/bookingPricing';
 import { formatCurrency } from '../../utils/formatCurrency';
 import { useLanguage } from '../../i18n/LanguageContext';
@@ -12,6 +13,7 @@ import { text, tr } from '../../i18n/translations';
 import { BoatCard } from '../boats/BoatCard';
 import { Container } from '../common/Container';
 import { Button, CarouselArrow, ChoiceCard, CloseButton, GlassPanel, MediaGallery, ModalShell, SectionHeader } from '../ui';
+import { reveal, SectionReveal } from '../common/SectionReveal';
 
 interface FleetSectionProps {
   boats: Boat[];
@@ -25,40 +27,20 @@ interface FleetSectionProps {
 export function FleetSection({ boats, tours, selectedBoat, onSelectBoat, onViewTourType, onViewAllTours }: FleetSectionProps) {
   const { language } = useLanguage();
   const [modalBoat, setModalBoat] = useState<Boat | null>(null);
-  const [canScrollLeft, setCanScrollLeft] = useState(false);
-  const [canScrollRight, setCanScrollRight] = useState(false);
-  const carouselRef = useRef<HTMLDivElement | null>(null);
+  const { scrollerRef: carouselRef, canScrollLeft, canScrollRight, updateControls, scrollByCards } = useCardCarousel(boats);
   const modalBoatText = modalBoat ? getBoatText(modalBoat, language) : null;
   const modalTourTypes = getModalTourTypes(modalBoat, tours, language);
   const modalImages = getBoatImages(modalBoat);
 
   const closeBoatDetails = useCallback(() => setModalBoat(null), []);
 
-  const updateCarouselControls = useCallback(() => {
-    const carousel = carouselRef.current;
-    if (!carousel) return;
-    setCanScrollLeft(carousel.scrollLeft > 2);
-    setCanScrollRight(carousel.scrollLeft + carousel.clientWidth < carousel.scrollWidth - 2);
-  }, []);
-
-  useEffect(() => {
-    const carousel = carouselRef.current;
-    if (!carousel) return;
-    updateCarouselControls();
-    const observer = new ResizeObserver(updateCarouselControls);
-    observer.observe(carousel);
-    return () => observer.disconnect();
-  }, [boats, updateCarouselControls]);
-
   function openBoatDetails(boat: Boat) {
     onSelectBoat(boat);
     setModalBoat(boat);
   }
 
-  function scrollBoats(direction: -1 | 1) {
-    const carousel = carouselRef.current;
-    if (!carousel) return;
-    carousel.scrollBy({ left: direction * Math.max(carousel.clientWidth * 0.82, 300), behavior: 'smooth' });
+  function scrollBoats(direction: 'left' | 'right') {
+    scrollByCards(direction, 1);
   }
 
   function handleViewTourType(tour: BoatTour) {
@@ -72,58 +54,53 @@ export function FleetSection({ boats, tours, selectedBoat, onSelectBoat, onViewT
   }
 
   return (
-    <section className="home-section pb-16 pt-0 sm:pb-20 sm:pt-8 lg:pb-24 lg:pt-10" data-after-hero="true" data-home-section data-nav-href="/#fleet" id="fleet">
+    <section className="home-section relative pb-10 pt-0 sm:pb-12 sm:pt-6 lg:pb-14 lg:pt-8" data-after-hero="true" data-home-section data-nav-href="/#fleet" id="fleet">
+      <SectionReveal variant="emerge">
       <Container>
-        <div className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between" data-section-anchor>
-          <SectionHeader
-            align="left"
-            eyebrow={tr(text.home.fleetEyebrow, language)}
-            title={tr(text.home.fleetTitle, language)}
-            description={tr(text.home.fleetDescription, language)}
-          />
-          <div className="hidden" aria-label={language === 'es' ? 'Controles del carrusel de barcos' : 'Boat carousel controls'}>
-            <CarouselArrow
-              direction="left"
-              disabled={!canScrollLeft}
-              label={language === 'es' ? 'Barcos anteriores' : 'Previous boats'}
-              onClick={() => scrollBoats(-1)}
-            />
-            <CarouselArrow
-              direction="right"
-              disabled={!canScrollRight}
-              label={language === 'es' ? 'Más barcos' : 'Next boats'}
-              onClick={() => scrollBoats(1)}
+        <div data-nav-frame>
+          <div className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between" {...reveal(0)}>
+            <SectionHeader
+              align="left"
+              eyebrow={tr(text.home.fleetEyebrow, language)}
+              title={tr(text.home.fleetTitle, language)}
+              description={tr(text.home.fleetDescription, language)}
             />
           </div>
-        </div>
 
-        <div className="mt-5 flex justify-center gap-3 sm:mt-6" aria-label={language === 'es' ? 'Controles del carrusel de barcos' : 'Boat carousel controls'}>
-          <CarouselArrow
-            direction="left"
-            disabled={!canScrollLeft}
-            label={language === 'es' ? 'Barcos anteriores' : 'Previous boats'}
-            onClick={() => scrollBoats(-1)}
-          />
-          <CarouselArrow
-            direction="right"
-            disabled={!canScrollRight}
-            label={language === 'es' ? 'Más barcos' : 'Next boats'}
-            onClick={() => scrollBoats(1)}
-          />
-        </div>
+          <div
+            ref={carouselRef}
+            className="mt-4 flex snap-x snap-mandatory gap-4 overflow-x-auto scroll-smooth pb-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:mt-5 sm:gap-5"
+            role="region"
+            aria-label={language === 'es' ? 'Barcos disponibles' : 'Available boats'}
+            onScroll={updateControls}
+            {...reveal(1)}
+          >
+            {boats.map((boat) => (
+              <div key={boat.id} className="w-full shrink-0 snap-start snap-always sm:w-[calc((100%-1.5rem)/2)] lg:w-[calc((100%-3rem)/3)]">
+                <BoatCard boat={boat} startingPrice={getBoatStartingPrice(boat.id, tours)} isSelected={boat.id === selectedBoat.id} onSelect={openBoatDetails} />
+              </div>
+            ))}
+          </div>
 
-        <div
-          ref={carouselRef}
-          className="mt-6 flex snap-x snap-mandatory gap-5 overflow-x-auto scroll-smooth pb-5 pr-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:mt-7 sm:gap-6"
-          role="region"
-          aria-label={language === 'es' ? 'Barcos disponibles' : 'Available boats'}
-          onScroll={updateCarouselControls}
-        >
-          {boats.map((boat) => (
-            <BoatCard key={boat.id} boat={boat} startingPrice={getBoatStartingPrice(boat.id, tours)} isSelected={boat.id === selectedBoat.id} onSelect={openBoatDetails} />
-          ))}
+          {canScrollLeft || canScrollRight ? (
+            <div className="mt-3 flex justify-center gap-3 sm:mt-3.5" aria-label={language === 'es' ? 'Controles del carrusel de barcos' : 'Boat carousel controls'} {...reveal(2)}>
+              <CarouselArrow
+                direction="left"
+                disabled={!canScrollLeft}
+                label={language === 'es' ? 'Barcos anteriores' : 'Previous boats'}
+                onClick={() => scrollBoats('left')}
+              />
+              <CarouselArrow
+                direction="right"
+                disabled={!canScrollRight}
+                label={language === 'es' ? 'Más barcos' : 'Next boats'}
+                onClick={() => scrollBoats('right')}
+              />
+            </div>
+          ) : null}
         </div>
       </Container>
+      </SectionReveal>
 
       <ModalShell open={Boolean(modalBoat)} onClose={closeBoatDetails} titleId="boat-detail-title" className="!max-h-[calc(100dvh-1.5rem)] !max-w-5xl text-white sm:!max-h-[85dvh]">
         {modalBoat ? (
@@ -143,16 +120,16 @@ export function FleetSection({ boats, tours, selectedBoat, onSelectBoat, onViewT
               />
             </div>
 
-            <div className="p-5 sm:p-6 lg:p-7">
+            <div className="p-4 sm:p-5 lg:p-6">
               <div>
-                <h3 id="boat-detail-title" className="font-display text-3xl font-semibold leading-none text-white sm:text-4xl">{modalBoat.name}</h3>
+                <h3 id="boat-detail-title" className="font-display text-2xl font-semibold leading-none text-white sm:text-3xl">{modalBoat.name}</h3>
                 <p className="mt-1 text-xs font-semibold uppercase tracking-[0.15em] text-ocean-300">
                   {modalBoatText?.badge ?? (language === 'es' ? 'Charter privado' : 'Private charter')}
                 </p>
               </div>
 
-              <div className="mt-5 grid gap-5 lg:grid-cols-[0.88fr_1.12fr] lg:gap-6">
-                <GlassPanel as="aside" className="p-4 sm:p-5" variant="surface">
+              <div className="mt-4 grid gap-4 lg:grid-cols-[0.88fr_1.12fr] lg:gap-5">
+                <GlassPanel as="aside" className="p-3.5 sm:p-4" variant="surface">
                   <p className="text-xs font-semibold uppercase tracking-[0.16em] text-ocean-400">{language === 'es' ? 'Detalles del barco' : 'Boat details'}</p>
                   <div className="mt-3 grid grid-cols-2 gap-2.5">
                     <CompactSpec icon={<Ruler size={16} />} label={language === 'es' ? 'Tamaño' : 'Size'} value={modalBoatText?.length ?? modalBoat.length} />
@@ -169,10 +146,10 @@ export function FleetSection({ boats, tours, selectedBoat, onSelectBoat, onViewT
                         <p className="mt-0.5 text-xs font-medium text-ocean-200">{language === 'es' ? 'A bordo para cada salida' : 'On board for every trip'}</p>
                       </div>
                     </div>
-                    <div className="grid gap-2 px-4 py-3 sm:grid-cols-2">
+                    <div className="grid gap-x-4 gap-y-2 px-4 py-3 sm:grid-cols-2">
                       {getEquipmentItems(modalBoatText?.featuredSpec ?? modalBoat.featuredSpec).map((item) => (
-                        <span className="flex min-w-0 items-center gap-2 rounded-lg border border-white/10 bg-white/[0.035] px-3 py-2 text-xs font-semibold text-white" key={item}>
-                          <Check className="size-3.5 shrink-0 text-seafoam-400" aria-hidden="true" />
+                        <span className="flex min-w-0 items-center gap-2 text-xs font-semibold text-white/90" key={item}>
+                          <Check className="size-3.5 shrink-0 text-ocean-200" aria-hidden="true" />
                           <span className="min-w-0 leading-snug">{item}</span>
                         </span>
                       ))}
@@ -180,32 +157,34 @@ export function FleetSection({ boats, tours, selectedBoat, onSelectBoat, onViewT
                   </GlassPanel>
                 </GlassPanel>
 
-                <GlassPanel className="p-4 sm:p-5" variant="surface">
+                <GlassPanel className="p-3.5 sm:p-4" variant="surface">
                   <p className="text-xs font-semibold uppercase tracking-[0.16em] text-ocean-400">{language === 'es' ? 'Tipos de tour' : 'Tour types'}</p>
-                  <h4 className="mt-1.5 font-display text-xl font-semibold leading-tight text-white sm:text-2xl">{language === 'es' ? 'Elige la experiencia que quieres explorar' : 'Choose the experience you want to explore'}</h4>
-                  <div className="mt-4 grid gap-2.5">
+                  <h4 className="mt-1.5 font-display text-lg font-semibold leading-tight text-white sm:text-xl">{language === 'es' ? 'Elige la experiencia que quieres explorar' : 'Choose the experience you want to explore'}</h4>
+                  <div className="mt-3 grid gap-2">
                     {modalTourTypes.map((tour) => (
                       <ChoiceCard
                         key={tour.key}
-                        className="group flex w-full min-w-0 items-center justify-between gap-4 px-4 py-3 text-left"
+                        className="group flex w-full min-w-0 items-center justify-between gap-4 px-3.5 py-2.5 text-left"
                         shape="soft"
                         onClick={() => handleViewTourType(tour.representativeTour)}
                       >
                         <span className="min-w-0">
-                          <h5 className="block truncate font-display text-lg font-semibold leading-tight text-white">{tour.title}</h5>
-                          <span className="mt-1 block text-xs font-medium text-ocean-200">
+                          <h5 className="block truncate font-display text-base font-semibold leading-tight text-white">{tour.title}</h5>
+                          <span className="mt-0.5 block text-xs font-medium text-ocean-200">
                             {language === 'es' ? 'Desde' : 'From'} {formatCurrency(tour.price)} · {tour.category}
                           </span>
                         </span>
-                        <GlassPanel as="span" className="grid size-9 shrink-0 place-items-center text-white transition-transform duration-200 group-hover:translate-x-0.5" shape="circle" variant="control" aria-hidden="true">
+                        <GlassPanel as="span" className="grid size-8 shrink-0 place-items-center text-white transition-transform duration-200 group-hover:translate-x-0.5" shape="circle" variant="control" aria-hidden="true">
                           <ChevronRight size={modalArrowIconSize} />
                         </GlassPanel>
                       </ChoiceCard>
                     ))}
                   </div>
-                  <Button className="mt-4" fullWidth size="sm" type="button" onClick={handleViewAllTours}>
-                    {language === 'es' ? 'Ver todos los tours' : 'View All Tours'}
-                  </Button>
+                  <div className="mt-3.5 flex justify-end">
+                    <Button className="sm:w-auto sm:min-w-[170px]" fullWidth type="button" onClick={handleViewAllTours}>
+                      {language === 'es' ? 'Ver todos los tours' : 'View All Tours'}
+                    </Button>
+                  </div>
                 </GlassPanel>
               </div>
             </div>
