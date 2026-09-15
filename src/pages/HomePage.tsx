@@ -54,12 +54,8 @@ export default function HomePage() {
       <Hero />
       <FleetSection boats={catalogBoats} tours={catalogTours} selectedBoat={selectedBoat} onSelectBoat={selectBoat} onViewTourType={viewTourOnHome} onViewAllTours={viewAllToursOnHome} />
       <TourCarouselSection boats={catalogBoats} tours={toursWithKnownBoats} selectedTour={selectedTour} onSelectTour={selectTour} />
-      <SectionReveal><section className="home-section booking-ocean-atmosphere relative overflow-hidden py-10 sm:py-12 lg:flex lg:min-h-[100svh] lg:flex-col lg:justify-center lg:pb-14 lg:pt-[104px]" data-home-section data-nav-href="/#booking" id="booking">
-        <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-ocean-300/30 to-transparent" />
-        <span aria-hidden="true" className="atmosphere-drift-slow pointer-events-none absolute left-[13%] top-[20%] hidden size-2 rounded-full bg-ocean-200/30 blur-[1.5px] lg:block" />
-        <span aria-hidden="true" className="atmosphere-drift pointer-events-none absolute right-[15%] top-[64%] hidden size-1.5 rounded-full bg-seafoam-300/25 blur-[1px] lg:block" />
-        <span aria-hidden="true" className="atmosphere-drift-slow pointer-events-none absolute left-[24%] bottom-[16%] hidden size-3 rounded-full bg-ocean-300/[0.12] blur-[3px] lg:block" />
-        <Container className="relative">
+      <section className="home-section section-y relative overflow-hidden bg-ocean-950" data-home-section data-nav-href="/#booking" id="booking">
+        <SectionReveal><Container className="relative">
           <div data-nav-frame>
             <div className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between" {...reveal(0)}>
               <SectionHeader align="left" description={tr(text.home.bookingDescription, language)} title={tr(text.home.bookingTitle, language)} />
@@ -68,8 +64,8 @@ export default function HomePage() {
               <BookingTeaser selectedBoat={selectedBoat} selectedTour={selectedTour} tours={catalogTours} />
             </div>
           </div>
-        </Container>
-      </section></SectionReveal>
+        </Container></SectionReveal>
+      </section>
       <SectionReveal variant="atmosphere"><Testimonials /></SectionReveal>
       <SectionReveal variant="mask"><GallerySection /></SectionReveal>
       {/* `.section-reveal--visible` leaves `transform: translate3d(0,0,0)`

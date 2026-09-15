@@ -643,7 +643,7 @@ export function BookingPanel({ selectedBoat, selectedTour, boats, tours, catalog
       ) : null}
 
       {successNotice ? (
-        <BookingSuccessModal notice={successNotice} onClose={() => setSuccessNotice(null)} />
+        <BookingSuccessModal notice={successNotice} onClose={() => { setSuccessNotice(null); window.location.assign('/'); }} />
       ) : null}
     </div>
   );

@@ -24,15 +24,11 @@ export function Testimonials() {
 
   return (
     <section
-      className="home-section section-y relative overflow-hidden bg-[linear-gradient(180deg,#0B2842_0%,#061B2F_48%,#0B2842_100%)] lg:flex lg:min-h-[100svh] lg:flex-col lg:justify-center lg:!pt-[104px]"
+      className="home-section section-y relative overflow-hidden bg-ocean-950"
       data-home-section
       data-nav-href="/#comments"
       id="comments"
     >
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-ocean-300/35 to-transparent" />
-      <div className="pointer-events-none absolute -left-24 top-16 h-72 w-72 rounded-full bg-ocean-500/10 blur-3xl" aria-hidden="true" />
-      <div className="pointer-events-none absolute -right-28 bottom-10 h-80 w-80 rounded-full bg-seafoam-400/10 blur-3xl" aria-hidden="true" />
-      <div className="pointer-events-none absolute left-1/3 top-1/2 hidden h-24 w-24 rounded-full bg-ocean-300/[0.06] blur-2xl lg:block" aria-hidden="true" />
 
       <Container className="relative">
         <div data-nav-frame>

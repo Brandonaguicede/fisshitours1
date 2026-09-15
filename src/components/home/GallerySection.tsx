@@ -56,7 +56,7 @@ export function GallerySection() {
   }
 
   return (
-    <section className="home-section bg-ocean-950 pb-4 pt-0 sm:pb-6 sm:pt-6 lg:pb-8 lg:pt-[104px]" data-home-section data-nav-href="/#gallery" id="gallery">
+    <section className="home-section section-y bg-ocean-950" data-home-section data-nav-href="/#gallery" id="gallery">
       <Container>
         <div data-nav-frame>
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between" {...reveal(0)}>

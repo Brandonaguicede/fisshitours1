@@ -1,12 +1,12 @@
 {
+  "headers": [
+    { "source": "/admin/:path*", "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }] }
+  ],
   "rewrites": [
-    {
-      "source": "/api/(.*)",
-      "destination": "/api/$1"
-    },
-    {
-      "source": "/(.*)",
-      "destination": "/index.html"
-    }
+    { "source": "/api/(.*)", "destination": "/api/$1" },
+    { "source": "/tours", "destination": "/tours/index.html" },
+    { "source": "/reservar", "destination": "/reservar/index.html" },
+    { "source": "/contacto", "destination": "/contacto/index.html" },
+    { "source": "/(.*)", "destination": "/index.html" }
   ]
 }

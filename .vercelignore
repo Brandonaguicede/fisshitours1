@@ -1,0 +1,10 @@
+tmp/
+tmp-playwright/
+playwright-report/
+test-results/
+tests/
+.agents/
+.codex/
+SEO-REVIEW.md
+.env
+.env.*

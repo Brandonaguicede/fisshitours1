@@ -60,7 +60,7 @@ export function TourCarouselSection({ boats, tours, selectedTour, onSelectTour }
   }
 
   return (
-    <section className="home-section tours-ocean-atmosphere pb-10 pt-0 sm:pb-12 sm:pt-6 lg:flex lg:min-h-[100svh] lg:flex-col lg:justify-center lg:pb-14 lg:pt-[104px]" data-home-section data-nav-href="/#tours" id="tours">
+    <section className="home-section section-y bg-ocean-950" data-home-section data-nav-href="/#tours" id="tours">
       <SectionReveal variant="drift">
       <Container>
         <div data-nav-frame>

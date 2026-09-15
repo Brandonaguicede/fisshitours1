@@ -142,7 +142,7 @@ export function Navbar() {
           onClick={(event) => handleNavigationClick(event, '/')}
         >
           <span className={cn('grid size-14 shrink-0 place-items-center transition-all duration-300 sm:size-16', isScrolled ? 'drop-shadow-lg' : 'drop-shadow-sm')}>
-            <img className="h-full w-full object-contain" src="/images/papagayo-logo.png" alt="" aria-hidden="true" loading="eager" decoding="async" />
+            <img className="h-full w-full object-contain" src="/images/papagayo-logo.png" alt="Papagayo Fishing Tours — inicio" width={1659} height={948} loading="eager" decoding="async" />
           </span>
         </NavLink>
 

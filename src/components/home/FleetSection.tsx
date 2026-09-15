@@ -54,7 +54,7 @@ export function FleetSection({ boats, tours, selectedBoat, onSelectBoat, onViewT
   }
 
   return (
-    <section className="home-section relative pb-10 pt-0 sm:pb-12 sm:pt-6 lg:flex lg:min-h-[100svh] lg:flex-col lg:justify-center lg:pb-14 lg:pt-[104px]" data-after-hero="true" data-home-section data-nav-href="/#fleet" id="fleet">
+    <section className="home-section section-y relative bg-ocean-950" data-after-hero="true" data-home-section data-nav-href="/#fleet" id="fleet">
       <SectionReveal variant="emerge">
       <Container>
         <div data-nav-frame>
