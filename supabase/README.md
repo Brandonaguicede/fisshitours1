@@ -101,11 +101,11 @@ ademas de localhost/127.0.0.1 y los dominios Vercel del proyecto ya configurados
 Los dos dominios de produccion no dependen de ese secret. Revisar su valor remoto
 y quitar el dominio anterior si sigue configurado alli.
 
-Las funciones de reservas llamadas desde el navegador responden OPTIONS con 204
+Todas las funciones responden OPTIONS con 204
 y conservan CORS en respuestas de error, incluidas excepciones inesperadas.
 Los origenes fuera de la allowlist no reciben `Access-Control-Allow-Origin`.
-`paypal-webhook` y `process-booking-emails` son endpoints entre servidores y no
-necesitan preflight del navegador. Los errores del gateway anteriores a ejecutar
+`paypal-webhook` y `process-booking-emails` siguen siendo endpoints entre servidores
+y conservan sus comprobaciones de autenticacion. Los errores del gateway anteriores a ejecutar
 la funcion deben diagnosticarse por separado; el helper no puede modificarlos.
 
 Validacion local de CORS sin Supabase ni secretos reales:

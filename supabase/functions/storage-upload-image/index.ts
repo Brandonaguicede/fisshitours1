@@ -1,6 +1,6 @@
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2';
-import { corsHeaders as getCorsHeaders } from '../_shared/cors.ts';
+import { corsHeaders as getCorsHeaders, withCors } from '../_shared/cors.ts';
 import { deleteR2Object, putR2Object, r2Bucket, r2PublicUrl } from '../_shared/r2.ts';
 
 const ALLOWED_FOLDERS = new Set(['boats', 'tours', 'gallery', 'destinations', 'reviews', 'general']);
@@ -24,7 +24,7 @@ const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 const MAX_VIDEO_BYTES = 300 * 1024 * 1024;
 const RESOURCE_ID_PATTERN = /^[A-Za-z0-9_.-]+$/;
 
-serve(async (req) => {
+serve(withCors(async (req) => {
   const corsHeaders = getCorsHeaders(req, 'POST, OPTIONS');
   const json = (body: unknown, status = 200) => jsonResponse(body, status, corsHeaders);
   if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: corsHeaders });
@@ -127,7 +127,7 @@ serve(async (req) => {
     console.error('storage-upload-image failed', error);
     return jsonResponse({ message: 'Internal server error' }, 500, corsHeaders);
   }
-});
+}));
 
 function jsonResponse(body: unknown, status: number, headers: HeadersInit) {
   return new Response(JSON.stringify(body), {

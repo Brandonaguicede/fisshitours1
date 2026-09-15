@@ -56,3 +56,26 @@ export async function signOutAdmin() {
   if (!isSupabaseConfigured) return;
   await supabase.auth.signOut();
 }
+
+export async function readWithAdminSession<T>(
+  query: () => PromiseLike<{ data: T | null; error: { message: string } | null; status: number }>,
+): Promise<T | null> {
+  const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+  if (sessionError || !sessionData.session?.access_token) {
+    throw new Error('Tu sesion expiro. Inicia sesion nuevamente para ver las reservas.');
+  }
+
+  let result = await query();
+  if (result.status === 401) {
+    const { data, error } = await supabase.auth.refreshSession();
+    if (error || !data.session?.access_token) {
+      throw new Error('Tu sesion expiro. Inicia sesion nuevamente para ver las reservas.');
+    }
+    result = await query();
+  }
+  if (result.status === 401) {
+    throw new Error('Tu sesion expiro. Inicia sesion nuevamente para ver las reservas.');
+  }
+  if (result.error) throw new Error(result.error.message);
+  return result.data;
+}

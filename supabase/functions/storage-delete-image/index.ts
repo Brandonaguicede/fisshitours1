@@ -1,7 +1,7 @@
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { z } from 'npm:zod@3.23.8';
-import { corsHeaders as getCorsHeaders, corsPreflight } from '../_shared/cors.ts';
+import { corsHeaders as getCorsHeaders, corsPreflight, withCors } from '../_shared/cors.ts';
 import { deleteR2Object, r2Bucket } from '../_shared/r2.ts';
 
 const ALLOWED_FOLDERS = new Set(['boats', 'tours', 'gallery', 'destinations', 'reviews', 'general']);
@@ -16,7 +16,7 @@ const schema = z
   })
   .refine((value) => value.storagePath || value.mediaAssetId, { message: 'storagePath or mediaAssetId is required' });
 
-serve(async (req) => {
+serve(withCors(async (req) => {
   const corsHeaders = getCorsHeaders(req, 'POST, DELETE, OPTIONS');
   const json = (body: unknown, status = 200) => jsonResponse(req, body, status, corsHeaders);
   if (req.method === 'OPTIONS') return corsPreflight(req, 'POST, DELETE, OPTIONS');
@@ -106,7 +106,7 @@ serve(async (req) => {
     console.error('storage-delete-image failed', error);
     return jsonResponse(req, { message: 'Internal server error' }, 500, corsHeaders);
   }
-});
+}, 'POST, DELETE, OPTIONS'));
 
 function jsonResponse(request: Request, body: unknown, status = 200, headers = getCorsHeaders(request, 'POST, DELETE, OPTIONS')) {
   return new Response(JSON.stringify(body), {

@@ -45,7 +45,42 @@ test('allowlist rejects external, old and deceptive origins; preserves previews 
   assert.equal(context.getAllowedOrigin(new Request('https://edge.example', { headers: { origin: env.ALLOWED_ORIGIN } })), env.ALLOWED_ORIGIN);
   delete env.ALLOWED_ORIGIN;
 });
-for (const name of ['calculate-booking-price', 'get-booking-availability']) {
+
+test('every Edge Function entrypoint returns allowed-origin preflight', async () => {
+  const names = fs.readdirSync('supabase/functions', { withFileTypes: true })
+    .filter((entry) => entry.isDirectory() && entry.name !== '_shared').map((entry) => entry.name);
+  for (const name of names) {
+    let handler;
+    context.serve = (value) => { handler = value; };
+    const source = fs.readFileSync(`supabase/functions/${name}/index.ts`, 'utf8').replace(/^import .*;\r?\n/gm, '');
+    vm.runInContext(`{ ${ts.transpile(source, { target: ts.ScriptTarget.ES2022 })} }`, context);
+    for (const origin of origins.slice(0, 2)) {
+      const response = await handler(new Request('https://edge.example', { method: 'OPTIONS', headers: { origin } }));
+      assert.equal(response.status, 204, name);
+      if (name === 'storage-delete-image') {
+        assert.equal(response.headers.get('access-control-allow-methods'), 'POST, DELETE, OPTIONS');
+        assert.equal(response.headers.get('access-control-allow-origin'), origin);
+        assert.equal(response.headers.get('vary'), 'Origin');
+      } else check(response, origin);
+    }
+  }
+});
+
+test('response wrapping preserves body, status, other Vary values and prevents wildcard leakage', async () => {
+  const origin = origins[0];
+  const handler = context.withCors(async () => Response.json({ ok: true }, {
+    status: 403, headers: { Vary: 'Accept-Encoding', 'access-control-allow-origin': '*' },
+  }), 'POST, DELETE, OPTIONS');
+  const response = await handler(new Request('https://edge.example', { headers: { origin } }));
+  assert.equal(response.status, 403);
+  assert.deepEqual(await response.json(), { ok: true });
+  assert.equal(response.headers.get('vary'), 'Accept-Encoding, Origin');
+  assert.equal(response.headers.get('access-control-allow-methods'), 'POST, DELETE, OPTIONS');
+  assert.equal(response.headers.get('access-control-allow-origin'), origin);
+  const denied = await handler(new Request('https://edge.example', { headers: { origin: 'https://evil.example' } }));
+  assert.equal(denied.headers.get('access-control-allow-origin'), null);
+});
+for (const name of ['calculate-booking-price', 'get-booking-availability', 'create-review']) {
   test(`${name}: actual handler preflight, invalid payload and unexpected failure`, async () => {
     let handler;
     context.serve = (value) => { handler = value; };
@@ -61,7 +96,9 @@ for (const name of ['calculate-booking-price', 'get-booking-availability']) {
       const invalid = await handler(request('POST', {}));
       assert.equal(invalid.status, 400);
       check(invalid, origin);
-      const payload = name === 'calculate-booking-price' ? { tourPackageId: 'package', boatId: 'boat', guests: 1 } : { boatId: 'boat', date: '2026-10-01' };
+      const payload = name === 'calculate-booking-price' ? { tourPackageId: 'package', boatId: 'boat', guests: 1 }
+        : name === 'create-review' ? { name: 'Test Customer', quote: 'A wonderful fishing trip.', rating: 5 }
+          : { boatId: 'boat', date: '2026-10-01' };
       const missingSecrets = await handler(request('POST', payload));
       assert.equal(missingSecrets.status, 500);
       check(missingSecrets, origin);
@@ -75,3 +112,24 @@ for (const name of ['calculate-booking-price', 'get-booking-availability']) {
     }
   });
 }
+
+test('send-contact-message: unexpected provider failure returns 500 with CORS', async () => {
+  let handler;
+  context.serve = (value) => { handler = value; };
+  context.fetch = async () => { throw Error('simulated provider failure'); };
+  const source = fs.readFileSync('supabase/functions/send-contact-message/index.ts', 'utf8').replace(/^import .*;\r?\n/gm, '');
+  vm.runInContext(`{ ${ts.transpile(source, { target: ts.ScriptTarget.ES2022 })} }`, context);
+  env.RESEND_API_KEY = 'test-only';
+  try {
+    for (const origin of origins.slice(0, 2)) {
+      const response = await handler(new Request('https://edge.example', {
+        method: 'POST', headers: { origin, 'content-type': 'application/json' },
+        body: JSON.stringify({ name: 'Test Customer', email: 'test@example.com', message: 'A test contact request.' }),
+      }));
+      assert.equal(response.status, 500);
+      check(response, origin);
+    }
+  } finally {
+    delete env.RESEND_API_KEY;
+  }
+});

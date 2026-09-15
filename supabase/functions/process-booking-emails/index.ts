@@ -1,3 +1,4 @@
+import { withCors } from '../_shared/cors.ts';
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { refreshBookingConfirmationNotification } from '../_shared/booking-confirmation-email.ts';
@@ -5,7 +6,7 @@ import { refreshBookingConfirmationNotification } from '../_shared/booking-confi
 const MAX_MESSAGES_PER_RUN = 10;
 const VISIBILITY_TIMEOUT_SECONDS = 120;
 
-serve(async (req) => {
+serve(withCors(async (req) => {
   if (req.method !== 'POST') return Response.json({ message: 'Method not allowed' }, { status: 405 });
 
   try {
@@ -92,7 +93,7 @@ serve(async (req) => {
     console.error('Booking email queue processor failed', error);
     return Response.json({ message: 'Booking email queue processing failed' }, { status: 500 });
   }
-});
+}));
 
 async function acknowledge(supabase: ReturnType<typeof createClient>, messageId: number) {
   const { error } = await supabase.rpc('ack_booking_email', { p_msg_id: messageId });

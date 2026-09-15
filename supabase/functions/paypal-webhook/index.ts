@@ -1,9 +1,10 @@
+import { withCors } from '../_shared/cors.ts';
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { areExternalProviderMocksAllowed } from '../_shared/environment.ts';
 import { enqueueBookingConfirmationEmails } from '../_shared/booking-confirmation-email.ts';
 
-serve(async (req) => {
+serve(withCors(async (req) => {
   if (req.method !== 'POST') return Response.json({ message: 'Method not allowed' }, { status: 405 });
   const webhookId = Deno.env.get('PAYPAL_WEBHOOK_ID');
   if (!webhookId) return Response.json({ message: 'PAYPAL_WEBHOOK_ID is not configured' }, { status: 500 });
@@ -59,7 +60,7 @@ serve(async (req) => {
   if (processedError) return Response.json({ message: 'Webhook event could not be marked as processed' }, { status: 500 });
 
   return Response.json({ ok: true });
-});
+}));
 
 function getSupabase() {
   const url = Deno.env.get('SUPABASE_URL');

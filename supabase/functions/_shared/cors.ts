@@ -40,15 +40,15 @@ export function corsPreflight(req: Request, methods = 'POST, DELETE, OPTIONS') {
 }
 
 // Keep unexpected runtime errors from becoming platform responses without CORS.
-export function withCors(handler: (req: Request) => Promise<Response>) {
+export function withCors(handler: (req: Request) => Promise<Response>, methods = 'POST, OPTIONS') {
   return async (req: Request): Promise<Response> => {
-    if (req.method === 'OPTIONS') return corsPreflight(req, 'POST, OPTIONS');
+    if (req.method === 'OPTIONS') return corsPreflight(req, methods);
     try {
       const response = await handler(req);
       const headers = new Headers(response.headers);
       const vary = headers.get('Vary');
       headers.delete('Access-Control-Allow-Origin');
-      new Headers(corsHeaders(req, 'POST, OPTIONS')).forEach((value, key) => headers.set(key, value));
+      new Headers(corsHeaders(req, methods)).forEach((value, key) => headers.set(key, value));
       if (vary && !vary.split(',').some((value) => value.trim().toLowerCase() === 'origin')) {
         headers.set('Vary', `${vary}, Origin`);
       } else if (vary) {
@@ -59,7 +59,7 @@ export function withCors(handler: (req: Request) => Promise<Response>) {
       console.error('Edge Function request failed', error);
       return Response.json({ message: 'Internal server error' }, {
         status: 500,
-        headers: corsHeaders(req, 'POST, OPTIONS'),
+        headers: corsHeaders(req, methods),
       });
     }
   };

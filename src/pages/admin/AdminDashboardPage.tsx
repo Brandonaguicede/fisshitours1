@@ -1,9 +1,11 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { CalendarDays, CreditCard, DollarSign, MessageSquare, Ship, Star } from 'lucide-react';
 import { useEffect } from 'react';
+import { Link } from 'react-router-dom';
 
 import { AdminBadge, AdminModuleSurface, AdminStatCard, AdminTable } from '../../components/admin/AdminPrimitives';
 import { supabase } from '../../lib/supabase';
+import { readWithAdminSession } from '../../services/adminAuthService';
 import { money } from './adminMockData';
 
 type DashboardReservation = {
@@ -31,14 +33,14 @@ export default function AdminDashboardPage() {
   const reservationsQuery = useQuery({
     queryKey: ['admin', 'dashboardReservations'],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const data = await readWithAdminSession(() => supabase
         .from('bookings')
         .select('id, booking_reference, tour_date, payment_status, booking_status, total_snapshot, customers(full_name, whatsapp), tours(title)')
-        .order('created_at', { ascending: false });
-      if (error) throw new Error(error.message);
+        .order('created_at', { ascending: false }));
       return (data ?? []) as DashboardReservation[];
     },
     refetchInterval: 30_000,
+    retry: false,
   });
   const reservations = reservationsQuery.data ?? [];
   const paidReservations = reservations.filter((item) => item.payment_status === 'paid');
@@ -56,6 +58,13 @@ export default function AdminDashboardPage() {
 
   return (
     <div className="admin-page">
+      {reservationsQuery.isError ? (
+        <div className="admin-alert admin-alert--danger" role="alert">
+          <p>No se pudieron cargar las reservas. {reservationsQuery.error instanceof Error ? reservationsQuery.error.message : 'Intenta nuevamente.'}</p>
+          <button className="admin-btn admin-btn--secondary" type="button" disabled={reservationsQuery.isFetching} onClick={() => void reservationsQuery.refetch()}>Reintentar</button>
+          <Link className="admin-btn admin-btn--secondary" to="/admin/login">Iniciar sesion</Link>
+        </div>
+      ) : null}
       <section className="admin-stat-grid">
         <AdminStatCard label="Reservas totales" value={reservationsQuery.isLoading ? '…' : String(reservations.length)} icon={CalendarDays} />
         <AdminStatCard label="Pagos pendientes" value={reservationsQuery.isLoading ? '…' : String(reservations.filter((item) => item.payment_status !== 'paid').length)} icon={CreditCard} tone="warning" />
@@ -79,7 +88,7 @@ export default function AdminDashboardPage() {
                 <td><AdminBadge value={reservation.booking_status} /></td>
               </tr>
             ))}
-            {!reservationsQuery.isLoading && reservations.length === 0 ? <tr><td colSpan={6} className="admin-muted">No hay reservas registradas todavía.</td></tr> : null}
+            {!reservationsQuery.isLoading && !reservationsQuery.isError && reservations.length === 0 ? <tr><td colSpan={6} className="admin-muted">No hay reservas registradas todavía.</td></tr> : null}
         </AdminTable>
       </AdminModuleSurface>
     </div>
