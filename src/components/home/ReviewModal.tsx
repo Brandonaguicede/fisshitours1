@@ -4,10 +4,8 @@ import { Check, Globe2, Loader2, PenLine, Quote, Send, Star, User } from 'lucide
 import { useEffect, useState, type FormEvent } from 'react';
 
 import { useLanguage } from '../../i18n/LanguageContext';
-import { MOCK_TURNSTILE_TOKEN, USE_LOCAL_TURNSTILE_MOCK } from '../../lib/turnstile';
 import { submitReview } from '../../services/reviewService';
 import { cn } from '../../utils/cn';
-import { TurnstileBox } from '../common/TurnstileBox';
 import { Badge, Button, CloseButton, FieldError, GlassPanel, Input, ModalShell, TextArea } from '../ui';
 
 interface ReviewModalProps {
@@ -24,8 +22,6 @@ export function ReviewModal({ open, onClose }: ReviewModalProps) {
   const [country, setCountry] = useState('');
   const [quote, setQuote] = useState('');
   const [rating, setRating] = useState(0);
-  const [turnstileToken, setTurnstileToken] = useState('');
-  const [turnstileResetKey, setTurnstileResetKey] = useState(0);
   const [formError, setFormError] = useState('');
   const [submitted, setSubmitted] = useState(false);
 
@@ -35,7 +31,6 @@ export function ReviewModal({ open, onClose }: ReviewModalProps) {
     setCountry('');
     setQuote('');
     setRating(0);
-    setTurnstileToken('');
     setFormError('');
     setSubmitted(false);
   }, [open]);
@@ -45,10 +40,6 @@ export function ReviewModal({ open, onClose }: ReviewModalProps) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['reviews', 'approved'] });
       setSubmitted(true);
-    },
-    onError: () => {
-      setTurnstileToken('');
-      setTurnstileResetKey((value) => value + 1);
     },
   });
 
@@ -70,17 +61,12 @@ export function ReviewModal({ open, onClose }: ReviewModalProps) {
       setFormError(t('Cuéntanos un poco más (al menos 10 caracteres).', 'Tell us a bit more (at least 10 characters).'));
       return;
     }
-    if (!USE_LOCAL_TURNSTILE_MOCK && !turnstileToken) {
-      setFormError(t('Completa la verificación para enviar.', 'Complete the verification to continue.'));
-      return;
-    }
 
     mutation.mutate({
       name: name.trim(),
       country: country.trim() || undefined,
       quote: quote.trim(),
       rating,
-      turnstileToken: USE_LOCAL_TURNSTILE_MOCK ? MOCK_TURNSTILE_TOKEN : turnstileToken,
     });
   }
 
@@ -149,10 +135,6 @@ export function ReviewModal({ open, onClose }: ReviewModalProps) {
               {t('Tu comentario', 'Your review')}
               <TextArea className="min-h-[7rem]" rows={4} value={quote} onChange={(event) => setQuote(event.target.value)} placeholder={t('¿Qué fue lo mejor de tu día en el océano?', 'What was the best part of your day on the ocean?')} startIcon={<Quote size={17} />} />
             </label>
-          </div>
-
-          <div className="mt-5">
-            <TurnstileBox token={turnstileToken} resetKey={turnstileResetKey} action="review" onTokenChange={setTurnstileToken} />
           </div>
 
           {formError || mutation.isError ? <FieldError className="mt-4" variant="panel">{mutation.isError ? t('No pudimos enviar tu comentario. Inténtalo de nuevo.', 'We couldn’t send your review. Please try again.') : formError}</FieldError> : null}

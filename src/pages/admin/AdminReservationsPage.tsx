@@ -1,10 +1,14 @@
 import { Check, Download, Filter, Loader2, Plus, Search, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { AdminBadge, AdminModuleSurface, AdminTable, AdminToolbar } from '../../components/admin/AdminPrimitives';
 import { Modal } from '../../components/common/Modal';
 import { supabase } from '../../lib/supabase';
 import { readWithAdminSession } from '../../services/adminAuthService';
+import AdminPagination from '../../components/admin/AdminPagination';
+import { useAdminPagedList } from '../../hooks/useAdminPagedList';
+import { getAdminReservationsPage } from '../../services/adminListService';
 import { getActiveBoatTours, getActiveTimeSlots } from '../../services/boatTourService';
 import { adminCreateBooking, confirmBooking, getActiveDepartureLocations, retryConfirmationEmail, updateBooking, type DepartureLocation } from '../../services/bookingService';
 import type { BoatTour, TourTimeSlot } from '../../types/boatTour';
@@ -95,7 +99,7 @@ type EditBookingForm = {
 
 export default function AdminReservationsPage() {
   const db = supabase as any;
-  const [reservations, setReservations] = useState<AdminReservation[]>([]);
+  const queryClient = useQueryClient();
   const [tours, setTours] = useState<BoatTour[]>([]);
   const [timeSlots, setTimeSlots] = useState<TourTimeSlot[]>([]);
   const [departureLocations, setDepartureLocations] = useState<DepartureLocation[]>([]);
@@ -103,7 +107,7 @@ export default function AdminReservationsPage() {
   const [bookingStatus, setBookingStatus] = useState('all');
   const [paymentStatus, setPaymentStatus] = useState('all');
   const [date, setDate] = useState('');
-  const [loading, setLoading] = useState(true);
+  const [exporting, setExporting] = useState(false);
   const [catalogLoading, setCatalogLoading] = useState(true);
   const [busyId, setBusyId] = useState('');
   const [manualOpen, setManualOpen] = useState(false);
@@ -115,12 +119,25 @@ export default function AdminReservationsPage() {
   const [manualForm, setManualForm] = useState<ManualBookingForm>(emptyManualBooking);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
-  const [confirmationSentByBooking, setConfirmationSentByBooking] = useState<Record<string, boolean>>({});
   const [filtersOpen, setFiltersOpen] = useState(false);
   const filterTriggerRef = useRef<HTMLButtonElement>(null);
   const filterPanelRef = useRef<HTMLDivElement>(null);
   const firstFilterRef = useRef<HTMLSelectElement>(null);
   const activeFilterCount = Number(bookingStatus !== 'all') + Number(paymentStatus !== 'all') + Number(Boolean(date));
+  const filters = { search, bookingStatus, paymentStatus, date };
+  const pagination = useAdminPagedList<AdminReservation>('reservations', JSON.stringify(filters), (page, size) => getAdminReservationsPage(filters, page, size));
+  const reservations = pagination.rows;
+  const visibleReservations = reservations;
+  const loading = pagination.query.isFetching;
+  const listError = pagination.query.error instanceof Error ? pagination.query.error.message : '';
+  const notificationIds = reservations.map((reservation) => reservation.id);
+  const notificationsQuery = useQuery({
+    queryKey: ['admin', 'reservationNotifications', notificationIds],
+    enabled: notificationIds.length > 0 && !pagination.query.isPlaceholderData,
+    queryFn: () => readWithAdminSession(() => db.from('booking_notifications').select('booking_id, dedupe_key, sent_at')
+      .in('booking_id', notificationIds).like('dedupe_key', 'booking:%:paypal-confirmation-customer-email')),
+  });
+  const confirmationSentByBooking = Object.fromEntries(((notificationsQuery.data ?? []) as Array<{ booking_id: string; sent_at: string | null }>).map((row) => [row.booking_id, Boolean(row.sent_at)]));
 
   useEffect(() => {
     if (!filtersOpen) return;
@@ -150,62 +167,18 @@ export default function AdminReservationsPage() {
   }
 
   async function loadReservations() {
-    setLoading(true);
     setError('');
-
-    try {
-      const [data, { data: notificationRows }] = await Promise.all([
-        readWithAdminSession(() => db
-        .from('bookings')
-        .select(`
-          id,
-          boat_id,
-          tour_id,
-          tour_package_id,
-          time_slot_id,
-          special_requests,
-          booking_reference,
-          tour_date,
-          guests,
-          total_snapshot,
-          departure_location_name_snapshot,
-          departure_surcharge_snapshot,
-          payment_method_key,
-          payment_status,
-          booking_status,
-          created_at,
-          customers (full_name, email, whatsapp),
-          boats (name),
-          tours (title),
-          time_slots (label)
-        `)
-        .order('tour_date', { ascending: true })
-        .order('created_at', { ascending: false })),
-        db.from('booking_notifications').select('booking_id, dedupe_key, sent_at')
-          .like('dedupe_key', 'booking:%:paypal-confirmation-customer-email'),
-      ]);
-
-      setReservations((data ?? []) as AdminReservation[]);
-      setConfirmationSentByBooking(Object.fromEntries((notificationRows ?? []).map((row: { booking_id: string; sent_at: string | null }) => [row.booking_id, Boolean(row.sent_at)])));
-    } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : 'No se pudieron cargar las reservas.');
-    } finally {
-      setLoading(false);
-    }
+    await pagination.query.refetch();
+    await queryClient.invalidateQueries({ queryKey: ['admin', 'reservationNotifications'] });
   }
 
   useEffect(() => {
-    void loadReservations();
-    const channel = db
-      .channel('admin-reservations-realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings' }, () => void loadReservations())
-      .subscribe();
-    const interval = window.setInterval(() => void loadReservations(), 30000);
-    return () => {
-      window.clearInterval(interval);
-      void db.removeChannel(channel);
-    };
-  }, []);
+    const channel = db.channel('admin-reservations-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings' }, () => {
+        void queryClient.invalidateQueries({ queryKey: ['admin', 'reservations'] });
+      }).subscribe();
+    return () => { void db.removeChannel(channel); };
+  }, [queryClient]);
 
   useEffect(() => {
     async function loadCatalog() {
@@ -296,24 +269,6 @@ export default function AdminReservationsPage() {
     }
   }
 
-  const visibleReservations = useMemo(() => {
-    return reservations.filter((reservation) => {
-      const searchable = [
-        reservation.booking_reference,
-        reservation.customers?.full_name,
-        reservation.customers?.email,
-        reservation.customers?.whatsapp,
-        reservation.boats?.name,
-        reservation.tours?.title,
-      ].join(' ').toLowerCase();
-
-      return (!search || searchable.includes(search.toLowerCase()))
-        && (bookingStatus === 'all' || reservation.booking_status === bookingStatus)
-        && (paymentStatus === 'all' || reservation.payment_status === paymentStatus)
-        && (!date || reservation.tour_date === date);
-    });
-  }, [bookingStatus, date, paymentStatus, reservations, search]);
-
   const selectedTour = useMemo(() => tours.find((tour) => tour.id === manualForm.tourPackageId), [manualForm.tourPackageId, tours]);
   const manualMaxGuests = useMemo(() => {
     if (!selectedTour) return 30;
@@ -385,37 +340,51 @@ export default function AdminReservationsPage() {
     }
   }
 
-  function exportCsv() {
-    const rows = visibleReservations.map((reservation) => ({
-      'Referencia de reserva': reservation.booking_reference,
-      'Nombre del cliente': reservation.customers?.full_name ?? '',
-      'Correo electrónico': reservation.customers?.email ?? '',
-      WhatsApp: reservation.customers?.whatsapp ?? '',
-      'Fecha del tour': reservation.tour_date,
-      Horario: reservation.time_slots?.label ?? '',
-      Bote: reservation.boats?.name ?? '',
-      Tour: reservation.tours?.title ?? '',
-      Personas: String(reservation.guests),
-      'Lugar de salida': reservation.departure_location_name_snapshot ?? '',
-      'Cargo de salida (USD)': Number(reservation.departure_surcharge_snapshot ?? 0).toFixed(2),
-      'Total (USD)': Number(reservation.total_snapshot ?? 0).toFixed(2),
-      'Método de pago': reservation.payment_method_key,
-      'Estado del pago': reservation.payment_status,
-      'Estado de reserva': reservation.booking_status,
-      'Creada el': new Date(reservation.created_at).toLocaleString('es-CR'),
-    }));
-    const headers = Object.keys(rows[0] ?? { 'Referencia de reserva': '', 'Nombre del cliente': '', 'Correo electrónico': '', WhatsApp: '', 'Fecha del tour': '', Horario: '', Bote: '', Tour: '', Personas: '', 'Lugar de salida': '', 'Cargo de salida (USD)': '', 'Total (USD)': '', 'Método de pago': '', 'Estado del pago': '', 'Estado de reserva': '', 'Creada el': '' });
-    const csv = [
-      headers.join(','),
-      ...rows.map((row) => headers.map((header) => csvCell((row as Record<string, string>)[header])).join(',')),
-    ].join('\r\n');
-    const blob = new Blob([`\ufeff${csv}`], { type: 'text/csv;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = `reservas-${new Date().toISOString().slice(0, 10)}.csv`;
-    anchor.click();
-    URL.revokeObjectURL(url);
+  async function exportCsv() {
+    setExporting(true);
+    setError('');
+    try {
+      const exportRows: AdminReservation[] = [];
+      for (let page = 1; ; page += 1) {
+        const result = await getAdminReservationsPage<AdminReservation>(filters, page, 50);
+        exportRows.push(...result.rows);
+        if (exportRows.length >= result.total || result.rows.length === 0) break;
+      }
+      const rows = exportRows.map((reservation) => ({
+        'Referencia de reserva': reservation.booking_reference,
+        'Nombre del cliente': reservation.customers?.full_name ?? '',
+        'Correo electrónico': reservation.customers?.email ?? '',
+        WhatsApp: reservation.customers?.whatsapp ?? '',
+        'Fecha del tour': reservation.tour_date,
+        Horario: reservation.time_slots?.label ?? '',
+        Bote: reservation.boats?.name ?? '',
+        Tour: reservation.tours?.title ?? '',
+        Personas: String(reservation.guests),
+        'Lugar de salida': reservation.departure_location_name_snapshot ?? '',
+        'Cargo de salida (USD)': Number(reservation.departure_surcharge_snapshot ?? 0).toFixed(2),
+        'Total (USD)': Number(reservation.total_snapshot ?? 0).toFixed(2),
+        'Método de pago': reservation.payment_method_key,
+        'Estado del pago': reservation.payment_status,
+        'Estado de reserva': reservation.booking_status,
+        'Creada el': new Date(reservation.created_at).toLocaleString('es-CR'),
+      }));
+      const headers = Object.keys(rows[0] ?? { 'Referencia de reserva': '', 'Nombre del cliente': '', 'Correo electrónico': '', WhatsApp: '', 'Fecha del tour': '', Horario: '', Bote: '', Tour: '', Personas: '', 'Lugar de salida': '', 'Cargo de salida (USD)': '', 'Total (USD)': '', 'Método de pago': '', 'Estado del pago': '', 'Estado de reserva': '', 'Creada el': '' });
+      const csv = [
+        headers.join(','),
+        ...rows.map((row) => headers.map((header) => csvCell((row as Record<string, string>)[header])).join(',')),
+      ].join('\r\n');
+      const blob = new Blob([`\ufeff${csv}`], { type: 'text/csv;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `reservas-${new Date().toISOString().slice(0, 10)}.csv`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+    } catch (exportError) {
+      setError(exportError instanceof Error ? exportError.message : 'No se pudieron exportar las reservas.');
+    } finally {
+      setExporting(false);
+    }
   }
 
   async function createManualReservation() {
@@ -454,6 +423,40 @@ export default function AdminReservationsPage() {
     }
   }
 
+  function renderReservationActions(reservation: AdminReservation) {
+    return (
+      <div className="admin-reservation-actions">
+        <button className="admin-btn admin-btn--secondary" type="button" disabled={loading || busyId === reservation.id} onClick={() => openEdit(reservation)}>Editar</button>
+        <button
+          className="admin-btn admin-btn--success"
+          type="button"
+          disabled={loading || busyId === reservation.id || reservation.booking_status === 'confirmed' || reservation.booking_status === 'cancelled' || (reservation.payment_method_key === 'paypal' && reservation.payment_status !== 'paid')}
+          onClick={() => void updateReservationStatus(reservation, 'confirmed')}
+        >
+          <Check size={14} /> Confirmar
+        </button>
+        {reservation.booking_status === 'confirmed' && reservation.customers?.email && !confirmationSentByBooking[reservation.id] ? (
+          <button
+            className="admin-btn admin-btn--secondary"
+            type="button"
+            disabled={loading || busyId === reservation.id}
+            onClick={() => void retryReservationConfirmation(reservation)}
+          >
+            Reintentar email
+          </button>
+        ) : null}
+        <button
+          className="admin-btn admin-btn--danger"
+          type="button"
+          disabled={loading || busyId === reservation.id || reservation.booking_status === 'cancelled'}
+          onClick={() => void updateReservationStatus(reservation, 'cancelled')}
+        >
+          <X size={14} /> Cancelar
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="admin-page">
       <AdminModuleSurface className="admin-reservations-surface">
@@ -484,19 +487,19 @@ export default function AdminReservationsPage() {
                 </div>
                 <label className="admin-field">
                   <span className="admin-field__label">Estado de reserva</span>
-                  <select ref={firstFilterRef} className="admin-select" value={bookingStatus} onChange={(event) => setBookingStatus(event.target.value)}>
+                  <select ref={firstFilterRef} className="admin-select" aria-label="Estado de reserva" value={bookingStatus} onChange={(event) => setBookingStatus(event.target.value)}>
                     {bookingStatusOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                   </select>
                 </label>
                 <label className="admin-field">
                   <span className="admin-field__label">Estado de pago</span>
-                  <select className="admin-select" value={paymentStatus} onChange={(event) => setPaymentStatus(event.target.value)}>
+                  <select className="admin-select" aria-label="Estado de pago" value={paymentStatus} onChange={(event) => setPaymentStatus(event.target.value)}>
                     {paymentStatusOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                   </select>
                 </label>
                 <label className="admin-field">
                   <span className="admin-field__label">Fecha del tour</span>
-                  <input className="admin-input" type="date" value={date} onChange={(event) => setDate(event.target.value)} />
+                  <input className="admin-input" aria-label="Fecha del tour" type="date" value={date} onChange={(event) => setDate(event.target.value)} />
                 </label>
                 <div className="admin-filter-panel__actions">
                   <button className="admin-btn admin-btn--ghost" type="button" disabled={activeFilterCount === 0} onClick={resetFilters}>Limpiar</button>
@@ -508,24 +511,24 @@ export default function AdminReservationsPage() {
         </div>
         <div className="admin-toolbar__actions">
           <button className="admin-btn" type="button" onClick={() => setManualOpen(true)}><Plus size={16} /> Crear reserva</button>
-          <button className="admin-btn admin-btn--secondary" type="button" onClick={exportCsv}><Download size={16} /> Exportar</button>
+          <button className="admin-btn admin-btn--secondary" type="button" disabled={exporting} onClick={() => void exportCsv()}><Download size={16} /> {exporting ? 'Exportando...' : 'Exportar'}</button>
         </div>
       </AdminToolbar>
 
-      {error ? (
+      {error || listError ? (
         <div className="admin-alert admin-alert--danger" role="alert">
-          {needsEditorNotice(error)
+          {needsEditorNotice(error || listError)
             ? 'No se pudo actualizar reservas: se requiere una sesion de admin/editor en Supabase.'
-            : error}
+            : error || listError}
           <button className="admin-btn admin-btn--secondary" type="button" disabled={loading} onClick={() => void loadReservations()}>Reintentar</button>
         </div>
       ) : null}
 
       {notice ? <div className="admin-alert admin-alert--success" role="status">{notice}</div> : null}
 
-      {loading ? (
-        <p className="admin-muted">Cargando reservas...</p>
-      ) : error && reservations.length === 0 ? null : (
+      {loading ? <p className="admin-muted" role="status">Cargando reservas...</p> : null}
+      <div className="admin-reservation-list" aria-busy={loading}>
+      <div className="admin-reservations-table">
         <AdminTable embedded headers={['Referencia', 'Cliente', 'Fecha', 'Bote / tour', 'Personas', 'Salida', 'Total', 'Metodo', 'Pago', 'Reserva', 'Acciones']}>
           {visibleReservations.map((reservation) => (
             <tr key={reservation.id}>
@@ -546,45 +549,40 @@ export default function AdminReservationsPage() {
               <td><AdminBadge value={reservation.payment_status} /></td>
               <td><AdminBadge value={reservation.booking_status} /></td>
               <td>
-                <div className="flex flex-wrap gap-2">
-                  <button className="admin-btn admin-btn--secondary" type="button" disabled={busyId === reservation.id} onClick={() => openEdit(reservation)}>Editar</button>
-                  <button
-                    className="admin-btn admin-btn--success"
-                    type="button"
-                    disabled={busyId === reservation.id || reservation.booking_status === 'confirmed' || reservation.booking_status === 'cancelled' || (reservation.payment_method_key === 'paypal' && reservation.payment_status !== 'paid')}
-                    onClick={() => void updateReservationStatus(reservation, 'confirmed')}
-                  >
-                    <Check size={14} /> Confirmar
-                  </button>
-                  {reservation.booking_status === 'confirmed' && reservation.customers?.email && !confirmationSentByBooking[reservation.id] ? (
-                    <button
-                      className="admin-btn admin-btn--secondary"
-                      type="button"
-                      disabled={busyId === reservation.id}
-                      onClick={() => void retryReservationConfirmation(reservation)}
-                    >
-                      Reintentar email
-                    </button>
-                  ) : null}
-                  <button
-                    className="admin-btn admin-btn--danger"
-                    type="button"
-                    disabled={busyId === reservation.id || reservation.booking_status === 'cancelled'}
-                    onClick={() => void updateReservationStatus(reservation, 'cancelled')}
-                  >
-                    <X size={14} /> Cancelar
-                  </button>
-                </div>
+                {renderReservationActions(reservation)}
               </td>
             </tr>
           ))}
-          {visibleReservations.length === 0 ? (
+          {!loading && !listError && visibleReservations.length === 0 ? (
             <tr>
               <td colSpan={11} className="admin-muted">No hay reservas para este filtro.</td>
             </tr>
           ) : null}
         </AdminTable>
-      )}
+      </div>
+      <div className="admin-reservation-cards">
+        {visibleReservations.map((reservation) => (
+          <article className="admin-reservation-card" key={reservation.id}>
+            <h2>{reservation.booking_reference}</h2>
+            <p>{reservation.customers?.full_name ?? '-'}</p>
+            <dl>
+              <div><dt>Fecha</dt><dd>{reservation.tour_date}</dd></div>
+              <div><dt>Horario</dt><dd>{reservation.time_slots?.label ?? '-'}</dd></div>
+              <div><dt>Barco</dt><dd>{reservation.boats?.name ?? '-'}</dd></div>
+              <div><dt>Tour</dt><dd>{reservation.tours?.title ?? '-'}</dd></div>
+              <div><dt>Personas</dt><dd>{reservation.guests}</dd></div>
+              <div><dt>Total</dt><dd>{money(Number(reservation.total_snapshot))}</dd></div>
+              <div><dt>Método de pago</dt><dd>{reservation.payment_method_key}</dd></div>
+              <div><dt>Estado de pago</dt><dd><AdminBadge value={reservation.payment_status} /></dd></div>
+              <div><dt>Estado de reserva</dt><dd><AdminBadge value={reservation.booking_status} /></dd></div>
+            </dl>
+            {renderReservationActions(reservation)}
+          </article>
+        ))}
+        {!loading && !listError && visibleReservations.length === 0 ? <p className="admin-empty">No hay reservas para este filtro.</p> : null}
+      </div>
+      </div>
+      <AdminPagination {...pagination} noun="reservas" loading={loading} />
       </AdminModuleSurface>
       <Modal open={manualOpen} onClose={() => setManualOpen(false)} titleId="manual-booking-title" className="admin-reservation-modal">
         <form className="admin-modal-shell" onSubmit={(event) => { event.preventDefault(); void createManualReservation(); }}>

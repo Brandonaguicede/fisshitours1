@@ -204,7 +204,6 @@ function reviewPayload(overrides: Record<string, unknown> = {}): Record<string, 
     name: 'Backend Reviewer',
     quote: 'Excellent service and crew, highly recommended tour.',
     rating: 5,
-    turnstileToken: MOCK_TURNSTILE,
     ...overrides,
   };
 }
@@ -541,11 +540,10 @@ test.describe('backend flows', () => {
     expect(rows.some((r) => r.ip_hash === myHash)).toBe(true);
   });
 
-  test('reviews: no token and invalid token return 403', async ({ request }) => {
-    const noToken = await fn(request, 'create-review', reviewPayload({ turnstileToken: undefined as any }), anonHeaders({ 'X-Forwarded-For': uniqueIp() }));
-    expect(noToken.status).toBe(403);
-    const badToken = await fn(request, 'create-review', reviewPayload({ turnstileToken: 'nope' }), anonHeaders({ 'X-Forwarded-For': uniqueIp() }));
-    expect(badToken.status).toBe(403);
+  test('reviews: submission without human verification remains pending', async ({ request }) => {
+    const result = await fn(request, 'create-review', reviewPayload(), anonHeaders({ 'X-Forwarded-For': uniqueIp() }));
+    expect(result.status).toBe(201);
+    expect(result.body.status).toBe('pending');
   });
 
   test('reviews: valid review is created and stored as pending', async ({ request }) => {

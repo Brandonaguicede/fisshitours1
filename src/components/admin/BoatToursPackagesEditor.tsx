@@ -82,8 +82,8 @@ function validateDraft(draft: DraftPackage, boatMaxGuests: number): FieldErrors 
   const errors: FieldErrors = {};
   const key = `pkg-${draft.id}`;
   if (!draft.name.trim()) errors[`${key}-name`] = 'El nombre es obligatorio.';
-  if (draft.durationHours.trim() && (!Number.isFinite(Number(draft.durationHours)) || Number(draft.durationHours) <= 0)) {
-    errors[`${key}-duration`] = 'Si indicas horas, deben ser mayores que cero.';
+  if (draft.durationHours.trim() && (!Number.isFinite(Number(draft.durationHours)) || Math.round(Number(draft.durationHours) * 60) < 1)) {
+    errors[`${key}-duration`] = 'Indica una duración válida de al menos un minuto o deja el campo vacío.';
   }
   if (!draft.basePrice.trim() || !Number.isFinite(Number(draft.basePrice)) || Number(draft.basePrice) < 0) {
     errors[`${key}-price`] = 'Ingresa un precio válido.';
@@ -154,16 +154,16 @@ function PackageDraftEditor({ draft, fieldErrors, busy, boatMaxGuests, onChange,
           {fieldErrors[`${key}-name`] ? <span className="admin-field-error">{fieldErrors[`${key}-name`]}</span> : null}
         </label>
         <label className="admin-field">
-          <span className="admin-field__label">Cantidad de horas (opcional)</span>
+          <span className="admin-field__label">Duración del paquete en horas (opcional)</span>
           <input
             className="admin-input"
             type="text"
             inputMode="decimal"
-            min={0.5}
-            step={0.5}
+            placeholder="Ej.: 2,5 o 4"
             value={draft.durationHours}
-            onChange={(event) => onChange({ durationHours: event.target.value })}
+            onChange={(event) => onChange({ durationHours: event.target.value.replace(',', '.') })}
           />
+          <span className="admin-field-help">Puedes indicar medias horas. Déjalo vacío si la duración se acuerda con el cliente.</span>
           {fieldErrors[`${key}-duration`] ? <span className="admin-field-error">{fieldErrors[`${key}-duration`]}</span> : null}
         </label>
         <label className="admin-field">

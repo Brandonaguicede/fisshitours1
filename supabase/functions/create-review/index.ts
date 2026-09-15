@@ -1,7 +1,6 @@
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { z } from 'npm:zod@3.23.8';
-import { areExternalProviderMocksAllowed } from '../_shared/environment.ts';
 import { corsHeaders, corsPreflight, withCors } from '../_shared/cors.ts';
 
 const schema = z.object({
@@ -11,7 +10,6 @@ const schema = z.object({
   rating: z.number().int().min(1).max(5),
   tourId: z.string().optional(),
   boatId: z.string().optional(),
-  turnstileToken: z.string().optional(),
 });
 
 serve(withCors(async (req) => {
@@ -26,9 +24,6 @@ serve(withCors(async (req) => {
   if (!supabaseUrl || !serviceRole) return Response.json({ message: 'Supabase secrets are not configured' }, { status: 500, headers });
 
   const supabase = createClient(supabaseUrl, serviceRole, { auth: { persistSession: false } });
-
-  const turnstileOk = await verifyTurnstile(parsed.data.turnstileToken, req);
-  if (!turnstileOk) return Response.json({ message: 'Human verification failed' }, { status: 403, headers });
 
   const ipHash = await hashIp(getClientIp(req));
   const { data: allowed, error: rateError } = await supabase.rpc('record_review_attempt', { p_ip_hash: ipHash, p_limit: 3 });
@@ -85,36 +80,4 @@ async function hashIp(value: string) {
   );
   const hash = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(value));
   return Array.from(new Uint8Array(hash)).map((byte) => byte.toString(16).padStart(2, '0')).join('');
-}
-
-async function verifyTurnstile(token: string | undefined, req: Request) {
-  if (Deno.env.get('DISABLE_TURNSTILE') === 'true') return true;
-  if (areExternalProviderMocksAllowed()) return token === 'mock-valid-turnstile';
-  if (!token) return false;
-  const secret = Deno.env.get('TURNSTILE_SECRET_KEY') ?? Deno.env.get('CLOUDFLARE_TURNSTILE_SECRET_KEY');
-  if (!secret) return false;
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 8000);
-  const form = new FormData();
-  form.append('secret', secret);
-  form.append('response', token);
-  form.append('remoteip', getClientIp(req));
-
-  try {
-    const response = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
-      method: 'POST',
-      body: form,
-      signal: controller.signal,
-    });
-    const data = await response.json();
-    const expectedHostname = Deno.env.get('TURNSTILE_EXPECTED_HOSTNAME');
-    const expectedAction = Deno.env.get('TURNSTILE_REVIEW_ACTION') ?? Deno.env.get('TURNSTILE_EXPECTED_ACTION');
-    if (expectedHostname && data.hostname !== expectedHostname) return false;
-    if (expectedAction && data.action !== expectedAction) return false;
-    return response.ok && data.success === true;
-  } catch {
-    return false;
-  } finally {
-    clearTimeout(timeout);
-  }
 }

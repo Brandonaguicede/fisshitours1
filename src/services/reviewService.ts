@@ -15,7 +15,6 @@ export interface SubmitReviewRequest {
   country?: string;
   quote: string;
   rating: number;
-  turnstileToken?: string;
 }
 
 export interface SubmitReviewResult {

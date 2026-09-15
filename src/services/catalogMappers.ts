@@ -69,7 +69,7 @@ export function mapBoatTour(
     galleryImages: primaryImage
       ? [primaryImage, ...galleryImages.filter((image) => image.src !== primaryImage.src)]
       : undefined,
-    duration: row.duration_minutes ? Math.round(row.duration_minutes / 60) : undefined,
+    duration: row.duration_minutes ? row.duration_minutes / 60 : undefined,
     basePrice: Number(row.base_price),
     includedGuests: row.included_guests,
     maxGuests: row.max_guests,

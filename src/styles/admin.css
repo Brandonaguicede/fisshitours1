@@ -36,6 +36,8 @@ body:has(.admin-login) {
 
 .admin-shell {
   display: flex;
+  width: 100%;
+  min-width: 0;
   min-height: 100dvh;
   background:
     radial-gradient(circle at top right, color-mix(in srgb, var(--admin-primary) 10%, transparent), transparent 25rem),
@@ -49,6 +51,7 @@ body:has(.admin-login) {
   z-index: 40;
   display: flex;
   width: 16.5rem;
+  flex-shrink: 0;
   height: 100dvh;
   flex-direction: column;
   border-right: 1px solid var(--admin-line-soft);
@@ -238,6 +241,9 @@ body:has(.admin-login) {
 
 .admin-content {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
+  max-width: 100%;
   gap: 1rem;
   width: min(100%, 96rem);
   margin: 0 auto;
@@ -447,6 +453,9 @@ body:has(.admin-login) {
 
 .admin-page {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
+  max-width: 100%;
   gap: 1rem;
 }
 
@@ -1023,10 +1032,13 @@ body:has(.admin-login) {
 
 .admin-table-card {
   overflow: hidden;
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
 }
 
 .admin-table-card--embedded {
-  margin-inline: -1.15rem;
+  margin-inline: 0;
   border: 0;
   border-radius: 0 0 var(--admin-radius-md) var(--admin-radius-md);
   background: transparent;
@@ -1034,7 +1046,11 @@ body:has(.admin-login) {
 }
 
 .admin-table-wrap {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   overflow-x: auto;
+  overscroll-behavior-x: contain;
 }
 
 .admin-table {
@@ -1062,12 +1078,64 @@ body:has(.admin-login) {
 
 .admin-table td {
   color: var(--admin-ink);
+  overflow-wrap: anywhere;
   font-size: 0.86rem;
   font-weight: 600;
 }
 
 .admin-table tbody tr:hover {
   background: color-mix(in srgb, var(--admin-selected) 36%, transparent);
+}
+
+.admin-page > * { min-width: 0; max-width: 100%; }
+
+.admin-pagination {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  min-width: 0;
+  padding-block: 1rem;
+  color: var(--admin-ink);
+  font-size: 0.88rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.admin-pagination__size,
+.admin-pagination__controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+}
+
+.admin-pagination__size .admin-select { width: auto; }
+.admin-pagination__controls .admin-btn { min-height: 44px; }
+.admin-reservation-list { min-width: 0; }
+.admin-reservations-table .admin-table { min-width: 90rem; }
+.admin-reservations-table td:first-child { min-width: 8rem; }
+.admin-reservations-table td:nth-child(2) { min-width: 14rem; max-width: 20rem; }
+.admin-reservations-table td:nth-child(3) { min-width: 8rem; white-space: nowrap; }
+.admin-reservations-table td:nth-child(8) { min-width: 10rem; }
+.admin-reservations-table td:nth-child(4),
+.admin-reservations-table td:nth-child(6) { min-width: 12rem; max-width: 18rem; }
+.admin-reservations-table td:last-child { min-width: 18rem; }
+.admin-reservation-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.admin-reservation-cards { display: none; }
+
+@media (max-width: 767px) {
+  .admin-reservations-table { display: none; }
+  .admin-reservation-cards { display: grid; gap: 1.25rem; }
+  .admin-reservation-card { min-width: 0; padding-block: 1rem; border-bottom: 1px solid var(--admin-line); }
+  .admin-reservation-card h2 { overflow-wrap: anywhere; }
+  .admin-reservation-card dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.85rem; margin-block: 1rem; }
+  .admin-reservation-card dt { color: var(--admin-muted); font-size: 0.8rem; }
+  .admin-reservation-card dd { margin: 0.2rem 0 0; color: var(--admin-ink); overflow-wrap: anywhere; }
+  .admin-reservation-actions .admin-btn { min-height: 44px; }
+  .admin-pagination { align-items: stretch; }
+  .admin-pagination__controls { width: 100%; justify-content: space-between; }
+  .admin-pagination__controls .admin-btn { flex: 1; }
 }
 
 .admin-muted {
@@ -2304,7 +2372,7 @@ body:has(.admin-login) {
   }
 
   .admin-table-card--embedded {
-    margin-inline: -1rem;
+    margin-inline: 0;
   }
 
   .admin-actions,

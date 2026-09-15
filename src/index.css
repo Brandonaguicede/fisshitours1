@@ -610,6 +610,20 @@
       linear-gradient(to bottom, transparent 45%, rgba(2, 11, 20, 0.38) 100%);
   }
 
+  /* Reveal About's existing light from Gallery's shared ocean base.
+     The fade overlays content and adds no empty spacer. */
+  .about-ocean-atmosphere {
+    mask-image: linear-gradient(to bottom, transparent, black 160px);
+    -webkit-mask-image: linear-gradient(to bottom, transparent, black 160px);
+  }
+
+  @media (min-width: 768px) {
+    .about-ocean-atmosphere {
+      mask-image: linear-gradient(to bottom, transparent, black 200px);
+      -webkit-mask-image: linear-gradient(to bottom, transparent, black 200px);
+    }
+  }
+
   .about-glass-showcase {
     position: relative;
     isolation: isolate;

@@ -42,10 +42,10 @@ export function AdminBadge({ value }: { value: string | boolean }) {
 export function AdminTable(props: { headers: string[]; children: ReactNode; embedded?: boolean }) {
   return (
     <section className={props.embedded ? 'admin-table-card admin-table-card--embedded' : 'admin-table-card'}>
-      <div className="admin-table-wrap">
+      <div className="admin-table-wrap" tabIndex={0} role="region" aria-label="Tabla del panel administrativo">
         <table className="admin-table">
           <thead>
-            <tr>{props.headers.map((header) => <th key={header}>{header}</th>)}</tr>
+            <tr>{props.headers.map((header) => <th scope="col" key={header}>{header}</th>)}</tr>
           </thead>
           <tbody>{props.children}</tbody>
         </table>

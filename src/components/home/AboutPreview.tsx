@@ -61,8 +61,8 @@ export function AboutPreview() {
   const paragraphs = splitParagraphs(about[`about.preview_text.${locale}` as keyof AboutSettings]);
 
   return (
-    <section className="home-section relative overflow-hidden bg-ocean-950 py-12 text-white sm:py-14 lg:flex lg:min-h-[100svh] lg:flex-col lg:justify-center lg:pb-16 lg:pt-[104px]" data-home-section data-nav-href="/#about" id="about">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_22%,rgba(110,172,201,0.16),transparent_34%),linear-gradient(180deg,rgba(11,40,66,0)_0%,rgba(19,62,98,0.32)_48%,rgba(11,40,66,0)_100%)]" aria-hidden="true" />
+    <section className="home-section relative overflow-hidden bg-ocean-950 pb-12 pt-6 text-white sm:pb-14 sm:pt-8 lg:pb-16 lg:pt-10" data-home-section data-nav-href="/#about" id="about">
+      <div className="about-ocean-atmosphere pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_22%,rgba(110,172,201,0.16),transparent_34%),linear-gradient(180deg,rgba(11,40,66,0)_0%,rgba(19,62,98,0.32)_48%,rgba(11,40,66,0)_100%)]" aria-hidden="true" />
       {/* Shoreline reveal — see notes above. Bottom-anchored to the section
           itself, so it always finishes resolving exactly at the Footer's
           own top, regardless of viewport height. Tablet/desktop only. */}

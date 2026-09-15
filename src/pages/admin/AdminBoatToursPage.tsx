@@ -1,10 +1,15 @@
 import { Pencil } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 
 import { AdminBadge, AdminPageHeader, AdminTable, AdminToolbar } from '../../components/admin/AdminPrimitives';
 import { supabase } from '../../lib/supabase';
 import { money } from './adminMockData';
+import AdminPagination from '../../components/admin/AdminPagination';
+import { useAdminPagedList } from '../../hooks/useAdminPagedList';
+import { getAdminTablePage } from '../../services/adminListService';
+import { readWithAdminSession } from '../../services/adminAuthService';
 
 interface BoatOption { id: string; name: string }
 
@@ -26,39 +31,23 @@ interface PackageRow {
 // package can never be reassigned to another boat.
 export default function AdminBoatToursPage() {
   const navigate = useNavigate();
-  const [packages, setPackages] = useState<PackageRow[]>([]);
-  const [boats, setBoats] = useState<BoatOption[]>([]);
   const [boatFilter, setBoatFilter] = useState('all');
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-
-  async function loadData() {
-    setLoading(true);
-    setError('');
-    const [packagesRes, boatsRes] = await Promise.all([
-      supabase
-        .from('tour_packages')
-        .select('id, name, base_price, included_guests, max_guests, custom_quote, active, sort_order, boat_tours(boat_id, tour_id, boats(name), tours(title))')
-        .order('sort_order'),
-      supabase.from('boats').select('id, name').order('sort_order'),
-    ]);
-    setLoading(false);
-    if (packagesRes.error || boatsRes.error) {
-      setError(packagesRes.error?.message ?? boatsRes.error?.message ?? 'No se pudieron cargar los paquetes.');
-      return;
-    }
-    setPackages((packagesRes.data ?? []) as unknown as PackageRow[]);
-    setBoats((boatsRes.data ?? []) as BoatOption[]);
-  }
-
-  useEffect(() => {
-    void loadData();
-  }, []);
-
-  const visiblePackages = useMemo(
-    () => packages.filter((item) => boatFilter === 'all' || item.boat_tours?.boat_id === boatFilter),
-    [packages, boatFilter],
-  );
+  const boatsQuery = useQuery({
+    queryKey: ['admin', 'packageBoats'],
+    queryFn: () => readWithAdminSession(() => supabase.from('boats').select('id, name').order('sort_order')),
+  });
+  const boats = (boatsQuery.data ?? []) as BoatOption[];
+  const pagination = useAdminPagedList<PackageRow>('packages', boatFilter, (page, size) => getAdminTablePage(() => {
+    const relation = boatFilter === 'all' ? 'boat_tours' : 'boat_tours!inner';
+    let query = (supabase as any).from('tour_packages')
+      .select(`id, name, base_price, included_guests, max_guests, custom_quote, active, sort_order, ${relation}(boat_id, tour_id, boats(name), tours(title))`, { count: 'exact' })
+      .order('sort_order').order('id');
+    if (boatFilter !== 'all') query = query.eq('boat_tours.boat_id', boatFilter);
+    return query;
+  }, page, size));
+  const visiblePackages = pagination.rows;
+  const loading = pagination.query.isFetching;
+  const error = (pagination.query.error ?? boatsQuery.error) instanceof Error ? (pagination.query.error ?? boatsQuery.error)?.message : '';
 
   function editInTour(item: PackageRow) {
     const boatId = item.boat_tours?.boat_id;
@@ -77,9 +66,8 @@ export default function AdminBoatToursPage() {
       </AdminToolbar>
       {error ? <div className="admin-alert admin-alert--danger">{error}</div> : null}
 
-      {loading ? (
-        <p className="admin-muted">Cargando paquetes...</p>
-      ) : (
+      {loading ? <p className="admin-muted" role="status">Cargando paquetes...</p> : null}
+      <div aria-busy={loading}>
         <AdminTable headers={['Paquete', 'Bote', 'Tour', 'Precio base', 'Capacidad', 'Estado', 'Acciones']}>
           {visiblePackages.map((item) => (
             <tr key={item.id}>
@@ -90,13 +78,14 @@ export default function AdminBoatToursPage() {
               <td>{item.included_guests} incluidos / {item.max_guests} max</td>
               <td><AdminBadge value={item.active} /></td>
               <td>
-                <button className="admin-btn admin-btn--ghost" type="button" onClick={() => editInTour(item)}><Pencil size={14} /> Editar en el bote</button>
+                <button className="admin-btn admin-btn--ghost" type="button" disabled={loading} onClick={() => editInTour(item)}><Pencil size={14} /> Editar en el bote</button>
               </td>
             </tr>
           ))}
-          {visiblePackages.length === 0 ? <tr><td colSpan={7} className="admin-muted">No hay paquetes.</td></tr> : null}
+          {!loading && !error && visiblePackages.length === 0 ? <tr><td colSpan={7} className="admin-muted">No hay paquetes para este filtro.</td></tr> : null}
         </AdminTable>
-      )}
+      </div>
+      <AdminPagination {...pagination} noun="paquetes" loading={loading} />
     </div>
   );
 }

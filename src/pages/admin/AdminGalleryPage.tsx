@@ -1,5 +1,10 @@
+import AdminPagination from '../../components/admin/AdminPagination';
+import { useAdminPagedList } from '../../hooks/useAdminPagedList';
+import { adminSearchFilter, getAdminTablePage } from '../../services/adminListService';
+import { useQuery } from '@tanstack/react-query';
+import { readWithAdminSession } from '../../services/adminAuthService';
 import { Plus, Pencil, Trash2, X } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 
 import AdminImageManager from '../../components/admin/AdminImageManager';
 import { AdminBadge, AdminPageHeader, AdminToolbar } from '../../components/admin/AdminPrimitives';
@@ -28,44 +33,33 @@ function needsEditorNotice(message: string) {
 }
 
 export default function AdminGalleryPage() {
-  const [images, setImages] = useState<GalleryRow[] | null>(null);
   const [filter, setFilter] = useState('all');
   const [search, setSearch] = useState('');
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [editing, setEditing] = useState<GalleryRow | null>(null);
   const [pendingDelete, setPendingDelete] = useState<GalleryRow | null>(null);
   const [saving, setSaving] = useState(false);
 
-  async function loadImages() {
-    setLoading(true);
-    setError('');
-    const { data, error } = await supabase
-      .from('gallery_images')
-      .select('id, src, image_url, image_public_id, alt, category, title, active, sort_order')
-      .order('sort_order', { ascending: true });
-
-    setLoading(false);
-    if (error) {
-      setImages([]);
-      setError(error.message);
-      return;
-    }
-    setImages((data ?? []) as GalleryRow[]);
-  }
-
-  useEffect(() => {
-    void loadImages();
-  }, []);
+  const pagination = useAdminPagedList<GalleryRow>('gallery', JSON.stringify({ filter, search }), (page, size) => getAdminTablePage(() => {
+    let query = (supabase as any).from('gallery_images').select('id, src, image_url, image_public_id, alt, category, title, active, sort_order', { count: 'exact' }).order('sort_order', { ascending: true }).order('id');
+    if (filter !== 'all') query = query.eq('category', filter);
+    if (search) query = query.or(adminSearchFilter(['alt', 'title'], search));
+    return query;
+  }, page, size));
+  const loading = pagination.query.isFetching;
+  const queryError = pagination.query.error instanceof Error ? pagination.query.error.message : '';
+  async function loadImages() { setError(''); await pagination.query.refetch(); }
 
   async function createImage() {
     setNotice('');
     setError('');
     const initialCategory = filter === 'all' ? 'fishing' : filter;
+    const { count, error: countError } = await supabase.from('gallery_images').select('id', { count: 'exact', head: true });
+    if (countError) { setError(countError.message); return; }
     const { data, error } = await supabase
       .from('gallery_images')
-      .insert({ id: `gal-${crypto.randomUUID()}`, alt: 'Nueva imagen', category: initialCategory, active: true, sort_order: (images?.length ?? 0) + 1 })
+      .insert({ id: `gal-${crypto.randomUUID()}`, alt: 'Nueva imagen', category: initialCategory, active: true, sort_order: (count ?? 0) + 1 })
       .select('id, src, image_url, image_public_id, alt, category, title, active, sort_order')
       .single();
     if (error) {
@@ -146,17 +140,13 @@ export default function AdminGalleryPage() {
     await loadImages();
   }
 
-  const categories = useMemo(() => {
-    const set = new Set<string>(CATEGORY_OPTIONS);
-    (images ?? []).forEach((image) => set.add(image.category));
-    return Array.from(set);
-  }, [images]);
+  const categoriesQuery = useQuery({
+    queryKey: ['admin', 'galleryCategories'],
+    queryFn: () => readWithAdminSession(() => (supabase as any).rpc('list_admin_gallery_categories')),
+  });
+  const categories = useMemo(() => [...new Set([...CATEGORY_OPTIONS, ...((categoriesQuery.data ?? []) as string[]), editing?.category ?? '', filter])].filter((category) => category && category !== 'all'), [categoriesQuery.data, editing?.category, filter]);
 
-  const visibleImages = (images ?? []).filter(
-    (image) =>
-      (filter === 'all' || image.category === filter) &&
-      (!search || image.alt.toLowerCase().includes(search.toLowerCase()) || (image.title ?? '').toLowerCase().includes(search.toLowerCase())),
-  );
+  const visibleImages = pagination.rows;
 
   return (
     <div className="admin-page">
@@ -170,19 +160,17 @@ export default function AdminGalleryPage() {
         <input className="admin-input" placeholder="Buscar por alt o titulo" value={search} onChange={(event) => setSearch(event.target.value)} />
       </AdminToolbar>
 
-      {error ? (
+      {error || queryError ? (
         <div className="admin-alert admin-alert--danger">
-          {needsEditorNotice(error)
+          {needsEditorNotice(error || queryError)
             ? 'No se pudo acceder a la galería: se requiere una sesión de admin/editor en Supabase.'
-            : error}
+            : error || queryError}
         </div>
       ) : null}
       {notice ? <div className="admin-alert admin-alert--success">{notice}</div> : null}
 
-      {loading ? (
-        <p className="admin-muted">Cargando galería...</p>
-      ) : (
-        <section className="admin-media-grid">
+      {loading ? <p className="admin-muted" role="status">Cargando galería...</p> : null}
+        <section className="admin-media-grid" aria-busy={loading}>
           {visibleImages.map((image) => (
             <article className="admin-media-card" key={image.id}>
               {image.src ?? image.image_url ? (
@@ -195,17 +183,17 @@ export default function AdminGalleryPage() {
                 <span className="admin-muted">{image.alt}</span>
                 <div className="admin-actions">
                   <AdminBadge value={image.active} />
-                  <button className="admin-btn admin-btn--ghost" type="button" onClick={() => setEditing(image)}><Pencil size={14} /> Editar</button>
-                  <button className="admin-btn admin-btn--ghost" type="button" onClick={() => setPendingDelete(image)}><Trash2 size={14} /></button>
+                  <button className="admin-btn admin-btn--ghost" type="button" disabled={loading} onClick={() => setEditing(image)}><Pencil size={14} /> Editar</button>
+                  <button className="admin-btn admin-btn--ghost" type="button" disabled={loading} onClick={() => setPendingDelete(image)}><Trash2 size={14} /></button>
                 </div>
               </div>
             </article>
           ))}
-          {visibleImages.length === 0 ? (
+          {!loading && !queryError && visibleImages.length === 0 ? (
             <div className="admin-empty">No hay imágenes en este estado.</div>
           ) : null}
         </section>
-      )}
+      <AdminPagination {...pagination} noun="imágenes" loading={loading} />
 
       <Modal open={Boolean(editing)} onClose={() => void closeEditor()} titleId="gallery-edit-title" className="max-w-2xl">
         {editing ? (

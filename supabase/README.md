@@ -265,12 +265,35 @@ Limitaciones pendientes:
 `create-review` es la unica entrada publica para comentarios.
 
 - Valida payload con Zod.
-- Exige Cloudflare Turnstile.
+- No requiere verificacion humana; mantiene validacion, rate limit y moderacion.
 - Usa rate limit por IP hasheada con HMAC y `RATE_LIMIT_HASH_SECRET`.
 - Fuerza `status = pending`.
 - Valida referencias de barco y tour.
 
 ## Tests Manuales Recomendados
+
+### Paginación del panel administrativo
+
+Reservas, Comentarios, Galería y Paquetes utilizan paginación del servidor con
+10 registros por defecto y opciones de 25 y 50. Los filtros reinician la página;
+las consultas conservan el orden existente y añaden el ID como desempate.
+
+Antes de publicar el frontend, aplicar `202609150001_admin_booking_pagination.sql`.
+Esta migración agrega únicamente consultas de lectura: `list_admin_bookings`
+para buscar también en cliente, barco y tour, y `list_admin_gallery_categories`
+para conservar todas las opciones del filtro sin descargar todas las imágenes.
+Ambas usan `security invoker`, respetan RLS y solo permiten ejecución a
+`authenticated`. No se modifican reservas, pagos ni confirmaciones.
+
+La exportación CSV de Reservas conserva todos los resultados filtrados; los
+descarga en lotes de 50 solo cuando se solicita la exportación.
+
+`tests/admin-pagination.test.mjs` prueba las pantallas con datos simulados y un
+servidor Vite con `VITE_SUPABASE_URL=https://admin-test.supabase.co` y una clave
+pública ficticia. Usa `ADMIN_TEST_BASE_URL` para indicar el puerto (5180 por defecto).
+`node tests/admin-pagination-sql-check.mjs` genera
+`tmp/admin-fixture-pagination-check.sql`: un SELECT con 76 filas virtuales para
+validar el SQL de la migración sin insertar datos ni instalar funciones.
 
 Despues de `db reset --local`, probar:
 

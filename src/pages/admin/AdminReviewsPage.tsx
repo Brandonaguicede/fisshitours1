@@ -1,5 +1,8 @@
+import AdminPagination from '../../components/admin/AdminPagination';
+import { useAdminPagedList } from '../../hooks/useAdminPagedList';
+import { adminSearchFilter, getAdminTablePage } from '../../services/adminListService';
 import { Check, EyeOff, Search, Star, Trash2, X } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 
 import { AdminBadge, AdminPageHeader, AdminTable, AdminToolbar } from '../../components/admin/AdminPrimitives';
 import { Modal } from '../../components/common/Modal';
@@ -33,36 +36,21 @@ function needsEditorNotice(message: string) {
 
 export default function AdminReviewsPage() {
   const db = supabase as any;
-  const [reviews, setReviews] = useState<AdminReview[] | null>(null);
   const [filter, setFilter] = useState('all');
   const [search, setSearch] = useState('');
   const [pendingDelete, setPendingDelete] = useState<AdminReview | null>(null);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
 
-  async function loadReviews() {
-    setLoading(true);
-    setError('');
-    const { data, error } = await db
-      .from('reviews')
-      .select('id, name, country, quote, rating, status, featured, active, sort_order, image_url, image_public_id, created_at')
-      .order('featured', { ascending: false })
-      .order('sort_order', { ascending: true })
-      .order('created_at', { ascending: false });
-
-    setLoading(false);
-    if (error) {
-      setReviews([]);
-      setError(error.message);
-      return;
-    }
-    setReviews((data ?? []) as unknown as AdminReview[]);
-  }
-
-  useEffect(() => {
-    void loadReviews();
-  }, []);
+  const pagination = useAdminPagedList<AdminReview>('reviews', JSON.stringify({ filter, search }), (page, size) => getAdminTablePage(() => {
+    let query = (supabase as any).from('reviews').select('id, name, country, quote, rating, status, featured, active, sort_order, image_url, image_public_id, created_at', { count: 'exact' }).order('featured', { ascending: false }).order('sort_order', { ascending: true }).order('created_at', { ascending: false }).order('id');
+    if (filter !== 'all') query = query.eq('status', filter);
+    if (search) query = query.or(adminSearchFilter(['name', 'country', 'quote'], search));
+    return query;
+  }, page, size));
+  const loading = pagination.query.isFetching;
+  const queryError = pagination.query.error instanceof Error ? pagination.query.error.message : '';
+  async function loadReviews() { setError(''); await pagination.query.refetch(); }
 
   async function setStatus(id: string, status: 'approved' | 'rejected') {
     setNotice('');
@@ -113,11 +101,7 @@ export default function AdminReviewsPage() {
     await loadReviews();
   }
 
-  const visibleReviews = (reviews ?? []).filter((review) => {
-    const matchesStatus = filter === 'all' || review.status === filter;
-    const text = `${review.name} ${review.country ?? ''} ${review.quote}`.toLowerCase();
-    return matchesStatus && (!search || text.includes(search.toLowerCase()));
-  });
+  const visibleReviews = pagination.rows;
 
   return (
     <div className="admin-page">
@@ -135,19 +119,18 @@ export default function AdminReviewsPage() {
         </select>
       </AdminToolbar>
 
-      {error ? (
+      {error || queryError ? (
         <div className="admin-alert admin-alert--danger">
-          {needsEditorNotice(error)
+          {needsEditorNotice(error || queryError)
             ? 'No se pudo acceder a los comentarios: se requiere una sesion de admin/editor en Supabase.'
-            : error}
+            : error || queryError}
         </div>
       ) : null}
 
       {notice ? <div className="admin-alert admin-alert--success">{notice}</div> : null}
 
-      {loading ? (
-        <p className="admin-muted">Cargando comentarios...</p>
-      ) : (
+      {loading ? <p className="admin-muted" role="status">Cargando comentarios...</p> : null}
+      <div aria-busy={loading}>
         <AdminTable headers={['Cliente', 'Pais', 'Comentario', 'Rating', 'Estado', 'Acciones']}>
           {visibleReviews.map((review) => (
             <tr key={review.id}>
@@ -173,32 +156,33 @@ export default function AdminReviewsPage() {
               <td><AdminBadge value={review.status} /></td>
               <td>
                 <div className="flex flex-wrap gap-2">
-                  <button className="admin-btn admin-btn--success" type="button" disabled={review.status === 'approved'} onClick={() => void setStatus(review.id, 'approved')}>
+                  <button className="admin-btn admin-btn--success" type="button" disabled={loading || review.status === 'approved'} onClick={() => void setStatus(review.id, 'approved')}>
                     <Check size={14} /> Aprobar
                   </button>
-                  <button className="admin-btn admin-btn--danger" type="button" disabled={review.status === 'rejected'} onClick={() => void setStatus(review.id, 'rejected')}>
+                  <button className="admin-btn admin-btn--danger" type="button" disabled={loading || review.status === 'rejected'} onClick={() => void setStatus(review.id, 'rejected')}>
                     <X size={14} /> Rechazar
                   </button>
-                  <button className="admin-btn admin-btn--ghost" type="button" onClick={() => void setActive(review.id, !review.active)}>
+                  <button className="admin-btn admin-btn--ghost" type="button" disabled={loading} onClick={() => void setActive(review.id, !review.active)}>
                     <EyeOff size={14} /> Ocultar
                   </button>
-                  <button className="admin-btn admin-btn--ghost" type="button" onClick={() => void setFeatured(review.id, !review.featured)}>
+                  <button className="admin-btn admin-btn--ghost" type="button" disabled={loading} onClick={() => void setFeatured(review.id, !review.featured)}>
                     <Star size={14} /> {review.featured ? 'Quitar' : 'Destacar'}
                   </button>
-                  <button className="admin-btn admin-btn--ghost" type="button" onClick={() => setPendingDelete(review)}>
+                  <button className="admin-btn admin-btn--ghost" type="button" disabled={loading} onClick={() => setPendingDelete(review)}>
                     <Trash2 size={14} />
                   </button>
                 </div>
               </td>
             </tr>
           ))}
-          {visibleReviews.length === 0 ? (
+          {!loading && !queryError && visibleReviews.length === 0 ? (
             <tr>
               <td colSpan={6} className="admin-muted">No hay comentarios para este filtro.</td>
             </tr>
           ) : null}
         </AdminTable>
-      )}
+      </div>
+      <AdminPagination {...pagination} noun="reseñas" loading={loading} />
 
       <Modal open={Boolean(pendingDelete)} onClose={() => setPendingDelete(null)} titleId="review-delete-title" className="max-w-md">
         {pendingDelete ? (
