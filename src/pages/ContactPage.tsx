@@ -8,7 +8,7 @@ import { z } from 'zod';
 import { BackToHomeButton } from '../components/common/BackToHomeButton';
 import { Container } from '../components/common/Container';
 import { Button, CardShell, ChoiceCard, Field, FieldError, GlassPanel, Input, SectionHeader, Select, TextArea } from '../components/ui';
-import { DISPLAY_PHONE, GOOGLE_MAPS_URL, WHATSAPP_NUMBER } from '../constants/contact';
+import { CONTACT_EMAIL, DISPLAY_PHONE, GOOGLE_MAPS_URL, WHATSAPP_NUMBER } from '../constants/contact';
 import { departureTimes } from '../data/departureTimes';
 import { useLanguage } from '../i18n/LanguageContext';
 import { supabase } from '../lib/supabase';
@@ -274,11 +274,11 @@ export default function ContactPage() {
                     <span className="text-sm font-bold text-white">{DISPLAY_PHONE}</span>
                   </span>
                 </CardShell>
-                <CardShell as="a" className="flex-row items-center gap-3 p-3.5" href="mailto:info@papagayofishingtours.com" interactive>
+                <CardShell as="a" className="flex-row items-center gap-3 p-3.5" href={`mailto:${CONTACT_EMAIL}`} interactive>
                   <Mail className="text-ocean-300" size={20} />
                   <span>
                     <span className="block text-xs font-extrabold text-ocean-300">{copy.emailLabel}</span>
-                    <span className="text-sm font-bold text-white">info@papagayofishingtours.com</span>
+                    <span className="text-sm font-bold text-white">{CONTACT_EMAIL}</span>
                   </span>
                 </CardShell>
                 <CardShell as="a" className="flex-row items-center gap-3 p-3.5" href={GOOGLE_MAPS_URL} target="_blank" rel="noreferrer" interactive>

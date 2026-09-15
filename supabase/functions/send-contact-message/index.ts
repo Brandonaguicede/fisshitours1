@@ -20,7 +20,7 @@ serve(withCors(async (req) => {
   const parsed = schema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return Response.json({ message: 'Invalid contact form' }, { status: 400, headers });
 
-  const adminEmail = Deno.env.get('BOOKING_ADMIN_EMAIL') ?? 'papagayofishingtourpague@gmail.com';
+  const adminEmail = Deno.env.get('BOOKING_ADMIN_EMAIL') ?? 'papagayofishingtourcr@gmail.com';
   const from = Deno.env.get('BOOKING_EMAIL_FROM') ?? 'Papagayo Fishing Tours <onboarding@resend.dev>';
   const resendApiKey = Deno.env.get('RESEND_API_KEY');
   if (!resendApiKey) return Response.json({ message: 'Email service is not configured' }, { status: 500, headers });

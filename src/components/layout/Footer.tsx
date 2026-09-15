@@ -1,7 +1,7 @@
 import { Facebook, Instagram, Mail, MapPin, Phone } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
-import { DISPLAY_PHONE, FACEBOOK_URL, INSTAGRAM_URL } from '../../constants/contact';
+import { CONTACT_EMAIL, DISPLAY_PHONE, FACEBOOK_URL, INSTAGRAM_URL } from '../../constants/contact';
 import { navigationItems } from '../../constants/navigation';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { text, tr } from '../../i18n/translations';
@@ -141,7 +141,7 @@ export function Footer() {
             <div className="mt-2.5 grid gap-1.5 text-[13px] leading-[1.2] text-ocean-800">
               <span className="flex items-center gap-2"><MapPin size={16} /> San José, Costa Rica</span>
               <span className="flex items-center gap-2"><Phone size={16} /> {DISPLAY_PHONE}</span>
-              <span className="flex items-center gap-2"><Mail size={16} /> info@papagayofishingtours.com</span>
+              <a className="flex items-center gap-2" href={`mailto:${CONTACT_EMAIL}`}><Mail className="shrink-0" size={16} /><span className="break-all">{CONTACT_EMAIL}</span></a>
             </div>
           </div>
 
@@ -237,7 +237,7 @@ export function Footer() {
               <div className="mt-2.5 grid gap-1.5 text-[13px] leading-[1.2] text-ocean-800 lg:text-sm">
                 <span className="flex items-center gap-2"><MapPin size={16} /> San José, Costa Rica</span>
                 <span className="flex items-center gap-2"><Phone size={16} /> {DISPLAY_PHONE}</span>
-                <span className="flex items-center gap-2"><Mail size={16} /> info@papagayofishingtours.com</span>
+                <a className="flex items-center gap-2" href={`mailto:${CONTACT_EMAIL}`}><Mail className="shrink-0" size={16} /><span className="break-all">{CONTACT_EMAIL}</span></a>
               </div>
 
               <div className="mt-2.5">

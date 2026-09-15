@@ -6,7 +6,7 @@ Dominio confirmado por el propietario: https://www.papagayofishingtourcr.com/.
 
 - Se eliminó Pura Ruta Adventures del título y descripción iniciales.
 - Se añadieron favicon PNG cuadrado de 192 px y apple-touch-icon de 180 px, derivados del logo existente sobre fondo azul para que sea visible.
-- Se añadió Organization y WebSite en JSON-LD con nombre, dominio, logo de 512 px, teléfono y perfiles sociales existentes. El correo del marcado coincide con el mostrado en la web pública.
+- Se añadió Organization y WebSite en JSON-LD con nombre, dominio, logo de 512 px, teléfono y perfiles sociales existentes. El correo de contacto confirmado por el propietario es papagayofishingtourcr@gmail.com; se usa en Contacto, footer, marcado SEO y respaldo del formulario.
 - Se añadió texto alternativo al logo de navegación, que antes estaba oculto para lectores de pantalla.
 - Se añadieron canonical, metadatos sociales, robots.txt y sitemap.xml con las cuatro páginas públicas y el logo.
 - Cada página pública recibe su propio título, descripción y canonical tanto al navegar como en su HTML generado al compilar. Esto genera metadatos estáticos; el contenido de React sigue requiriendo JavaScript.
