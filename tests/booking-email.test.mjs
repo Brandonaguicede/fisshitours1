@@ -42,7 +42,7 @@ function fixture(paymentMethodKey = 'whatsapp-link') {
   return { context, supabase, sent, notifications, booking };
 }
 
-for (const method of ['whatsapp-link', 'pay-on-day']) {
+for (const method of ['pay-on-day']) {
   test(`${method}: actual sender includes existing branded HTML and records it`, async () => {
     const { context, supabase, sent, notifications } = fixture(method);
     await context.sendBookingEmails(supabase, {
@@ -67,6 +67,17 @@ for (const method of ['whatsapp-link', 'pay-on-day']) {
     assert.equal(sent.find((message) => message.to === 'admin@example.com').html, undefined);
   });
 }
+
+test('WhatsApp request notifies the admin but sends no customer email before manual payment confirmation', async () => {
+  const { context, supabase, sent, notifications } = fixture('whatsapp-link');
+  await context.sendBookingEmails(supabase, { booking_id: 'test-booking', booking_reference: 'PFT-TEST' }, {
+    customer: { email: 'customer@example.com' }, paymentMethodKey: 'whatsapp-link',
+  });
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].to, 'admin@example.com');
+  assert.equal(notifications.length, 1);
+  assert.equal(notifications[0].dedupe_key, 'booking:test-booking:admin-email');
+});
 
 test('paid confirmation retains its existing branded template', async () => {
   const { context, supabase } = fixture('paypal');

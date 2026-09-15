@@ -184,13 +184,13 @@ async function sendBookingEmails(supabase: ReturnType<typeof createClient>, book
   ].join('\n');
 
   const messages = [
-    {
+    payload.paymentMethodKey !== 'whatsapp-link' ? {
       to: customerEmail,
       subject: `Solicitud de reserva ${booking.booking_reference}`,
       html: await buildBookingRequestCustomerHtml(supabase, booking.booking_id),
       text: `Hemos recibido tu solicitud de reserva.\n\n${summary}\n\nNuestro equipo confirmará la disponibilidad y te contactará pronto.`,
       dedupe: `booking:${booking.booking_id}:customer-email`,
-    },
+    } : null,
     adminEmail ? {
       to: adminEmail,
       subject: `Nueva reserva ${booking.booking_reference}`,
