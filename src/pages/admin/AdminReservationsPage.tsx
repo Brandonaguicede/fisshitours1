@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { AdminBadge, AdminModuleSurface, AdminTable, AdminToolbar } from '../../components/admin/AdminPrimitives';
 import { Modal } from '../../components/common/Modal';
 import { supabase } from '../../lib/supabase';
+import { readWithAdminSession } from '../../services/adminAuthService';
 import { getActiveBoatTours, getActiveTimeSlots } from '../../services/boatTourService';
 import { adminCreateBooking, confirmBooking, getActiveDepartureLocations, retryConfirmationEmail, updateBooking, type DepartureLocation } from '../../services/bookingService';
 import type { BoatTour, TourTimeSlot } from '../../types/boatTour';
@@ -152,46 +153,45 @@ export default function AdminReservationsPage() {
     setLoading(true);
     setError('');
 
-    const [{ data, error }, { data: notificationRows }] = await Promise.all([
-      db
-      .from('bookings')
-      .select(`
-        id,
-        boat_id,
-        tour_id,
-        tour_package_id,
-        time_slot_id,
-        special_requests,
-        booking_reference,
-        tour_date,
-        guests,
-        total_snapshot,
-        departure_location_name_snapshot,
-        departure_surcharge_snapshot,
-        payment_method_key,
-        payment_status,
-        booking_status,
-        created_at,
-        customers (full_name, email, whatsapp),
-        boats (name),
-        tours (title),
-        time_slots (label)
-      `)
-      .order('tour_date', { ascending: true })
-      .order('created_at', { ascending: false }),
-      db.from('booking_notifications').select('booking_id, dedupe_key, sent_at')
-        .like('dedupe_key', 'booking:%:paypal-confirmation-customer-email'),
-    ]);
+    try {
+      const [data, { data: notificationRows }] = await Promise.all([
+        readWithAdminSession(() => db
+        .from('bookings')
+        .select(`
+          id,
+          boat_id,
+          tour_id,
+          tour_package_id,
+          time_slot_id,
+          special_requests,
+          booking_reference,
+          tour_date,
+          guests,
+          total_snapshot,
+          departure_location_name_snapshot,
+          departure_surcharge_snapshot,
+          payment_method_key,
+          payment_status,
+          booking_status,
+          created_at,
+          customers (full_name, email, whatsapp),
+          boats (name),
+          tours (title),
+          time_slots (label)
+        `)
+        .order('tour_date', { ascending: true })
+        .order('created_at', { ascending: false })),
+        db.from('booking_notifications').select('booking_id, dedupe_key, sent_at')
+          .like('dedupe_key', 'booking:%:paypal-confirmation-customer-email'),
+      ]);
 
-    setLoading(false);
-    if (error) {
-      setReservations([]);
-      setError(error.message);
-      return;
+      setReservations((data ?? []) as AdminReservation[]);
+      setConfirmationSentByBooking(Object.fromEntries((notificationRows ?? []).map((row: { booking_id: string; sent_at: string | null }) => [row.booking_id, Boolean(row.sent_at)])));
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : 'No se pudieron cargar las reservas.');
+    } finally {
+      setLoading(false);
     }
-
-    setReservations((data ?? []) as AdminReservation[]);
-    setConfirmationSentByBooking(Object.fromEntries((notificationRows ?? []).map((row: { booking_id: string; sent_at: string | null }) => [row.booking_id, Boolean(row.sent_at)])));
   }
 
   useEffect(() => {
@@ -513,10 +513,11 @@ export default function AdminReservationsPage() {
       </AdminToolbar>
 
       {error ? (
-        <div className="admin-alert admin-alert--danger">
+        <div className="admin-alert admin-alert--danger" role="alert">
           {needsEditorNotice(error)
             ? 'No se pudo actualizar reservas: se requiere una sesion de admin/editor en Supabase.'
             : error}
+          <button className="admin-btn admin-btn--secondary" type="button" disabled={loading} onClick={() => void loadReservations()}>Reintentar</button>
         </div>
       ) : null}
 
@@ -524,7 +525,7 @@ export default function AdminReservationsPage() {
 
       {loading ? (
         <p className="admin-muted">Cargando reservas...</p>
-      ) : (
+      ) : error && reservations.length === 0 ? null : (
         <AdminTable embedded headers={['Referencia', 'Cliente', 'Fecha', 'Bote / tour', 'Personas', 'Salida', 'Total', 'Metodo', 'Pago', 'Reserva', 'Acciones']}>
           {visibleReservations.map((reservation) => (
             <tr key={reservation.id}>
@@ -550,7 +551,7 @@ export default function AdminReservationsPage() {
                   <button
                     className="admin-btn admin-btn--success"
                     type="button"
-                    disabled={busyId === reservation.id || reservation.booking_status === 'confirmed' || reservation.booking_status === 'cancelled'}
+                    disabled={busyId === reservation.id || reservation.booking_status === 'confirmed' || reservation.booking_status === 'cancelled' || (reservation.payment_method_key === 'paypal' && reservation.payment_status !== 'paid')}
                     onClick={() => void updateReservationStatus(reservation, 'confirmed')}
                   >
                     <Check size={14} /> Confirmar

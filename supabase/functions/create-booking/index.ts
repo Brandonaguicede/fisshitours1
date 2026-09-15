@@ -3,6 +3,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2';
 import { z } from 'npm:zod@3.23.8';
 import { areExternalProviderMocksAllowed } from '../_shared/environment.ts';
 import { corsHeaders, corsPreflight, withCors } from '../_shared/cors.ts';
+import { buildBookingRequestCustomerHtml } from '../_shared/booking-confirmation-email.ts';
 
 const schema = z.object({
   customer: z.object({
@@ -186,6 +187,7 @@ async function sendBookingEmails(supabase: ReturnType<typeof createClient>, book
     {
       to: customerEmail,
       subject: `Solicitud de reserva ${booking.booking_reference}`,
+      html: await buildBookingRequestCustomerHtml(supabase, booking.booking_id),
       text: `Hemos recibido tu solicitud de reserva.\n\n${summary}\n\nNuestro equipo confirmará la disponibilidad y te contactará pronto.`,
       dedupe: `booking:${booking.booking_id}:customer-email`,
     },
@@ -195,7 +197,7 @@ async function sendBookingEmails(supabase: ReturnType<typeof createClient>, book
       text: `Nueva reserva recibida.\n\n${summary}`,
       dedupe: `booking:${booking.booking_id}:admin-email`,
     } : null,
-  ].filter(Boolean) as Array<{ to: string; subject: string; text: string; dedupe: string }>;
+  ].filter(Boolean) as Array<{ to: string; subject: string; text: string; html?: string; dedupe: string }>;
 
   for (const message of messages) {
     if (!apiKey || !from) {
@@ -209,7 +211,7 @@ async function sendBookingEmails(supabase: ReturnType<typeof createClient>, book
         Authorization: `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ from, to: message.to, subject: message.subject, text: message.text }),
+      body: JSON.stringify({ from, to: message.to, subject: message.subject, text: message.text, html: message.html }),
     });
 
     await recordEmailNotification(supabase, booking.booking_id, message, response.ok);
@@ -220,7 +222,7 @@ async function sendBookingEmails(supabase: ReturnType<typeof createClient>, book
 async function recordEmailNotification(
   supabase: ReturnType<typeof createClient>,
   bookingId: string,
-  message: { to: string; subject: string; text: string; dedupe: string },
+  message: { to: string; subject: string; text: string; html?: string; dedupe: string },
   sent: boolean,
 ) {
   await supabase.from('booking_notifications').insert({
@@ -228,7 +230,7 @@ async function recordEmailNotification(
     type: 'email',
     channel: 'email',
     dedupe_key: message.dedupe,
-    payload: { to: message.to, subject: message.subject, text: message.text },
+    payload: { to: message.to, subject: message.subject, text: message.text, html: message.html },
     sent_at: sent ? new Date().toISOString() : null,
   });
 }

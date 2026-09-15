@@ -41,6 +41,16 @@ serve(withCors(async (req) => {
       return Response.json({ message: 'Admin or editor role required' }, { status: 403, headers });
     }
 
+    const { data: booking, error: bookingError } = await adminClient
+      .from('bookings')
+      .select('payment_method_key, payment_status, customers(email)')
+      .eq('id', parsed.data.bookingId)
+      .single();
+    if (bookingError || !booking) return Response.json({ message: 'Booking not found' }, { status: 404, headers });
+    if (booking.payment_method_key === 'paypal' && booking.payment_status !== 'paid') {
+      return Response.json({ message: 'PayPal payment must be verified before confirming the booking' }, { status: 409, headers });
+    }
+
     const { data, error } = await userClient.rpc('update_booking_status', {
       p_booking_id: parsed.data.bookingId,
       p_booking_status: 'confirmed',
@@ -49,11 +59,6 @@ serve(withCors(async (req) => {
     });
     if (error) return Response.json({ message: error.message }, { status: 400, headers });
 
-    const { data: booking } = await adminClient
-      .from('bookings')
-      .select('customers(email)')
-      .eq('id', parsed.data.bookingId)
-      .single();
     const customerEmailPresent = Boolean(booking?.customers?.email);
     let emailQueued = false;
     if (customerEmailPresent) {

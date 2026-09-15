@@ -15,7 +15,7 @@ test('dashboard displays reservations, reports load failures and recovers on ret
       if (url.pathname.endsWith('/user')) return route.fulfill({ json: user });
       if (url.pathname.endsWith('/bookings')) {
         if (fail) return route.fulfill({ status: 500, json: { message: 'Simulated booking query failure', code: 'TEST' } });
-        return route.fulfill({ json: ['PFT-3BD31A7A', 'PFT-60E8EAA3'].map((reference, i) => ({ id: String(i), booking_reference: reference, tour_date: '2026-09-19', payment_status: i ? 'paid' : 'pending', booking_status: i ? 'confirmed' : 'pending_payment', total_snapshot: 100, customers: { full_name: 'Test Customer', whatsapp: '0000000' }, tours: { title: 'Test Tour' } })) });
+        return route.fulfill({ json: ['PFT-3BD31A7A', 'PFT-60E8EAA3'].map((reference, i) => ({ id: String(i), booking_reference: reference, tour_date: '2026-09-19', payment_status: i ? 'paid' : 'pending', payment_method_key: i ? 'paypal' : 'whatsapp-link', booking_status: i ? 'confirmed' : 'pending_payment', total_snapshot: 100, customers: { full_name: 'Test Customer', whatsapp: '0000000' }, tours: { title: 'Test Tour' } })) });
       }
       return route.fulfill({ json: [], headers: { 'content-range': '0-0/0' } });
     });
@@ -30,7 +30,12 @@ test('dashboard displays reservations, reports load failures and recovers on ret
     await expect(page.getByRole('cell', { name: 'PFT-3BD31A7A', exact: true })).toBeVisible();
     await expect(page.getByRole('cell', { name: 'PFT-60E8EAA3', exact: true })).toBeVisible();
     await expect(page.getByRole('alert')).toHaveCount(0);
-    assert.equal(new URL(page.url()).pathname, '/admin');
+    await expect(page.locator('.admin-stat-card').filter({ hasText: 'Reservas por confirmar' }).locator('.admin-stat-card__value')).toHaveText('1');
+    await page.goto('http://127.0.0.1:5174/admin/reservations');
+    await expect(page.getByRole('cell', { name: 'PFT-3BD31A7A', exact: true })).toBeVisible();
+    await expect(page.getByRole('cell', { name: 'PFT-60E8EAA3', exact: true })).toBeVisible();
+    await expect(page.getByRole('row').filter({ hasText: 'PFT-3BD31A7A' }).getByRole('button', { name: 'Confirmar', exact: true })).toBeEnabled();
+    assert.equal(new URL(page.url()).pathname, '/admin/reservations');
   } finally {
     await browser.close();
   }

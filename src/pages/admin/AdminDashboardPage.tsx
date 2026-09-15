@@ -13,6 +13,7 @@ type DashboardReservation = {
   booking_reference: string;
   tour_date: string;
   payment_status: string;
+  payment_method_key: string;
   booking_status: string;
   total_snapshot: number;
   customers: { full_name: string; whatsapp: string } | null;
@@ -35,7 +36,7 @@ export default function AdminDashboardPage() {
     queryFn: async () => {
       const data = await readWithAdminSession(() => supabase
         .from('bookings')
-        .select('id, booking_reference, tour_date, payment_status, booking_status, total_snapshot, customers(full_name, whatsapp), tours(title)')
+        .select('id, booking_reference, tour_date, payment_status, payment_method_key, booking_status, total_snapshot, customers(full_name, whatsapp), tours(title)')
         .order('created_at', { ascending: false }));
       return (data ?? []) as DashboardReservation[];
     },
@@ -70,7 +71,7 @@ export default function AdminDashboardPage() {
         <AdminStatCard label="Pagos pendientes" value={reservationsQuery.isLoading ? '…' : String(reservations.filter((item) => item.payment_status !== 'paid').length)} icon={CreditCard} tone="warning" />
         <AdminStatCard label="Ingresos" value={money(estimatedRevenue)} icon={DollarSign} tone="success" />
         <AdminStatCard label="Pagos confirmados" value={reservationsQuery.isLoading ? '…' : String(paidReservations.length)} icon={Star} />
-        <AdminStatCard label="Reservas por confirmar" value={reservationsQuery.isLoading ? '…' : String(reservations.filter((item) => item.booking_status === 'pending_confirmation').length)} icon={Ship} />
+        <AdminStatCard label="Reservas por confirmar" value={reservationsQuery.isLoading ? '…' : String(reservations.filter((item) => item.payment_method_key !== 'paypal' && ['pending_confirmation', 'pending_payment'].includes(item.booking_status)).length)} icon={Ship} />
         <AdminStatCard label="Comentarios por revisar" value={String(pendingReviews)} icon={MessageSquare} />
       </section>
       <AdminModuleSurface className="admin-dashboard-reservations">
