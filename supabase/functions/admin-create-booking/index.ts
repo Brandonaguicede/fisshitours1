@@ -1,7 +1,7 @@
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { z } from 'npm:zod@3.23.8';
-import { corsHeaders, corsPreflight } from '../_shared/cors.ts';
+import { corsHeaders, corsPreflight, withCors } from '../_shared/cors.ts';
 
 const schema = z.object({
   customer: z.object({
@@ -24,7 +24,7 @@ const schema = z.object({
   adminNote: z.string().max(1000).optional(),
 });
 
-serve(async (req) => {
+serve(withCors(async (req) => {
   const headers = corsHeaders(req, 'POST, OPTIONS');
   if (req.method === 'OPTIONS') return corsPreflight(req, 'POST, OPTIONS');
   if (req.method !== 'POST') return Response.json({ message: 'Method not allowed' }, { status: 405, headers });
@@ -66,7 +66,7 @@ serve(async (req) => {
   }
 
   return Response.json(data, { status: 201, headers });
-});
+}));
 
 function clean(value?: string) {
   return value?.trim().replace(/\s+/g, ' ') || undefined;

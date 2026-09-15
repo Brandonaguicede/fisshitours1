@@ -1,12 +1,12 @@
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { z } from 'npm:zod@3.23.8';
-import { corsHeaders, corsPreflight } from '../_shared/cors.ts';
+import { corsHeaders, corsPreflight, withCors } from '../_shared/cors.ts';
 import { enqueueBookingConfirmationEmails } from '../_shared/booking-confirmation-email.ts';
 
 const schema = z.object({ bookingId: z.string().uuid() });
 
-serve(async (req) => {
+serve(withCors(async (req) => {
   const headers = corsHeaders(req, 'POST, OPTIONS');
   if (req.method === 'OPTIONS') return corsPreflight(req, 'POST, OPTIONS');
   if (req.method !== 'POST') return Response.json({ message: 'Method not allowed' }, { status: 405, headers });
@@ -68,4 +68,4 @@ serve(async (req) => {
   } catch (error) {
     return Response.json({ message: error instanceof Error ? error.message : 'Booking could not be confirmed' }, { status: 500, headers });
   }
-});
+}));

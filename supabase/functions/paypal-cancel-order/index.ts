@@ -1,11 +1,11 @@
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { z } from 'npm:zod@3.23.8';
-import { corsHeaders, corsPreflight } from '../_shared/cors.ts';
+import { corsHeaders, corsPreflight, withCors } from '../_shared/cors.ts';
 
 const schema = z.object({ bookingId: z.string().uuid(), orderId: z.string().min(1).optional() });
 
-serve(async (req) => {
+serve(withCors(async (req) => {
   const headers = corsHeaders(req, 'POST, OPTIONS');
   if (req.method === 'OPTIONS') return corsPreflight(req, 'POST, OPTIONS');
   if (req.method !== 'POST') return Response.json({ message: 'Method not allowed' }, { status: 405, headers });
@@ -37,4 +37,4 @@ serve(async (req) => {
 
   if (rpcError) return Response.json({ message: rpcError.message }, { status: 400, headers });
   return Response.json(data, { headers });
-});
+}));

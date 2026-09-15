@@ -92,6 +92,28 @@ ALLOWED_ORIGIN=
 WHATSAPP_NUMBER=
 ```
 
+### CORS y dominio de produccion
+
+La allowlist compartida en `functions/_shared/cors.ts` permite
+`https://www.papagayofishingtourcr.com` y `https://papagayofishingtourcr.com`,
+ademas de localhost/127.0.0.1 y los dominios Vercel del proyecto ya configurados.
+`ALLOWED_ORIGIN` permite agregar un unico origen exacto; no acepta una lista ni `*`.
+Los dos dominios de produccion no dependen de ese secret. Revisar su valor remoto
+y quitar el dominio anterior si sigue configurado alli.
+
+Las funciones de reservas llamadas desde el navegador responden OPTIONS con 204
+y conservan CORS en respuestas de error, incluidas excepciones inesperadas.
+Los origenes fuera de la allowlist no reciben `Access-Control-Allow-Origin`.
+`paypal-webhook` y `process-booking-emails` son endpoints entre servidores y no
+necesitan preflight del navegador. Los errores del gateway anteriores a ejecutar
+la funcion deben diagnosticarse por separado; el helper no puede modificarlos.
+
+Validacion local de CORS sin Supabase ni secretos reales:
+
+```sh
+node --test tests/cors.test.mjs
+```
+
 Nunca exponer `SUPABASE_SERVICE_ROLE_KEY`, secretos PayPal, Turnstile secret, hash secret de rate limit ni token de Cloudflare en variables `VITE_*`.
 
 ## Edge Functions
