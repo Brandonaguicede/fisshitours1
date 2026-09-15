@@ -56,20 +56,16 @@ export function TourCarouselSection({ boats, tours, selectedTour, onSelectTour }
   }, [groupedTours.length, selectedTour?.id, selectedTourIndex, updateControls, visibleCardCount]);
 
   function scrollByCard(direction: 'left' | 'right') {
-    scrollByCards(direction, visibleCardCount);
+    scrollByCards(direction, 1);
   }
 
   return (
-    <section className="home-section tours-ocean-atmosphere pb-10 pt-0 sm:pb-12 sm:pt-6 lg:pb-14 lg:pt-8" data-home-section data-nav-href="/#tours" id="tours">
+    <section className="home-section tours-ocean-atmosphere pb-10 pt-0 sm:pb-12 sm:pt-6 lg:flex lg:min-h-[100svh] lg:flex-col lg:justify-center lg:pb-14 lg:pt-[104px]" data-home-section data-nav-href="/#tours" id="tours">
       <SectionReveal variant="drift">
       <Container>
         <div data-nav-frame>
           <div className="flex flex-col gap-6 md:flex-row md:items-end md:justify-between" {...reveal(0)}>
-            <SectionHeader
-              align="left"
-              eyebrow="Tours"
-              title={tr(text.home.toursTitle, language)}
-            />
+            <SectionHeader align="left" title={tr(text.home.toursTitle, language)} />
             <div className="flex flex-wrap items-center gap-3 self-end md:self-auto">
               <span className="text-sm font-bold text-ocean-200">{groupedTours.length} {tr(text.home.toursAvailable, language)}</span>
               {boats.length > 1 ? (
@@ -89,7 +85,7 @@ export function TourCarouselSection({ boats, tours, selectedTour, onSelectTour }
             </div>
           </div>
 
-          <div className="mt-4 sm:mt-5">
+          <div className="mt-4 sm:mt-5 [@media(min-width:1024px)_and_(max-height:800px)]:mt-2.5">
             <div
               ref={scrollerRef}
               className={cn(
@@ -111,15 +107,22 @@ export function TourCarouselSection({ boats, tours, selectedTour, onSelectTour }
               {groupedTours.map(({ key, tour, relatedTours }) => (
                 <div
                   key={key}
-                  className="w-full shrink-0 snap-start snap-always sm:w-[calc((100%-1.5rem)/2)] lg:w-[calc((100%-3rem)/3)]"
+                  className="w-full shrink-0 snap-start snap-always sm:w-[calc((100%-1.5rem)/2)] lg:w-[calc((100%-3rem)/3)] xl:w-[calc((100%-4.5rem)/4)]"
                 >
-                  <BoatTourCard boat={boats.find((boat) => boat.id === tour.boatId)!} tour={tour} relatedTours={relatedTours} isSelected={relatedTours.some((item) => item.id === selectedTour?.id)} onSelect={onSelectTour} />
+                  <BoatTourCard
+                    boat={boats.find((boat) => boat.id === tour.boatId)!}
+                    isSelected={relatedTours.some((item) => item.id === selectedTour?.id)}
+                    mediaClassName="lg:h-28"
+                    onSelect={onSelectTour}
+                    relatedTours={relatedTours}
+                    tour={tour}
+                  />
                 </div>
               ))}
             </div>
 
             {canScrollLeft || canScrollRight ? (
-              <div className="mt-3 flex justify-center gap-3 sm:mt-3.5" aria-label={language === 'es' ? 'Controles del carrusel de tours' : 'Tour carousel controls'} {...reveal(2)}>
+              <div className="mt-3 flex justify-center gap-3 sm:mt-3.5 [@media(min-width:1024px)_and_(max-height:800px)]:mt-1.5" aria-label={language === 'es' ? 'Controles del carrusel de tours' : 'Tour carousel controls'} {...reveal(2)}>
                 <CarouselArrow direction="left" disabled={!canScrollLeft} label={language === 'es' ? 'Tours anteriores' : 'Previous tours'} onClick={() => scrollByCard('left')} />
                 <CarouselArrow direction="right" disabled={!canScrollRight} label={language === 'es' ? 'Más tours' : 'Next tours'} onClick={() => scrollByCard('right')} />
               </div>

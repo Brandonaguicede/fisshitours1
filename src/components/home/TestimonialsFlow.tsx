@@ -98,10 +98,14 @@ export function TestimonialsFlow({ reviews }: TestimonialsFlowProps) {
 
   return (
     <div
-      className="relative h-[420px] overflow-hidden sm:h-[480px] lg:h-[560px]"
+      className="relative h-[420px] overflow-hidden sm:h-[min(480px,58vh)] lg:h-[min(560px,58vh)]"
       style={{
-        WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, black 12%, black 88%, transparent 100%)',
-        maskImage: 'linear-gradient(to bottom, transparent 0%, black 12%, black 88%, transparent 100%)',
+        // A shallower fade (6%, not 12%) relative to real card height: the old
+        // 12% zone at a compact viewport height was wide enough to swallow
+        // roughly a quarter of a card, reading as an accidental crop instead
+        // of an intentional "more below" hint.
+        WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, black 6%, black 94%, transparent 100%)',
+        maskImage: 'linear-gradient(to bottom, transparent 0%, black 6%, black 94%, transparent 100%)',
       }}
     >
       <div className="grid h-full gap-4 sm:grid-cols-2 lg:grid-cols-3 lg:gap-6">
@@ -200,7 +204,7 @@ function TestimonialCard({ review, featured }: { review: DisplayReview; featured
   return (
     <figure>
       <GlassPanel
-        className={cn('flex flex-col gap-3 p-4', featured && 'ring-1 ring-inset ring-ocean-200/20')}
+        className={cn('flex flex-col gap-2.5 p-3.5', featured && 'ring-1 ring-inset ring-ocean-200/20')}
         style={featured ? { boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.09), 0 0 0 1px rgba(168, 211, 228, 0.1), 0 10px 30px -14px rgba(2, 18, 31, 0.55)' } : undefined}
         variant={featured ? 'active' : 'subtle'}
       >

@@ -55,13 +55,15 @@ function getCardStep(element: HTMLDivElement) {
 }
 
 /**
- * Cards-per-view for the shared 1 / 2 / 3 carousel layout (matches the
- * `sm:w-[calc((100%-1.5rem)/2)] lg:w-[calc((100%-3rem)/3)]` card-width
- * classes both carousels use — the Tailwind `sm`/`lg` breakpoints here are
- * the same tokens the CSS itself reads, not independent guesses).
+ * Cards-per-view for the shared 1 / 2 / 3 / 4 carousel layout (matches the
+ * `sm:w-[calc((100%-1.5rem)/2)] lg:w-[calc((100%-3rem)/3)] xl:w-[calc((100%-4.5rem)/4)]`
+ * card-width classes both carousels use — the Tailwind `sm`/`lg`/`xl`
+ * breakpoints here are the same tokens the CSS itself reads, not independent
+ * guesses).
  */
 export function getVisibleCardCount() {
   if (typeof window === 'undefined') return 3;
+  if (window.innerWidth >= 1280) return 4;
   if (window.innerWidth >= 1024) return 3;
   if (window.innerWidth >= 640) return 2;
   return 1;

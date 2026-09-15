@@ -2,3 +2,4 @@ export const WHATSAPP_NUMBER = import.meta.env.VITE_WHATSAPP_NUMBER?.replace(/\D
 export const DISPLAY_PHONE = '+506 8610 5784';
 export const INSTAGRAM_URL = 'https://www.instagram.com/fishingtourscr/';
 export const FACEBOOK_URL = 'https://www.facebook.com/profile.php?id=61579488863430';
+export const GOOGLE_MAPS_URL = 'https://maps.app.goo.gl/D59oBAr9HaZfHCXY8';

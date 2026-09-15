@@ -1,4 +1,4 @@
-import { Compass, Clock, Users } from 'lucide-react';
+import { Clock, Users } from 'lucide-react';
 import { useState } from 'react';
 
 import type { Boat } from '../../types/boat';
@@ -15,6 +15,7 @@ interface BoatTourCardProps {
   tour: BoatTour;
   relatedTours?: BoatTour[];
   isSelected: boolean;
+  mediaClassName?: string;
   onSelect: (tour: BoatTour) => void;
 }
 
@@ -22,7 +23,7 @@ function getLowestPrice(tours: BoatTour[]) {
   return Math.min(...tours.map((item) => item.basePrice));
 }
 
-export function BoatTourCard({ boat, tour, relatedTours, isSelected, onSelect }: BoatTourCardProps) {
+export function BoatTourCard({ boat, tour, relatedTours, isSelected, mediaClassName, onSelect }: BoatTourCardProps) {
   const { language } = useLanguage();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const packageTours = relatedTours?.length ? relatedTours : [tour];
@@ -32,10 +33,11 @@ export function BoatTourCard({ boat, tour, relatedTours, isSelected, onSelect }:
 
   return (
     <>
-      <article className="h-full w-full">
+      <article className="card-shadow-pool h-full w-full">
         <CardShell
           as="button"
           aria-label={`${language === 'es' ? 'Ver tour' : 'View tour'} ${display.title}`}
+          className="card-shell-soft"
           interactive
           onClick={() => setIsModalOpen(true)}
           selected={isSelected}
@@ -43,6 +45,7 @@ export function BoatTourCard({ boat, tour, relatedTours, isSelected, onSelect }:
         >
           <CardMedia
             alt={language === 'es' ? `Tour ${display.title} a bordo de ${boat.name}` : `${display.title} tour aboard ${boat.name}`}
+            className={mediaClassName}
             src={tour.image}
             title={display.title}
           />
@@ -50,10 +53,9 @@ export function BoatTourCard({ boat, tour, relatedTours, isSelected, onSelect }:
           <CardContent>
             <PriceLabel label={language === 'es' ? 'Desde' : 'From'} value={formatTourPrice(lowestPrice)} />
 
-            <SpecsGrid>
+            <SpecsGrid className="grid-cols-2">
               <SpecItem icon={Clock} value={getDurationLabel(tour, display.duration, language)} />
               <SpecItem icon={Users} value={language === 'es' ? `Hasta ${effectiveMaxGuests} personas` : `Up to ${effectiveMaxGuests} guests`} />
-              <SpecItem icon={Compass} value={display.category} />
             </SpecsGrid>
 
             <div className="mt-2.5 grid gap-1">
@@ -64,6 +66,8 @@ export function BoatTourCard({ boat, tour, relatedTours, isSelected, onSelect }:
                 </div>
               ))}
             </div>
+
+            <span aria-hidden="true" className="flex-1" />
 
             <CardActions>{language === 'es' ? 'Ver tour' : 'View Tour'}</CardActions>
           </CardContent>

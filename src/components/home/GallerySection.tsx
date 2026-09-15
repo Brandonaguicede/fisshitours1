@@ -56,16 +56,11 @@ export function GallerySection() {
   }
 
   return (
-    <section className="home-section bg-ocean-950 pb-10 pt-0 sm:pb-12 sm:pt-6 lg:pb-14 lg:pt-8" data-home-section data-nav-href="/#gallery" id="gallery">
+    <section className="home-section bg-ocean-950 pb-10 pt-0 sm:pb-12 sm:pt-6 lg:flex lg:min-h-[100svh] lg:flex-col lg:justify-center lg:pb-14 lg:pt-[104px]" data-home-section data-nav-href="/#gallery" id="gallery">
       <Container>
         <div data-nav-frame>
-        <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between" {...reveal(0)}>
-          <SectionHeader
-            align="left"
-            eyebrow={tr(text.home.galleryEyebrow, language)}
-            title={tr(text.home.galleryTitle, language)}
-            description={tr(text.home.galleryDescription, language)}
-          />
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between" {...reveal(0)}>
+          <SectionHeader align="left" title={tr(text.home.galleryTitle, language)} variant="compact" />
           <FilterMenu
             label={language === 'es' ? 'Filtrar' : 'Filter'}
             ariaLabel={language === 'es' ? 'Filtrar galería por categoría' : 'Filter gallery by category'}
@@ -78,10 +73,11 @@ export function GallerySection() {
         </div>
 
         <Gallery closeLabel={language === 'es' ? 'Cerrar galería' : 'Close gallery'}>
-          <GalleryGrid className="mt-7" {...reveal(1)}>
+          <GalleryGrid className="mt-5 gap-2.5 sm:gap-3" {...reveal(1)}>
             {visibleImages.map((image) => (
               <GalleryImage
                 key={image.id}
+                className="mb-2.5 sm:mb-3"
                 id={String(image.id)}
                 src={image.src}
                 alt={image.alt ?? (language === 'es' ? 'Imagen de la galería' : 'Gallery image')}

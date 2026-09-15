@@ -1,4 +1,4 @@
-import { Anchor, Compass, Mail, ShieldCheck, Users } from 'lucide-react';
+import { Anchor, Mail, MessageCircle } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 
@@ -6,6 +6,28 @@ import { Container } from '../common/Container';
 import { Button, Chip, GlassPanel, SectionHeader } from '../ui';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { DEFAULT_ABOUT_SETTINGS, getAboutSettings, splitParagraphs, type AboutSettings } from '../../services/aboutSettings';
+
+// The shoreline photo starts appearing behind the contact card, tablet/
+// desktop only (mobile owns its own separate shoreline scene inside
+// Footer.tsx now — see notes there). Anchored with `bottom: 0` against the
+// section itself (not `top`), so its bottom edge is pinned exactly to the
+// section's own end — i.e. exactly where the Footer's own photo picks up,
+// at any viewport height. pointer-events-none, position:absolute — never
+// affects About's own box height, data-home-section, or nav/scroll
+// geometry.
+const SHORELINE_URL = "url('/footer/footer-shoreline.png')";
+// The Footer's own photo there picks up exactly where this gradient
+// finishes resolving (see Footer.tsx), so it MUST reach fully transparent
+// by 100% — anything left over would show as a tint mismatch at the seam.
+const CONTACT_SHORELINE_REVEAL =
+  'linear-gradient(to bottom, rgba(11,40,66,1) 0%, rgba(11,40,66,0.98) 10%, rgba(11,40,66,0.94) 22%, rgba(11,40,66,0.85) 35%, rgba(11,40,66,0.68) 48%, rgba(11,40,66,0.48) 60%, rgba(11,40,66,0.28) 72%, rgba(11,40,66,0.14) 84%, rgba(11,40,66,0.05) 92%, rgba(11,40,66,0) 100%)';
+// Tablet/desktop only: the box itself also fades in (not just its color
+// content) — its own top edge is a hard geometric line otherwise, since
+// About's ambient glow (below) tints the navy slightly differently than
+// this layer's flat rgba(navy) does. Masking the layer's own visibility in
+// over its first ~20% means there is never a single row where "layer"
+// meets "no layer".
+const REVEAL_MASK = 'linear-gradient(to bottom, transparent 0%, black 20%, black 100%)';
 
 const FALLBACK_IMAGES = [
   '/about/8809f2f5-0a3b-45bd-9771-1ac3505181bc.jpeg',
@@ -18,33 +40,6 @@ function buildCarouselImages(settings: AboutSettings): string[] {
   const managed = settings['about.image'];
   return Array.from(new Set([...FALLBACK_IMAGES, managed].filter(Boolean)));
 }
-
-const valueCards = [
-  {
-    title: { es: 'Nacidos en Playas del Coco', en: 'Born in Playas del Coco' },
-    description: {
-      es: 'Somos locales, familia y mar: conectados con nuestra comunidad y el Pacifico.',
-      en: 'We are local, family-run and deeply connected to our community and the sea.',
-    },
-    icon: Anchor,
-  },
-  {
-    title: { es: 'La seguridad va primero', en: 'Safety comes first' },
-    description: {
-      es: 'Tripulacion profesional, barcos bien cuidados y protocolos claros.',
-      en: 'Professional crew, well-maintained boats and clear protocols for peace of mind.',
-    },
-    icon: ShieldCheck,
-  },
-  {
-    title: { es: 'Hecho para tu grupo', en: 'Made for your group' },
-    description: {
-      es: 'Tours privados e itinerarios flexibles segun tu estilo y objetivos.',
-      en: 'Private tours and flexible itineraries tailored to your style and goals.',
-    },
-    icon: Users,
-  },
-];
 
 export function AboutPreview() {
   const { language } = useLanguage();
@@ -66,33 +61,35 @@ export function AboutPreview() {
   const paragraphs = splitParagraphs(about[`about.preview_text.${locale}` as keyof AboutSettings]);
 
   return (
-    <section className="home-section relative overflow-hidden bg-ocean-950 py-16 text-white sm:py-20 lg:py-24" data-home-section data-nav-href="/#about" id="about">
+    <section className="home-section relative overflow-hidden bg-ocean-950 py-12 text-white sm:py-14 lg:flex lg:min-h-[100svh] lg:flex-col lg:justify-center lg:pb-16 lg:pt-[104px]" data-home-section data-nav-href="/#about" id="about">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_22%,rgba(110,172,201,0.16),transparent_34%),linear-gradient(180deg,rgba(11,40,66,0)_0%,rgba(19,62,98,0.32)_48%,rgba(11,40,66,0)_100%)]" aria-hidden="true" />
+      {/* Shoreline reveal — see notes above. Bottom-anchored to the section
+          itself, so it always finishes resolving exactly at the Footer's
+          own top, regardless of viewport height. Tablet/desktop only. */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-x-0 bottom-0 z-0 hidden h-[130px] bg-top bg-no-repeat md:block lg:h-[clamp(220px,18vw,380px)]"
+        style={{
+          backgroundImage: `${CONTACT_SHORELINE_REVEAL}, ${SHORELINE_URL}`,
+          backgroundSize: '100% auto',
+          maskImage: REVEAL_MASK,
+          WebkitMaskImage: REVEAL_MASK,
+        }}
+      />
       <Container>
         <div data-nav-frame>
-        <div className="relative grid gap-9 lg:grid-cols-[minmax(0,0.82fr)_minmax(520px,1.18fr)] lg:items-center">
-          <div className="max-w-2xl">
-            <SectionHeader
-              align="left"
-              eyebrow={about[`about.eyebrow.${locale}` as keyof AboutSettings]}
-              title={about[`about.title.${locale}` as keyof AboutSettings]}
-              variant="feature"
-            />
-            <div className="mt-5 grid gap-4 text-[0.98rem] leading-7 text-ocean-100/90 sm:text-base sm:leading-8">
+        <div className="relative grid gap-5 lg:grid-cols-[minmax(0,0.82fr)_minmax(520px,1.18fr)] lg:items-start">
+          <div className="max-w-2xl lg:[&_h2]:text-[clamp(2.125rem,1.33rem+1.08vw,2.75rem)] lg:[&_h2]:leading-[1.12]">
+            <SectionHeader align="left" title={about[`about.title.${locale}` as keyof AboutSettings]} variant="default" />
+            <div className="mt-3 grid max-w-md gap-2.5 text-left text-[0.92rem] leading-7 text-ocean-100/90 sm:max-w-lg sm:text-[0.95rem] lg:max-w-xl lg:gap-2 lg:text-base lg:text-justify">
               {paragraphs.map((paragraph) => (
                 <p key={paragraph.slice(0, 32)}>{paragraph}</p>
               ))}
             </div>
-            <div className="mt-7">
-              <Button className="gap-2.5" size="lg" variant="primary" to="/tours">
-                <Compass size={18} />
-                {language === 'es' ? 'Explorar tours' : 'Explore our tours'}
-              </Button>
-            </div>
           </div>
 
           <div className="relative">
-            <div className="about-glass-showcase relative aspect-[1.26/1] overflow-hidden rounded-[1.5rem] sm:aspect-[1.55/1] lg:aspect-[1.58/1]">
+            <div className="about-glass-showcase relative aspect-[1.5/1] overflow-hidden rounded-[1.5rem] sm:aspect-[1.75/1] lg:aspect-auto lg:h-[clamp(300px,40vh,340px)] min-[1536px]:h-[clamp(320px,38vh,360px)] min-[1920px]:h-[clamp(340px,32vh,420px)]">
               {images.map((image, index) => (
                 <img
                   key={image}
@@ -115,37 +112,24 @@ export function AboutPreview() {
             </Chip>
           </div>
         </div>
-        <span aria-hidden="true" data-nav-frame-end />
         </div>
 
-        <div className="relative mt-5 grid gap-4 md:grid-cols-3 lg:mt-5">
-          {valueCards.map((card) => (
-            <GlassPanel as="article" className="about-glass-card grid grid-cols-[auto_1fr] gap-4 p-5 sm:p-6" key={card.title.en} variant="subtle">
-              <span className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-ocean-100 text-ocean-950 shadow-soft">
-                <card.icon size={20} />
-              </span>
-              <span>
-                <h3 className="text-lg font-extrabold leading-6 text-white">{card.title[language]}</h3>
-                <p className="mt-2 text-sm leading-6 text-ocean-100/88">{card.description[language]}</p>
-              </span>
+        <GlassPanel className="relative z-30 mt-6 flex flex-col items-start gap-3 p-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:p-3.5" variant="subtle">
+          <div className="flex min-w-0 items-center gap-3">
+            <GlassPanel as="span" className="grid size-9 shrink-0 place-items-center text-ocean-200" shape="circle" variant="control">
+              <MessageCircle aria-hidden="true" size={15} />
             </GlassPanel>
-          ))}
-        </div>
-
-        <GlassPanel className="mt-4 flex flex-col items-start gap-4 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6" variant="subtle">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[0.14em] text-ocean-400">{language === 'es' ? 'Contacto' : 'Contact'}</p>
-            <h3 className="mt-1.5 text-lg font-extrabold text-white">
-              {language === 'es' ? '¿Quieres hablar con nosotros?' : 'Want to talk with us?'}
-            </h3>
-            <p className="mt-1.5 max-w-md text-sm leading-6 text-ocean-100/88">
-              {language === 'es'
-                ? 'Si tienes preguntas sobre tours, horarios o reservas, escribenos y con gusto te ayudamos.'
-                : "If you have questions about tours, schedules or bookings, send us a message and we'll be happy to help."}
-            </p>
+            <div className="min-w-0">
+              <h3 className="text-[0.88rem] font-extrabold leading-tight text-white">
+                {language === 'es' ? '¿Quieres hablar con nosotros?' : 'Want to talk with us?'}
+              </h3>
+              <p className="mt-0.5 truncate text-[0.78rem] text-ocean-100/80">
+                {language === 'es' ? 'Escríbenos y con gusto te ayudamos.' : "Send us a message and we'll be happy to help."}
+              </p>
+            </div>
           </div>
-          <Button className="w-full shrink-0 gap-2.5 sm:w-auto" size="lg" variant="glass" to="/contacto">
-            <Mail size={18} />
+          <Button className="w-full shrink-0 gap-1.5 sm:w-auto" size="xs" variant="glass" to="/contacto">
+            <Mail aria-hidden="true" size={14} />
             {language === 'es' ? 'Ver información de contacto' : 'View contact information'}
           </Button>
         </GlassPanel>

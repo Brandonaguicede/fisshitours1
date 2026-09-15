@@ -9,24 +9,26 @@ interface BoatCardProps {
   boat: Boat;
   startingPrice: number;
   isSelected: boolean;
+  mediaClassName?: string;
   onSelect: (boat: Boat) => void;
 }
 
-export function BoatCard({ boat, startingPrice, isSelected, onSelect }: BoatCardProps) {
+export function BoatCard({ boat, startingPrice, isSelected, mediaClassName, onSelect }: BoatCardProps) {
   const { language } = useLanguage();
   const boatText = getBoatText(boat, language);
 
   return (
-    <article className="h-full w-full">
+    <article className="card-shadow-pool h-full w-full">
       <CardShell
         as="button"
         aria-label={`${language === 'es' ? 'Ver barco' : 'Explore boat'} ${boat.name}`}
+        className="card-shell-soft"
         interactive
         onClick={() => onSelect(boat)}
         selected={isSelected}
         type="button"
       >
-        <CardMedia alt={boat.name} src={boat.image} title={boat.name} />
+        <CardMedia alt={boat.name} className={mediaClassName} src={boat.image} title={boat.name} />
 
         <CardContent>
           <PriceLabel label={language === 'es' ? 'Desde' : 'From'} value={formatStartingPrice(startingPrice)} />
@@ -36,6 +38,8 @@ export function BoatCard({ boat, startingPrice, isSelected, onSelect }: BoatCard
             <SpecItem icon={Ruler} value={boatText.length} />
             <SpecItem icon={Gauge} value={boat.engine} />
           </SpecsGrid>
+
+          <span aria-hidden="true" className="flex-1" />
 
           <CardActions>{language === 'es' ? 'Ver barco' : 'Explore Boat'}</CardActions>
         </CardContent>

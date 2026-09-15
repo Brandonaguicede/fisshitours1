@@ -19,6 +19,12 @@ function isBrowserReload() {
   return entry?.type === 'reload';
 }
 
+// /reservar and /contacto are focused single-task screens (booking flow,
+// contact form) — the marketing footer beneath them added scroll depth
+// without serving either task, so both opt out of it here rather than
+// hiding Footer globally.
+const ROUTES_WITHOUT_FOOTER = ['/reservar', '/contacto'];
+
 export function MainLayout() {
   const location = useLocation();
   // Captured once on the very first render and never reassigned — including
@@ -59,7 +65,7 @@ export function MainLayout() {
       <main id="main-content">
         <Outlet />
       </main>
-      <Footer />
+      {ROUTES_WITHOUT_FOOTER.includes(location.pathname) ? null : <Footer />}
       <CookieNotice />
     </div>
   );

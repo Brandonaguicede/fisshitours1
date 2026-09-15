@@ -184,6 +184,17 @@
       inset 0 -1px 0 rgba(158, 98, 52, 0.08),
       0 0 0 2px rgba(226, 168, 109, 0.06),
       0 6px 16px rgba(var(--color-surface-ink), 0.16);
+    /* Boat/Tour carousel cards only (.card-shell-soft) — no outer drop-shadow
+       at all on the rectangle itself (that's what read as a rigid box/glow
+       around the card); depth now comes entirely from the separate blurred
+       ellipse under the card (.card-shadow-pool::after). Only a faint inset
+       top highlight remains for a touch of glass sheen. Scoped to its own
+       token/class rather than edited in place so every other glass-surface
+       user (modals, Booking, Testimonials, admin) is untouched. */
+    --shadow-card-soft: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    --shadow-card-soft-selected:
+      inset 0 1px 0 rgba(255, 255, 255, 0.1),
+      0 0 0 2px rgba(var(--color-surface-highlight), 0.16);
 
     --radius-card: 1.65rem;
     --radius-panel: 1.5rem;
@@ -263,6 +274,20 @@
   }
 }
 
+/*
+ * A 1366x768 laptop and a 1366x1000 one hit the same min-width breakpoint but
+ * have very different vertical room. This is the one deliberately
+ * height-aware override in the system — reserved for compact-height laptops
+ * (roughly up to 900px tall, covering 768/864-class screens) — so section
+ * padding compresses there without needing a width breakpoint of its own.
+ */
+@media (min-width: 1024px) and (max-height: 900px) {
+  :root {
+    --nav-section-gap: 36px;
+    --section-space-block: 2.75rem;
+  }
+}
+
 @layer components {
   .skip-link {
     @apply focus-ring fixed left-4 top-4 z-[100] -translate-y-24 rounded-full bg-white px-5 py-3 text-sm font-bold text-ocean-900 shadow-lifted transition-transform duration-200 focus-visible:translate-y-0;
@@ -307,6 +332,39 @@
 
   .glass-panel {
     background: var(--glass-panel-background);
+  }
+
+  .glass-surface.card-shell-soft {
+    border-color: rgba(var(--color-surface-light), 0.08);
+    box-shadow: var(--shadow-card-soft);
+  }
+
+  .glass-surface.card-shell-soft.glass-interactive:is([aria-pressed='true'], [aria-current='page'], [aria-expanded='true'], [aria-checked='true'], [data-selected='true']),
+  .glass-surface.card-shell-soft.glass-interactive:is([aria-pressed='true'], [aria-current='page'], [aria-expanded='true'], [aria-checked='true'], [data-selected='true']):hover:not(:disabled):not([aria-disabled='true']) {
+    border-color: rgba(var(--color-surface-light), 0.22);
+    box-shadow: var(--shadow-card-soft-selected);
+  }
+
+  /* Wraps the Boat/Tour <article> (outside CardShell, which keeps its own
+     overflow-hidden for the rounded image). Must stay overflow-visible so
+     the ::after ellipse can sit partly below the card's own box. */
+  .card-shadow-pool {
+    position: relative;
+    z-index: 0;
+  }
+
+  .card-shadow-pool::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    bottom: -9px;
+    z-index: -1;
+    width: 88%;
+    height: 18px;
+    background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0.5) 0%, rgba(0, 0, 0, 0.24) 45%, rgba(0, 0, 0, 0) 72%);
+    filter: blur(7px);
+    transform: translateX(-50%);
+    pointer-events: none;
   }
 
   .navbar-nav-shell {

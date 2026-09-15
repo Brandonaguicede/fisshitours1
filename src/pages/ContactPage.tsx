@@ -5,9 +5,10 @@ import { useForm } from 'react-hook-form';
 import { useState } from 'react';
 import { z } from 'zod';
 
+import { BackToHomeButton } from '../components/common/BackToHomeButton';
 import { Container } from '../components/common/Container';
 import { Button, CardShell, ChoiceCard, Field, FieldError, GlassPanel, Input, SectionHeader, Select, TextArea } from '../components/ui';
-import { DISPLAY_PHONE, WHATSAPP_NUMBER } from '../constants/contact';
+import { DISPLAY_PHONE, GOOGLE_MAPS_URL, WHATSAPP_NUMBER } from '../constants/contact';
 import { departureTimes } from '../data/departureTimes';
 import { useLanguage } from '../i18n/LanguageContext';
 import { supabase } from '../lib/supabase';
@@ -26,7 +27,6 @@ function uniqueTourOptions(tours: Array<{ tourId?: string; tourTitle?: string }>
 
 const contactText = {
   es: {
-    eyebrow: 'Contacto / reservas',
     title: 'Contactanos',
     subtitle: 'Envia tus datos y te respondemos con disponibilidad, horario recomendado y siguientes pasos.',
     formTitle: 'Envia un mensaje',
@@ -48,7 +48,7 @@ const contactText = {
     sending: 'Enviando...',
     error: 'No pudimos enviar tu mensaje. Inténtalo de nuevo.',
     asideTitle: 'Siempre estamos listos para ayudarte',
-    asideDescription: 'Papagayo Fishing Tours coordina charters privados de pesca, snorkeling, playa y navegacion en Guanacaste.',
+    asideDescription: 'Papagayo Fishing Tours coordina tours privados de pesca, snorkeling, playa y navegacion en Guanacaste.',
     phoneLabel: 'Telefono',
     whatsappLabel: 'WhatsApp',
     emailLabel: 'Email',
@@ -64,7 +64,6 @@ const contactText = {
     },
   },
   en: {
-    eyebrow: 'Contact / bookings',
     title: 'Contact us',
     subtitle: 'Send your details and we will reply with availability, recommended time and next steps.',
     formTitle: 'Send us a message',
@@ -86,7 +85,7 @@ const contactText = {
     sending: 'Sending...',
     error: 'We could not send your message. Please try again.',
     asideTitle: 'We are always ready to help',
-    asideDescription: 'Papagayo Fishing Tours coordinates private fishing, snorkeling, beach and cruising charters in Guanacaste.',
+    asideDescription: 'Papagayo Fishing Tours coordinates private fishing, snorkeling, beach and cruising tours in Guanacaste.',
     phoneLabel: 'Phone',
     whatsappLabel: 'WhatsApp',
     emailLabel: 'Email',
@@ -158,14 +157,18 @@ export default function ContactPage() {
   }
 
   return (
-    <main className="bg-ocean-950 text-white">
-      <section className="relative min-h-screen overflow-hidden bg-ocean-900 pb-20 pt-32 sm:pt-36">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_10%_12%,rgba(110,172,201,0.22),transparent_26rem),linear-gradient(180deg,#133E62_0%,#1A466C_46%,#0B2842_100%)]" />
+    <main className="tours-ocean-atmosphere relative text-white">
+      {/* Contact-only: softens the shared ocean photo behind the form
+          (Booking keeps it at full intensity — this overlay isn't part of
+          the shared class). */}
+      <div className="pointer-events-none absolute inset-0 bg-[#0B2842]/55" aria-hidden="true" />
+      <section className="relative pb-8 pt-20 sm:pt-24 lg:pt-24">
         <Container className="relative">
-          <SectionHeader description={copy.subtitle} eyebrow={copy.eyebrow} level={1} title={copy.title} variant="hero" />
+          <BackToHomeButton />
+          <SectionHeader description={copy.subtitle} level={1} title={copy.title} variant="feature" />
 
-          <GlassPanel className="mx-auto mt-10 grid max-w-6xl gap-5 p-4 lg:grid-cols-[minmax(0,1fr)_340px] lg:p-5" variant="surface">
-            <form className="p-2 sm:p-4 lg:p-5" onSubmit={handleSubmit(onSubmit)} noValidate>
+          <div className="mx-auto mt-6 grid max-w-6xl gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
+            <form onSubmit={handleSubmit(onSubmit)} noValidate>
               <div>
                 <h2 className="text-xl font-extrabold text-white">{copy.formTitle}</h2>
                 <p className="mt-1 max-w-xl text-xs leading-5 text-ocean-200">
@@ -173,7 +176,7 @@ export default function ContactPage() {
                 </p>
               </div>
 
-              <div className="mt-6 grid gap-4 sm:grid-cols-2">
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
                 <Field error={errors.name?.message} errorId="contact-name-error" htmlFor="contact-name" label={copy.name}>
                   <Input id="contact-name" aria-describedby={errors.name ? 'contact-name-error' : undefined} aria-invalid={Boolean(errors.name)} autoComplete="name" className="font-semibold placeholder:text-ocean-400" placeholder={copy.namePlaceholder} shape="pill" tone="deep" {...register('name')} />
                 </Field>
@@ -182,7 +185,7 @@ export default function ContactPage() {
                 </Field>
               </div>
 
-              <div className="mt-4 grid gap-4 sm:grid-cols-2">
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
                 <Field error={errors.tourType?.message} errorId="contact-tour-error" htmlFor="contact-tour" label={copy.experience}>
                   <Select id="contact-tour" aria-describedby={errors.tourType ? 'contact-tour-error' : undefined} aria-invalid={Boolean(errors.tourType)} autoComplete="off" className="font-semibold" shape="pill" tone="deep" {...register('tourType')}>
                     <option value="">{copy.selectExperience}</option>
@@ -198,14 +201,14 @@ export default function ContactPage() {
                 </Field>
               </div>
 
-              <fieldset className="mt-5">
+              <fieldset className="mt-4">
                 <legend className="text-xs font-extrabold text-ocean-100">{copy.time}</legend>
                 <div className="mt-2 grid gap-2 md:grid-cols-3">
                   {departureTimes.map((departure) => (
                     <ChoiceCard
                       as="label"
                       key={departure.id}
-                      className="cursor-pointer px-4 py-3 shadow-sm"
+                      className="cursor-pointer px-4 py-2.5 shadow-sm"
                       selected={selectedTime === departure.id}
                       shape="soft"
                     >
@@ -218,12 +221,12 @@ export default function ContactPage() {
                 {errors.departureTime ? <FieldError className="mt-2" id="contact-time-error">{errors.departureTime.message}</FieldError> : null}
               </fieldset>
 
-              <Field className="mt-4" error={errors.message?.message} errorId="contact-message-error" htmlFor="contact-message" label={copy.message}>
+              <Field className="mt-3" error={errors.message?.message} errorId="contact-message-error" htmlFor="contact-message" label={copy.message}>
                 <TextArea
                   id="contact-message"
                   aria-describedby={errors.message ? 'contact-message-error' : undefined}
                   aria-invalid={Boolean(errors.message)}
-                  className="min-h-28 font-semibold placeholder:text-ocean-400"
+                  className="min-h-24 font-semibold placeholder:text-ocean-400"
                   placeholder={copy.messagePlaceholder}
                   autoComplete="off"
                   shape="soft"
@@ -232,7 +235,7 @@ export default function ContactPage() {
                 />
               </Field>
 
-              <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 {isSubmitSuccessful ? (
                   <p className="rounded-full border border-ocean-300/40 bg-ocean-500/15 px-4 py-2 text-xs font-extrabold text-ocean-100" aria-live="polite">
                     {copy.success}
@@ -250,45 +253,45 @@ export default function ContactPage() {
               </div>
             </form>
 
-            <GlassPanel as="aside" className="p-6 text-white lg:p-7" variant="panel">
+            <GlassPanel as="aside" className="p-5 text-white lg:p-6" variant="panel">
               <h2 className="text-xl font-extrabold">{copy.asideTitle}</h2>
-              <p className="mt-3 text-sm leading-6 text-ocean-200">
+              <p className="mt-2.5 text-sm leading-6 text-ocean-200">
                 {copy.asideDescription}
               </p>
 
-              <div className="mt-7 grid gap-3">
-                <CardShell as="a" className="flex-row items-center gap-3 p-4" href={`tel:${DISPLAY_PHONE.replace(/\s/g, '')}`} interactive>
+              <div className="mt-5 grid gap-2.5">
+                <CardShell as="a" className="flex-row items-center gap-3 p-3.5" href={`tel:${DISPLAY_PHONE.replace(/\s/g, '')}`} interactive>
                   <Phone className="text-ocean-300" size={20} />
                   <span>
                     <span className="block text-xs font-extrabold text-ocean-300">{copy.phoneLabel}</span>
                     <span className="text-sm font-bold text-white">{DISPLAY_PHONE}</span>
                   </span>
                 </CardShell>
-                <CardShell as="a" className="flex-row items-center gap-3 p-4" href={`https://wa.me/${WHATSAPP_NUMBER}`} target="_blank" rel="noreferrer" interactive>
+                <CardShell as="a" className="flex-row items-center gap-3 p-3.5" href={`https://wa.me/${WHATSAPP_NUMBER}`} target="_blank" rel="noreferrer" interactive>
                   <MessageCircle className="text-ocean-300" size={20} />
                   <span>
                     <span className="block text-xs font-extrabold text-ocean-300">{copy.whatsappLabel}</span>
                     <span className="text-sm font-bold text-white">{DISPLAY_PHONE}</span>
                   </span>
                 </CardShell>
-                <CardShell as="a" className="flex-row items-center gap-3 p-4" href="mailto:info@papagayofishingtours.com" interactive>
+                <CardShell as="a" className="flex-row items-center gap-3 p-3.5" href="mailto:info@papagayofishingtours.com" interactive>
                   <Mail className="text-ocean-300" size={20} />
                   <span>
                     <span className="block text-xs font-extrabold text-ocean-300">{copy.emailLabel}</span>
                     <span className="text-sm font-bold text-white">info@papagayofishingtours.com</span>
                   </span>
                 </CardShell>
-                <GlassPanel className="flex items-center gap-3 p-4" variant="subtle">
+                <CardShell as="a" className="flex-row items-center gap-3 p-3.5" href={GOOGLE_MAPS_URL} target="_blank" rel="noreferrer" interactive>
                   <MapPin className="text-ocean-300" size={20} />
                   <span>
                     <span className="block text-xs font-extrabold text-ocean-300">{copy.locationLabel}</span>
                     <span className="text-sm font-bold text-white">{copy.location}</span>
                   </span>
-                </GlassPanel>
+                </CardShell>
               </div>
 
               <Button
-                className="mt-7"
+                className="mt-5"
                 fullWidth
                 href={`https://wa.me/${WHATSAPP_NUMBER}`}
                 target="_blank"
@@ -296,7 +299,7 @@ export default function ContactPage() {
                 <MessageCircle size={18} /> {copy.whatsappCta}
               </Button>
             </GlassPanel>
-          </GlassPanel>
+          </div>
         </Container>
       </section>
     </main>

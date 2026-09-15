@@ -32,16 +32,19 @@ const eyebrowStyles: Record<SectionHeaderVariant, string> = {
 
 /*
  * Fluid clamp() scales instead of a single sm: breakpoint jump: the title
- * grows smoothly with viewport width and caps at a moderate size, so it
- * reads as "important" without dominating the viewport at 1366/1920 — and
- * without a hard jump right at 640px either.
+ * grows smoothly with viewport width and caps at a moderate size. The
+ * vw-coefficient is deliberately shallow so the curve keeps climbing all the
+ * way to ~1920px instead of saturating at its max around ~1100px — the old
+ * curves reached max size by ~1100px, so 1366/1536/1920 all rendered the
+ * identical (maxed-out) size with zero differentiation between a compact
+ * laptop and a large desktop. Min values (small viewports) are unchanged.
  */
 const titleStyles: Record<SectionHeaderVariant, string> = {
-  default: 'mt-2.5 font-display font-extrabold leading-[1.08] text-white [font-size:clamp(1.7rem,1.32rem+1.7vw,2.5rem)]',
-  compact: 'mt-2 font-display font-extrabold leading-tight text-white [font-size:clamp(1.4rem,1.22rem+0.8vw,1.75rem)]',
-  feature: 'mt-2.5 font-display font-extrabold leading-[1.06] text-white [font-size:clamp(1.9rem,1.5rem+1.8vw,2.75rem)]',
-  hero: 'mt-3 font-display font-extrabold leading-[1.02] text-white [font-size:clamp(2.25rem,1.7rem+2.4vw,3.25rem)]',
-  heroWide: 'mt-3.5 font-display font-extrabold leading-[0.98] text-white [font-size:clamp(2.5rem,1.8rem+3vw,3.75rem)]',
+  default: 'mt-2.5 font-display font-extrabold leading-[1.08] text-white [font-size:clamp(1.7rem,1.51rem+0.83vw,2.5rem)]',
+  compact: 'mt-2 font-display font-extrabold leading-tight text-white [font-size:clamp(1.4rem,1.32rem+0.36vw,1.75rem)]',
+  feature: 'mt-2.5 font-display font-extrabold leading-[1.06] text-white [font-size:clamp(1.9rem,1.69rem+0.88vw,2.75rem)]',
+  hero: 'mt-3 font-display font-extrabold leading-[1.02] text-white [font-size:clamp(2.25rem,2.01rem+1.04vw,3.25rem)]',
+  heroWide: 'mt-3.5 font-display font-extrabold leading-[0.98] text-white [font-size:clamp(2.5rem,2.2rem+1.29vw,3.75rem)]',
 };
 
 const descriptionStyles: Record<SectionHeaderVariant, string> = {

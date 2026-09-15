@@ -24,6 +24,14 @@ interface BoatImageRow {
   sort_order: number;
   active: boolean;
   pending_deletion: boolean;
+  /**
+   * true only for synthetic rows computed client-side by fallbackBoatImages() from the
+   * legacy boats.images/image_url columns — they do NOT exist in boat_images (their id
+   * is a fake "legacy-<boatId>-<n>" string, not a real uuid). Read-only preview only:
+   * never pass one of these to setPrimaryImage / moveImage / deleteBoatImage, which
+   * write to boat_images by real id. Real rows never set this flag.
+   */
+  synthetic?: boolean;
 }
 
 interface BoatRow {
@@ -57,6 +65,15 @@ function publicStoragePath(value: string): string | null {
   }
 }
 
+// READ-ONLY preview for a boat that has zero rows in boat_images: computes the legacy
+// set from boats.image_url / boats.images (the old jsonb column) so the admin still sees
+// the boat's existing photos instead of a blank gallery. This performs NO writes and
+// loadBoats()/refreshEditing() never store its output as editing.boat_images — it is
+// display-only.
+// The synthetic "legacy-<boatId>-<n>" id is not a real uuid; callers must check
+// `.synthetic` and hide/disable edit actions for these rows (see editorImages below) —
+// setPrimaryImage / moveImage / deleteBoatImage write to boat_images by real id and will
+// fail (or worse, silently no-op) against a synthetic one.
 function fallbackBoatImages(boat: BoatRow): BoatImageRow[] {
   const urls = Array.from(new Set([boat.image_url, ...(boat.images ?? [])].filter(Boolean))) as string[];
   return urls.map((url, index) => ({
@@ -69,6 +86,7 @@ function fallbackBoatImages(boat: BoatRow): BoatImageRow[] {
     sort_order: index,
     active: true,
     pending_deletion: false,
+    synthetic: true,
   }));
 }
 
@@ -141,7 +159,12 @@ export default function AdminBoatsPage() {
       }
     }
 
-    setBoats(rows.map((boat) => ({ ...boat, boat_images: imagesByBoat.get(boat.id) ?? fallbackBoatImages(boat) })));
+    // Read-only: boat_images rows as-is, or [] when a boat has none yet. NEVER
+    // fallbackBoatImages() here — that would put synthetic, unpersisted rows into
+    // editing.boat_images, which the write handlers (onGalleryImageSaved,
+    // deleteBoatImage, setPrimaryImage, moveImage) trust as real. The synthetic
+    // read-only preview is applied only at render time, in editorImages below.
+    setBoats(rows.map((boat) => ({ ...boat, boat_images: imagesByBoat.get(boat.id) ?? [] })));
     setLoading(false);
     await loadStartingPrices();
   }
@@ -385,6 +408,12 @@ export default function AdminBoatsPage() {
       if (deactivateError) throw new Error(deactivateError.message);
     }
     const shouldBePrimary = currentImages.length === 0;
+    // Use max(sort_order) + 1, not currentImages.length: after a delete, remaining
+    // sort_order values have a gap (e.g. [0, 2] once index 1 was removed), so
+    // currentImages.length (2) would collide with the still-existing sort_order=2 row
+    // instead of appending after it. That collision made a newly-added "replacement"
+    // image tie for position with an existing one instead of landing where expected.
+    const nextSortOrder = currentImages.reduce((max, item) => Math.max(max, item.sort_order), -1) + 1;
     const { data, error } = await db
       .from('boat_images')
       .insert({
@@ -393,7 +422,7 @@ export default function AdminBoatsPage() {
         storage_path: image.storage_path,
         alt_text: `${editing.name} image`,
         is_primary: shouldBePrimary,
-        sort_order: currentImages.length,
+        sort_order: nextSortOrder,
         active: true,
       })
       .select('id, boat_id, image_url, storage_path, alt_text, is_primary, sort_order, active, pending_deletion')
@@ -402,7 +431,7 @@ export default function AdminBoatsPage() {
     const nextImages = shouldBePrimary ? [data as BoatImageRow] : [...currentImages, data as BoatImageRow];
     await syncBoatImageFields(editing.id, nextImages);
     if (deactivatedForImageCount) {
-      setNotice(`Imagen agregada. El bote se inactivo temporalmente porque ahora tiene ${nextImages.length} imagenes; podras activarlo al completar 3, 6 o 9.`);
+      setNotice(`Imagen agregada. El bote se inactivo temporalmente porque ahora tiene ${nextImages.length} imagenes; necesitas entre 3 y 6 para activarlo.`);
     }
     setSelectedImageId((data as BoatImageRow).id);
     await refreshEditing(editing.id);
@@ -483,9 +512,15 @@ export default function AdminBoatsPage() {
     setNotice('URL copiada.');
   }
 
+  // editing.boat_images is always real (or []) — see loadBoats()/refreshEditing(). The
+  // synthetic legacy preview is applied ONLY here, for display, and every row it produces
+  // carries `synthetic: true` so the actions below know not to wire real writes to it.
   const editorImages = useMemo(() => (editing?.boat_images?.length ? editing.boat_images : editing ? fallbackBoatImages(editing) : []), [editing]);
   const selectedImage = editorImages.find((image) => image.id === selectedImageId) ?? editorImages.find((image) => image.is_primary) ?? editorImages[0] ?? null;
   const isExistingBoat = Boolean(editing && boats?.some((boat) => boat.id === editing.id));
+  // True while we're showing the boat's legacy boats.images/image_url as a read-only
+  // preview because it has no boat_images rows yet.
+  const isLegacyPreview = Boolean(editing && !editing.boat_images?.length && editorImages.length > 0);
 
   return (
     <div className="admin-page">
@@ -579,7 +614,7 @@ export default function AdminBoatsPage() {
                           <div className="admin-boat-images__empty"><ImagePlus size={28} /> Sin imagenes del bote</div>
                         )}
                         <span className="admin-boat-images__badge">Imagen principal</span>
-                        {selectedImage && !selectedImage.is_primary ? (
+                        {selectedImage && !selectedImage.is_primary && !selectedImage.synthetic ? (
                           <button className="admin-boat-images__primary admin-btn" type="button" onClick={() => void setPrimaryImage(selectedImage)}>
                             <Star size={14} /> Marcar principal
                           </button>
@@ -599,15 +634,27 @@ export default function AdminBoatsPage() {
                               <img src={image.image_url} alt="" loading="lazy" decoding="async" />
                             </button>
                             <div className="admin-boat-thumb__actions">
-                              <button type="button" aria-label="Marcar como principal" onClick={() => void setPrimaryImage(image)}><Star size={14} /></button>
-                              <button type="button" aria-label="Mover a la izquierda" onClick={() => void moveImage(image, -1)}><ArrowUp size={14} /></button>
-                              <button type="button" aria-label="Mover a la derecha" onClick={() => void moveImage(image, 1)}><ArrowDown size={14} /></button>
+                              {image.synthetic ? null : (
+                                <>
+                                  <button type="button" aria-label="Marcar como principal" onClick={() => void setPrimaryImage(image)}><Star size={14} /></button>
+                                  <button type="button" aria-label="Mover a la izquierda" onClick={() => void moveImage(image, -1)}><ArrowUp size={14} /></button>
+                                  <button type="button" aria-label="Mover a la derecha" onClick={() => void moveImage(image, 1)}><ArrowDown size={14} /></button>
+                                </>
+                              )}
                               <button type="button" aria-label="Copiar URL" title={image.image_url} onClick={() => void copyUrl(image.image_url)}><Copy size={14} /></button>
-                              <button type="button" aria-label="Eliminar imagen" onClick={() => setPendingDelete(image)}><Trash2 size={14} /></button>
+                              {image.synthetic ? null : (
+                                <button type="button" aria-label="Eliminar imagen" onClick={() => setPendingDelete(image)}><Trash2 size={14} /></button>
+                              )}
                             </div>
                           </div>
                         ))}
                       </div>
+
+                      {isLegacyPreview ? (
+                        <p className="admin-field-help" role="status">
+                          Estas fotos pertenecen al formato anterior y se muestran solo como referencia. Las nuevas imagenes del bote se administran desde la galeria actual.
+                        </p>
+                      ) : null}
 
                       <AdminImageManager
                         resourceTable="boats"
@@ -618,7 +665,7 @@ export default function AdminBoatsPage() {
                         maxWidth={1600}
                         maxHeight={900}
                         maxSizeMB={0.6}
-                      disabled={editorImages.length >= 6}
+                      disabled={(editing.boat_images?.length ?? 0) >= 6}
                         retainPreviousOnUpload
                         onImageSaved={onGalleryImageSaved}
                       />

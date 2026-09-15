@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { MapPin, PenLine } from 'lucide-react';
 import { useState } from 'react';
 
+import { GOOGLE_MAPS_URL } from '../../constants/contact';
 import { testimonials as fallbackTestimonials } from '../../data/testimonials';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { getApprovedReviews } from '../../services/reviewService';
@@ -10,8 +11,6 @@ import { reveal } from '../common/SectionReveal';
 import { Button, GlassPanel, SectionHeader } from '../ui';
 import { ReviewModal } from './ReviewModal';
 import { TestimonialsFlow, type DisplayReview } from './TestimonialsFlow';
-
-const GOOGLE_MAPS_URL = 'https://maps.app.goo.gl/D59oBAr9HaZfHCXY8';
 
 export function Testimonials() {
   const { language } = useLanguage();
@@ -25,7 +24,7 @@ export function Testimonials() {
 
   return (
     <section
-      className="home-section section-y relative overflow-hidden bg-[linear-gradient(180deg,#0B2842_0%,#061B2F_48%,#0B2842_100%)]"
+      className="home-section section-y relative overflow-hidden bg-[linear-gradient(180deg,#0B2842_0%,#061B2F_48%,#0B2842_100%)] lg:flex lg:min-h-[100svh] lg:flex-col lg:justify-center lg:!pt-[104px]"
       data-home-section
       data-nav-href="/#comments"
       id="comments"
@@ -37,24 +36,14 @@ export function Testimonials() {
 
       <Container className="relative">
         <div data-nav-frame>
-          <div {...reveal(0)}>
-            <SectionHeader
-              align="center"
-              description={
-                language === 'es'
-                  ? 'Comentarios reales de quienes navegaron con nosotros en el Pacifico de Costa Rica.'
-                  : "Real feedback from travelers who sailed with us on Costa Rica's Pacific coast."
-              }
-              eyebrow={language === 'es' ? 'Comentarios' : 'Reviews'}
-              title={language === 'es' ? 'Historias que vuelven con sal' : 'Stories that come back with salt'}
-              variant="compact"
-            />
+          <div className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between" {...reveal(0)}>
+            <SectionHeader align="left" title={language === 'es' ? 'Historias que vuelven con sal' : 'Stories that come back with salt'} />
           </div>
 
           {reviewsQuery.isLoading ? (
             <TestimonialsSkeleton />
           ) : (
-            <div className="mt-7" {...reveal(1)}>
+            <div className="mt-6" {...reveal(1)}>
               <TestimonialsFlow reviews={reviews} />
             </div>
           )}
@@ -79,7 +68,7 @@ export function Testimonials() {
 
 function TestimonialsSkeleton() {
   return (
-    <div className="mt-7 grid h-[420px] gap-4 sm:h-[480px] sm:grid-cols-2 lg:h-[560px] lg:grid-cols-3 lg:gap-6">
+    <div className="mt-6 grid h-[420px] gap-4 sm:h-[min(480px,58vh)] sm:grid-cols-2 lg:h-[min(560px,58vh)] lg:grid-cols-3 lg:gap-6">
       {Array.from({ length: 3 }).map((_, index) => (
         <div className={index === 2 ? 'hidden gap-4 lg:flex lg:flex-col' : index === 1 ? 'hidden gap-4 sm:flex sm:flex-col' : 'flex flex-col gap-4'} key={index}>
           {Array.from({ length: 3 }).map((_, cardIndex) => (

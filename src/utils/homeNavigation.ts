@@ -1,5 +1,4 @@
 const DEFAULT_SAFE_HEADER = 96;
-const LANDING_GAP = 20;
 
 function readToken(name: string, fallback: number) {
   const value = Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue(name));
@@ -10,65 +9,26 @@ export function getSafeHeaderHeight() {
   return readToken('--header-safe-height', DEFAULT_SAFE_HEADER);
 }
 
-function getNavbarBottom() {
-  const navbar = document.querySelector<HTMLElement>('[data-navbar-bar]');
-  return navbar ? navbar.getBoundingClientRect().bottom : getSafeHeaderHeight();
-}
-
 /**
- * Everything below the navbar, plus one shared breathing margin, is the
- * "usable" viewport a landed section is composed within. One constant for
- * every section — never a per-section offset.
- */
-function getUsableTop() {
-  return getNavbarBottom() + LANDING_GAP;
-}
-
-function getNavFrame(section: HTMLElement) {
-  return section.querySelector<HTMLElement>('[data-nav-frame]') ?? section;
-}
-
-/**
- * A `[data-nav-frame]` can contain a `[data-nav-frame-end]` marker to say
- * "the composition I want judged for fit ends here" even though real content
- * (a boat list, a pricing breakdown) continues below it in the DOM — that
- * trailing content still renders and is still reachable by scrolling, it
- * just isn't required to be centered or forced to fit. Falls back to the
- * frame's own bottom when no marker is present.
- */
-function getFrameBottom(frame: HTMLElement) {
-  const marker = frame.querySelector<HTMLElement>('[data-nav-frame-end]');
-  return marker ? marker.getBoundingClientRect().top : frame.getBoundingClientRect().bottom;
-}
-
-/**
- * The frame is the part of a section that should read as deliberately
- * composed for the viewport: eyebrow, title, description, and its primary
- * content (a card row, a stepper, a stats block — whatever `[data-nav-frame]`
- * wraps, up to any `[data-nav-frame-end]` marker inside it). When the frame
- * is shorter than the usable viewport, it is vertically centered inside it
- * so the landing feels balanced rather than merely "scrolled to". When the
- * frame is taller than the usable viewport (a long boat list, a tall image
- * grid), it physically cannot be centered without cropping its own top, so
- * it lands top-aligned with the same shared gap instead — never a bespoke
- * offset.
+ * The floating navbar sits *over* the page rather than pushing it down, so
+ * "clearance" is not a scroll offset — it's space reserved *inside* each
+ * section's own layout (its CSS padding-top + an inner centering wrapper),
+ * see `lg:pt-[104px]` on the six navigable sections. The scroll target's
+ * only job is to put the section's own physical top at the real viewport
+ * top (`sectionRect.top === 0`). Landing anywhere lower than that — even by
+ * exactly the navbar's height — leaves a strip of the *previous* section
+ * sitting behind/above the floating navbar, which is the bug this function
+ * exists to prevent. Since every navigable section carries `lg:min-h-[100svh]`,
+ * this same rule also keeps the *next* section from showing on desktop: the
+ * section already fills at least one viewport, so there's nothing beyond it
+ * to reveal.
  */
 function computeSectionTarget(section: HTMLElement) {
-  const frame = getNavFrame(section);
-  const usableTop = getUsableTop();
-  const usableHeight = Math.max(0, window.innerHeight - usableTop);
+  const sectionRect = section.getBoundingClientRect();
+  const sectionDocTop = window.scrollY + sectionRect.top;
 
-  const frameRect = frame.getBoundingClientRect();
-  const frameDocTop = window.scrollY + frameRect.top;
-  const frameHeight = getFrameBottom(frame) - frameRect.top;
-
-  const topAlignedScroll = frameDocTop - usableTop;
-  const targetScrollY = frameHeight <= usableHeight
-    ? topAlignedScroll - (usableHeight - frameHeight) / 2
-    : topAlignedScroll;
-
-  const maximumScroll = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
-  return Math.min(Math.max(0, targetScrollY), maximumScroll);
+  const maximumDocumentScroll = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+  return Math.min(Math.max(0, sectionDocTop), maximumDocumentScroll);
 }
 
 /**

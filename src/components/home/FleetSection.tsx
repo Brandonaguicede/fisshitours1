@@ -54,36 +54,37 @@ export function FleetSection({ boats, tours, selectedBoat, onSelectBoat, onViewT
   }
 
   return (
-    <section className="home-section relative pb-10 pt-0 sm:pb-12 sm:pt-6 lg:pb-14 lg:pt-8" data-after-hero="true" data-home-section data-nav-href="/#fleet" id="fleet">
+    <section className="home-section relative pb-10 pt-0 sm:pb-12 sm:pt-6 lg:flex lg:min-h-[100svh] lg:flex-col lg:justify-center lg:pb-14 lg:pt-[104px]" data-after-hero="true" data-home-section data-nav-href="/#fleet" id="fleet">
       <SectionReveal variant="emerge">
       <Container>
         <div data-nav-frame>
           <div className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between" {...reveal(0)}>
-            <SectionHeader
-              align="left"
-              eyebrow={tr(text.home.fleetEyebrow, language)}
-              title={tr(text.home.fleetTitle, language)}
-              description={tr(text.home.fleetDescription, language)}
-            />
+            <SectionHeader align="left" title={tr(text.home.fleetTitle, language)} />
           </div>
 
           <div
             ref={carouselRef}
-            className="mt-4 flex snap-x snap-mandatory gap-4 overflow-x-auto scroll-smooth pb-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:mt-5 sm:gap-5"
+            className="mt-4 flex snap-x snap-mandatory gap-4 overflow-x-auto scroll-smooth pb-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:mt-5 sm:gap-5 [@media(min-width:1024px)_and_(max-height:800px)]:mt-2.5"
             role="region"
             aria-label={language === 'es' ? 'Barcos disponibles' : 'Available boats'}
             onScroll={updateControls}
             {...reveal(1)}
           >
             {boats.map((boat) => (
-              <div key={boat.id} className="w-full shrink-0 snap-start snap-always sm:w-[calc((100%-1.5rem)/2)] lg:w-[calc((100%-3rem)/3)]">
-                <BoatCard boat={boat} startingPrice={getBoatStartingPrice(boat.id, tours)} isSelected={boat.id === selectedBoat.id} onSelect={openBoatDetails} />
+              <div key={boat.id} className="w-full shrink-0 snap-start snap-always sm:w-[calc((100%-1.5rem)/2)] lg:w-[calc((100%-3rem)/3)] xl:w-[calc((100%-4.5rem)/4)]">
+                <BoatCard
+                  boat={boat}
+                  isSelected={boat.id === selectedBoat.id}
+                  mediaClassName="[@media(min-width:1024px)_and_(max-height:800px)]:h-36"
+                  onSelect={openBoatDetails}
+                  startingPrice={getBoatStartingPrice(boat.id, tours)}
+                />
               </div>
             ))}
           </div>
 
           {canScrollLeft || canScrollRight ? (
-            <div className="mt-3 flex justify-center gap-3 sm:mt-3.5" aria-label={language === 'es' ? 'Controles del carrusel de barcos' : 'Boat carousel controls'} {...reveal(2)}>
+            <div className="mt-3 flex justify-center gap-3 sm:mt-3.5 [@media(min-width:1024px)_and_(max-height:800px)]:mt-1.5" aria-label={language === 'es' ? 'Controles del carrusel de barcos' : 'Boat carousel controls'} {...reveal(2)}>
               <CarouselArrow
                 direction="left"
                 disabled={!canScrollLeft}

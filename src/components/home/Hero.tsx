@@ -190,19 +190,19 @@ export function Hero() {
           two sections read as one continuous depth rather than a hard cut. */}
       <div className="absolute inset-x-0 bottom-0 h-56 bg-gradient-to-t from-ocean-950 via-ocean-950/75 to-transparent sm:h-64" />
 
-      <div className="absolute bottom-24 left-1/2 z-10 flex -translate-x-1/2 gap-3 sm:left-auto sm:right-32 sm:translate-x-0 md:bottom-24 lg:right-40">
+      <div className="absolute bottom-32 left-1/2 z-10 flex -translate-x-1/2 gap-3 sm:left-auto sm:right-32 sm:translate-x-0 md:bottom-32 lg:right-40">
         <IconButton href={INSTAGRAM_URL} icon={Instagram} label="Instagram" size="md" target="_blank" />
         <IconButton href={FACEBOOK_URL} icon={Facebook} label="Facebook" size="md" target="_blank" />
       </div>
 
       <a
-        className="glass-control glass-interactive glass-focus-ring fixed bottom-5 right-5 z-[70] grid h-14 w-14 place-items-center rounded-full sm:bottom-6 sm:right-6"
+        className="glass-control glass-interactive glass-focus-ring fixed bottom-4 right-4 z-[70] flex h-[50px] w-[50px] items-center justify-center rounded-full"
         href={`https://wa.me/${WHATSAPP_NUMBER}`}
         target="_blank"
         rel="noreferrer"
         aria-label="WhatsApp"
       >
-        <img className="h-full w-full object-contain" src="/images/whatsapp.png" alt="" aria-hidden="true" />
+        <img className="block h-[68%] w-[68%] object-contain" src="/images/whatsapp.png" alt="" aria-hidden="true" />
       </a>
 
       <Container className="relative grid min-h-[100svh] place-items-center px-6 pb-32 pt-24 text-center sm:px-8 sm:pb-20 sm:pt-28 lg:min-h-[100dvh] lg:px-10">
@@ -216,7 +216,7 @@ export function Hero() {
             {hero[`home.hero.eyebrow.${locale}` as keyof HeroSettings]}
           </motion.p>
           <motion.h1
-            className="mx-auto mt-5 max-w-[48rem] font-display text-[clamp(2.75rem,6vw,5.25rem)] font-extrabold leading-[0.98] text-white"
+            className="mx-auto mt-5 max-w-[48rem] font-display text-[clamp(2.75rem,2.14rem+2.59vw,5.25rem)] font-extrabold leading-[0.98] text-white"
             initial={{ opacity: 0, y: 18 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.7, ease: [0.23, 1, 0.32, 1] }}

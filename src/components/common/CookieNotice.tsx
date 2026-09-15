@@ -18,19 +18,23 @@ export function CookieNotice() {
   if (!visible) return null;
 
   return (
-    <aside className="fixed inset-x-3 bottom-3 z-[80] mx-auto max-w-4xl overflow-hidden rounded-[1.5rem] border border-ocean-200/70 bg-[#f8fbfc] p-4 text-ocean-950 shadow-[0_22px_60px_-24px_rgba(0,20,40,0.75)] sm:bottom-6 sm:flex sm:items-center sm:gap-5 sm:p-5" role="dialog" aria-label="Preferencias de cookies">
-      <span className="mb-3 grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-ocean-100 text-ocean-700 sm:mb-0" aria-hidden="true">
+    <aside
+      className="fixed inset-x-3 bottom-3 z-[80] mx-auto max-w-4xl overflow-hidden rounded-[1.5rem] border border-ocean-200/70 bg-[#f8fbfc] p-4 text-ocean-950 shadow-[0_22px_60px_-24px_rgba(0,20,40,0.75)] sm:bottom-6 sm:flex sm:items-center sm:gap-5 sm:p-5 [@media(min-width:1024px)_and_(max-height:800px)]:bottom-2 [@media(min-width:1024px)_and_(max-height:800px)]:gap-3 [@media(min-width:1024px)_and_(max-height:800px)]:p-2.5"
+      role="dialog"
+      aria-label="Preferencias de cookies"
+    >
+      <span className="mb-3 grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-ocean-100 text-ocean-700 sm:mb-0 [@media(min-width:1024px)_and_(max-height:800px)]:h-8 [@media(min-width:1024px)_and_(max-height:800px)]:w-8" aria-hidden="true">
         <Cookie size={19} strokeWidth={1.8} />
       </span>
       <div className="min-w-0 flex-1">
-        <p className="text-sm font-bold tracking-tight text-ocean-950">Preferencias de cookies</p>
-        <p className="mt-1 text-sm leading-5 text-slate-600">
+        <p className="text-sm font-bold tracking-tight text-ocean-950 [@media(min-width:1024px)_and_(max-height:800px)]:leading-4">Preferencias de cookies</p>
+        <p className="mt-1 text-sm leading-5 text-slate-600 [@media(min-width:1024px)_and_(max-height:800px)]:mt-0 [@media(min-width:1024px)_and_(max-height:800px)]:leading-4">
           Usamos cookies necesarias para recordar tus preferencias y mantener segura tu sesión.
         </p>
       </div>
       <button
         type="button"
-        className="mt-4 w-full shrink-0 rounded-xl bg-ocean-950 px-5 py-2.5 text-sm font-bold text-white transition hover:bg-ocean-800 focus:outline-none focus:ring-2 focus:ring-ocean-500 focus:ring-offset-2 sm:mt-0 sm:w-auto"
+        className="mt-4 w-full shrink-0 rounded-xl bg-ocean-950 px-5 py-2.5 text-sm font-bold text-white transition hover:bg-ocean-800 focus:outline-none focus:ring-2 focus:ring-ocean-500 focus:ring-offset-2 sm:mt-0 sm:w-auto [@media(min-width:1024px)_and_(max-height:800px)]:py-1.5"
         onClick={() => {
           document.cookie = `${COOKIE_KEY}=accepted; Max-Age=31536000; Path=/; SameSite=Lax`;
           window.localStorage.setItem(COOKIE_KEY, 'accepted');

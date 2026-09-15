@@ -1,4 +1,4 @@
-import { ArrowRight, Clock, MapPin, SlidersHorizontal, CheckCircle2, Users } from 'lucide-react';
+import { ArrowRight, CheckCircle2, Clock, MapPin, ShieldCheck, SlidersHorizontal, Users } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 import type { Boat } from '../../types/boat';
@@ -8,8 +8,9 @@ import { useLanguage } from '../../i18n/LanguageContext';
 import { text, tr } from '../../i18n/translations';
 import { getBoatStartingPrice, getEffectiveMaxGuests } from '../../utils/bookingPricing';
 import { formatCurrency } from '../../utils/formatCurrency';
+import { cn } from '../../utils/cn';
 import { reveal, revealBlur } from '../common/SectionReveal';
-import { Button, GlassPanel } from '../ui';
+import { Button } from '../ui';
 
 interface BookingTeaserProps {
   selectedBoat: Boat;
@@ -18,93 +19,159 @@ interface BookingTeaserProps {
 }
 
 const steps = [
-  { icon: MapPin, es: 'Elige bote', esSub: 'Selecciona tu embarcación', en: 'Choose your boat', enSub: 'Select your vessel' },
-  { icon: SlidersHorizontal, es: 'Personaliza tu tour', esSub: 'Define fechas y actividades', en: 'Customize your tour', enSub: 'Set dates and activities' },
-  { icon: CheckCircle2, es: 'Confirma', esSub: 'Revisa y asegura tu reserva', en: 'Confirm', enSub: 'Review and secure your booking' },
+  { icon: MapPin, es: { title: 'Elige tu bote', sub: 'Selecciona tu embarcación' }, en: { title: 'Choose your boat', sub: 'Select your vessel' } },
+  { icon: SlidersHorizontal, es: { title: 'Personaliza tu tour', sub: 'Define fechas y actividades' }, en: { title: 'Customize your tour', sub: 'Set dates and activities' } },
+  { icon: CheckCircle2, es: { title: 'Confirma', sub: 'Revisa y asegura tu reserva' }, en: { title: 'Confirm', sub: 'Review and secure your booking' } },
 ];
 
-// Wide glass card by design, not a vertical product card — full flow lives at /reservar.
+// Four true die-cut holes (left/right/top/bottom, all 12px radius) punched
+// through the ticket via mask instead of a painted circle — this reveals
+// whatever's genuinely behind the component instead of guessing its color.
+const NOTCH_MASK = [
+  'radial-gradient(circle 12px at 0% 50%, transparent 99%, #000 100%)',
+  'radial-gradient(circle 12px at 100% 50%, transparent 99%, #000 100%)',
+  'radial-gradient(circle 12px at 50% 0%, transparent 99%, #000 100%)',
+  'radial-gradient(circle 12px at 50% 100%, transparent 99%, #000 100%)',
+].join(', ');
+
+// Cinematic boarding-pass ticket: photo / info, 2 zones only, with the 3
+// booking steps living outside the ticket as their own row — full flow at /reservar.
 export function BookingTeaser({ selectedBoat, selectedTour, tours }: BookingTeaserProps) {
   const { language } = useLanguage();
   const navigate = useNavigate();
   const tourText = selectedTour ? getTourText(selectedTour, language) : null;
   const price = selectedTour ? selectedTour.basePrice : getBoatStartingPrice(selectedBoat.id, tours);
   const effectiveGuests = selectedTour ? getEffectiveMaxGuests(selectedBoat, selectedTour) : undefined;
+  const tourTitle = tourText ? tourText.title : tr(text.home.bookingNoSelection, language);
 
   return (
-    <GlassPanel className="mx-auto max-w-3xl p-8 sm:p-9 lg:p-10" variant="panel" {...revealBlur(1)}>
-      <div className="relative [--step-r:1.25rem] lg:[--step-r:1.375rem]" {...reveal(1.2)}>
-        {/* Two segments (not one full-width line) so the connector runs only in the
-            gap between bubbles and never passes behind/through either circle. */}
-        <span aria-hidden="true" className="pointer-events-none absolute top-5 left-[calc(16.6667%_+_var(--step-r))] right-[calc(50%_+_var(--step-r))] z-0 h-px bg-gradient-to-r from-white/5 via-white/20 to-white/5 lg:top-[22px]" />
-        <span aria-hidden="true" className="pointer-events-none absolute top-5 left-[calc(50%_+_var(--step-r))] right-[calc(16.6667%_+_var(--step-r))] z-0 h-px bg-gradient-to-r from-white/5 via-white/20 to-white/5 lg:top-[22px]" />
-        <div className="relative z-10 grid grid-cols-3">
-          {steps.map((step, index) => (
-            <div className="flex flex-col items-center gap-1.5 px-1 text-center" key={step.en}>
-              <GlassPanel as="span" className="grid size-10 shrink-0 place-items-center text-ocean-200 lg:size-11" shape="circle" variant={index === 0 ? 'active' : 'control'}>
-                <step.icon aria-hidden="true" size={17} />
-              </GlassPanel>
-              <span className="text-[0.62rem] font-bold uppercase leading-tight tracking-[0.06em] text-ocean-300 sm:text-[0.68rem]">
-                {language === 'es' ? step.es : step.en}
-              </span>
-              <span className="text-[0.6rem] leading-tight text-ocean-400/80 sm:text-[0.65rem]">
-                {language === 'es' ? step.esSub : step.enSub}
-              </span>
-            </div>
-          ))}
+    <div {...revealBlur(1)}>
+      {/* Steps — external, above the ticket: linear progress, not columns */}
+      <div className="mx-auto mb-7 max-w-[620px] lg:max-w-[660px] [@media(min-width:1024px)_and_(max-height:800px)]:mb-4" {...reveal(1.2)}>
+        <div className="relative">
+          <span aria-hidden="true" className="pointer-events-none absolute left-9 right-[66.667%] top-[18px] hidden h-px bg-gradient-to-r from-white/10 via-white/25 to-white/10 sm:block" />
+          <span aria-hidden="true" className="pointer-events-none absolute left-[calc(33.333%_+_2.25rem)] right-[33.333%] top-[18px] hidden h-px bg-gradient-to-r from-white/10 via-white/25 to-white/10 sm:block" />
+          <div className="relative z-10 grid grid-cols-1 divide-y divide-white/10 sm:grid-cols-3 sm:divide-y-0">
+            {steps.map((step, index) => {
+              const copy = language === 'es' ? step.es : step.en;
+              return (
+                <div className="flex items-center gap-2.5 py-2 sm:py-0" key={copy.title}>
+                  <span
+                    className={cn(
+                      'grid size-8 shrink-0 place-items-center rounded-full border sm:size-9',
+                      index === 0 ? 'border-ocean-200/70 bg-white/10 text-white' : 'border-white/20 text-ocean-200/70',
+                    )}
+                  >
+                    <step.icon aria-hidden="true" size={13} strokeWidth={1.75} />
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-[0.62rem] font-bold uppercase tracking-[0.05em] text-white/85 sm:text-[0.66rem]">
+                      {index + 1}. {copy.title}
+                    </p>
+                    <p className="mt-0.5 text-[0.6rem] leading-snug text-ocean-200/60">{copy.sub}</p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       </div>
 
-      <div className="mt-5 border-t border-white/10 pt-5" {...reveal(2.1)}>
-        <GlassPanel
-          className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:gap-5 sm:p-5"
-          style={{ borderColor: 'rgba(221, 239, 246, 0.14)', boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.07)' }}
-          variant="subtle"
+      {/* Ticket */}
+      <div className="card-shadow-pool mx-auto max-w-[1050px] lg:max-w-[1100px] [@media(min-width:1024px)_and_(max-height:800px)]:max-w-[720px]">
+        <div
+          className="relative overflow-hidden rounded-[30px] border border-white/25 bg-ocean-950"
+          style={{ maskImage: NOTCH_MASK, WebkitMaskImage: NOTCH_MASK, maskComposite: 'intersect', WebkitMaskComposite: 'intersect' as never }}
         >
-          <img
-            alt={selectedBoat.name}
-            className="h-40 w-full shrink-0 rounded-[var(--radius-panel)] object-cover sm:h-36 sm:w-44 lg:h-40 lg:w-56"
-            loading="lazy"
-            src={selectedBoat.image}
-          />
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-xs font-bold uppercase tracking-[0.1em] text-ocean-400">{selectedBoat.name}</p>
-            <h3 className="mt-1 line-clamp-2 font-display text-xl font-bold leading-tight text-white sm:text-2xl">
-              {tourText ? tourText.title : tr(text.home.bookingNoSelection, language)}
-            </h3>
-            {tourText ? (
-              <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-ocean-200">
-                {selectedTour?.duration ? (
-                  <span className="inline-flex items-center gap-1.5">
-                    <Clock aria-hidden="true" className="text-ocean-400" size={14} strokeWidth={2} />
-                    {`${selectedTour.duration}h`}
-                  </span>
-                ) : null}
-                {effectiveGuests ? (
-                  <span className="inline-flex items-center gap-1.5">
-                    <Users aria-hidden="true" className="text-ocean-400" size={14} strokeWidth={2} />
-                    {language === 'es' ? `Hasta ${effectiveGuests}` : `Up to ${effectiveGuests}`}
-                  </span>
-                ) : null}
+          <div className="grid grid-cols-1 sm:grid-cols-[50%_50%] [@media(min-width:1024px)_and_(min-height:801px)]:aspect-[2.8/1]">
+            {/* Zone A — photo, full bleed */}
+            <div className="relative h-52 overflow-hidden sm:h-full">
+              <img
+                alt={selectedBoat.name}
+                className="absolute inset-0 h-full w-full object-cover object-[50%_38%]"
+                loading="lazy"
+                src={selectedBoat.image}
+              />
+              <div
+                aria-hidden="true"
+                className="absolute inset-0"
+                style={{ background: 'linear-gradient(to top, rgba(11,40,66,0.92) 0%, rgba(11,40,66,0.58) 24%, rgba(11,40,66,0.06) 48%, rgba(11,40,66,0.32) 100%)' }}
+              />
+              <div className="absolute inset-x-3 bottom-2 max-w-[75%] sm:inset-x-4 sm:bottom-3 [@media(min-width:1024px)_and_(max-height:800px)]:bottom-1.5">
+                <p className="font-display text-base italic leading-snug text-white/95 sm:text-lg">
+                  {language === 'es' ? (
+                    <>
+                      Más que un tour,
+                      <br />una mejor forma de vivir el día.
+                    </>
+                  ) : (
+                    <>
+                      More than a tour,
+                      <br />a better kind of day.
+                    </>
+                  )}
+                </p>
               </div>
-            ) : null}
-            <div className="mt-3 flex items-baseline gap-2 border-t border-white/10 pt-3">
-              <span className="text-[0.65rem] font-semibold uppercase tracking-[0.08em] text-ocean-300">{language === 'es' ? 'Desde' : 'From'}</span>
-              <span className="font-display text-xl font-extrabold text-white sm:text-2xl">{formatCurrency(price)}</span>
+            </div>
+
+            {/* Zone B — info panel, deep navy */}
+            <div className="relative flex min-w-0 flex-col justify-center overflow-hidden border-t border-dashed border-white/15 bg-ocean-950 px-5 py-6 sm:border-t-0 sm:pl-10 sm:pr-10 [@media(min-width:1024px)_and_(max-height:800px)]:py-3.5">
+            <div className="max-w-full text-left sm:max-w-[300px] sm:self-start sm:mx-auto">
+              <p className="truncate text-center text-[0.62rem] font-bold uppercase tracking-[0.18em] text-ocean-300">{selectedBoat.name}</p>
+              <h3 className="mt-1 line-clamp-2 font-display text-[1.6rem] font-bold leading-[1.1] text-white sm:text-[2rem] [@media(min-width:1024px)_and_(max-height:800px)]:mt-1 [@media(min-width:1024px)_and_(max-height:800px)]:text-[1.4rem]">{tourTitle}</h3>
+
+              {tourText ? (
+                <div className="mt-2 flex items-center gap-3 text-xs text-ocean-100 [@media(min-width:1024px)_and_(max-height:800px)]:mt-1">
+                  {selectedTour?.duration ? (
+                    <span className="inline-flex items-center gap-1.5">
+                      <Clock aria-hidden="true" className="text-ocean-300" size={13} strokeWidth={2} />
+                      {selectedTour.duration} {language === 'es' ? 'horas' : 'hours'}
+                    </span>
+                  ) : null}
+                  {effectiveGuests ? (
+                    <>
+                      <span aria-hidden="true" className="h-3.5 w-px bg-white/20" />
+                      <span className="inline-flex items-center gap-1.5">
+                        <Users aria-hidden="true" className="text-ocean-300" size={13} strokeWidth={2} />
+                        {language === 'es' ? `Hasta ${effectiveGuests} personas` : `Up to ${effectiveGuests} guests`}
+                      </span>
+                    </>
+                  ) : null}
+                </div>
+              ) : null}
+
+              <span aria-hidden="true" className="mt-3.5 block h-px w-full bg-white/15 [@media(min-width:1024px)_and_(max-height:800px)]:mt-2" />
+
+              <div className="mt-3 flex items-baseline justify-center gap-2 [@media(min-width:1024px)_and_(max-height:800px)]:mt-2">
+                <span className="text-[0.62rem] font-bold uppercase tracking-[0.14em] text-ocean-300">{language === 'es' ? 'Desde' : 'From'}</span>
+                <span className="font-display text-2xl font-extrabold leading-none text-white sm:text-3xl [@media(min-width:1024px)_and_(max-height:800px)]:text-xl">{formatCurrency(price)}</span>
+              </div>
+
+              <div className="mt-3 flex justify-center [@media(min-width:1024px)_and_(max-height:800px)]:mt-2">
+                <Button
+                  className="w-[68%] [@media(min-width:1024px)_and_(max-height:800px)]:min-h-0 [@media(min-width:1024px)_and_(max-height:800px)]:py-1"
+                  onClick={() => navigate('/reservar')}
+                  size="sm"
+                  type="button"
+                  variant="primary"
+                >
+                  {tr(text.booking.startBooking, language)}
+                  <ArrowRight aria-hidden="true" size={14} />
+                </Button>
+              </div>
+              <p className="mt-2.5 flex items-center justify-center gap-1.5 text-[0.62rem] text-ocean-200/80 [@media(min-width:1024px)_and_(max-height:800px)]:mt-1.5">
+                <ShieldCheck aria-hidden="true" size={12} />
+                {tr(text.home.bookingHelper, language)}
+              </p>
+            </div>
             </div>
           </div>
-        </GlassPanel>
-      </div>
 
-      <div className="mt-5 flex justify-center" {...reveal(2.4)}>
-        <Button className="w-full sm:w-[90%] lg:w-[88%]" onClick={() => navigate('/reservar')} size="lg" type="button">
-          {tr(text.booking.startBooking, language)}
-          <ArrowRight aria-hidden="true" size={16} />
-        </Button>
+          {/* Perforation A/B — at the 50% split; the dashed line stops short of the
+              masked-through top/bottom notches instead of running under them. */}
+          <div aria-hidden="true" className="pointer-events-none absolute left-1/2 top-3 bottom-3 hidden border-l border-dashed border-white/30 sm:block" />
+        </div>
       </div>
-      <p className="mt-1.5 text-center text-xs text-ocean-300" {...reveal(2.6)}>
-        {tr(text.home.bookingHelper, language)}
-      </p>
-    </GlassPanel>
+    </div>
   );
 }
