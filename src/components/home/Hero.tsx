@@ -1,7 +1,7 @@
 import { ArrowDown, Facebook, Instagram } from 'lucide-react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { useQuery } from '@tanstack/react-query';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { Container } from '../common/Container';
 import { Button, IconButton } from '../ui';
@@ -11,6 +11,16 @@ import { supabase } from '../../lib/supabase';
 import { scrollToHomeSection } from '../../utils/homeNavigation';
 
 const FALLBACK_HERO_IMAGE = '/images/placeholder-image.jpg';
+
+// Upgrade only our bundled assets. Custom videos selected in the admin remain intact.
+function currentHeroAsset(value: string) {
+  const upgrades: Record<string, string> = {
+    '/videos/hero-papagayo-desktop-v1.mp4': '/videos/hero-papagayo-desktop-v2.mp4',
+    '/videos/hero-papagayo-mobile-v1.mp4': '/videos/hero-papagayo-mobile-v2.mp4',
+    '/images/hero-papagayo-poster-v1.webp': '/images/hero-papagayo-poster-v2.webp',
+  };
+  return upgrades[value] ?? value;
+}
 
 // React 18 doesn't recognize the camelCase `fetchPriority` prop (added in React 19) and
 // silently drops it — the lowercase `fetchpriority` HTML attribute reaches the DOM instead.
@@ -91,10 +101,11 @@ export function Hero() {
   const [isMobile, setIsMobile] = useState(() => window.matchMedia('(max-width: 639px)').matches);
   const [failedVideoUrl, setFailedVideoUrl] = useState('');
   const [readyVideoUrl, setReadyVideoUrl] = useState('');
-  const videoUrl = hero['home.hero.video'];
-  const mobileVideoUrl = hero['home.hero.mobile_video'] || videoUrl;
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const videoUrl = currentHeroAsset(hero['home.hero.video']);
+  const mobileVideoUrl = currentHeroAsset(hero['home.hero.mobile_video']) || videoUrl;
   const selectedVideoUrl = isMobile ? mobileVideoUrl : videoUrl || mobileVideoUrl;
-  const poster = hero['home.hero.video_poster'] || (isMobile ? hero['home.hero.mobile_image'] : '') || hero['home.hero.image'];
+  const poster = currentHeroAsset(hero['home.hero.video_poster']) || (isMobile ? hero['home.hero.mobile_image'] : '') || hero['home.hero.image'];
   const videoReady = readyVideoUrl === selectedVideoUrl;
   const videoMode = hero['home.hero.media_mode'] === 'video';
   // A looping background video replaces the image slideshow outright rather than
@@ -123,6 +134,43 @@ export function Hero() {
     }, 6500);
     return () => window.clearInterval(interval);
   }, [slides.length, videoMode, reduceMotion]);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!showVideo || !video) return;
+    let disposed = false;
+    // Set DOM properties and attributes before play(), including Safari's inline hint.
+    video.muted = true;
+    video.defaultMuted = true;
+    video.setAttribute('muted', '');
+    video.playsInline = true;
+    video.setAttribute('webkit-playsinline', '');
+    video.controls = false;
+    const start = () => {
+      if (document.visibilityState === 'hidden' || !video.paused) return;
+      void video.play().catch(() => {
+        if (!disposed && video.paused) setReadyVideoUrl('');
+      });
+    };
+    video.addEventListener('loadeddata', start);
+    document.addEventListener('visibilitychange', start);
+    window.addEventListener('pageshow', start);
+    // If autoplay is blocked, a normal page interaction can start the background.
+    // Until then keep the poster visible, without a native Play overlay.
+    document.addEventListener('pointerdown', start, { passive: true });
+    document.addEventListener('touchend', start, { passive: true });
+    document.addEventListener('keydown', start);
+    start();
+    return () => {
+      disposed = true;
+      video.removeEventListener('loadeddata', start);
+      document.removeEventListener('visibilitychange', start);
+      window.removeEventListener('pageshow', start);
+      document.removeEventListener('pointerdown', start);
+      document.removeEventListener('touchend', start);
+      document.removeEventListener('keydown', start);
+    };
+  }, [showVideo, selectedVideoUrl]);
 
   function scrollToFleet() {
     scrollToHomeSection('fleet');
@@ -159,19 +207,22 @@ export function Hero() {
       /> : null}
       {showVideo ? (
         <video
+          ref={videoRef}
           key={selectedVideoUrl}
-          className="absolute inset-0 h-full w-full object-cover object-center transition-opacity duration-150 ease-linear"
+          className="pointer-events-none absolute inset-0 h-full w-full object-cover object-center transition-opacity duration-150 ease-linear"
           style={{ opacity: videoReady ? 1 : 0 }}
           src={selectedVideoUrl}
           poster={poster}
           autoPlay
           muted
+          controls={false}
+          disablePictureInPicture
           loop
           playsInline
           preload="auto"
           aria-hidden="true"
-          onLoadedData={() => setReadyVideoUrl(selectedVideoUrl)}
           onPlaying={() => setReadyVideoUrl(selectedVideoUrl)}
+          onPause={() => setReadyVideoUrl('')}
           onError={() => setFailedVideoUrl(selectedVideoUrl)}
         />
       ) : videoMode && poster ? null : (
@@ -250,7 +301,7 @@ export function Hero() {
           </motion.h1>
 
           <motion.p
-            className="mx-auto mt-6 w-full max-w-[40rem] text-balance text-base font-medium leading-7 text-white/78 sm:text-xl sm:leading-8"
+            className="mx-auto mt-6 w-full max-w-[40rem] text-balance text-base font-medium leading-7 text-white/80 sm:text-xl sm:leading-8"
             initial={{ opacity: 0, y: 14 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.7, delay: 0.12, ease: [0.23, 1, 0.32, 1] }}

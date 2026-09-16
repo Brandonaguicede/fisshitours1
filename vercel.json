@@ -1,5 +1,8 @@
 {
   "headers": [
+    { "source": "/videos/hero-papagayo-desktop-v2.mp4", "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }] },
+    { "source": "/videos/hero-papagayo-mobile-v2.mp4", "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }] },
+    { "source": "/images/hero-papagayo-poster-v2.webp", "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }] },
     { "source": "/videos/hero-papagayo-desktop-v1.mp4", "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }] },
     { "source": "/videos/hero-papagayo-mobile-v1.mp4", "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }] },
     { "source": "/images/hero-papagayo-poster-v1.webp", "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }] },
