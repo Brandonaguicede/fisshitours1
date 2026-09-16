@@ -20,12 +20,18 @@ serve(withCors(async (req) => {
   const supabase = createClient(supabaseUrl, serviceRole, { auth: { persistSession: false } });
   const { data: booking, error } = await supabase
     .from('bookings')
-    .select('id, paypal_order_id, payment_method_key')
+    .select('id, paypal_order_id, payment_method_key, payment_status')
     .eq('id', parsed.data.bookingId)
     .single();
 
   if (error || !booking) return Response.json({ message: 'Booking not found' }, { status: 404, headers });
   if (booking.payment_method_key !== 'paypal') return Response.json({ message: 'Booking payment method is not PayPal' }, { status: 400, headers });
+  // A booking that's already paid has nothing to cancel — reject before
+  // calling the RPC so a customer replaying this request against their own
+  // already-paid booking can't touch the payment record at all (the RPC
+  // also guards this server-side, but failing closed here avoids relying on
+  // that alone).
+  if (booking.payment_status === 'paid') return Response.json({ message: 'Booking is already paid' }, { status: 409, headers });
 
   const orderId = parsed.data.orderId ?? booking.paypal_order_id ?? '';
   const { data, error: rpcError } = await supabase.rpc('mark_paypal_payment_unsuccessful', {

@@ -39,12 +39,16 @@ export async function getCurrentAdminProfile(): Promise<AdminProfile | null> {
   return profile as AdminProfile;
 }
 
-export async function signInAdmin(email: string, password: string): Promise<AdminProfile> {
+export async function signInAdmin(email: string, password: string, captchaToken?: string): Promise<AdminProfile> {
   if (!isSupabaseConfigured) {
     throw new Error('El panel administrativo no esta configurado para iniciar sesion en este entorno.');
   }
 
-  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  const { error } = await supabase.auth.signInWithPassword({
+    email,
+    password,
+    options: captchaToken ? { captchaToken } : undefined,
+  });
   if (error) throw new Error('Credenciales incorrectas o usuario no autorizado.');
 
   const profile = await getCurrentAdminProfile();

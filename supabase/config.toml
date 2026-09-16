@@ -204,13 +204,24 @@ anonymous_users = 30
 # Number of sessions that can be refreshed in a 5 minute interval per IP address.
 token_refresh = 150
 # Number of sign up and sign-in requests that can be made in a 5 minute interval per IP address (excludes anonymous users).
-sign_in_sign_ups = 30
+# Lowered from the 30/5min default: this project has no public sign-up, only
+# a handful of staff logging into /admin, so a much stricter cap meaningfully
+# slows password brute-forcing without affecting real usage.
+sign_in_sign_ups = 5
 # Number of OTP / Magic link verifications that can be made in a 5 minute interval per IP address.
 token_verifications = 30
 # Number of Web3 logins that can be made in a 5 minute interval per IP address.
 web3 = 30
 
 # Configure one of the supported captcha providers: `hcaptcha`, `turnstile`.
+# Not enabled here because pushing it requires TURNSTILE_SECRET_KEY to be
+# present in the shell running `supabase config push`, which this change
+# doesn't have access to. The admin login page (src/pages/admin/AdminLoginPage.tsx)
+# already sends a Turnstile token with every login attempt using the same
+# VITE_TURNSTILE_SITE_KEY as the booking form, so enabling this is a single
+# manual step: Supabase Dashboard -> Authentication -> Attack Protection ->
+# turn on CAPTCHA protection (Turnstile) with the existing site/secret keys.
+# Until that's flipped on, the extra token is accepted but not required.
 # [auth.captcha]
 # enabled = true
 # provider = "hcaptcha"

@@ -1,9 +1,68 @@
 import { Loader2 } from 'lucide-react';
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 
 import { getCurrentAdminProfile, signInAdmin } from '../../services/adminAuthService';
+import { TURNSTILE_SITE_KEY, USE_LOCAL_TURNSTILE_MOCK, MOCK_TURNSTILE_TOKEN } from '../../lib/turnstile';
 import '../../styles/admin.css';
+
+// The global `Window.turnstile` type is already declared in TurnstileBox.tsx
+// and merges across the project — no need to redeclare it here.
+
+// Renders a light-themed Turnstile widget (the shared TurnstileBox component
+// is styled for the public site's dark glass surfaces, which clashes with
+// this page's plain white card). Inert until Supabase's own captcha
+// enforcement is turned on for the project (see supabase/config.toml) — the
+// token is still sent with every attempt so login is protected the moment
+// that's flipped on, with no further code changes.
+function AdminTurnstile({ onTokenChange }: { onTokenChange: (token: string) => void }) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const widgetIdRef = useRef<string | undefined>();
+
+  useEffect(() => {
+    if (USE_LOCAL_TURNSTILE_MOCK) {
+      onTokenChange(MOCK_TURNSTILE_TOKEN);
+      return;
+    }
+    if (!TURNSTILE_SITE_KEY) return;
+    const siteKey = TURNSTILE_SITE_KEY;
+
+    let cancelled = false;
+    const renderWidget = () => {
+      if (cancelled || !containerRef.current || !window.turnstile) return;
+      widgetIdRef.current = window.turnstile.render(containerRef.current, {
+        sitekey: siteKey,
+        action: 'admin-login',
+        callback: onTokenChange,
+        'expired-callback': () => onTokenChange(''),
+        'error-callback': () => onTokenChange(''),
+      });
+    };
+
+    const existing = document.querySelector<HTMLScriptElement>('script[data-turnstile-script="true"]');
+    if (window.turnstile) {
+      renderWidget();
+    } else if (existing) {
+      existing.addEventListener('load', renderWidget, { once: true });
+    } else {
+      const script = document.createElement('script');
+      script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
+      script.async = true;
+      script.defer = true;
+      script.dataset.turnstileScript = 'true';
+      script.onload = renderWidget;
+      document.head.appendChild(script);
+    }
+
+    return () => {
+      cancelled = true;
+      if (widgetIdRef.current) window.turnstile?.remove(widgetIdRef.current);
+    };
+  }, [onTokenChange]);
+
+  if (USE_LOCAL_TURNSTILE_MOCK || !TURNSTILE_SITE_KEY) return null;
+  return <div className="mt-1" ref={containerRef} />;
+}
 
 export default function AdminLoginPage() {
   const [email, setEmail] = useState('');
@@ -12,6 +71,7 @@ export default function AdminLoginPage() {
   const [authenticated, setAuthenticated] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [captchaToken, setCaptchaToken] = useState('');
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -51,7 +111,7 @@ export default function AdminLoginPage() {
     setSubmitting(true);
     setError('');
     try {
-      await signInAdmin(email.trim(), password);
+      await signInAdmin(email.trim(), password, captchaToken || undefined);
       const from = (location.state as { from?: { pathname?: string } } | null)?.from?.pathname;
       navigate(from && from.startsWith('/admin') && from !== '/admin/login' ? from : '/admin', { replace: true });
     } catch (error) {
@@ -100,6 +160,7 @@ export default function AdminLoginPage() {
               required
             />
           </label>
+          <AdminTurnstile onTokenChange={setCaptchaToken} />
           {error ? <div className="admin-alert admin-alert--danger" role="alert">{error}</div> : null}
           <button className="admin-btn" type="submit" disabled={submitting}>
             {submitting ? <Loader2 className="animate-spin" size={16} /> : null}
