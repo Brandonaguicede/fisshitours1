@@ -1,4 +1,4 @@
-import { Loader2 } from 'lucide-react';
+import { ArrowRight, Eye, EyeOff, Loader2, Lock, Mail } from 'lucide-react';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 
@@ -72,6 +72,7 @@ export default function AdminLoginPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [captchaToken, setCaptchaToken] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -127,6 +128,17 @@ export default function AdminLoginPage() {
 
   return (
     <main className="admin-login">
+      <div className="admin-login__photo" aria-hidden="true" />
+      <div className="admin-login__scrim" aria-hidden="true" />
+
+      <div className="admin-login__mark" aria-hidden="true">
+        <span className="admin-login__mark-title">Papagayo</span>
+        <span className="admin-login__mark-sub">Costa Rica</span>
+        <span className="admin-login__mark-rule" />
+      </div>
+      <p className="admin-login__signature" aria-hidden="true">Good Fishing<br />Brighter Days</p>
+      <span className="admin-login__corner" aria-hidden="true">Costa Rica</span>
+
       <div className="admin-login__stack">
         <span className="admin-login__brand">
           <img src="/images/papagayo-logo.png" alt="Papagayo Fishing Tours" />
@@ -138,36 +150,52 @@ export default function AdminLoginPage() {
           <form className="admin-login__form" onSubmit={handleSubmit}>
           <label className="admin-login__field">
             <span className="admin-login__label">Email</span>
-            <input
-              className="admin-input"
-              type="email"
-              placeholder="admin@example.com"
-              autoComplete="email"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              required
-            />
+            <span className="admin-login__input-wrap">
+              <Mail className="admin-login__input-icon" size={16} aria-hidden="true" />
+              <input
+                className="admin-input"
+                type="email"
+                placeholder="admin@example.com"
+                autoComplete="email"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                required
+              />
+            </span>
           </label>
           <label className="admin-login__field">
             <span className="admin-login__label">Password</span>
-            <input
-              className="admin-input"
-              type="password"
-              placeholder="Password"
-              autoComplete="current-password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              required
-            />
+            <span className="admin-login__input-wrap">
+              <Lock className="admin-login__input-icon" size={16} aria-hidden="true" />
+              <input
+                className="admin-input"
+                type={showPassword ? 'text' : 'password'}
+                placeholder="Password"
+                autoComplete="current-password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                required
+              />
+              <button
+                className="admin-login__input-toggle"
+                type="button"
+                aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                onClick={() => setShowPassword((value) => !value)}
+              >
+                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </span>
           </label>
           <AdminTurnstile onTokenChange={setCaptchaToken} />
           {error ? <div className="admin-alert admin-alert--danger" role="alert">{error}</div> : null}
           <button className="admin-btn" type="submit" disabled={submitting}>
             {submitting ? <Loader2 className="animate-spin" size={16} /> : null}
             {submitting ? 'Entrando...' : 'Entrar al panel'}
+            {submitting ? null : <ArrowRight size={16} />}
           </button>
           <Link className="admin-btn admin-btn--secondary" to="/">Volver al sitio</Link>
           </form>
+          <p className="admin-login__divider"><span>Experiencias extraordinarias en el mar</span></p>
         </section>
       </div>
     </main>

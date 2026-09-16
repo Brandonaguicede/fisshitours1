@@ -1339,22 +1339,108 @@ body:has(.admin-login) {
 }
 
 .admin-login {
+  position: relative;
   display: grid;
   min-height: 100dvh;
   place-items: center;
-  padding: clamp(1rem, 4vw, 2rem);
-  background:
-    linear-gradient(135deg, rgba(244, 248, 250, 0.96), rgba(230, 246, 250, 0.9)),
-    radial-gradient(circle at top right, rgba(14, 116, 144, 0.16), transparent 28rem),
-    linear-gradient(rgba(11, 40, 66, 0.38), rgba(11, 40, 66, 0.52)),
-    url('/galeria/IMG_1088.jpeg') center / cover;
+  padding: clamp(1.25rem, 4vw, 3rem);
+  overflow: hidden;
+  background: #06121e;
   color: var(--admin-ink);
 }
 
+/* Real photo (a boat easing past the rocks at Playas del Coco) instead of a
+   generic gradient — the brief asked for this specific shot as the scene,
+   not an abstract wash standing in for "ocean". */
+.admin-login__photo {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background: url('/admin/login-bg.webp') center 42% / cover no-repeat;
+}
+
+.admin-login__scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background:
+    linear-gradient(180deg, rgba(4, 14, 24, 0.62) 0%, rgba(4, 14, 24, 0.14) 30%, rgba(4, 14, 24, 0.2) 66%, rgba(4, 14, 24, 0.66) 100%),
+    linear-gradient(90deg, rgba(4, 14, 24, 0.4), transparent 32%, transparent 68%, rgba(4, 14, 24, 0.4));
+}
+
+/* Corner marks live directly on the photo (not the glass card), so they're
+   hidden below the width where they'd start crowding the centered stack
+   instead of framing it. */
+.admin-login__mark,
+.admin-login__signature,
+.admin-login__corner {
+  position: absolute;
+  z-index: 2;
+  text-shadow: 0 1px 6px rgba(2, 9, 16, 0.45);
+}
+
+.admin-login__mark {
+  top: clamp(1.25rem, 3vw, 2.5rem);
+  left: clamp(1.25rem, 3vw, 2.5rem);
+  display: grid;
+  gap: 0.3rem;
+}
+
+.admin-login__mark-title,
+.admin-login__mark-sub,
+.admin-login__corner {
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.admin-login__mark-sub {
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.62);
+}
+
+.admin-login__mark-rule {
+  width: 2.5rem;
+  height: 1px;
+  margin-top: 0.15rem;
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.admin-login__signature {
+  top: clamp(1.5rem, 4vw, 2.75rem);
+  right: clamp(1.25rem, 3vw, 2.5rem);
+  max-width: 14rem;
+  font-family: 'EB Garamond', Georgia, serif;
+  font-style: italic;
+  font-weight: 500;
+  font-size: clamp(1.1rem, 2vw, 1.4rem);
+  line-height: 1.28;
+  text-align: right;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.admin-login__corner {
+  bottom: clamp(1.25rem, 3vw, 2.5rem);
+  right: clamp(1.25rem, 3vw, 2.5rem);
+  color: rgba(255, 255, 255, 0.75);
+}
+
+@media (max-width: 720px) {
+  .admin-login__mark,
+  .admin-login__signature,
+  .admin-login__corner {
+    display: none;
+  }
+}
+
 .admin-login__stack {
+  position: relative;
+  z-index: 2;
   display: grid;
   justify-items: center;
-  width: min(100%, 27.5rem);
+  width: min(100%, 26rem);
   animation: admin-login-settle 0.5s cubic-bezier(0.23, 1, 0.32, 1) both;
 }
 
@@ -1408,12 +1494,13 @@ body:has(.admin-login) {
 
 .admin-login__card {
   width: 100%;
-  padding: clamp(1.2rem, 5vw, 1.75rem);
-  border: 1px solid var(--admin-line-soft);
-  border-radius: var(--admin-radius-md);
-  background: rgba(255, 255, 255, 0.96);
-  box-shadow: 0 22px 54px -30px rgba(11, 37, 51, 0.6), 0 1px 3px rgba(11, 37, 51, 0.1);
-  backdrop-filter: blur(10px);
+  padding: clamp(1.5rem, 5vw, 2.25rem);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  border-radius: 1.75rem;
+  background: linear-gradient(165deg, rgba(255, 255, 255, 0.6), rgba(255, 255, 255, 0.34));
+  box-shadow: 0 34px 70px -28px rgba(2, 9, 16, 0.65), inset 0 1px 0 rgba(255, 255, 255, 0.65);
+  backdrop-filter: blur(24px) saturate(160%);
+  -webkit-backdrop-filter: blur(24px) saturate(160%);
 }
 
 .admin-login__card h1 {
@@ -1451,21 +1538,105 @@ body:has(.admin-login) {
   font-weight: 700;
 }
 
+.admin-login__input-wrap {
+  position: relative;
+  display: block;
+}
+
+.admin-login__input-icon {
+  position: absolute;
+  left: 0.9rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--admin-primary);
+  pointer-events: none;
+}
+
+.admin-login__input-toggle {
+  position: absolute;
+  right: 0.6rem;
+  top: 50%;
+  display: grid;
+  place-items: center;
+  padding: 0.35rem;
+  transform: translateY(-50%);
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--admin-primary);
+  cursor: pointer;
+}
+
+.admin-login__input-toggle:hover {
+  background: rgba(43, 95, 130, 0.1);
+}
+
 .admin-login__form .admin-input {
-  min-height: 2.7rem;
+  min-height: 2.85rem;
   min-width: 0;
-  background: #fff;
+  padding-left: 2.6rem;
+  border-color: rgba(255, 255, 255, 0.7);
+  border-radius: 1rem;
+  background: rgba(255, 255, 255, 0.55);
   font-size: 0.95rem;
+}
+
+.admin-login__form input[type='password'].admin-input {
+  padding-right: 2.6rem;
+}
+
+.admin-login__form .admin-input:focus {
+  background: rgba(255, 255, 255, 0.85);
 }
 
 .admin-login__form .admin-btn {
   width: 100%;
-  min-height: 2.75rem;
+  min-height: 2.85rem;
   margin-top: 0.1rem;
+  border-radius: 999px;
+}
+
+.admin-login__form .admin-btn--secondary {
+  border-color: rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.4);
 }
 
 .admin-login__form .admin-alert {
   margin: 0;
+}
+
+.admin-login__divider {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-top: 1.5rem;
+  color: var(--admin-muted);
+  font-size: 0.6rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.admin-login__divider span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 420px) {
+  .admin-login__divider {
+    font-size: 0.52rem;
+    letter-spacing: 0.08em;
+  }
+}
+
+.admin-login__divider::before,
+.admin-login__divider::after {
+  flex: 1;
+  height: 1px;
+  background: rgba(43, 95, 130, 0.25);
+  content: '';
 }
 
 .admin-empty {
