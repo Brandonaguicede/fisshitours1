@@ -123,9 +123,9 @@ export function BookingPanel({ selectedBoat, selectedTour: requestedTour, boats,
 
   const availableTours = useMemo(() => tours.filter((tour) => tour.boatId === selectedBoat.id && isBookableCatalogPackage(tour)), [selectedBoat.id, tours]);
   const availabilityQuery = useQuery({
-    queryKey: ['availability', selectedBoat.id, date],
-    queryFn: () => getBookingAvailability(selectedBoat.id, date),
-    enabled: Boolean(selectedBoat.id && date),
+    queryKey: ['availability', selectedBoat.id, selectedTour?.tourId, selectedTour?.id, date],
+    queryFn: () => getBookingAvailability(selectedBoat.id, selectedTour?.tourId ?? '', selectedTour?.id ?? '', date),
+    enabled: Boolean(selectedBoat.id && selectedTour?.tourId && selectedTour?.id && date),
   });
   const paymentMethodsQuery = useQuery({ queryKey: ['paymentMethods', 'active'], queryFn: getActivePaymentMethods });
   const departureLocationsQuery = useQuery({ queryKey: ['departureLocations', 'active'], queryFn: getActiveDepartureLocations });
@@ -313,14 +313,16 @@ export function BookingPanel({ selectedBoat, selectedTour: requestedTour, boats,
     mutationFn: createBooking,
     onSuccess: (booking) => {
       setCreatedBooking(booking);
-      queryClient.invalidateQueries({ queryKey: ['availability', selectedBoat.id, date] });
+      queryClient.invalidateQueries({ queryKey: ['availability', selectedBoat.id, selectedTour?.tourId, selectedTour?.id, date] });
     },
     onError: (error: Error & { status?: number }) => {
       setTurnstileToken('');
       setTurnstileResetKey((value) => value + 1);
       if (error.status === 409) {
-        setValidationMessage('This time slot is no longer available. Please select another time.');
-        queryClient.invalidateQueries({ queryKey: ['availability', selectedBoat.id, date] });
+        setValidationMessage(language === 'es'
+          ? 'Ese horario ya no está disponible para este bote. Elige otro horario.'
+          : 'That time is no longer available for this boat. Please choose another time.');
+        queryClient.invalidateQueries({ queryKey: ['availability', selectedBoat.id, selectedTour?.tourId, selectedTour?.id, date] });
         setActiveStep(1);
         return;
       }
@@ -589,6 +591,7 @@ export function BookingPanel({ selectedBoat, selectedTour: requestedTour, boats,
             ) : null}
           </div>
         </GlassPanel>
+        {validationMessage && activeStep !== 3 ? <div className="mt-3"><FieldError variant="panel">{validationMessage}</FieldError></div> : null}
 
         {/* Rendered as a sibling of the GlassPanel above, never nested
             inside it: `.glass-surface` uses `backdrop-filter`, and any

@@ -13,7 +13,8 @@
     "test:hero": "node tests/hero/media.mjs && playwright test --config tests/hero/playwright.config.ts",
     "test:packages": "node tests/package-settings/database.mjs && playwright test --config tests/package-settings/playwright.config.ts",
     "test:e2e:ui": "playwright test --ui",
-    "test:catalog": "node tests/tour-catalog/grouping.mjs && playwright test --config tests/tour-catalog/playwright.config.ts"
+    "test:catalog": "node tests/tour-catalog/grouping.mjs && playwright test --config tests/tour-catalog/playwright.config.ts",
+    "test:booking-overlap": "node tests/booking-overlap/availability.mjs && node tests/booking-overlap/database.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.1.1",

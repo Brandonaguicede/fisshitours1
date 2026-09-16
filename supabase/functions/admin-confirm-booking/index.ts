@@ -57,7 +57,7 @@ serve(withCors(async (req) => {
       p_payment_status: 'paid',
       p_note: 'Reserva confirmada desde admin; pago manual recibido. Bote bloqueado en disponibilidad.',
     });
-    if (error) return Response.json({ message: error.message }, { status: 400, headers });
+    if (error) return Response.json({ message: error.message }, { status: error.message.includes('BOAT_TIME_CONFLICT') || error.message.includes('already reserved') ? 409 : 400, headers });
 
     const customerEmailPresent = Boolean(booking?.customers?.email);
     let emailQueued = false;

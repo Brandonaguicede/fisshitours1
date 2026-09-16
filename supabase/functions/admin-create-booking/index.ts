@@ -62,7 +62,7 @@ serve(withCors(async (req) => {
   const { data, error } = await adminClient.rpc('create_booking_transaction', { payload });
   if (error) {
     const message = error.message || 'Booking could not be created';
-    return Response.json({ message }, { status: message.includes('already reserved') ? 409 : 400, headers });
+    return Response.json({ message }, { status: message.includes('BOAT_TIME_CONFLICT') || message.includes('already reserved') ? 409 : 400, headers });
   }
 
   return Response.json(data, { status: 201, headers });

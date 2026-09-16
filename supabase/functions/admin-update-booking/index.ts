@@ -47,7 +47,7 @@ serve(withCors(async (req) => {
     if (!profile?.active || !['admin', 'editor'].includes(profile.role)) return Response.json({ message: 'Admin or editor role required' }, { status: 403, headers });
 
     const { data, error } = await userClient.rpc('update_booking_details', { payload: parsed.data });
-    if (error) return Response.json({ message: error.message }, { status: 400, headers });
+    if (error) return Response.json({ message: error.message }, { status: error.message.includes('BOAT_TIME_CONFLICT') || error.message.includes('already reserved') ? 409 : 400, headers });
     return Response.json(data, { headers });
   } catch (error) {
     return Response.json({ message: error instanceof Error ? error.message : 'Booking could not be updated' }, { status: 500, headers });

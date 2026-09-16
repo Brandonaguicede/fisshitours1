@@ -61,7 +61,7 @@ serve(withCors(async (req) => {
 
   if (error) {
     const message = error.message || 'Booking could not be created';
-    const status = message.includes('already reserved') ? 409 : 400;
+    const status = message.includes('BOAT_TIME_CONFLICT') || message.includes('already reserved') ? 409 : 400;
     return Response.json({ message }, { status, headers });
   }
 
