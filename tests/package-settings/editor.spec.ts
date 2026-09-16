@@ -68,6 +68,17 @@ test('package hours and meals persist and automatically reach the customer', asy
   await expect(page.locator('input[name="timeSlot"][value="departure-0930"]')).toBeChecked();
   await expect(page.locator('input[name="timeSlot"][value="afternoon"]')).toHaveCount(0);
   await page.locator('input[name="mealOption"]').first().check({ force: true });
+  await expect(page.locator('#booking-guests-extra')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Sumar persona', exact: true }).click();
+  await expect(page.locator('#booking-guests-extra')).toContainText('1 persona extra');
+  await expect(page.locator('#booking-guests-extra strong')).toContainText(/65/);
+  await page.getByRole('button', { name: 'Sumar persona', exact: true }).click();
+  await expect(page.locator('#booking-guests-extra')).toContainText('2 personas extra');
+  await expect(page.locator('#booking-guests-extra strong')).toContainText(/130/);
+  await page.screenshot({ path: `tmp/package-settings-test/extra-guests-${info.project.name}.png`, fullPage: true });
+  await page.getByRole('button', { name: 'Restar persona', exact: true }).click();
+  await page.getByRole('button', { name: 'Restar persona', exact: true }).click();
+  await expect(page.locator('#booking-guests-extra')).toHaveCount(0);
   await page.locator('input[name="tourPackage"][value="half"]').check({ force: true });
   await expect(page.getByText('Escoge tu comida incluida', { exact: true })).toHaveCount(0);
   await expect(page.locator('input[name="timeSlot"][value="departure-0930"]')).toHaveCount(0);

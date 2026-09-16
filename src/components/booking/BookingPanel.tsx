@@ -499,6 +499,8 @@ export function BookingPanel({ selectedBoat, selectedTour: requestedTour, boats,
                 guests={guests}
                 timeSlotId={timeSlotId}
                 effectiveMaxGuests={effectiveMaxGuests}
+                includedGuests={includedGuests}
+                extraGuestPrice={extraGuestPrice}
                 availabilitySlots={currentSlots}
                 availabilityLoading={availabilityQuery.isFetching}
                 availabilityError={availabilityQuery.isError}
@@ -800,6 +802,8 @@ function TourDetailsStep(props: {
   guests: number;
   timeSlotId: string;
   effectiveMaxGuests: number;
+  includedGuests: number;
+  extraGuestPrice: number;
   availabilitySlots: Array<{ id: string; label: string; time: string; available?: boolean }>;
   availabilityLoading: boolean;
   availabilityError: boolean;
@@ -815,6 +819,8 @@ function TourDetailsStep(props: {
   const tourGroups = getBookingTourGroups(props.availableTours, language);
   const activeGroup = props.selectedTour ? (props.selectedTour.tourId ?? props.selectedTour.id) : '';
   const activeGroupData = tourGroups.find((group) => group.key === activeGroup);
+  const extraGuests = Math.max(0, props.guests - props.includedGuests);
+  const showExtraGuestNotice = Boolean(props.selectedTour && !props.selectedTour.customQuote && extraGuests > 0 && props.extraGuestPrice > 0);
 
   return (
     <div className="grid gap-4 text-white">
@@ -895,7 +901,7 @@ function TourDetailsStep(props: {
             </button>
             <input
               id="booking-guests"
-              aria-describedby={props.hasCapacityError ? 'booking-guests-error' : undefined}
+              aria-describedby={[props.hasCapacityError ? 'booking-guests-error' : '', showExtraGuestNotice ? 'booking-guests-extra' : ''].filter(Boolean).join(' ') || undefined}
               aria-invalid={props.hasCapacityError}
               className="w-10 min-w-0 border-0 bg-transparent text-center text-sm font-extrabold text-white outline-none [appearance:textfield]"
               inputMode="numeric"
@@ -914,6 +920,19 @@ function TourDetailsStep(props: {
             >
               <Plus aria-hidden="true" size={14} />
             </button>
+          </div>
+          <div role="status" aria-live="polite" aria-atomic="true">
+            {showExtraGuestNotice ? (
+              <p id="booking-guests-extra" className="mt-2 flex items-start gap-2 rounded-lg border border-amber-200/25 bg-amber-200/10 px-3 py-2 text-xs leading-relaxed text-amber-100">
+                <Info aria-hidden="true" className="mt-0.5 shrink-0" size={15} />
+                <span>
+                  {language === 'es'
+                    ? `El paquete incluye ${props.includedGuests} personas. ${extraGuests} ${extraGuests === 1 ? 'persona extra' : 'personas extra'} × ${formatCurrency(props.extraGuestPrice)}: `
+                    : `This package includes ${props.includedGuests} guests. ${extraGuests} additional ${extraGuests === 1 ? 'guest' : 'guests'} × ${formatCurrency(props.extraGuestPrice)}: `}
+                  <strong>+{formatCurrency(extraGuests * props.extraGuestPrice)}</strong>
+                </span>
+              </p>
+            ) : null}
           </div>
         </Field>
       </div>
