@@ -15,7 +15,7 @@ body:has(.admin-login) {
   --admin-surface-elevated: #ffffff;
   --admin-surface-subtle: #ddeff6;
   --admin-ink: #0b2842;
-  --admin-muted: #4986a7;
+  --admin-muted: #357294;
   --admin-line: #a8d3e4;
   --admin-line-soft: #ddeff6;
   --admin-primary: #2b5f82;
@@ -610,7 +610,7 @@ body:has(.admin-login) {
 
 .admin-btn--success {
   border-color: #047857;
-  background: var(--admin-success);
+  background: #047857;
   color: white;
 }
 
@@ -630,13 +630,13 @@ body:has(.admin-login) {
 .admin-shell button.admin-btn--success,
 .admin-shell a.admin-btn--success,
 .admin-shell label.admin-btn--success {
-  background-color: var(--admin-success);
+  background-color: #047857;
   color: #fff;
 }
 
 .admin-btn--success:hover {
   border-color: #065f46;
-  background: #047857;
+  background: #065f46;
   color: #fff;
 }
 
@@ -673,7 +673,7 @@ body:has(.admin-login) {
 
 .admin-btn--success:disabled:hover {
   border-color: #047857;
-  background: var(--admin-success);
+  background: #047857;
   color: #fff;
 }
 
@@ -834,6 +834,11 @@ body:has(.admin-login) {
   color: var(--admin-primary-dark);
 }
 
+.admin-tab:focus-visible {
+  outline: 2px solid var(--admin-focus);
+  outline-offset: 2px;
+}
+
 .admin-tab--active,
 .admin-tab--active:hover {
   background: linear-gradient(120deg, var(--admin-primary), var(--admin-primary-dark));
@@ -865,6 +870,11 @@ body:has(.admin-login) {
 
 .admin-segmented button:hover {
   color: var(--admin-primary-dark);
+}
+
+.admin-segmented button:focus-visible {
+  outline: 2px solid var(--admin-focus);
+  outline-offset: 2px;
 }
 
 .admin-segmented button.admin-segmented__option--active {
@@ -1789,10 +1799,20 @@ body:has(.admin-login) {
   justify-items: center;
   gap: 0.35rem;
   border: 0;
+  border-radius: var(--admin-radius-sm);
   background: transparent;
   color: var(--admin-muted);
   font: inherit;
   cursor: pointer;
+}
+
+.admin-stepper__item button:hover {
+  color: var(--admin-primary-dark);
+}
+
+.admin-stepper__item button:focus-visible {
+  outline: 2px solid var(--admin-focus);
+  outline-offset: 2px;
 }
 
 .admin-stepper__item button span {
@@ -1923,6 +1943,15 @@ body:has(.admin-login) {
   background: transparent;
   border: 0;
   border-radius: 999px;
+}
+
+.admin-location-chip button:hover {
+  color: var(--admin-danger);
+}
+
+.admin-location-chip button:focus-visible {
+  outline: 2px solid var(--admin-focus);
+  outline-offset: 2px;
 }
 
 .admin-tour-image-slot__empty {
@@ -2292,6 +2321,11 @@ body:has(.admin-login) {
 .admin-boat-thumb--selected > button:first-child {
   border-color: var(--admin-primary);
   box-shadow: 0 0 0 3px rgba(14, 116, 144, 0.14);
+}
+
+.admin-boat-thumb > button:first-child:focus-visible {
+  outline: 2px solid var(--admin-focus);
+  outline-offset: 2px;
 }
 
 .admin-boat-thumb img {

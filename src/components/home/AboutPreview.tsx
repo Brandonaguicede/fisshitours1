@@ -15,7 +15,7 @@ import { buildAboutCarouselImages, DEFAULT_ABOUT_SETTINGS, getAboutSettings, spl
 // at any viewport height. pointer-events-none, position:absolute — never
 // affects About's own box height, data-home-section, or nav/scroll
 // geometry.
-const SHORELINE_URL = "url('/footer/footer-shoreline.png')";
+const SHORELINE_URL = "url('/footer/footer-shoreline.webp')";
 // The Footer's own photo there picks up exactly where this gradient
 // finishes resolving (see Footer.tsx), so it MUST reach fully transparent
 // by 100% — anything left over would show as a tint mismatch at the seam.

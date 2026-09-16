@@ -8,7 +8,7 @@ import { text, tr } from '../../i18n/translations';
 import { Container } from '../common/Container';
 import { IconButton } from '../ui';
 
-// Desktop (lg+, untouched): footer-shoreline.png is the footer's own
+// Desktop (lg+, untouched): footer-shoreline.webp is the footer's own
 // background at its native 2.5:1 ratio, `100% auto`, continuing exactly
 // where About's reveal (AboutPreview.tsx) leaves off. Tablet keeps its own
 // separate band below. Neither is touched by the mobile block underneath.
@@ -43,19 +43,6 @@ const MOBILE_NAVY_FADE =
 // the contact card instead of starting only once the footer itself
 // begins.
 const MOBILE_SHORELINE_REACH = 90;
-// The main shoreline layer's own crop only carries water/foam/the start of
-// the sand — extending its own box tall enough to reach all the way down
-// to the copyright block would flatten the foam into a sliver. Instead a
-// second layer picks up exactly where it ends, showing a deep, pre-foam
-// slice of the SAME photo (rows 1000–1460 of the 1536px-tall source, well
-// past any foam) at native resolution, so the footer content sits on real
-// photographed sand all the way down — never a flat CSS color.
-const MOBILE_SAND_EXTENSION_STYLE = {
-  backgroundImage: MOBILE_SHORELINE_URL,
-  backgroundSize: '1024px auto',
-  backgroundPosition: 'center -1000px',
-  backgroundRepeat: 'no-repeat',
-} as const;
 
 export function Footer() {
   const { language } = useLanguage();
@@ -67,11 +54,23 @@ export function Footer() {
       <div className="relative overflow-visible md:hidden" style={{ backgroundColor: MOBILE_SAND_MATCH }}>
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute inset-x-0 z-0 bg-cover bg-top bg-no-repeat"
+          className="pointer-events-none absolute inset-x-0 bottom-0 z-0 bg-no-repeat"
           style={{
             backgroundImage: MOBILE_SHORELINE_URL,
             top: `-${MOBILE_SHORELINE_REACH}px`,
-            height: `clamp(300px, calc(55vw + ${MOBILE_SHORELINE_REACH}px), 350px)`,
+            /* A plain bg-cover shows the photo's full height (open water
+               down to sand) stretched across however tall the footer's
+               content makes this box — which left a long stretch of empty
+               open water before any content appeared. Sizing off the
+               box's OWN height (not width) keeps the cropped-away top
+               fraction constant across phone widths — width-relative
+               sizing here would crop far more on wide phones than narrow
+               ones, since content height barely changes with viewport
+               width. Zooming past cover's minimum height and pinning to
+               the bottom crops that dead water off the top instead, so
+               the wave curl shows up sooner. */
+            backgroundSize: 'auto 130%',
+            backgroundPosition: 'center bottom',
           }}
         />
         <div
@@ -79,13 +78,17 @@ export function Footer() {
           className="pointer-events-none absolute inset-x-0 z-[1] h-[150px]"
           style={{ top: `-${MOBILE_SHORELINE_REACH}px`, backgroundImage: MOBILE_NAVY_FADE }}
         />
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-x-0 z-0 top-[214.5px] h-[460px]"
-          style={MOBILE_SAND_EXTENSION_STYLE}
-        />
 
-        <div className="relative z-10 px-6 pb-8 pt-[160px]">
+        <div
+          className="relative z-10 px-6 pb-8"
+          style={{
+            /* Just enough to clear the cropped-in wave/foam band above
+               (see the photo's backgroundSize/Position) before content
+               starts, without the large empty stretch of open water a
+               taller offset used to leave. */
+            paddingTop: `clamp(90px, calc(25vw + 10px), 150px)`,
+          }}
+        >
           {/* Marca */}
           <Link className="inline-flex flex-col items-start gap-2" to="/">
             <img alt="" aria-hidden="true" className="h-auto w-20 brightness-0" src="/images/papagayo-logo.png" />
