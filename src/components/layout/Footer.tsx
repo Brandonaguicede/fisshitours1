@@ -13,7 +13,7 @@ import { IconButton } from '../ui';
 // where About's reveal (AboutPreview.tsx) leaves off. Tablet keeps its own
 // separate band below. Neither is touched by the mobile block underneath.
 const SAND_MATCH = '#F1CFA9';
-const SHORELINE_URL = "url('/footer/footer-shoreline.png')";
+const SHORELINE_URL = "url('/footer/footer-shoreline.webp')";
 const TABLET_BAND_FADE = {
   maskImage: 'linear-gradient(to bottom, black 0%, black 85%, transparent 100%)',
   WebkitMaskImage: 'linear-gradient(to bottom, black 0%, black 85%, transparent 100%)',
@@ -27,7 +27,7 @@ const TABLET_BAND_FADE = {
 // sibling with a negative offset breaks the contact card's backdrop-filter.
 // Kept fully opaque — no mask/fade on the photo itself — so its real
 // colors (navy water, turquoise, white foam, sand) show through undimmed.
-const MOBILE_SHORELINE_URL = "url('/footer/footer-shoreline_responsive.png')";
+const MOBILE_SHORELINE_URL = "url('/footer/footer-shoreline_responsive.webp')";
 // Sampled directly from this photo's own rendered bottom edge (at its
 // actual cover-crop box size), so the flat color picks up exactly where
 // the (opaque) photo leaves off. Only used as the fallback behind/below
@@ -121,20 +121,6 @@ export function Footer() {
             />
           </div>
 
-          {/* Navegación */}
-          <div className="mt-6">
-            <h3 className="text-[11px] font-bold uppercase tracking-[0.14em] text-ocean-700">
-              {language === 'es' ? 'Navegación' : 'Navigation'}
-            </h3>
-            <div className="mt-2.5 grid grid-flow-col grid-cols-2 grid-rows-4 gap-x-10 gap-y-2">
-              {navigationItems.map((item) => (
-                <Link className="w-fit text-[13px] leading-[1.2] text-ocean-800 underline-offset-4 transition hover:text-ocean-950 hover:underline" key={item.href} to={item.href}>
-                  {tr(item.label, language)}
-                </Link>
-              ))}
-            </div>
-          </div>
-
           {/* Contacto */}
           <div className="mt-6">
             <h3 className="text-[11px] font-bold uppercase tracking-[0.14em] text-ocean-700">{tr(text.nav.contact, language)}</h3>
@@ -166,7 +152,7 @@ export function Footer() {
 
       {/* Tablet/desktop (≥768px): entirely unchanged. */}
       <div
-        className="relative hidden md:block lg:bg-no-repeat lg:bg-top lg:[background-image:url('/footer/footer-shoreline.png')] lg:[background-size:100%_auto] lg:[background-position:center_calc(-1*clamp(220px,18vw,380px))]"
+        className="relative hidden md:block lg:bg-no-repeat lg:bg-top lg:[background-image:url('/footer/footer-shoreline.webp')] lg:[background-size:100%_auto] lg:[background-position:center_calc(-1*clamp(220px,18vw,380px))]"
         style={{ backgroundColor: SAND_MATCH }}
       >
         {/* Tablet-only band. Padding-top below matches this band's own

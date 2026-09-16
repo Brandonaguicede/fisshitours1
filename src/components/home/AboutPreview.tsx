@@ -5,7 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Container } from '../common/Container';
 import { Button, Chip, GlassPanel, SectionHeader } from '../ui';
 import { useLanguage } from '../../i18n/LanguageContext';
-import { DEFAULT_ABOUT_SETTINGS, getAboutSettings, splitParagraphs, type AboutSettings } from '../../services/aboutSettings';
+import { buildAboutCarouselImages, DEFAULT_ABOUT_SETTINGS, getAboutSettings, splitParagraphs, type AboutSettings } from '../../services/aboutSettings';
 
 // The shoreline photo starts appearing behind the contact card, tablet/
 // desktop only (mobile owns its own separate shoreline scene inside
@@ -29,28 +29,19 @@ const CONTACT_SHORELINE_REVEAL =
 // meets "no layer".
 const REVEAL_MASK = 'linear-gradient(to bottom, transparent 0%, black 20%, black 100%)';
 
-const FALLBACK_IMAGES = [
-  '/about/8809f2f5-0a3b-45bd-9771-1ac3505181bc.jpeg',
-  '/about/IMG_1020 (1).jpeg',
-  '/galeria/fec8db08-1bbc-435a-8ac6-03e31aadc685.jpeg',
-  '/galeria/IMG_9407.jpeg',
-];
-
-function buildCarouselImages(settings: AboutSettings): string[] {
-  const managed = settings['about.image'];
-  return Array.from(new Set([...FALLBACK_IMAGES, managed].filter(Boolean)));
-}
-
 export function AboutPreview() {
   const { language } = useLanguage();
   const locale = language === 'es' ? 'es' : 'en';
   const aboutQuery = useQuery({ queryKey: ['site-settings', 'about'], queryFn: getAboutSettings, staleTime: 60_000 });
   const about = aboutQuery.data ?? DEFAULT_ABOUT_SETTINGS;
 
-  const images = useMemo(() => buildCarouselImages(about), [about]);
+  const [failedImages, setFailedImages] = useState<Set<string>>(() => new Set());
+  const images = useMemo(() => buildAboutCarouselImages(about).filter((url) => !failedImages.has(url)), [about, failedImages]);
   const [activeImage, setActiveImage] = useState(0);
+  const visibleIndex = images.length ? activeImage % images.length : 0;
 
   useEffect(() => {
+    if (images.length < 2) return;
     const interval = window.setInterval(() => {
       setActiveImage((index) => (index + 1) % images.length);
     }, 3400);
@@ -92,18 +83,20 @@ export function AboutPreview() {
               {images.map((image, index) => (
                 <img
                   key={image}
-                  className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-700 ${index === activeImage ? 'opacity-100' : 'opacity-0'}`}
+                  className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-700 ${index === visibleIndex ? 'opacity-100' : 'opacity-0'}`}
                   src={image}
-                  alt={index === 0 ? about[`about.image_alt.${locale}` as keyof AboutSettings] : ''}
-                  aria-hidden={index === 0 ? undefined : true}
-                  loading={index === 0 ? 'eager' : 'lazy'}
+                  alt={index === visibleIndex ? about[`about.image_alt.${locale}` as keyof AboutSettings] : ''}
+                  aria-hidden={index === visibleIndex ? undefined : true}
+                  loading="eager"
+                  onError={() => setFailedImages((current) => new Set(current).add(image))}
                 />
               ))}
               <div className="absolute bottom-4 left-4 flex gap-1.5" aria-hidden="true">
                 {images.map((image, index) => (
-                  <span key={image} className={`h-1.5 rounded-full transition-all duration-300 ${index === activeImage ? 'w-5 bg-white' : 'w-1.5 bg-white/45'}`} />
+                  <span key={image} className={`h-1.5 rounded-full transition-all duration-300 ${index === visibleIndex ? 'w-5 bg-white' : 'w-1.5 bg-white/45'}`} />
                 ))}
               </div>
+              {images.length === 0 ? <p className="absolute inset-0 grid place-items-center text-sm text-ocean-100">{language === 'es' ? 'Imagen no disponible' : 'Image unavailable'}</p> : null}
               <div className="absolute inset-x-0 bottom-0 h-28 bg-gradient-to-t from-ocean-950/46 to-transparent" aria-hidden="true" />
             </div>
             <Chip className="absolute right-5 top-5 gap-1.5 border border-white/45 bg-ocean-100/90 px-4 py-2 text-[0.72rem] font-extrabold uppercase tracking-[0.08em] text-ocean-950 shadow-soft backdrop-blur-md">

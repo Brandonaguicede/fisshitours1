@@ -5,6 +5,7 @@ import AdminImageManager from '../../components/admin/AdminImageManager';
 import AdminVideoManager from '../../components/admin/AdminVideoManager';
 import { AdminBadge, AdminPageHeader, AdminTable } from '../../components/admin/AdminPrimitives';
 import { supabase } from '../../lib/supabase';
+import { ABOUT_CAROUSEL_DEFAULTS, buildAboutCarouselImages } from '../../services/aboutSettings';
 import { deleteStorageImage, type StorageImage } from '../../services/imageService';
 
 interface SiteSettingRow {
@@ -64,6 +65,9 @@ const HERO_FIELDS: ContentField[] = [
 ];
 
 const ABOUT_FIELDS: ContentField[] = [
+  ...Object.entries(ABOUT_CAROUSEL_DEFAULTS).map(([key, fallback], index): ContentField => ({
+    key, fallback, label: `Carrusel About - foto ${index + 1}`, type: 'image', aspect: 16 / 9, maxWidth: 1920, maxHeight: 1080,
+  })),
   { key: 'about.eyebrow.es', label: 'Etiqueta ES', type: 'text', fallback: 'Sobre nosotros' },
   { key: 'about.eyebrow.en', label: 'Etiqueta EN', type: 'text', fallback: 'About us' },
   { key: 'about.title.es', label: 'Titulo ES', type: 'text', fallback: 'Pasion local y excelencia en el Pacifico de Costa Rica' },
@@ -84,7 +88,7 @@ const ABOUT_FIELDS: ContentField[] = [
   { key: 'about.cta_button_label.en', label: 'Boton final EN', type: 'text', fallback: 'Book now' },
   { key: 'about.image_alt.es', label: 'Texto alternativo imagen ES', type: 'text', fallback: 'Tripulacion con pesca en aguas de Guanacaste' },
   { key: 'about.image_alt.en', label: 'Texto alternativo imagen EN', type: 'text', fallback: 'Crew with a catch in Guanacaste waters' },
-  { key: 'about.image', label: 'Imagen principal de Nosotros', type: 'image', fallback: '', aspect: 16 / 9, maxWidth: 1920, maxHeight: 1080 },
+  { key: 'about.image', label: 'Carrusel About - foto 5 (opcional)', type: 'image', fallback: '', aspect: 16 / 9, maxWidth: 1920, maxHeight: 1080 },
 ];
 
 function storagePathFromPublicUrl(value?: string | null) {
@@ -221,6 +225,13 @@ function ContentSection({ title, description, fields, saveLabel, imageRequireRep
     }
   }
 
+  async function ensureImageSetting(field: ContentField) {
+    const { error } = await supabase.from('site_settings').upsert({
+      key: field.key, value: draft[field.key] ?? field.fallback, type: 'image', active: true,
+    }, { onConflict: 'key', ignoreDuplicates: true });
+    if (error) throw new Error(error.message);
+  }
+
   async function handleImageDeleted(field: ContentField, storagePath: string) {
     try {
       await upsertKey(field.key, field.fallback, 'image');
@@ -327,8 +338,8 @@ function ContentSection({ title, description, fields, saveLabel, imageRequireRep
           {(videoFields.length === 0 || heroMediaMode === 'image') && primaryImageFields.length > 0 ? (
             <div className="grid gap-5 lg:grid-cols-2">
               {primaryImageFields.map((imageField) => (
-                <div className="grid gap-2" key={imageField.key}>
-                  <p className="admin-muted font-extrabold">{imageField.label}</p>
+                <div className="admin-media-field" key={imageField.key}>
+                  <p className="admin-media-field__label">{imageField.label}</p>
                   <AdminImageManager
                     resourceTable="site_settings"
                     resourceId={imageField.key}
@@ -341,6 +352,7 @@ function ContentSection({ title, description, fields, saveLabel, imageRequireRep
                     maxWidth={imageField.maxWidth ?? 1920}
                     maxHeight={imageField.maxHeight ?? 1080}
                     maxSizeMB={0.9}
+                    beforeUpload={() => ensureImageSetting(imageField)}
                     requireReplacementToDelete={imageRequireReplacement && Boolean(imageField.fallback)}
                     onImageSaved={(image) => handleImageSaved(imageField, image)}
                     onImageDeleted={(storagePath) => handleImageDeleted(imageField, storagePath)}
@@ -364,8 +376,8 @@ function ContentSection({ title, description, fields, saveLabel, imageRequireRep
               {showExtraSlides ? (
                 <div className="grid gap-5 lg:grid-cols-2">
                   {extraImageFields.map((imageField) => (
-                    <div className="grid gap-2" key={imageField.key}>
-                      <p className="admin-muted font-extrabold">{imageField.label}</p>
+                    <div className="admin-media-field" key={imageField.key}>
+                      <p className="admin-media-field__label">{imageField.label}</p>
                       <AdminImageManager
                         resourceTable="site_settings"
                         resourceId={imageField.key}
@@ -392,8 +404,8 @@ function ContentSection({ title, description, fields, saveLabel, imageRequireRep
           {videoFields.length > 0 && heroMediaMode === 'video' ? (
             <div className="grid gap-5 lg:grid-cols-2">
               {videoFields.map((videoField) => (
-                <div className="grid gap-2" key={videoField.key}>
-                  <p className="admin-muted font-extrabold">{videoField.label}</p>
+                <div className="admin-media-field" key={videoField.key}>
+                  <p className="admin-media-field__label">{videoField.label}</p>
                   <AdminVideoManager
                     resourceTable="site_settings"
                     resourceId={videoField.key}
@@ -407,8 +419,8 @@ function ContentSection({ title, description, fields, saveLabel, imageRequireRep
                 </div>
               ))}
               {videoPosterField ? (
-                <div className="grid gap-2" key={videoPosterField.key}>
-                  <p className="admin-muted font-extrabold">{videoPosterField.label}</p>
+                <div className="admin-media-field" key={videoPosterField.key}>
+                  <p className="admin-media-field__label">{videoPosterField.label}</p>
                   <AdminImageManager
                     resourceTable="site_settings"
                     resourceId={videoPosterField.key}
@@ -578,7 +590,7 @@ export default function AdminContentPage() {
       <div style={{ display: activeTab === 'about' ? undefined : 'none' }}>
       <ContentSection
         title="Nosotros / About"
-        description="Controla la pagina /nosotros y la seccion Sobre nosotros de la inicio. La imagen administrada aparece primero en los carruseles; sin imagen se muestran las fotos por defecto."
+        description="Cambia cada foto del carrusel de Sobre nosotros. Se muestran en orden del 1 al 5 y cambian automáticamente. La quinta foto es opcional."
         fields={ABOUT_FIELDS}
         saveLabel="Guardar Nosotros"
         preview={(draft) => (
@@ -591,8 +603,8 @@ export default function AdminContentPage() {
                 <ImageIcon size={13} /> {draft['about.preview_button_label.es']}
               </p>
             </div>
-            {draft['about.image'] ? (
-              <img className="aspect-[4/3] w-full rounded-xl object-cover" src={draft['about.image']} alt={draft['about.image_alt.es']} />
+            {buildAboutCarouselImages(draft).length ? (
+              <div className="grid grid-cols-2 gap-2">{buildAboutCarouselImages(draft).map((src, index) => <img key={src} className="aspect-video w-full rounded-xl object-cover" src={src} alt={`Foto ${index + 1}`} />)}</div>
             ) : (
               <div className="grid aspect-[4/3] w-full place-items-center rounded-xl border border-dashed border-white/25 text-xs text-white/60">
                 Sin imagen gestionada (usa fotos por defecto)

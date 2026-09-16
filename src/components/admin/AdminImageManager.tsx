@@ -24,6 +24,7 @@ interface AdminImageManagerProps {
   requireReplacementToDelete?: boolean;
   disabled?: boolean;
   retainPreviousOnUpload?: boolean;
+  beforeUpload?: () => Promise<void>;
   onImageSaved?: (image: StorageImage) => Promise<void> | void;
   onImageDeleted?: (storagePath: string) => Promise<void> | void;
 }
@@ -49,6 +50,7 @@ export default function AdminImageManager({
   requireReplacementToDelete = false,
   disabled = false,
   retainPreviousOnUpload = false,
+  beforeUpload,
   onImageSaved,
   onImageDeleted,
 }: AdminImageManagerProps) {
@@ -183,6 +185,7 @@ export default function AdminImageManager({
       form.append('width', String(width));
       form.append('height', String(height));
 
+      await beforeUpload?.();
       const image = await uploadStorageImageWithProgress(form, setProgress);
 
       try {

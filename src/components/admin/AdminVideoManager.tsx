@@ -231,9 +231,9 @@ export default function AdminVideoManager({
         {confirmDelete ? <button className="admin-btn admin-btn--ghost" type="button" onClick={() => setConfirmDelete(false)}>Cancelar</button> : null}
       </div>
 
-      <div className="mt-3 grid gap-2">
+      <div className="admin-video-manager__r2">
         <label className="admin-muted" htmlFor={`${resourceId}-r2-url`}>O usa un video ya subido a R2</label>
-        <div className="flex gap-2">
+        <div className="admin-video-manager__r2-row">
           <input id={`${resourceId}-r2-url`} className="admin-input" type="url" placeholder="https://pub-...r2.dev/videos/hero.mp4" value={manualUrl} onChange={(event) => setManualUrl(event.target.value)} disabled={disabled || uploading} />
           <button className="admin-btn admin-btn--secondary" type="button" onClick={() => void saveR2Url()} disabled={disabled || !manualUrl.trim()}>Usar URL</button>
         </div>

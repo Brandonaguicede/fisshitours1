@@ -1,6 +1,19 @@
 import { supabase } from '../lib/supabase';
 
+export const ABOUT_CAROUSEL_DEFAULTS = {
+  'about.carousel_1.image': '/about/8809f2f5-0a3b-45bd-9771-1ac3505181bc.jpeg',
+  'about.carousel_2.image': '/about/IMG_1020 (1).jpeg',
+  'about.carousel_3.image': '/galeria/fec8db08-1bbc-435a-8ac6-03e31aadc685.jpeg',
+  'about.carousel_4.image': '/galeria/IMG_9407.jpeg',
+};
+
+export function buildAboutCarouselImages(settings: Record<string, string>): string[] {
+  return Array.from(new Set([...Object.entries(ABOUT_CAROUSEL_DEFAULTS)
+    .map(([key, fallback]) => (settings[key] ?? fallback).trim()), settings['about.image']?.trim()].filter((url): url is string => Boolean(url))));
+}
+
 export const DEFAULT_ABOUT_SETTINGS = {
+  ...ABOUT_CAROUSEL_DEFAULTS,
   'about.eyebrow.es': 'Sobre nosotros',
   'about.eyebrow.en': 'About us',
   'about.title.es': 'Pasión local y excelencia en el Pacífico de Costa Rica',
@@ -34,7 +47,7 @@ export async function getAboutSettings(): Promise<AboutSettings> {
   if (error) return DEFAULT_ABOUT_SETTINGS;
 
   return (data ?? []).reduce<AboutSettings>(
-    (settings, row) => ({ ...settings, [row.key]: row.value || settings[row.key as keyof AboutSettings] }),
+    (settings, row) => ({ ...settings, [row.key]: row.value ?? settings[row.key as keyof AboutSettings] }),
     { ...DEFAULT_ABOUT_SETTINGS },
   );
 }
