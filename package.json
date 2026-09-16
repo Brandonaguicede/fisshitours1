@@ -10,6 +10,7 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "test:e2e": "playwright test",
+    "test:hero": "node tests/hero/media.mjs && playwright test --config tests/hero/playwright.config.ts",
     "test:packages": "node tests/package-settings/database.mjs && playwright test --config tests/package-settings/playwright.config.ts",
     "test:e2e:ui": "playwright test --ui"
   },

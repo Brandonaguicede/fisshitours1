@@ -88,14 +88,19 @@ export function Hero() {
   const slides = useMemo(() => getHeroSlides(heroQuery.data), [heroQuery.data]);
   const [activeSlide, setActiveSlide] = useState(0);
   const reduceMotion = useReducedMotion();
-  const [videoFailed, setVideoFailed] = useState(false);
-  const [videoReady, setVideoReady] = useState(false);
+  const [isMobile, setIsMobile] = useState(() => window.matchMedia('(max-width: 639px)').matches);
+  const [failedVideoUrl, setFailedVideoUrl] = useState('');
+  const [readyVideoUrl, setReadyVideoUrl] = useState('');
   const videoUrl = hero['home.hero.video'];
   const mobileVideoUrl = hero['home.hero.mobile_video'] || videoUrl;
+  const selectedVideoUrl = isMobile ? mobileVideoUrl : videoUrl || mobileVideoUrl;
+  const poster = hero['home.hero.video_poster'] || (isMobile ? hero['home.hero.mobile_image'] : '') || hero['home.hero.image'];
+  const videoReady = readyVideoUrl === selectedVideoUrl;
+  const videoMode = hero['home.hero.media_mode'] === 'video';
   // A looping background video replaces the image slideshow outright rather than
   // mixing two independent motion sources; respect prefers-reduced-motion by
   // falling back to a static poster frame instead of autoplaying.
-  const showVideo = hero['home.hero.media_mode'] === 'video' && Boolean(videoUrl || mobileVideoUrl) && !reduceMotion && !videoFailed;
+  const showVideo = videoMode && Boolean(selectedVideoUrl) && !reduceMotion && failedVideoUrl !== selectedVideoUrl;
   const title = splitTitle(hero[`home.hero.title.${locale}` as keyof HeroSettings]);
   const primaryEnabled = hero['home.hero.primary_enabled'] !== 'false';
   const secondaryEnabled = hero['home.hero.secondary_enabled'] !== 'false';
@@ -105,17 +110,19 @@ export function Hero() {
   }, [slides.length]);
 
   useEffect(() => {
-    setVideoFailed(false);
-    setVideoReady(false);
-  }, [videoUrl, mobileVideoUrl]);
+    const media = window.matchMedia('(max-width: 639px)');
+    const update = () => setIsMobile(media.matches);
+    media.addEventListener('change', update);
+    return () => media.removeEventListener('change', update);
+  }, []);
 
   useEffect(() => {
-    if (slides.length < 2) return undefined;
+    if (slides.length < 2 || videoMode || reduceMotion) return undefined;
     const interval = window.setInterval(() => {
       setActiveSlide((current) => (current + 1) % slides.length);
     }, 6500);
     return () => window.clearInterval(interval);
-  }, [slides.length]);
+  }, [slides.length, videoMode, reduceMotion]);
 
   function scrollToFleet() {
     scrollToHomeSection('fleet');
@@ -139,18 +146,35 @@ export function Hero() {
       data-home-section
       data-nav-href="/"
     >
+      {videoMode && poster ? <img
+        className="absolute inset-0 h-full w-full object-cover object-center"
+        src={poster}
+        alt=""
+        aria-hidden="true"
+        width={1920}
+        height={1080}
+        loading="eager"
+        decoding="async"
+        {...({ fetchpriority: 'high' } as FetchPriorityAttr)}
+      /> : null}
       {showVideo ? (
-        <>
-          <div className="absolute inset-0 bg-ocean-950" aria-hidden="true" />
-          {!videoReady ? (
-            <div className="absolute inset-0 z-[1] grid place-items-center" role="status" aria-label="Cargando video">
-              <span className="h-9 w-9 animate-spin rounded-full border-2 border-white/25 border-t-white/90" />
-            </div>
-          ) : null}
-          <video className="absolute inset-0 hidden h-full w-full object-cover object-center transition-opacity duration-150 ease-linear sm:block" style={{ opacity: videoReady ? 1 : 0 }} src={videoUrl || mobileVideoUrl} autoPlay muted loop playsInline preload="metadata" aria-hidden="true" onCanPlay={() => setVideoReady(true)} onError={() => setVideoFailed(true)} />
-          <video className="absolute inset-0 h-full w-full object-cover object-center transition-opacity duration-150 ease-linear sm:hidden" style={{ opacity: videoReady ? 1 : 0 }} src={mobileVideoUrl} autoPlay muted loop playsInline preload="metadata" aria-hidden="true" onCanPlay={() => setVideoReady(true)} onError={() => setVideoFailed(true)} />
-        </>
-      ) : (
+        <video
+          key={selectedVideoUrl}
+          className="absolute inset-0 h-full w-full object-cover object-center transition-opacity duration-150 ease-linear"
+          style={{ opacity: videoReady ? 1 : 0 }}
+          src={selectedVideoUrl}
+          poster={poster}
+          autoPlay
+          muted
+          loop
+          playsInline
+          preload="auto"
+          aria-hidden="true"
+          onLoadedData={() => setReadyVideoUrl(selectedVideoUrl)}
+          onPlaying={() => setReadyVideoUrl(selectedVideoUrl)}
+          onError={() => setFailedVideoUrl(selectedVideoUrl)}
+        />
+      ) : videoMode && poster ? null : (
         slides.map((slide, index) => (
           <div
             className={`absolute inset-0 transition-opacity duration-1000 ease-out ${index === activeSlide ? 'opacity-100' : 'opacity-0'}`}
