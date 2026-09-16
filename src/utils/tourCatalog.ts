@@ -1,0 +1,45 @@
+import type { Boat } from '../types/boat';
+import type { BoatTour } from '../types/boatTour';
+
+export interface TourBoatOption {
+  boat: Boat;
+  boatTourId?: string;
+  packages: BoatTour[];
+}
+
+export interface TourCatalogItem {
+  tourId: string;
+  /** Used only for tour-level content, never as a global commercial default. */
+  tour: BoatTour;
+  boatOptions: TourBoatOption[];
+  fromPrice: number;
+}
+
+// Matches the existing booking flow: a priced package and at least one departure.
+// Date-specific availability is still checked by the booking availability API.
+export function isBookableCatalogPackage(item: BoatTour) {
+  return item.catalogActive !== false && !item.customQuote && Number.isFinite(item.basePrice)
+    && item.basePrice > 0 && item.timeSlots.length > 0;
+}
+
+export function groupTourCatalog(packages: BoatTour[], boats: Boat[]): TourCatalogItem[] {
+  const boatById = new Map(boats.map((boat) => [boat.id, boat]));
+  const groups = new Map<string, TourCatalogItem>();
+  for (const item of packages) {
+    const boat = boatById.get(item.boatId);
+    if (!item.tourId || !boat || !isBookableCatalogPackage(item)) continue;
+    let group = groups.get(item.tourId);
+    if (!group) {
+      group = { tourId: item.tourId, tour: item, boatOptions: [], fromPrice: item.basePrice };
+      groups.set(item.tourId, group);
+    }
+    group.fromPrice = Math.min(group.fromPrice, item.basePrice);
+    let option = group.boatOptions.find((entry) => entry.boat.id === item.boatId && entry.boatTourId === item.boatTourId);
+    if (!option) {
+      option = { boat, boatTourId: item.boatTourId, packages: [] };
+      group.boatOptions.push(option);
+    }
+    if (!option.packages.some((entry) => entry.id === item.id)) option.packages.push(item);
+  }
+  return [...groups.values()];
+}

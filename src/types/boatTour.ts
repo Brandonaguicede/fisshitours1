@@ -20,6 +20,15 @@ export interface BoatTour {
   boatTourId?: string;
   tourId?: string;
   tourTitle?: string;
+  /** Shared tour content; commercial fields below still belong to this package. */
+  tourDetails?: {
+    title: string;
+    description: string;
+    image: string;
+    galleryImages: Array<{ src: string; alt: string }>;
+    activities: string[];
+  };
+  catalogActive?: boolean;
   name: string;
   packageType?: string;
   mealOptions?: Array<{ es: string; en: string }>;

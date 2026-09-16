@@ -13,14 +13,15 @@ import { getActiveBoats } from '../services/boatService';
 import { getActiveBoatTours } from '../services/boatTourService';
 import type { Boat } from '../types/boat';
 import type { BoatTour } from '../types/boatTour';
+import { groupTourCatalog } from '../utils/tourCatalog';
 import { getBoatStartingPrice } from '../utils/bookingPricing';
 
 export default function ToursPage() {
   const { language } = useLanguage();
   const boatsQuery = useQuery({ queryKey: ['boats', 'active'], queryFn: getActiveBoats });
   const toursQuery = useQuery({ queryKey: ['boatTours', 'active'], queryFn: getActiveBoatTours });
-  const catalogBoats = boatsQuery.data?.length ? boatsQuery.data : boats;
-  const catalogTours = toursQuery.data?.length ? toursQuery.data : boatTours;
+  const catalogBoats = boatsQuery.data ?? boats;
+  const catalogTours = toursQuery.data ?? boatTours;
   const [selectedBoatId, setSelectedBoatId] = useState(boats[0].id);
   const [selectedTourId, setSelectedTourId] = useState<string | undefined>(boatTours.find((tour) => tour.boatId === boats[0].id)?.id);
   const toursRef = useRef<HTMLElement | null>(null);
@@ -29,7 +30,7 @@ export default function ToursPage() {
   const selectedBoat = useMemo(() => catalogBoats.find((boat) => boat.id === selectedBoatId) ?? catalogBoats[0], [catalogBoats, selectedBoatId]);
   const availableTours = useMemo(() => (selectedBoat ? catalogTours.filter((tour) => tour.boatId === selectedBoat.id) : []), [catalogTours, selectedBoat]);
   const selectedTour = useMemo(() => availableTours.find((tour) => tour.id === selectedTourId), [availableTours, selectedTourId]);
-  const groupedTours = useMemo(() => groupToursForCards(availableTours), [availableTours]);
+  const groupedTours = useMemo(() => groupTourCatalog(availableTours, catalogBoats), [availableTours, catalogBoats]);
   const catalogLoading = boatsQuery.isLoading || toursQuery.isLoading;
   const catalogError = boatsQuery.isError || toursQuery.isError;
 
@@ -132,8 +133,8 @@ export default function ToursPage() {
           </div>
 
           <div className="mt-10 grid gap-6 lg:grid-cols-3">
-            {groupedTours.map(({ key, tour, relatedTours }) => (
-              <BoatTourCard key={key} boat={selectedBoat} tour={tour} relatedTours={relatedTours} isSelected={relatedTours.some((item) => item.id === selectedTour?.id)} onSelect={selectTour} />
+            {groupedTours.map((item) => (
+              <BoatTourCard key={item.tourId} catalogItem={item} isSelected={item.boatOptions.some((option) => option.packages.some((entry) => entry.id === selectedTour?.id))} onSelect={selectTour} />
             ))}
           </div>
         </Container>
@@ -164,24 +165,4 @@ export default function ToursPage() {
       </section>
     </>
   );
-}
-
-function getTourGroupKey(tour: BoatTour) {
-  if (tour.category === 'Bioluminescence Basic' || tour.category === 'Bioluminescence Deluxe') return `${tour.boatId}-Bioluminescence`;
-  return `${tour.boatId}-${tour.category}`;
-}
-
-function groupToursForCards(tours: BoatTour[]) {
-  const groups = new Map<string, BoatTour[]>();
-
-  tours.forEach((tour) => {
-    const key = getTourGroupKey(tour);
-    groups.set(key, [...(groups.get(key) ?? []), tour]);
-  });
-
-  return Array.from(groups.entries()).map(([key, relatedTours]) => ({
-    key,
-    tour: [...relatedTours].sort((a, b) => a.basePrice - b.basePrice)[0],
-    relatedTours: [...relatedTours].sort((a, b) => a.basePrice - b.basePrice),
-  }));
 }

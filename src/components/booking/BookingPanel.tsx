@@ -2,7 +2,7 @@ import { ArrowLeft, ArrowRight, Check, CreditCard, Info, Mail, MapPin, Minus, Me
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-import { getPackageLabel, getTourGroupKey, getTourText } from '../../i18n/content';
+import { getPackageLabel, getTourText } from '../../i18n/content';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { text, tr } from '../../i18n/translations';
 import { MOCK_TURNSTILE_TOKEN, USE_LOCAL_TURNSTILE_MOCK } from '../../lib/turnstile';
@@ -14,6 +14,7 @@ import type { Boat } from '../../types/boat';
 import type { BoatTour } from '../../types/boatTour';
 import { buildBookingPaymentPayload, createWhatsAppBookingMessage, getWhatsAppBookingUrl, type BookingPaymentMethod, type BookingStatus, type BookingPaymentPayload, type PaymentStatus } from '../../utils/bookingPayment';
 import { calculateBookingTotal, getBoatStartingPrice, getEffectiveMaxGuests, getExtraGuestPrice, getTourIncludedGuests } from '../../utils/bookingPricing';
+import { isBookableCatalogPackage } from '../../utils/tourCatalog';
 import { filterPackageSlots } from '../../utils/packageSettings';
 import { cn } from '../../utils/cn';
 import { formatTime } from '../../utils/format';
@@ -68,9 +69,12 @@ export function getBookingTerms(language: 'es' | 'en') {
       ];
 }
 
-export function BookingPanel({ selectedBoat, selectedTour, boats, tours, catalogLoading, selectedTimeSlotId, onBoatChange, onTourChange }: BookingPanelProps) {
+export function BookingPanel({ selectedBoat, selectedTour: requestedTour, boats, tours, catalogLoading, selectedTimeSlotId, onBoatChange, onTourChange }: BookingPanelProps) {
   const { language } = useLanguage();
   const queryClient = useQueryClient();
+  const selectedTour = tours.find((item) => item.id === requestedTour?.id && item.boatId === selectedBoat.id
+    && item.tourId === requestedTour?.tourId && item.boatTourId === requestedTour?.boatTourId
+    && isBookableCatalogPackage(item));
   const [activeStep, setActiveStep] = useState(0);
   const [date, setDate] = useState(() => new Date(Date.now() + 86400000).toISOString().slice(0, 10));
   const [timeSlotId, setTimeSlotId] = useState(selectedTimeSlotId ?? selectedTour?.timeSlots[0]?.id ?? '');
@@ -96,8 +100,28 @@ export function BookingPanel({ selectedBoat, selectedTour, boats, tours, catalog
   const [turnstileResetKey, setTurnstileResetKey] = useState(0);
   const headingRef = useRef<HTMLHeadingElement | null>(null);
   const availabilityAlertKey = useRef('');
+  const parentIdentity = selectedBoat.id + ':' + (selectedTour?.boatTourId ?? '') + ':' + (selectedTour?.id ?? '');
+  const previousParent = useRef(parentIdentity);
+  useEffect(() => {
+    if (previousParent.current === parentIdentity) return;
+    previousParent.current = parentIdentity;
+    setMealOption('');
+    setTimeSlotId(selectedTour?.timeSlots[0]?.id ?? '');
+    setGuests(getTourIncludedGuests(selectedBoat, selectedTour));
+    setBookingStatus('pending');
+    setPaymentStatus('pending');
+    setPaypalVisible(false);
+    setPaypalError('');
+    setPaypalInfo('');
+    setPaypalSuccess(null);
+    setCreatedBooking(null);
+    setSuccessNotice(null);
+    setIsPayOnDayOpen(false);
+    setValidationMessage('');
+    setActiveStep(selectedTour ? 1 : 0);
+  }, [parentIdentity, selectedBoat, selectedTour]);
 
-  const availableTours = useMemo(() => tours.filter((tour) => tour.boatId === selectedBoat.id), [selectedBoat.id, tours]);
+  const availableTours = useMemo(() => tours.filter((tour) => tour.boatId === selectedBoat.id && isBookableCatalogPackage(tour)), [selectedBoat.id, tours]);
   const availabilityQuery = useQuery({
     queryKey: ['availability', selectedBoat.id, date],
     queryFn: () => getBookingAvailability(selectedBoat.id, date),
@@ -778,7 +802,7 @@ function TourDetailsStep(props: {
 }) {
   const { language } = useLanguage();
   const tourGroups = getBookingTourGroups(props.availableTours, language);
-  const activeGroup = props.selectedTour ? getTourGroupKey(props.selectedTour) : '';
+  const activeGroup = props.selectedTour ? (props.selectedTour.tourId ?? props.selectedTour.id) : '';
   const activeGroupData = tourGroups.find((group) => group.key === activeGroup);
 
   return (
@@ -906,7 +930,7 @@ function getBookingTourGroups(tours: BoatTour[], language: 'es' | 'en') {
   const groups = new Map<string, BoatTour[]>();
 
   tours.forEach((tour) => {
-    const key = getTourGroupKey(tour);
+    const key = (tour.tourId ?? tour.id);
     groups.set(key, [...(groups.get(key) ?? []), tour]);
   });
 

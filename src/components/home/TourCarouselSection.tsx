@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import type { Boat } from '../../types/boat';
 import type { BoatTour } from '../../types/boatTour';
+import { groupTourCatalog } from '../../utils/tourCatalog';
 import { getVisibleCardCount, useCardCarousel } from '../../hooks/useCardCarousel';
 import { BoatTourCard } from '../tours/BoatTourCard';
 import { Container } from '../common/Container';
@@ -22,10 +23,10 @@ export function TourCarouselSection({ boats, tours, selectedTour, onSelectTour }
   const { language } = useLanguage();
   const [visibleCardCount, setVisibleCardCount] = useState(getVisibleCardCount);
   const [activeBoatId, setActiveBoatId] = useState<string>('all');
-  const visibleTours = activeBoatId === 'all' ? tours : tours.filter((tour) => tour.boatId === activeBoatId);
-  const groupedTours = groupToursForCards(visibleTours);
+  const visibleTours = useMemo(() => activeBoatId === 'all' ? tours : tours.filter((tour) => tour.boatId === activeBoatId), [activeBoatId, tours]);
+  const groupedTours = useMemo(() => groupTourCatalog(visibleTours, boats), [visibleTours, boats]);
   const { scrollerRef, canScrollLeft, canScrollRight, updateControls, scrollByCards } = useCardCarousel(groupedTours);
-  const selectedTourIndex = selectedTour ? groupedTours.findIndex(({ relatedTours }) => relatedTours.some((tour) => tour.id === selectedTour.id)) : -1;
+  const selectedTourIndex = selectedTour ? groupedTours.findIndex((item) => item.boatOptions.some((option) => option.packages.some((tour) => tour.id === selectedTour.id))) : -1;
 
   useEffect(() => {
     const updateVisibleCardCount = () => setVisibleCardCount(getVisibleCardCount());
@@ -104,22 +105,22 @@ export function TourCarouselSection({ boats, tours, selectedTour, onSelectTour }
               }}
               {...reveal(1)}
             >
-              {groupedTours.map(({ key, tour, relatedTours }) => (
+              {groupedTours.map((item) => (
                 <div
-                  key={key}
+                  key={item.tourId}
                   className="w-full shrink-0 snap-start snap-always sm:w-[calc((100%-1.5rem)/2)] lg:w-[calc((100%-3rem)/3)] xl:w-[calc((100%-4.5rem)/4)]"
                 >
                   <BoatTourCard
-                    boat={boats.find((boat) => boat.id === tour.boatId)!}
-                    isSelected={relatedTours.some((item) => item.id === selectedTour?.id)}
+                    catalogItem={item}
+                    isSelected={item.boatOptions.some((option) => option.packages.some((entry) => entry.id === selectedTour?.id))}
                     mediaClassName="lg:h-28"
                     onSelect={onSelectTour}
-                    relatedTours={relatedTours}
-                    tour={tour}
                   />
                 </div>
               ))}
             </div>
+
+            {groupedTours.length === 0 ? <p role="status" className="py-8 text-center text-sm text-ocean-200">{language === 'es' ? 'No hay tours disponibles para este filtro.' : 'No tours available for this filter.'}</p> : null}
 
             {canScrollLeft || canScrollRight ? (
               <div className="mt-3 flex justify-center gap-3 sm:mt-3.5 [@media(min-width:1024px)_and_(max-height:800px)]:mt-1.5" aria-label={language === 'es' ? 'Controles del carrusel de tours' : 'Tour carousel controls'} {...reveal(2)}>
@@ -139,24 +140,4 @@ function scrollToCard(element: HTMLDivElement, cardIndex: number, behavior: Scro
   const firstCard = element.children.item(0) as HTMLElement | null;
   const card = element.children.item(cardIndex) as HTMLElement | null;
   element.scrollTo({ left: card && firstCard ? card.offsetLeft - firstCard.offsetLeft : 0, behavior });
-}
-
-function getTourGroupKey(tour: BoatTour) {
-  if (tour.category === 'Bioluminescence Basic' || tour.category === 'Bioluminescence Deluxe') return `${tour.boatId}-Bioluminescence`;
-  return `${tour.boatId}-${tour.category}`;
-}
-
-function groupToursForCards(tours: BoatTour[]) {
-  const groups = new Map<string, BoatTour[]>();
-
-  tours.forEach((tour) => {
-    const key = getTourGroupKey(tour);
-    groups.set(key, [...(groups.get(key) ?? []), tour]);
-  });
-
-  return Array.from(groups.entries()).map(([key, relatedTours]) => ({
-    key,
-    tour: [...relatedTours].sort((a, b) => a.basePrice - b.basePrice)[0],
-    relatedTours: [...relatedTours].sort((a, b) => a.basePrice - b.basePrice),
-  }));
 }

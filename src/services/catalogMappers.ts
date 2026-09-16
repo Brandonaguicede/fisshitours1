@@ -61,6 +61,14 @@ export function mapBoatTour(
     boatTourId: row.boat_tours.id,
     tourId: row.boat_tours.tour_id,
     tourTitle: tour.title,
+    tourDetails: {
+      title: tour.title,
+      description: tour.description ?? '',
+      image: tour.image_url ?? primaryImage?.src ?? '/images/placeholder-image.jpg',
+      galleryImages,
+      activities,
+    },
+    catalogActive: row.active && row.boat_tours.active && row.boat_tours.boats.active && tour.active,
     name: row.name,
     packageType: row.package_type,
     departureTimes: row.departure_times,
@@ -74,7 +82,7 @@ export function mapBoatTour(
       ? [primaryImage, ...galleryImages.filter((image) => image.src !== primaryImage.src)]
       : undefined,
     duration: row.duration_minutes ? row.duration_minutes / 60 : undefined,
-    basePrice: Number(row.base_price),
+    basePrice: row.base_price == null ? Number.NaN : Number(row.base_price),
     includedGuests: row.included_guests,
     maxGuests: row.max_guests,
     extraGuestPrice: Number(row.extra_guest_price),

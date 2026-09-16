@@ -20,8 +20,8 @@ export function useBookingCatalog() {
   const { selectedBoatId, selectedTourId, setSelectedBoatId, setSelectedTourId } = useBookingSelectionContext();
   const boatsQuery = useQuery({ queryKey: ['boats', 'active'], queryFn: getActiveBoats });
   const toursQuery = useQuery({ queryKey: ['boatTours', 'active'], queryFn: getActiveBoatTours });
-  const catalogBoats = boatsQuery.data?.length ? boatsQuery.data : boats;
-  const catalogTours = toursQuery.data?.length ? toursQuery.data : boatTours;
+  const catalogBoats = boatsQuery.data ?? boats;
+  const catalogTours = toursQuery.data ?? boatTours;
   const catalogLoading = boatsQuery.isLoading || toursQuery.isLoading;
 
   const selectedBoat = useMemo(() => catalogBoats.find((boat) => boat.id === selectedBoatId) ?? catalogBoats[0], [catalogBoats, selectedBoatId]);
