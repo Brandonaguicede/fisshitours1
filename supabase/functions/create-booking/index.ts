@@ -3,7 +3,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2';
 import { z } from 'npm:zod@3.23.8';
 import { areExternalProviderMocksAllowed } from '../_shared/environment.ts';
 import { corsHeaders, corsPreflight, withCors } from '../_shared/cors.ts';
-import { buildBookingRequestCustomerHtml } from '../_shared/booking-confirmation-email.ts';
+import { buildBookingRequestAdminHtml, buildBookingRequestCustomerHtml } from '../_shared/booking-confirmation-email.ts';
 
 const schema = z.object({
   customer: z.object({
@@ -194,6 +194,7 @@ async function sendBookingEmails(supabase: ReturnType<typeof createClient>, book
     adminEmail ? {
       to: adminEmail,
       subject: `Nueva reserva ${booking.booking_reference}`,
+      html: await buildBookingRequestAdminHtml(supabase, booking.booking_id),
       text: `Nueva reserva recibida.\n\n${summary}`,
       dedupe: `booking:${booking.booking_id}:admin-email`,
     } : null,
