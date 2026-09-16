@@ -140,12 +140,13 @@ export default function AdminLoginPage() {
       <span className="admin-login__corner" aria-hidden="true">Costa Rica</span>
 
       <div className="admin-login__stack">
-        <span className="admin-login__brand">
-          <img src="/images/papagayo-logo.png" alt="Papagayo Fishing Tours" />
-        </span>
         <section className="admin-login__card">
+          <span className="admin-login__brand">
+            <img src="/images/papagayo-logo.png" alt="Papagayo Fishing Tours" />
+          </span>
           <h1>Panel de administración</h1>
           <p className="admin-muted">Inicia sesion con tu cuenta de staff.</p>
+          <span className="admin-login__rule" aria-hidden="true" />
           {checking ? <p className="admin-muted">Validando sesion existente...</p> : null}
           <form className="admin-login__form" onSubmit={handleSubmit}>
           <label className="admin-login__field">
