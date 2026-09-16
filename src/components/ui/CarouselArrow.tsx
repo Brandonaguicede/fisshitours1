@@ -1,5 +1,6 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 
+import { cn } from '../../utils/cn';
 import { IconButton, type IconButtonSize, type IconButtonVariant } from './IconButton';
 
 interface CarouselArrowProps {
@@ -15,7 +16,7 @@ interface CarouselArrowProps {
 export function CarouselArrow({ className, direction, disabled, label, onClick, size = 'md', variant = 'glass' }: CarouselArrowProps) {
   return (
     <IconButton
-      className={className}
+      className={cn('text-celeste hover:text-celeste-light', className)}
       disabled={disabled}
       icon={direction === 'left' ? ChevronLeft : ChevronRight}
       label={label}

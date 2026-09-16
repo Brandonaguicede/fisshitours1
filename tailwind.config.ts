@@ -47,6 +47,12 @@ const config: Config = {
           500: '#C9844A',
           600: '#9E6234',
         },
+        celeste: {
+          light: '#9BD4E8',
+          DEFAULT: '#7EC8E3',
+          dark: '#5FA8C4',
+          ink: '#082F49',
+        },
       },
       fontFamily: {
         sans: ['Manrope', 'ui-sans-serif', 'system-ui', 'sans-serif'],

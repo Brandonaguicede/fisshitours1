@@ -143,18 +143,26 @@
     --color-surface-ink: 2, 18, 31;
     --color-surface-light: 221, 239, 246;
     --color-surface-highlight: 242, 250, 253;
-    --color-text-on-light: #0b2842;
+    --color-text-on-light: #082F49;
 
     --surface-border: rgba(var(--color-surface-light), 0.12);
     --surface-border-control: rgba(var(--color-surface-highlight), 0.16);
-    --glass-selected-border: rgba(var(--color-surface-highlight), 0.36);
-    --glass-focus-border: rgba(var(--color-surface-highlight), 0.3);
-    --glass-focus-outline: rgba(var(--color-surface-highlight), 0.5);
+    /* Selection/focus/active details across every glass control — was a
+       near-white highlight, now the site's celeste accent so those small
+       interactive details read as intentional rather than neutral. */
+    --glass-selected-border: rgba(126, 200, 227, 0.55);
+    --glass-focus-border: rgba(126, 200, 227, 0.45);
+    --glass-focus-outline: rgba(126, 200, 227, 0.65);
     --glass-accent-border: rgba(226, 168, 109, 0.46);
     --glass-surface-background: rgba(var(--color-surface-ocean), 0.4);
     --glass-panel-background: rgba(var(--color-surface-ocean), 0.5);
     --glass-control-background: rgba(var(--color-surface-light), 0.05);
-    --glass-primary-background: rgba(188, 222, 236, 0.78);
+    /* Primary CTA (Book Now, View Tour): softer, less-saturated celeste
+       than a neon sky/cyan, desaturated enough to read as premium glass
+       rather than a bright brand chip. */
+    --glass-primary-background: rgba(126, 200, 227, 0.78);
+    --glass-primary-hover-background: rgba(155, 212, 232, 0.88);
+    --glass-primary-border: rgba(95, 168, 196, 0.55);
     --glass-subtle-background: rgba(var(--color-surface-light), 0.035);
     --glass-accent-background: rgba(201, 132, 74, 0.16);
     --glass-blur-surface: 20px;
@@ -400,7 +408,7 @@
     right: 0.9rem;
     bottom: 0.35rem;
     height: 1.5px;
-    background: #fff;
+    background: #7EC8E3;
     transform: scaleX(0);
     transform-origin: center;
     transition: transform 460ms cubic-bezier(0.34, 1.56, 0.64, 1), opacity 220ms ease;
@@ -475,12 +483,17 @@
   }
 
   .glass-primary {
-    border: 1px solid var(--surface-border-control);
+    border: 1px solid var(--glass-primary-border);
     background: var(--glass-primary-background);
     color: var(--color-text-on-light);
     box-shadow: var(--shadow-glass-control);
     -webkit-backdrop-filter: blur(var(--glass-blur-control)) saturate(118%);
     backdrop-filter: blur(var(--glass-blur-control)) saturate(118%);
+  }
+
+  .glass-interactive.glass-primary:hover:not(:disabled):not([aria-disabled='true']) {
+    background: var(--glass-primary-hover-background);
+    border-color: var(--glass-primary-border);
   }
 
   .glass-subtle {
