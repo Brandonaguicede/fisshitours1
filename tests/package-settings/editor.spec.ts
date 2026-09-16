@@ -42,7 +42,7 @@ test('package hours and meals persist and automatically reach the customer', asy
   const { packages } = await mockCatalog(page);
   await page.goto('/tests/package-settings/fixture.html');
   await page.getByRole('button', { name: 'Editar Fishing Tour - Full Day', exact: true }).click();
-  await page.getByRole('checkbox', { name: '13:00', exact: true }).uncheck();
+  await page.getByRole('checkbox', { name: '1:00 PM', exact: true }).uncheck();
   await page.getByLabel('Agregar hora de salida', { exact: true }).fill('09:30');
   await page.getByRole('button', { name: 'Agregar hora', exact: true }).click();
   await page.getByRole('checkbox', { name: 'Personalizar lo incluido' }).check();
@@ -59,7 +59,7 @@ test('package hours and meals persist and automatically reach the customer', asy
   expect(packages[1].departure_times).toEqual(['08:00', '13:00']);
   await page.getByRole('button', { name: 'Editar Fishing Tour - Full Day', exact: true }).click();
   await expect(page.getByLabel('Comida 1 · Español')).toHaveValue('Pescado con arroz');
-  await expect(page.getByRole('checkbox', { name: '09:30', exact: true })).toBeChecked();
+  await expect(page.getByRole('checkbox', { name: '9:30 AM', exact: true })).toBeChecked();
   await page.getByRole('button', { name: 'Abrir reserva', exact: true }).click();
   await page.getByRole('button', { name: 'Continuar', exact: true }).click();
   await expect(page.getByText('Pescado con arroz', { exact: true }).first()).toBeVisible();
@@ -72,6 +72,7 @@ test('package hours and meals persist and automatically reach the customer', asy
   await expect(page.getByText('Escoge tu comida incluida', { exact: true })).toHaveCount(0);
   await expect(page.locator('input[name="timeSlot"][value="departure-0930"]')).toHaveCount(0);
   await expect(page.locator('input[name="timeSlot"][value="afternoon"]')).toBeChecked();
+  await expect(page.getByText('1:00 PM', { exact: true }).first()).toBeVisible();
   await page.locator('input[name="tourPackage"][value="full"]').check({ force: true });
   await expect(page.locator('input[name="mealOption"]:checked')).toHaveCount(0);
   await page.getByRole('button', { name: 'Ver detalles del paquete', exact: true }).click();

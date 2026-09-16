@@ -1,3 +1,4 @@
+import { formatTime } from '../../utils/format';
 import { Clock, Users } from 'lucide-react';
 import { useState } from 'react';
 
@@ -98,5 +99,5 @@ function getDurationLabel(tour: BoatTour, localizedDuration: string | undefined,
   if (localizedDuration) return localizedDuration;
   const slot = tour.timeSlots[0];
   if (!slot) return language === 'es' ? 'Consultar' : 'On request';
-  return slot.time;
+  return formatTime(slot.time);
 }

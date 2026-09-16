@@ -16,6 +16,7 @@ import { buildBookingPaymentPayload, createWhatsAppBookingMessage, getWhatsAppBo
 import { calculateBookingTotal, getBoatStartingPrice, getEffectiveMaxGuests, getExtraGuestPrice, getTourIncludedGuests } from '../../utils/bookingPricing';
 import { filterPackageSlots } from '../../utils/packageSettings';
 import { cn } from '../../utils/cn';
+import { formatTime } from '../../utils/format';
 import { formatCurrency } from '../../utils/formatCurrency';
 import { Button, ChoiceCard, Field, FieldError, GlassPanel, Input, ModalShell, TextArea } from '../ui';
 
@@ -622,7 +623,7 @@ export function BookingPanel({ selectedBoat, selectedTour, boats, tours, catalog
           selectedBoat={selectedBoat}
           selectedTour={selectedTour}
           date={date}
-          departure={selectedTimeSlot?.time ?? 'Not selected'}
+          departure={selectedTimeSlot ? formatTime(selectedTimeSlot.time) : 'Not selected'}
           guests={guests}
           mealOption={mealOption}
           customerName={customerName}
@@ -887,7 +888,7 @@ function TourDetailsStep(props: {
             {props.availabilitySlots.map((slot) => (
               <ChoiceCard as="label" key={slot.id} className="flex min-h-[34px] cursor-pointer flex-col items-center justify-center px-2.5 py-0.5 text-center leading-tight" disabled={slot.available === false} selected={props.timeSlotId === slot.id}>
                 <input className="sr-only" type="radio" name="timeSlot" value={slot.id} checked={props.timeSlotId === slot.id} disabled={slot.available === false} onChange={() => props.onTimeSlotChange(slot.id)} />
-                <span className="text-xs font-extrabold text-white">{slot.time}</span>
+                <span className="text-xs font-extrabold text-white">{formatTime(slot.time)}</span>
                 <span className="text-[0.6rem] font-semibold text-ocean-300">{slot.available === false ? (language === 'es' ? 'No disponible' : 'Unavailable') : slot.label}</span>
               </ChoiceCard>
             ))}
@@ -1327,7 +1328,7 @@ function BookingSummary(props: {
       <div className="mt-2 grid gap-0.5 text-xs text-ocean-100">
         <SummaryRow label={tr(text.booking.tourType, language)} value={props.selectedTour ? `${selectedTourName}${props.selectedTour.duration ? ` (${props.selectedTour.duration}h)` : ''}` : tr(text.booking.selectTour, language)} />
         <SummaryRow label={tr(text.booking.date, language)} value={formatDisplayDate(props.date)} />
-        <SummaryRow label={language === 'es' ? 'Salida' : 'Departure'} value={props.selectedTimeSlot?.time ?? tr(text.booking.selectTime, language)} />
+        <SummaryRow label={language === 'es' ? 'Salida' : 'Departure'} value={props.selectedTimeSlot ? formatTime(props.selectedTimeSlot.time) : tr(text.booking.selectTime, language)} />
         <SummaryRow label={tr(text.booking.guests, language)} value={`${props.guests} ${tr(text.booking.people, language)}`} />
         {Boolean(props.selectedTour?.mealOptions?.length) ? <SummaryRow label={language === 'es' ? 'Comida' : 'Meal option'} value={props.mealOption || (language === 'es' ? 'No seleccionada' : 'Not selected')} /> : null}
         <SummaryRow label={language === 'es' ? 'Lugar de salida' : 'Departure location'} value={props.departureLocation?.name ?? (language === 'es' ? 'No seleccionado' : 'Not selected')} />

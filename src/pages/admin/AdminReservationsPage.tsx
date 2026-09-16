@@ -1,3 +1,4 @@
+import { formatTime } from '../../utils/format';
 import { Check, Download, Filter, Loader2, Plus, Search, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -641,7 +642,7 @@ export default function AdminReservationsPage() {
                   <span className="admin-field__label">Hora</span>
                   <select className="admin-select" required value={manualForm.timeSlotId} onChange={(event) => updateManualForm('timeSlotId', event.target.value)}>
                     <option value="">Selecciona horario</option>
-                    {manualTimeSlots.map((slot) => <option key={slot.id} value={slot.id}>{slot.label}</option>)}
+                    {manualTimeSlots.map((slot) => <option key={slot.id} value={slot.id}>{formatTime(slot.time)}</option>)}
                   </select>
                 </label>
                 <label className="admin-field">
@@ -692,7 +693,7 @@ export default function AdminReservationsPage() {
             <label className="admin-field"><span className="admin-field__label">WhatsApp</span><input className="admin-input" required value={editForm.whatsapp} onChange={(event) => updateEditForm('whatsapp', event.target.value)} /></label>
             <label className="admin-field"><span className="admin-field__label">Tour / paquete</span><select className="admin-select" required value={editForm.tourPackageId} onChange={(event) => updateEditForm('tourPackageId', event.target.value)}>{tours.map((tour) => <option key={tour.id} value={tour.id}>{tour.tourTitle ?? tour.name} - {tour.name}</option>)}</select></label>
             <label className="admin-field"><span className="admin-field__label">Fecha</span><input className="admin-input" required type="date" value={editForm.tourDate} onChange={(event) => updateEditForm('tourDate', event.target.value)} /></label>
-            <label className="admin-field"><span className="admin-field__label">Hora</span><select className="admin-select" required value={editForm.timeSlotId} onChange={(event) => updateEditForm('timeSlotId', event.target.value)}>{editTimeSlots.map((slot) => <option key={slot.id} value={slot.id}>{slot.label}</option>)}</select></label>
+            <label className="admin-field"><span className="admin-field__label">Hora</span><select className="admin-select" required value={editForm.timeSlotId} onChange={(event) => updateEditForm('timeSlotId', event.target.value)}>{editTimeSlots.map((slot) => <option key={slot.id} value={slot.id}>{formatTime(slot.time)}</option>)}</select></label>
             <label className="admin-field"><span className="admin-field__label">Personas</span><input className="admin-input" required type="number" min={1} value={editForm.guests} onChange={(event) => updateEditForm('guests', Number(event.target.value))} /></label>
             <label className="admin-field admin-field--wide"><span className="admin-field__label">Notas</span><textarea className="admin-input admin-textarea-list" value={editForm.specialRequests} onChange={(event) => updateEditForm('specialRequests', event.target.value)} /></label>
           </div></div></div> : null}

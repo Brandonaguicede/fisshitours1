@@ -14,6 +14,7 @@ import {
   type PackageInput,
 } from '../../services/adminBoatToursService';
 import FormSection from './FormSection';
+import { formatTime } from '../../utils/format';
 import { parseMealOptions } from '../../utils/packageSettings';
 import { useQueryClient } from '@tanstack/react-query';
 
@@ -254,10 +255,10 @@ function PackageDraftEditor({ draft, fieldErrors, busy, boatMaxGuests, defaultTi
         <span className="admin-field-help">Desmarca esta opción para escoger horas distintas por paquete. Una lista vacía impide reservar este paquete.</span>
         {!draft.inheritTimes ? <>
           <div className="admin-form-columns">
-            {timeChoices.map((time) => <label key={time} className="admin-field__label"><input type="checkbox" checked={draft.departureTimes.includes(time)} onChange={(event) => onChange({ departureTimes: event.target.checked ? [...draft.departureTimes, time] : draft.departureTimes.filter((item) => item !== time) })} /> {time}</label>)}
+            {timeChoices.map((time) => <label key={time} className="admin-field__label"><input type="checkbox" checked={draft.departureTimes.includes(time)} onChange={(event) => onChange({ departureTimes: event.target.checked ? [...draft.departureTimes, time] : draft.departureTimes.filter((item) => item !== time) })} /> {formatTime(time)}</label>)}
           </div>
           <div className="admin-actions">
-            <label className="admin-field"><span className="admin-field__label">Agregar hora de salida</span><input className="admin-input" type="time" step="60" value={newTime} onChange={(event) => setNewTime(event.target.value)} /></label>
+            <label className="admin-field"><span className="admin-field__label">Agregar hora de salida</span><input className="admin-input" type="time" step="60" value={newTime} onChange={(event) => setNewTime(event.target.value)} />{newTime ? <span className="admin-field-help">{formatTime(newTime)}</span> : null}</label>
             <button className="admin-btn admin-btn--secondary" type="button" disabled={!newTime || draft.departureTimes.includes(newTime)} onClick={() => { onChange({ departureTimes: [...draft.departureTimes, newTime] }); setNewTime(''); }}><Plus size={15} /> Agregar hora</button>
           </div>
         </> : null}

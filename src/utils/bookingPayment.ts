@@ -1,3 +1,4 @@
+import { formatTime } from './format';
 import { WHATSAPP_NUMBER } from '../constants/contact';
 import { getPackageLabel, getTourText } from '../i18n/content';
 import type { Boat } from '../types/boat';
@@ -74,7 +75,7 @@ export function buildBookingPaymentPayload(input: {
     tour: input.tour,
     packageLabel: getPackageLabel(input.tour, 'en'),
     date: input.date,
-    time: cleanText(input.timeSlot?.time ?? ''),
+    time: cleanText(formatTime(input.timeSlot?.time ?? '')),
     guests: input.guests,
     basePrice: input.pricing.basePrice,
     includedGuests: input.pricing.includedGuests,
