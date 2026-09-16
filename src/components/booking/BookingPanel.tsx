@@ -923,8 +923,9 @@ function TourDetailsStep(props: {
           <legend className="text-sm font-bold text-ocean-100">{tr(text.booking.departure, language)}</legend>
           <div className="mt-2.5 flex flex-wrap gap-2">
             {props.availabilitySlots.map((slot) => (
-              <ChoiceCard as="label" key={slot.id} className="flex min-h-[34px] cursor-pointer flex-col items-center justify-center px-2.5 py-0.5 text-center leading-tight" disabled={slot.available === false} selected={props.timeSlotId === slot.id}>
+              <ChoiceCard as="label" key={slot.id} className="relative flex min-h-[44px] cursor-pointer flex-col items-center justify-center py-1 pl-2.5 pr-10 text-center leading-tight has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-50" disabled={slot.available === false} selected={props.timeSlotId === slot.id}>
                 <input className="sr-only" type="radio" name="timeSlot" value={slot.id} checked={props.timeSlotId === slot.id} disabled={slot.available === false} onChange={() => props.onTimeSlotChange(slot.id)} />
+                <ChoiceCheck selected={props.timeSlotId === slot.id} />
                 <span className="text-xs font-extrabold text-white">{formatTime(slot.time)}</span>
                 <span className="text-[0.6rem] font-semibold text-ocean-300">{slot.available === false ? (language === 'es' ? 'No disponible' : 'Unavailable') : slot.label}</span>
               </ChoiceCard>
