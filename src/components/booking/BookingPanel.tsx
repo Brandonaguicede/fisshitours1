@@ -731,6 +731,14 @@ function StepActionBar(props: { onBack?: () => void; backLabel: string; primaryL
 }
 
 /** Small selected-state indicator used on every card type in the flow. */
+function ChoiceCheck({ selected }: { selected: boolean }) {
+  return (
+    <span aria-hidden="true" className={`absolute right-3 top-1/2 grid size-5 -translate-y-1/2 place-items-center rounded-full border ${selected ? 'border-ocean-100 bg-ocean-100 text-ocean-950' : 'border-ocean-200/60'}`}>
+      {selected ? <Check size={12} strokeWidth={3} /> : null}
+    </span>
+  );
+}
+
 function SelectedCheck() {
   return (
     <span className="absolute right-2 top-2 grid size-5 shrink-0 place-items-center rounded-full bg-ocean-100 text-ocean-950">
@@ -841,8 +849,9 @@ function TourDetailsStep(props: {
           <legend className="text-sm font-bold text-ocean-100">{language === 'es' ? 'Escoge paquete o duracion' : 'Choose package or duration'}</legend>
           <div className="mt-2.5 grid gap-2 min-[420px]:grid-cols-2 lg:grid-cols-3">
             {activeGroupData.tours.map((tour) => (
-              <ChoiceCard as="label" key={tour.id} className="flex min-h-[48px] cursor-pointer flex-col justify-center px-3 py-1.5" selected={props.selectedTour?.id === tour.id}>
+              <ChoiceCard as="label" key={tour.id} className="relative flex min-h-[48px] cursor-pointer flex-col justify-center py-1.5 pl-3 pr-10" selected={props.selectedTour?.id === tour.id}>
                 <input className="sr-only" type="radio" name="tourPackage" value={tour.id} checked={props.selectedTour?.id === tour.id} onChange={() => props.onTourChange(tour.id)} />
+                <ChoiceCheck selected={props.selectedTour?.id === tour.id} />
                 <span className="block truncate text-xs font-extrabold text-white">{getPackageLabel(tour, language)}</span>
                 <span className="mt-0.5 block text-sm font-extrabold text-ocean-100">{formatCurrency(tour.basePrice)}</span>
               </ChoiceCard>
@@ -856,8 +865,9 @@ function TourDetailsStep(props: {
           <legend className="px-1 text-sm font-bold text-ocean-100">{language === 'es' ? 'Escoge tu comida incluida' : 'Choose your included meal'}</legend>
           <div className="mt-2.5 grid gap-1.5 min-[420px]:grid-cols-2">
             {(props.selectedTour?.mealOptions ?? []).map((meal) => (
-              <ChoiceCard as="label" key={meal.en} className="flex min-h-[34px] cursor-pointer items-center px-2.5 py-1 text-xs font-bold leading-4 text-ocean-100" selected={props.mealOption === meal.es || props.mealOption === meal.en}>
+              <ChoiceCard as="label" key={meal.en} className="relative flex min-h-[44px] cursor-pointer items-center py-2 pl-2.5 pr-10 text-xs font-bold leading-4 text-ocean-100" selected={props.mealOption === meal.es || props.mealOption === meal.en}>
                 <input className="sr-only" type="radio" name="mealOption" value={meal[language]} checked={props.mealOption === meal.es || props.mealOption === meal.en} onChange={() => props.onMealOptionChange(meal[language])} />
+                <ChoiceCheck selected={props.mealOption === meal.es || props.mealOption === meal.en} />
                 {meal[language]}
               </ChoiceCard>
             ))}
