@@ -1424,6 +1424,9 @@ export type Database = {
       }
       tour_packages: {
         Row: {
+          departure_times: string[] | null
+          meal_options: Json
+          package_included: string[] | null
           active: boolean
           base_price: number
           boat_tour_id: string
@@ -1443,6 +1446,9 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          departure_times?: string[] | null
+          meal_options?: Json
+          package_included?: string[] | null
           active?: boolean
           base_price?: number
           boat_tour_id: string
@@ -1462,6 +1468,9 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          departure_times?: string[] | null
+          meal_options?: Json
+          package_included?: string[] | null
           active?: boolean
           base_price?: number
           boat_tour_id?: string

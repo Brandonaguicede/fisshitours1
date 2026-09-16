@@ -14,6 +14,7 @@ import type { Boat } from '../../types/boat';
 import type { BoatTour } from '../../types/boatTour';
 import { buildBookingPaymentPayload, createWhatsAppBookingMessage, getWhatsAppBookingUrl, type BookingPaymentMethod, type BookingStatus, type BookingPaymentPayload, type PaymentStatus } from '../../utils/bookingPayment';
 import { calculateBookingTotal, getBoatStartingPrice, getEffectiveMaxGuests, getExtraGuestPrice, getTourIncludedGuests } from '../../utils/bookingPricing';
+import { filterPackageSlots } from '../../utils/packageSettings';
 import { cn } from '../../utils/cn';
 import { formatCurrency } from '../../utils/formatCurrency';
 import { Button, ChoiceCard, Field, FieldError, GlassPanel, Input, ModalShell, TextArea } from '../ui';
@@ -45,16 +46,6 @@ function getPaymentMethodCopy(id: BookingPaymentMethod, language: 'es' | 'en') {
   const method = paymentMethods.find((item) => item.id === id) ?? paymentMethods[0];
   return { ...method, ...copy[id] };
 }
-
-const fullDayMealOptions = [
-  { en: 'Chicken wrap', es: 'Wrap de pollo' },
-  { en: 'Ham and cheese wrap', es: 'Wrap de jamon y queso' },
-  { en: 'Chicken sandwich', es: 'Sandwich de pollo' },
-  { en: 'Ham and cheese sandwich', es: 'Sandwich de jamon y queso' },
-  { en: 'Caprese sandwich', es: 'Sandwich caprese' },
-  { en: 'Chicken salad', es: 'Ensalada de pollo' },
-  { en: 'Ceviche', es: 'Ceviche' },
-];
 
 export function getBookingTerms(language: 'es' | 'en') {
   return language === 'es'
@@ -142,12 +133,12 @@ export function BookingPanel({ selectedBoat, selectedTour, boats, tours, catalog
   const effectiveMaxGuests = priceQuery.data?.max_guests ?? getEffectiveMaxGuests(selectedBoat, selectedTour);
   const includedGuests = priceQuery.data?.included_guests ?? getTourIncludedGuests(selectedBoat, selectedTour);
   const extraGuestPrice = priceQuery.data?.extra_guest_price ?? getExtraGuestPrice(selectedBoat, selectedTour);
-  const currentSlots: Array<AvailabilitySlot | (BoatTour['timeSlots'][number] & { available?: boolean })> = availabilityQuery.data ?? selectedTour?.timeSlots ?? [];
+  const currentSlots = useMemo(() => filterPackageSlots(selectedTour, availabilityQuery.data ?? (selectedTour?.timeSlots ?? []).map((slot) => ({ ...slot, available: true }))), [selectedTour, availabilityQuery.data]);
   const selectedTimeSlot = currentSlots.find((slot) => slot.id === timeSlotId);
   const selectedPayment = backendPaymentMethods.find((method) => method.id === paymentMethod) ?? backendPaymentMethods[0];
   const steps = [tr(text.booking.steps.boat, language), tr(text.booking.steps.tour, language), language === 'es' ? 'Lugar de salida' : 'Departure location', language === 'es' ? 'Tus datos y pago' : 'Your details and payment'];
   const hasCapacityError = guests > effectiveMaxGuests;
-  const canContinueToCustomer = Boolean(selectedTour && selectedTimeSlot && !hasCapacityError && !priceQuery.isError && !availabilityQuery.isError && selectedTimeSlot.available !== false);
+  const canContinueToCustomer = Boolean(selectedTour && selectedTimeSlot && !hasCapacityError && !priceQuery.isError && !availabilityQuery.isError && !availabilityQuery.isFetching && selectedTimeSlot.available !== false);
   const hasTurnstileToken = USE_LOCAL_TURNSTILE_MOCK || Boolean(turnstileToken);
   const canContinueToPayment = Boolean(canContinueToCustomer && selectedDepartureLocation);
   const canReview = Boolean(canContinueToPayment && customerName.trim() && customerEmail.trim() && customerWhatsapp.trim() && isValidEmail(customerEmail) && hasTurnstileToken);
@@ -170,23 +161,26 @@ export function BookingPanel({ selectedBoat, selectedTour, boats, tours, catalog
     : null;
 
   useEffect(() => {
-    const slots: Array<AvailabilitySlot | (BoatTour['timeSlots'][number] & { available?: boolean })> = availabilityQuery.data ?? selectedTour?.timeSlots ?? [];
-    if (selectedTour && slots.length && !slots.some((slot) => slot.id === timeSlotId && slot.available !== false)) {
-      setTimeSlotId(slots.find((slot) => slot.available !== false)?.id ?? '');
+    if (!currentSlots.some((slot) => slot.id === timeSlotId && slot.available !== false)) {
+      setTimeSlotId(currentSlots.find((slot) => slot.available !== false)?.id ?? '');
     }
-  }, [availabilityQuery.data, selectedTour, timeSlotId]);
+  }, [currentSlots, timeSlotId]);
+
+  useEffect(() => {
+    if (mealOption && !(selectedTour?.mealOptions ?? []).some((meal) => meal.es === mealOption || meal.en === mealOption)) setMealOption('');
+  }, [mealOption, selectedTour]);
 
   useEffect(() => {
     if (!selectedTour || availabilityQuery.isFetching || availabilityQuery.isError || !availabilityQuery.data) return;
     const unavailableKey = selectedBoat.id + ':' + date + ':' + selectedTour.id;
-    const allUnavailable = availabilityQuery.data.length > 0 && availabilityQuery.data.every((slot) => slot.available === false);
+    const allUnavailable = currentSlots.length > 0 && currentSlots.every((slot) => slot.available === false);
     if (allUnavailable && availabilityAlertKey.current !== unavailableKey) {
       availabilityAlertKey.current = unavailableKey;
       window.alert(language === 'es'
         ? 'No hay horarios disponibles para este bote en la fecha seleccionada.'
         : 'There are no departure times available for this boat on the selected date.');
     }
-  }, [availabilityQuery.data, availabilityQuery.isError, availabilityQuery.isFetching, date, language, selectedBoat.id, selectedTour]);
+  }, [currentSlots, availabilityQuery.data, availabilityQuery.isError, availabilityQuery.isFetching, date, language, selectedBoat.id, selectedTour]);
 
   useEffect(() => {
     headingRef.current?.focus();
@@ -203,6 +197,7 @@ export function BookingPanel({ selectedBoat, selectedTour, boats, tours, catalog
     if (!nextBoat) return;
     onBoatChange(nextBoat);
     onTourChange(undefined);
+    setMealOption('');
     setTimeSlotId('');
     setGuests(getTourIncludedGuests(nextBoat, undefined));
     setBookingStatus('pending');
@@ -218,7 +213,7 @@ export function BookingPanel({ selectedBoat, selectedTour, boats, tours, catalog
     onTourChange(nextTour);
     setTimeSlotId(nextTour?.timeSlots[0]?.id ?? '');
     if (nextTour) setGuests(getTourIncludedGuests(selectedBoat, nextTour));
-    if (!nextTour || !isFullDayTour(nextTour)) setMealOption('');
+    setMealOption('');
     setBookingStatus('pending');
     setPaymentStatus('pending');
     setPaypalVisible(false);
@@ -477,7 +472,7 @@ export function BookingPanel({ selectedBoat, selectedTour, boats, tours, catalog
                 guests={guests}
                 timeSlotId={timeSlotId}
                 effectiveMaxGuests={effectiveMaxGuests}
-                availabilitySlots={availabilityQuery.data ?? []}
+                availabilitySlots={currentSlots}
                 availabilityLoading={availabilityQuery.isFetching}
                 availabilityError={availabilityQuery.isError}
                 mealOption={mealOption}
@@ -828,13 +823,13 @@ function TourDetailsStep(props: {
         </fieldset>
       ) : null}
 
-      {isFullDayTour(props.selectedTour) ? (
+      {Boolean(props.selectedTour?.mealOptions?.length) ? (
         <GlassPanel as="fieldset" className="p-3" variant="subtle">
-          <legend className="px-1 text-sm font-bold text-ocean-100">{language === 'es' ? 'Comida opcional para Dia completo' : 'Optional meal for Full Day'}</legend>
+          <legend className="px-1 text-sm font-bold text-ocean-100">{language === 'es' ? 'Escoge tu comida incluida' : 'Choose your included meal'}</legend>
           <div className="mt-2.5 grid gap-1.5 min-[420px]:grid-cols-2">
-            {fullDayMealOptions.map((meal) => (
-              <ChoiceCard as="label" key={meal.en} className="flex min-h-[34px] cursor-pointer items-center px-2.5 py-1 text-xs font-bold leading-4 text-ocean-100" selected={props.mealOption === meal[language]}>
-                <input className="sr-only" type="radio" name="mealOption" value={meal[language]} checked={props.mealOption === meal[language]} onChange={() => props.onMealOptionChange(meal[language])} />
+            {(props.selectedTour?.mealOptions ?? []).map((meal) => (
+              <ChoiceCard as="label" key={meal.en} className="flex min-h-[34px] cursor-pointer items-center px-2.5 py-1 text-xs font-bold leading-4 text-ocean-100" selected={props.mealOption === meal.es || props.mealOption === meal.en}>
+                <input className="sr-only" type="radio" name="mealOption" value={meal[language]} checked={props.mealOption === meal.es || props.mealOption === meal.en} onChange={() => props.onMealOptionChange(meal[language])} />
                 {meal[language]}
               </ChoiceCard>
             ))}
@@ -889,7 +884,7 @@ function TourDetailsStep(props: {
         <fieldset>
           <legend className="text-sm font-bold text-ocean-100">{tr(text.booking.departure, language)}</legend>
           <div className="mt-2.5 flex flex-wrap gap-2">
-            {(props.availabilitySlots.length ? props.availabilitySlots : props.selectedTour.timeSlots.map((slot) => ({ ...slot, available: true }))).map((slot) => (
+            {props.availabilitySlots.map((slot) => (
               <ChoiceCard as="label" key={slot.id} className="flex min-h-[34px] cursor-pointer flex-col items-center justify-center px-2.5 py-0.5 text-center leading-tight" disabled={slot.available === false} selected={props.timeSlotId === slot.id}>
                 <input className="sr-only" type="radio" name="timeSlot" value={slot.id} checked={props.timeSlotId === slot.id} disabled={slot.available === false} onChange={() => props.onTimeSlotChange(slot.id)} />
                 <span className="text-xs font-extrabold text-white">{slot.time}</span>
@@ -897,6 +892,7 @@ function TourDetailsStep(props: {
               </ChoiceCard>
             ))}
           </div>
+          {!props.availabilityLoading && !props.availabilityError && !props.availabilitySlots.length ? <p className="mt-2 text-sm text-ocean-200">{language === 'es' ? 'Este paquete no tiene horas de salida disponibles.' : 'This package has no available departure times.'}</p> : null}
           {props.availabilityLoading ? <p className="mt-2 text-xs font-semibold text-ocean-300">Checking availability...</p> : null}
           {props.availabilityError ? <p className="mt-2 text-xs font-semibold text-red-200">We couldn’t load the booking information. Please try again.</p> : null}
         </fieldset>
@@ -1002,9 +998,6 @@ function DepartureLocationStep(props: {
   );
 }
 
-function isFullDayTour(tour?: BoatTour) {
-  return Boolean(tour?.name.toLowerCase().includes('full day'));
-}
 
 function clampGuests(value: number, maxGuests: number) {
   if (!Number.isFinite(value)) return 1;
@@ -1336,7 +1329,7 @@ function BookingSummary(props: {
         <SummaryRow label={tr(text.booking.date, language)} value={formatDisplayDate(props.date)} />
         <SummaryRow label={language === 'es' ? 'Salida' : 'Departure'} value={props.selectedTimeSlot?.time ?? tr(text.booking.selectTime, language)} />
         <SummaryRow label={tr(text.booking.guests, language)} value={`${props.guests} ${tr(text.booking.people, language)}`} />
-        {isFullDayTour(props.selectedTour) ? <SummaryRow label={language === 'es' ? 'Comida' : 'Meal option'} value={props.mealOption || (language === 'es' ? 'No seleccionada' : 'Not selected')} /> : null}
+        {Boolean(props.selectedTour?.mealOptions?.length) ? <SummaryRow label={language === 'es' ? 'Comida' : 'Meal option'} value={props.mealOption || (language === 'es' ? 'No seleccionada' : 'Not selected')} /> : null}
         <SummaryRow label={language === 'es' ? 'Lugar de salida' : 'Departure location'} value={props.departureLocation?.name ?? (language === 'es' ? 'No seleccionado' : 'Not selected')} />
         {props.currentStep >= 3 ? <SummaryRow label={language === 'es' ? 'Método de pago' : 'Payment method'} value={props.selectedPayment} /> : null}
       </div>
@@ -1388,7 +1381,7 @@ function ReviewModal(props: {
           <SummaryLine label={language === 'es' ? 'Fecha' : 'Date'} value={formatDisplayDate(props.date)} />
           <SummaryLine label={language === 'es' ? 'Salida' : 'Departure time'} value={props.departure} />
           <SummaryLine label={language === 'es' ? 'Personas' : 'Guests'} value={String(props.guests)} />
-          {isFullDayTour(props.selectedTour) ? <SummaryLine label={language === 'es' ? 'Comida' : 'Meal option'} value={props.mealOption || (language === 'es' ? 'No seleccionada' : 'Not selected')} /> : null}
+          {Boolean(props.selectedTour?.mealOptions?.length) ? <SummaryLine label={language === 'es' ? 'Comida' : 'Meal option'} value={props.mealOption || (language === 'es' ? 'No seleccionada' : 'Not selected')} /> : null}
           <SummaryLine label={language === 'es' ? 'Cargos por personas extra' : 'Additional guest charges'} value={props.pricing.extraGuests > 0 ? `${props.pricing.extraGuests} x ${formatCurrency(props.pricing.extraGuestPrice)} = ${formatCurrency(props.pricing.extraGuestsTotal)}` : '$0'} />
           <SummaryLine label={language === 'es' ? 'Lugar de salida' : 'Departure location'} value={props.departureLocation?.name ?? '-'} />
           <SummaryLine label={language === 'es' ? 'Cargo por salida' : 'Departure surcharge'} value={props.pricing.departureSurcharge > 0 ? formatCurrency(props.pricing.departureSurcharge) : (language === 'es' ? 'Sin costo' : 'No cost')} />

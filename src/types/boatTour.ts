@@ -21,6 +21,9 @@ export interface BoatTour {
   tourId?: string;
   tourTitle?: string;
   name: string;
+  packageType?: string;
+  mealOptions?: Array<{ es: string; en: string }>;
+  departureTimes?: string[] | null;
   category: TourCategory;
   description: string;
   shortDescription?: string;

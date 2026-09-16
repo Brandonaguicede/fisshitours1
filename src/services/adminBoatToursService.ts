@@ -16,6 +16,7 @@ export interface BoatToursPackagesData {
   links: AdminBoatTourLink[];
   /** Only packages whose boat_tour_id belongs to this boat. */
   packages: AdminPackageRow[];
+  timeSlots: Tables<'time_slots'>[];
 }
 
 export interface PackageInput {
@@ -28,6 +29,9 @@ export interface PackageInput {
   maxGuests: number;
   extraGuestPrice: number;
   description: string | null;
+  departureTimes: string[] | null;
+  mealOptions: Array<{ es: string; en: string }>;
+  packageIncluded: string[] | null;
   customQuote: boolean;
   active: boolean;
   sortOrder: number;
@@ -44,11 +48,13 @@ export function packageSlug(value: string) {
 }
 
 export async function loadBoatToursPackages(boatId: string): Promise<BoatToursPackagesData> {
-  const [toursRes, linksRes] = await Promise.all([
+  const [toursRes, linksRes, slotsRes] = await Promise.all([
     supabase.from('tours').select('id, title, category, publication_status, active, sort_order').order('sort_order'),
     supabase.from('boat_tours').select('id, boat_id, tour_id, active, sort_order').eq('boat_id', boatId).order('sort_order'),
+    supabase.from('time_slots').select('*').eq('active', true).order('sort_order'),
   ]);
   if (toursRes.error) throw new Error(toursRes.error.message);
+  if (slotsRes.error) throw new Error(slotsRes.error.message);
   if (linksRes.error) throw new Error(linksRes.error.message);
 
   const links = (linksRes.data ?? []) as AdminBoatTourLink[];
@@ -61,6 +67,7 @@ export async function loadBoatToursPackages(boatId: string): Promise<BoatToursPa
   return {
     tours: (toursRes.data ?? []) as AdminTourOption[],
     links,
+    timeSlots: slotsRes.data ?? [],
     packages: (packagesRes.data ?? []) as AdminPackageRow[],
   };
 }
@@ -99,6 +106,9 @@ export async function savePackageForBoatTour(
     name: input.name.trim(),
     package_type: input.packageType || packageSlug(input.name),
     description: input.description,
+    departure_times: input.departureTimes,
+    meal_options: input.mealOptions,
+    package_included: input.packageIncluded,
     duration_minutes: input.durationMinutes,
     base_price: input.basePrice,
     included_guests: input.includedGuests,

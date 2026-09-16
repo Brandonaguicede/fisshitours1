@@ -1,5 +1,6 @@
 import type { Boat } from '../types/boat';
 import type { BoatTour, TourCategory, TourTimeSlot } from '../types/boatTour';
+import { parseMealOptions } from '../utils/packageSettings';
 import type { Tables } from '../types/supabase';
 
 type BoatRow = Tables<'boats'>;
@@ -61,11 +62,14 @@ export function mapBoatTour(
     tourId: row.boat_tours.tour_id,
     tourTitle: tour.title,
     name: row.name,
+    packageType: row.package_type,
+    departureTimes: row.departure_times,
+    mealOptions: parseMealOptions(row.meal_options),
     category: normalizeCategory(tour.category, row.name),
     description: row.description ?? tour.description ?? '',
     shortDescription: tour.description ?? row.description ?? '',
     activities,
-    included: activeInclusions.length > 0 ? activeInclusions : legacyIncluded,
+    included: row.package_included ?? (activeInclusions.length > 0 ? activeInclusions : legacyIncluded),
     galleryImages: primaryImage
       ? [primaryImage, ...galleryImages.filter((image) => image.src !== primaryImage.src)]
       : undefined,
@@ -76,7 +80,7 @@ export function mapBoatTour(
     extraGuestPrice: Number(row.extra_guest_price),
     customQuote: row.custom_quote,
     image: row.image_url ?? tour.image_url ?? primaryImage?.src ?? '/images/placeholder-image.jpg',
-    timeSlots,
+    timeSlots: row.departure_times == null ? timeSlots : timeSlots.filter((slot) => row.departure_times?.includes(slot.time)),
   };
 }
 

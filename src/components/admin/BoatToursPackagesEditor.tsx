@@ -14,6 +14,8 @@ import {
   type PackageInput,
 } from '../../services/adminBoatToursService';
 import FormSection from './FormSection';
+import { parseMealOptions } from '../../utils/packageSettings';
+import { useQueryClient } from '@tanstack/react-query';
 
 interface Props {
   boatId: string;
@@ -32,6 +34,11 @@ interface DraftPackage {
   maxGuests: string;
   extraGuestPrice: string;
   description: string;
+  departureTimes: string[];
+  inheritTimes: boolean;
+  mealOptions: Array<{ es: string; en: string }>;
+  packageIncluded: string;
+  overrideIncluded: boolean;
   customQuote: boolean;
   active: boolean;
   sortOrder: number;
@@ -40,7 +47,7 @@ interface DraftPackage {
 
 type FieldErrors = Partial<Record<string, string>>;
 
-function rowToDraft(row: AdminPackageRow, tourId: string): DraftPackage {
+function rowToDraft(row: AdminPackageRow, tourId: string, defaultTimes: string[]): DraftPackage {
   return {
     id: row.id,
     tourId,
@@ -52,6 +59,11 @@ function rowToDraft(row: AdminPackageRow, tourId: string): DraftPackage {
     maxGuests: String(row.max_guests),
     extraGuestPrice: String(row.extra_guest_price),
     description: row.description ?? '',
+    departureTimes: row.departure_times ?? defaultTimes,
+    inheritTimes: row.departure_times == null,
+    mealOptions: parseMealOptions(row.meal_options),
+    packageIncluded: (row.package_included ?? []).join('\n'),
+    overrideIncluded: row.package_included != null,
     customQuote: row.custom_quote,
     active: row.active,
     sortOrder: row.sort_order,
@@ -59,7 +71,7 @@ function rowToDraft(row: AdminPackageRow, tourId: string): DraftPackage {
   };
 }
 
-function newDraft(tourId: string, boatMaxGuests: number, sortOrder: number): DraftPackage {
+function newDraft(tourId: string, boatMaxGuests: number, sortOrder: number, defaultTimes: string[]): DraftPackage {
   return {
     id: `package-${crypto.randomUUID().slice(0, 8)}`,
     tourId,
@@ -71,6 +83,11 @@ function newDraft(tourId: string, boatMaxGuests: number, sortOrder: number): Dra
     maxGuests: String(boatMaxGuests),
     extraGuestPrice: '0',
     description: '',
+    departureTimes: defaultTimes,
+    inheritTimes: false,
+    mealOptions: [],
+    packageIncluded: '',
+    overrideIncluded: false,
     customQuote: false,
     active: true,
     sortOrder,
@@ -99,6 +116,10 @@ function validateDraft(draft: DraftPackage, boatMaxGuests: number): FieldErrors 
   if (!Number.isFinite(extraGuestPrice) || extraGuestPrice < 0) {
     errors[`${key}-extra`] = 'El extra no puede ser negativo.';
   }
+  if (!draft.inheritTimes && (draft.departureTimes.length > 48 || draft.departureTimes.some((time) => !/^([01]\d|2[0-3]):[0-5]\d$/.test(time)))) errors[`${key}-times`] = 'Revisa los horarios (máximo 48).';
+  if (draft.mealOptions.length > 30 || draft.mealOptions.some((meal) => !meal.es.trim() || !meal.en.trim() || meal.es.trim().length > 120 || meal.en.trim().length > 120)) errors[`${key}-meals`] = 'Cada comida necesita nombre en español e inglés (máximo 120 caracteres).';
+  const included = draft.packageIncluded.split('\n').map((item) => item.trim()).filter(Boolean);
+  if (draft.overrideIncluded && (included.length > 50 || included.some((item) => item.length > 300))) errors[`${key}-contents`] = 'Máximo 50 elementos de 300 caracteres.';
   return errors;
 }
 
@@ -107,14 +128,17 @@ interface PackageDraftEditorProps {
   fieldErrors: FieldErrors;
   busy: boolean;
   boatMaxGuests: number;
+  defaultTimes: string[];
   onChange: (changes: Partial<DraftPackage>) => void;
   onCancel: () => void;
   onSave: () => void;
   onDelete: () => void;
 }
 
-function PackageDraftEditor({ draft, fieldErrors, busy, boatMaxGuests, onChange, onCancel, onSave, onDelete }: PackageDraftEditorProps) {
+function PackageDraftEditor({ draft, fieldErrors, busy, boatMaxGuests, defaultTimes, onChange, onCancel, onSave, onDelete }: PackageDraftEditorProps) {
   const key = `pkg-${draft.id}`;
+  const [newTime, setNewTime] = useState('');
+  const timeChoices = Array.from(new Set([...defaultTimes, ...draft.departureTimes])).sort();
   return (
     <div className="admin-package-compact-editor">
       <div className="admin-package-editor__heading">
@@ -224,6 +248,39 @@ function PackageDraftEditor({ draft, fieldErrors, busy, boatMaxGuests, onChange,
           onChange={(event) => onChange({ description: event.target.value })}
         />
       </label>
+      <fieldset className="admin-field" disabled={busy}>
+        <legend className="admin-field__label">Horas de salida de este paquete</legend>
+        <label className="admin-field__label"><input type="checkbox" checked={draft.inheritTimes} onChange={(event) => onChange({ inheritTimes: event.target.checked })} /> Usar todos los horarios generales</label>
+        <span className="admin-field-help">Desmarca esta opción para escoger horas distintas por paquete. Una lista vacía impide reservar este paquete.</span>
+        {!draft.inheritTimes ? <>
+          <div className="admin-form-columns">
+            {timeChoices.map((time) => <label key={time} className="admin-field__label"><input type="checkbox" checked={draft.departureTimes.includes(time)} onChange={(event) => onChange({ departureTimes: event.target.checked ? [...draft.departureTimes, time] : draft.departureTimes.filter((item) => item !== time) })} /> {time}</label>)}
+          </div>
+          <div className="admin-actions">
+            <label className="admin-field"><span className="admin-field__label">Agregar hora de salida</span><input className="admin-input" type="time" step="60" value={newTime} onChange={(event) => setNewTime(event.target.value)} /></label>
+            <button className="admin-btn admin-btn--secondary" type="button" disabled={!newTime || draft.departureTimes.includes(newTime)} onClick={() => { onChange({ departureTimes: [...draft.departureTimes, newTime] }); setNewTime(''); }}><Plus size={15} /> Agregar hora</button>
+          </div>
+        </> : null}
+        {fieldErrors[`${key}-times`] ? <span className="admin-field-error" role="alert">{fieldErrors[`${key}-times`]}</span> : null}
+      </fieldset>
+      <fieldset className="admin-field" disabled={busy}>
+        <legend className="admin-field__label">Qué incluye este paquete</legend>
+        <label className="admin-field__label"><input type="checkbox" checked={draft.overrideIncluded} onChange={(event) => onChange({ overrideIncluded: event.target.checked })} /> Personalizar lo incluido</label>
+        <span className="admin-field-help">Sin personalización se usa la lista del tour. Puedes detallar las comidas y bebidas incluidas en Full Day.</span>
+        {draft.overrideIncluded ? <label className="admin-field"><span className="admin-field__label">Elementos incluidos, uno por línea</span><textarea className="admin-input admin-textarea-list" rows={4} value={draft.packageIncluded} onChange={(event) => onChange({ packageIncluded: event.target.value })} /></label> : null}
+        {fieldErrors[`${key}-contents`] ? <span className="admin-field-error" role="alert">{fieldErrors[`${key}-contents`]}</span> : null}
+      </fieldset>
+      <fieldset className="admin-field" disabled={busy}>
+        <legend className="admin-field__label">Comidas incluidas para elegir</legend>
+        <span className="admin-field-help">En Full Day, el cliente puede elegir una de estas comidas. Si eliminas todas, no se muestra el selector de comida.</span>
+        {draft.mealOptions.map((meal, index) => <div className="admin-form-columns" key={index}>
+          <label className="admin-field"><span className="admin-field__label">Comida {index + 1} · Español</span><input className="admin-input" maxLength={120} value={meal.es} onChange={(event) => onChange({ mealOptions: draft.mealOptions.map((item, position) => position === index ? { ...item, es: event.target.value } : item) })} /></label>
+          <label className="admin-field"><span className="admin-field__label">Comida {index + 1} · Inglés</span><input className="admin-input" maxLength={120} value={meal.en} onChange={(event) => onChange({ mealOptions: draft.mealOptions.map((item, position) => position === index ? { ...item, en: event.target.value } : item) })} /></label>
+          <button className="admin-btn admin-btn--secondary" type="button" aria-label={`Eliminar comida ${index + 1}`} onClick={() => onChange({ mealOptions: draft.mealOptions.filter((_, position) => position !== index) })}><Trash2 size={15} /> Eliminar comida</button>
+        </div>)}
+        <button className="admin-btn admin-btn--secondary" type="button" disabled={draft.mealOptions.length >= 30} onClick={() => onChange({ mealOptions: [...draft.mealOptions, { es: '', en: '' }] })}><Plus size={15} /> Agregar comida</button>
+        {fieldErrors[`${key}-meals`] ? <span className="admin-field-error" role="alert">{fieldErrors[`${key}-meals`]}</span> : null}
+      </fieldset>
       <label className="admin-field admin-field--narrow">
         <span className="admin-field__label">
           <input
@@ -247,6 +304,7 @@ function PackageDraftEditor({ draft, fieldErrors, busy, boatMaxGuests, onChange,
 }
 
 export default function BoatToursPackagesEditor({ boatId, boatName, boatMaxGuests }: Props) {
+  const queryClient = useQueryClient();
   const [data, setData] = useState<BoatToursPackagesData | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -327,15 +385,17 @@ export default function BoatToursPackagesEditor({ boatId, boatName, boatMaxGuest
     setFieldErrors({});
   }
 
+  const defaultTimes = Array.from(new Set((data?.timeSlots ?? []).map((slot) => slot.starts_at.slice(0, 5)))).sort();
+
   function startEditing(row: AdminPackageRow, tourId: string) {
-    setDraft(rowToDraft(row, tourId));
+    setDraft(rowToDraft(row, tourId, defaultTimes));
     setEditingId(row.id);
     setFieldErrors({});
   }
 
   function startCreating(tour: AdminTourOption) {
     const count = packagesByTour.get(tour.id)?.length ?? 0;
-    const next = newDraft(tour.id, boatMaxGuests, count + 1);
+    const next = newDraft(tour.id, boatMaxGuests, count + 1, defaultTimes);
     setDraft(next);
     setEditingId(next.id);
     setFieldErrors({});
@@ -361,12 +421,16 @@ export default function BoatToursPackagesEditor({ boatId, boatName, boatMaxGuest
       maxGuests: Number(draft.maxGuests),
       extraGuestPrice: Number(draft.extraGuestPrice),
       description: draft.description.trim() || null,
+      departureTimes: draft.inheritTimes ? null : draft.departureTimes,
+      mealOptions: draft.mealOptions.map((meal) => ({ es: meal.es.trim(), en: meal.en.trim() })),
+      packageIncluded: draft.overrideIncluded ? draft.packageIncluded.split('\n').map((item) => item.trim()).filter(Boolean) : null,
       customQuote: draft.customQuote,
       active: draft.active,
       sortOrder: draft.sortOrder,
     };
     await run(async () => {
       await savePackageForBoatTour(boatId, draft.tourId, input, boatMaxGuests);
+      await Promise.all([queryClient.invalidateQueries({ queryKey: ['boatTours'] }), queryClient.invalidateQueries({ queryKey: ['availability'] })]);
       closeEditor();
     }, 'Paquete guardado.');
   }
@@ -451,6 +515,7 @@ export default function BoatToursPackagesEditor({ boatId, boatName, boatMaxGuest
                     fieldErrors={fieldErrors}
                     busy={busy}
                     boatMaxGuests={boatMaxGuests}
+                    defaultTimes={defaultTimes}
                     onChange={updateDraft}
                     onCancel={closeEditor}
                     onSave={() => void persistDraft()}
@@ -465,6 +530,7 @@ export default function BoatToursPackagesEditor({ boatId, boatName, boatMaxGuest
                 fieldErrors={fieldErrors}
                 busy={busy}
                 boatMaxGuests={boatMaxGuests}
+                    defaultTimes={defaultTimes}
                 onChange={updateDraft}
                 onCancel={closeEditor}
                 onSave={() => void persistDraft()}
