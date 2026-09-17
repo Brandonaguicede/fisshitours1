@@ -1514,6 +1514,7 @@ export type Database = {
           included: Json
           location: string | null
           long_description: string | null
+          operating_end_time: string | null
           publication_status: string
           rating: number
           slug: string
@@ -1535,6 +1536,7 @@ export type Database = {
           included?: Json
           location?: string | null
           long_description?: string | null
+          operating_end_time?: string | null
           publication_status?: string
           rating?: number
           slug: string
@@ -1556,6 +1558,7 @@ export type Database = {
           included?: Json
           location?: string | null
           long_description?: string | null
+          operating_end_time?: string | null
           publication_status?: string
           rating?: number
           slug?: string

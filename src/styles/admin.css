@@ -735,6 +735,10 @@ body:has(.admin-login) {
   --stat-color: var(--admin-warning);
 }
 
+.admin-stat-card--danger {
+  --stat-color: var(--admin-danger);
+}
+
 .admin-stat-card__head {
   display: flex;
   align-items: center;

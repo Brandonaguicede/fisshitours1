@@ -1,9 +1,9 @@
 import { formatTime } from '../../utils/format';
-import { Check, Download, Filter, Loader2, Plus, Search, X } from 'lucide-react';
+import { Calendar, Check, CheckCircle2, Clock, Download, Filter, Loader2, Plus, Search, X, XCircle } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
-import { AdminBadge, AdminModuleSurface, AdminTable, AdminToolbar } from '../../components/admin/AdminPrimitives';
+import { AdminBadge, AdminModuleSurface, AdminStatCard, AdminTable, AdminToolbar } from '../../components/admin/AdminPrimitives';
 import { Modal } from '../../components/common/Modal';
 import { supabase } from '../../lib/supabase';
 import { readWithAdminSession } from '../../services/adminAuthService';
@@ -139,6 +139,21 @@ export default function AdminReservationsPage() {
       .in('booking_id', notificationIds).like('dedupe_key', 'booking:%:paypal-confirmation-customer-email')),
   });
   const confirmationSentByBooking = Object.fromEntries(((notificationsQuery.data ?? []) as Array<{ booking_id: string; sent_at: string | null }>).map((row) => [row.booking_id, Boolean(row.sent_at)]));
+  const statsQuery = useQuery({
+    queryKey: ['admin', 'reservationStats'],
+    queryFn: async () => {
+      const rows = (await readWithAdminSession(() => db.from('bookings').select('booking_status')) ?? []) as Array<{ booking_status: string }>;
+      return {
+        total: rows.length,
+        pending: rows.filter((row) => ['pending_confirmation', 'pending_payment'].includes(row.booking_status)).length,
+        confirmed: rows.filter((row) => row.booking_status === 'confirmed').length,
+        cancelled: rows.filter((row) => row.booking_status === 'cancelled').length,
+      };
+    },
+    refetchInterval: 30_000,
+    retry: false,
+  });
+  const stats = statsQuery.data;
 
   useEffect(() => {
     if (!filtersOpen) return;
@@ -177,6 +192,7 @@ export default function AdminReservationsPage() {
     const channel = db.channel('admin-reservations-realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings' }, () => {
         void queryClient.invalidateQueries({ queryKey: ['admin', 'reservations'] });
+        void queryClient.invalidateQueries({ queryKey: ['admin', 'reservationStats'] });
       }).subscribe();
     return () => { void db.removeChannel(channel); };
   }, [queryClient]);
@@ -473,6 +489,12 @@ export default function AdminReservationsPage() {
 
   return (
     <div className="admin-page">
+      <section className="admin-stat-grid">
+        <AdminStatCard label="Reservas" value={statsQuery.isLoading ? '…' : String(stats?.total ?? 0)} icon={Calendar} />
+        <AdminStatCard label="Pendientes" value={statsQuery.isLoading ? '…' : String(stats?.pending ?? 0)} icon={Clock} tone="warning" />
+        <AdminStatCard label="Confirmadas" value={statsQuery.isLoading ? '…' : String(stats?.confirmed ?? 0)} icon={CheckCircle2} tone="success" />
+        <AdminStatCard label="Canceladas" value={statsQuery.isLoading ? '…' : String(stats?.cancelled ?? 0)} icon={XCircle} tone="danger" />
+      </section>
       <AdminModuleSurface className="admin-reservations-surface">
       <AdminToolbar embedded>
         <div className="admin-search-field">
@@ -585,6 +607,7 @@ export default function AdminReservationsPage() {
               <div><dt>Barco</dt><dd>{reservation.boats?.name ?? '-'}</dd></div>
               <div><dt>Tour</dt><dd>{reservation.tours?.title ?? '-'}</dd></div>
               <div><dt>Personas</dt><dd>{reservation.guests}</dd></div>
+              <div><dt>Lugar de salida</dt><dd>{reservation.departure_location_name_snapshot ?? '-'}<div className="admin-muted">{Number(reservation.departure_surcharge_snapshot ?? 0) > 0 ? money(Number(reservation.departure_surcharge_snapshot)) : 'Sin costo'}</div></dd></div>
               <div><dt>Total</dt><dd>{money(Number(reservation.total_snapshot))}</dd></div>
               <div><dt>Método de pago</dt><dd>{reservation.payment_method_key}</dd></div>
               <div><dt>Estado de pago</dt><dd><AdminBadge value={reservation.payment_status} /></dd></div>

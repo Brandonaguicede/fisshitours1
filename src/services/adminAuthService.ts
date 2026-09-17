@@ -49,7 +49,7 @@ export async function signInAdmin(email: string, password: string, captchaToken?
     password,
     options: captchaToken ? { captchaToken } : undefined,
   });
-  if (error) throw new Error('Credenciales incorrectas o usuario no autorizado.');
+  if (error) throw new Error('Correo o contraseña incorrectos.');
 
   const profile = await getCurrentAdminProfile();
   if (!profile) throw new Error('No se pudo iniciar sesion.');

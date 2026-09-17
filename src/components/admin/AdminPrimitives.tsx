@@ -13,7 +13,7 @@ export function AdminPageHeader(props: { title: string; description: string; act
   );
 }
 
-export function AdminStatCard(props: { label: string; value: string; icon: LucideIcon; tone?: 'ocean' | 'success' | 'warning' }) {
+export function AdminStatCard(props: { label: string; value: string; icon: LucideIcon; tone?: 'ocean' | 'success' | 'warning' | 'danger' }) {
   return (
     <article className={`admin-stat-card admin-stat-card--${props.tone ?? 'ocean'}`}>
       <div className="admin-stat-card__head">

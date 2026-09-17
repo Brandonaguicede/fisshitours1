@@ -119,7 +119,7 @@ test.describe('admin auth routing', () => {
     await page.getByPlaceholder('admin@example.com').fill('bad@example.com');
     await page.getByPlaceholder('Password').fill('wrong-password');
     await page.getByRole('button', { name: 'Entrar al panel' }).click();
-    await expect(page.getByRole('alert')).toContainText('Credenciales incorrectas');
+    await expect(page.getByRole('alert')).toContainText('Correo o contraseña incorrectos');
   });
 
   test('authorized user enters the dashboard', async ({ page }) => {

@@ -8,17 +8,23 @@ export function minutesSinceMidnight(value) {
   return hour * 60 + minute + second / 60;
 }
 
-export function intervalsOverlap(start, duration, otherStart, otherDuration) {
-  return start < otherStart + otherDuration && otherStart < start + duration;
+export const BUFFER_MINUTES = 120;
+
+export function intervalsOverlap(start, duration, otherStart, otherDuration, bufferMinutes = BUFFER_MINUTES) {
+  const occupiedEnd = start + duration + bufferMinutes;
+  const otherOccupiedEnd = otherStart + otherDuration + bufferMinutes;
+  return start < otherOccupiedEnd && otherStart < occupiedEnd;
 }
 
-export function resolveAvailableDepartures({ slots, bookings, packages, timeSlots, durationMinutes, departureTimes, blockedSlotIds }) {
+export function resolveAvailableDepartures({ slots, bookings, packages, timeSlots, durationMinutes, departureTimes, blockedSlotIds, operatingEnd }) {
   const durationByPackage = new Map(packages.map((item) => [item.id, item.duration_minutes]));
   const startBySlot = new Map(timeSlots.map((item) => [item.id, minutesSinceMidnight(String(item.starts_at))]));
+  const operatingEndMinutes = operatingEnd == null ? null : minutesSinceMidnight(String(operatingEnd));
   return slots
     .filter((slot) => departureTimes === null || departureTimes.includes(String(slot.starts_at).slice(0, 5)))
     .map((slot) => {
       const start = minutesSinceMidnight(String(slot.starts_at));
+      const candidateEnd = start === null ? null : start + durationMinutes;
       const conflicted = start !== null && bookings.some((booking) => {
         const existingStart = startBySlot.get(booking.time_slot_id);
         const existingDuration = durationByPackage.get(booking.tour_package_id);
@@ -26,7 +32,9 @@ export function resolveAvailableDepartures({ slots, bookings, packages, timeSlot
           && Number.isInteger(existingDuration) && existingDuration > 0
           && intervalsOverlap(start, durationMinutes, existingStart, existingDuration);
       });
-      return { ...slot, time: String(slot.starts_at).slice(0, 5), available: !blockedSlotIds.has(slot.id) && !conflicted };
+      const outsideOperatingHours = operatingEndMinutes !== null
+        && (candidateEnd === null || candidateEnd > operatingEndMinutes);
+      return { ...slot, time: String(slot.starts_at).slice(0, 5), available: !blockedSlotIds.has(slot.id) && !conflicted && !outsideOperatingHours };
     })
     .filter((slot) => slot.available);
 }

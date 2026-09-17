@@ -29,7 +29,7 @@ serve(withCors(async (req) => {
   const { data: boat } = await supabase.from('boats').select('id').eq('id', parsed.data.boatId).eq('active', true).maybeSingle();
   if (!boat) return Response.json({ message: 'Boat not found' }, { status: 404, headers });
 
-  const { data: boatTour } = await supabase.from('boat_tours').select('id')
+  const { data: boatTour } = await supabase.from('boat_tours').select('id, tour_id, tours!inner(operating_end_time)')
     .eq('boat_id', parsed.data.boatId).eq('tour_id', parsed.data.tourId).eq('active', true).maybeSingle();
   if (!boatTour) return Response.json({ message: 'Tour is not available for this boat' }, { status: 404, headers });
   const { data: tourPackage } = await supabase.from('tour_packages')
@@ -50,7 +50,8 @@ serve(withCors(async (req) => {
       .neq('source', 'booking'),
     supabase.from('bookings').select('time_slot_id, tour_package_id, expires_at')
       .eq('boat_id', parsed.data.boatId).eq('tour_date', parsed.data.date)
-      .neq('booking_status', 'cancelled').or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`),
+      .in('booking_status', ['pending', 'pending_payment', 'pending_confirmation', 'confirmed', 'completed'])
+      .or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`),
   ]);
 
   if (slotsError || blocksError || bookingsError) return Response.json({ message: 'Availability could not be loaded' }, { status: 400, headers });
@@ -65,6 +66,7 @@ serve(withCors(async (req) => {
   const availableSlots = resolveAvailableDepartures({
     slots: slots ?? [], bookings: bookings ?? [], packages: existingPackages ?? [], timeSlots: existingSlots ?? [],
     durationMinutes: tourPackage.duration_minutes, departureTimes: tourPackage.departure_times as string[] | null,
+    operatingEnd: (boatTour.tours as { operating_end_time: string | null }).operating_end_time,
     blockedSlotIds: unavailable,
   });
 
