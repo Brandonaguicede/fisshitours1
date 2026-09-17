@@ -310,6 +310,7 @@ body:has(.admin-shell) {
 }
 
 .admin-main {
+  position: relative;
   min-width: 0;
   flex: 1;
   height: 100dvh;
