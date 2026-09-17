@@ -124,9 +124,11 @@ interface ContentSectionProps {
   saveLabel: string;
   imageRequireReplacement?: boolean;
   preview?: (draft: Draft) => React.ReactNode;
+  /** Splits this section into "Media" / "Textos" inner tabs so it isn't one long scroll. Save stays unified (one section = one payload). */
+  mediaTextTabs?: boolean;
 }
 
-function ContentSection({ title, description, fields, saveLabel, imageRequireReplacement = false, preview }: ContentSectionProps) {
+function ContentSection({ title, description, fields, saveLabel, imageRequireReplacement = false, preview, mediaTextTabs = false }: ContentSectionProps) {
   const keys = useMemo(() => fields.map((field) => field.key), [fields]);
   const [settings, setSettings] = useState<SiteSettingRow[]>([]);
   const [draft, setDraft] = useState<Draft>(() => defaultsFrom(fields));
@@ -139,6 +141,7 @@ function ContentSection({ title, description, fields, saveLabel, imageRequireRep
   const [showTable, setShowTable] = useState(false);
   const [heroMediaMode, setHeroMediaMode] = useState<'image' | 'video'>('image');
   const [switchingMediaMode, setSwitchingMediaMode] = useState(false);
+  const [innerTab, setInnerTab] = useState<'media' | 'texts'>('media');
 
   const rowsByKey = useMemo(() => new Map(settings.map((setting) => [setting.key, setting])), [settings]);
   const imageFields = useMemo(() => fields.filter((field) => field.type === 'image'), [fields]);
@@ -311,6 +314,14 @@ function ContentSection({ title, description, fields, saveLabel, imageRequireRep
         <p className="admin-muted">Cargando contenido...</p>
       ) : (
         <div className="grid gap-5">
+          {mediaTextTabs ? (
+            <nav className="admin-tabs" aria-label={`Secciones de ${title}`}>
+              <button type="button" className={`admin-tab${innerTab === 'media' ? ' admin-tab--active' : ''}`} onClick={() => setInnerTab('media')}>Media</button>
+              <button type="button" className={`admin-tab${innerTab === 'texts' ? ' admin-tab--active' : ''}`} onClick={() => setInnerTab('texts')}>Textos</button>
+            </nav>
+          ) : null}
+
+          <div style={mediaTextTabs && innerTab !== 'media' ? { display: 'none' } : undefined} className="grid gap-5">
           {videoFields.length > 0 ? (
             <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="admin-muted font-extrabold">Fondo del Hero</p>
@@ -440,7 +451,9 @@ function ContentSection({ title, description, fields, saveLabel, imageRequireRep
               ) : null}
             </div>
           ) : null}
+          </div>
 
+          <div style={mediaTextTabs && innerTab !== 'texts' ? { display: 'none' } : undefined} className="grid gap-5">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="admin-muted font-extrabold">Textos</p>
             <div className="admin-segmented" role="group" aria-label="Filtrar por idioma">
@@ -487,6 +500,7 @@ function ContentSection({ title, description, fields, saveLabel, imageRequireRep
               {preview(draft)}
             </div>
           ) : null}
+          </div>
 
           <div className="admin-image-manager__actions">
             <button className="admin-btn" type="button" disabled={saving} onClick={() => void saveSettings()}>
@@ -537,14 +551,14 @@ export default function AdminContentPage() {
   return (
     <div className="admin-page">
       <AdminPageHeader
-        title="Contenido general"
+        title="Hero Section"
         description="Administra el hero del inicio y la pagina Nosotros sin cambiar codigo."
         actions={<span />}
       />
 
       <nav className="admin-tabs" aria-label="Secciones de contenido editable">
         <button type="button" className={`admin-tab${activeTab === 'hero' ? ' admin-tab--active' : ''}`} onClick={() => setActiveTab('hero')}>
-          Hero / inicio
+          Hero Section
         </button>
         <button type="button" className={`admin-tab${activeTab === 'about' ? ' admin-tab--active' : ''}`} onClick={() => setActiveTab('about')}>
           Nosotros / About
@@ -553,11 +567,12 @@ export default function AdminContentPage() {
 
       <div style={{ display: activeTab === 'hero' ? undefined : 'none' }}>
       <ContentSection
-        title="Hero / inicio"
+        title="Hero Section"
         description="La imagen administrada es el fondo principal del hero. El archivo de video queda conservado, pero no bloquea el contenido editable."
         fields={HERO_FIELDS}
         saveLabel="Guardar hero"
         imageRequireReplacement
+        mediaTextTabs
         preview={(draft) => (
           <div className="relative overflow-hidden rounded-xl">
             {draft['home.hero.mobile_image'] ? (

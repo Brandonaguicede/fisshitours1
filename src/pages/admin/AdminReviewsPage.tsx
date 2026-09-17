@@ -1,10 +1,10 @@
 import AdminPagination from '../../components/admin/AdminPagination';
 import { useAdminPagedList } from '../../hooks/useAdminPagedList';
 import { adminSearchFilter, getAdminTablePage } from '../../services/adminListService';
-import { Check, EyeOff, Search, Star, Trash2, X } from 'lucide-react';
+import { Check, EyeOff, Star, Trash2, X } from 'lucide-react';
 import { useState } from 'react';
 
-import { AdminBadge, AdminPageHeader, AdminTable, AdminToolbar } from '../../components/admin/AdminPrimitives';
+import { AdminBadge, AdminFilterMenu, AdminListToolbar, AdminModuleSurface, AdminPageHeader, AdminTable } from '../../components/admin/AdminPrimitives';
 import { Modal } from '../../components/common/Modal';
 import { supabase } from '../../lib/supabase';
 
@@ -107,17 +107,25 @@ export default function AdminReviewsPage() {
     <div className="admin-page">
       <AdminPageHeader title="Comentarios" description="Modera reseñas pendientes, aprobadas, destacadas y ocultas." />
 
-      <AdminToolbar>
-        <div className="relative min-w-[220px] flex-1">
-          <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ocean-400" size={15} />
-          <input className="admin-input pl-9" placeholder="Buscar comentarios" value={search} onChange={(event) => setSearch(event.target.value)} />
-        </div>
-        <select className="admin-select" value={filter} onChange={(event) => setFilter(event.target.value)}>
-          {statusOptions.map((option) => (
-            <option key={option.value} value={option.value}>{option.label}</option>
-          ))}
-        </select>
-      </AdminToolbar>
+      <AdminModuleSurface>
+        <AdminListToolbar
+          embedded
+          searchValue={search}
+          onSearchChange={setSearch}
+          searchPlaceholder="Buscar comentarios"
+          filters={
+            <AdminFilterMenu panelLabel="Filtros de comentarios" panelDescription="Refina la lista de comentarios." activeCount={Number(filter !== 'all')} onReset={() => setFilter('all')}>
+              <label className="admin-field">
+                <span className="admin-field__label">Estado</span>
+                <select className="admin-select" value={filter} onChange={(event) => setFilter(event.target.value)}>
+                  {statusOptions.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+              </label>
+            </AdminFilterMenu>
+          }
+        />
 
       {error || queryError ? (
         <div className="admin-alert admin-alert--danger">
@@ -131,7 +139,7 @@ export default function AdminReviewsPage() {
 
       {loading ? <p className="admin-muted" role="status">Cargando comentarios...</p> : null}
       <div aria-busy={loading}>
-        <AdminTable headers={['Cliente', 'Pais', 'Comentario', 'Rating', 'Estado', 'Acciones']}>
+        <AdminTable embedded headers={['Cliente', 'Pais', 'Comentario', 'Rating', 'Estado', 'Acciones']}>
           {visibleReviews.map((review) => (
             <tr key={review.id}>
               <td>
@@ -147,7 +155,7 @@ export default function AdminReviewsPage() {
                 </div>
               </td>
               <td>{review.country ?? '-'}</td>
-              <td className="admin-table__quote">"{review.quote}"</td>
+              <td className="admin-table__quote"><span className="admin-table__truncate" title={review.quote}>"{review.quote}"</span></td>
               <td>
                 <span className="inline-flex items-center gap-1">
                   {review.rating} <Star size={13} className="fill-amber-400 text-amber-400" />
@@ -155,21 +163,21 @@ export default function AdminReviewsPage() {
               </td>
               <td><AdminBadge value={review.status} /></td>
               <td>
-                <div className="flex flex-wrap gap-2">
-                  <button className="admin-btn admin-btn--success" type="button" disabled={loading || review.status === 'approved'} onClick={() => void setStatus(review.id, 'approved')}>
-                    <Check size={14} /> Aprobar
+                <div className="admin-row-actions">
+                  <button className="admin-icon-action admin-icon-action--success" type="button" disabled={loading || review.status === 'approved'} title="Aprobar comentario" aria-label={`Aprobar comentario de ${review.name}`} onClick={() => void setStatus(review.id, 'approved')}>
+                    <Check size={17} />
                   </button>
-                  <button className="admin-btn admin-btn--danger" type="button" disabled={loading || review.status === 'rejected'} onClick={() => void setStatus(review.id, 'rejected')}>
-                    <X size={14} /> Rechazar
+                  <button className="admin-icon-action admin-icon-action--danger" type="button" disabled={loading || review.status === 'rejected'} title="Rechazar comentario" aria-label={`Rechazar comentario de ${review.name}`} onClick={() => void setStatus(review.id, 'rejected')}>
+                    <X size={17} />
                   </button>
-                  <button className="admin-btn admin-btn--ghost" type="button" disabled={loading} onClick={() => void setActive(review.id, !review.active)}>
-                    <EyeOff size={14} /> Ocultar
+                  <button className="admin-icon-action" type="button" disabled={loading} title={review.active ? 'Ocultar comentario' : 'Mostrar comentario'} aria-label={review.active ? `Ocultar comentario de ${review.name}` : `Mostrar comentario de ${review.name}`} onClick={() => void setActive(review.id, !review.active)}>
+                    <EyeOff size={17} />
                   </button>
-                  <button className="admin-btn admin-btn--ghost" type="button" disabled={loading} onClick={() => void setFeatured(review.id, !review.featured)}>
-                    <Star size={14} /> {review.featured ? 'Quitar' : 'Destacar'}
+                  <button className="admin-icon-action admin-icon-action--warning" type="button" disabled={loading} title={review.featured ? 'Quitar de destacados' : 'Destacar comentario'} aria-label={review.featured ? `Quitar de destacados el comentario de ${review.name}` : `Destacar comentario de ${review.name}`} onClick={() => void setFeatured(review.id, !review.featured)}>
+                    <Star size={17} />
                   </button>
-                  <button className="admin-btn admin-btn--ghost" type="button" disabled={loading} onClick={() => setPendingDelete(review)}>
-                    <Trash2 size={14} />
+                  <button className="admin-icon-action admin-icon-action--danger" type="button" disabled={loading} title="Eliminar comentario" aria-label={`Eliminar comentario de ${review.name}`} onClick={() => setPendingDelete(review)}>
+                    <Trash2 size={17} />
                   </button>
                 </div>
               </td>
@@ -183,6 +191,7 @@ export default function AdminReviewsPage() {
         </AdminTable>
       </div>
       <AdminPagination {...pagination} noun="reseñas" loading={loading} />
+      </AdminModuleSurface>
 
       <Modal open={Boolean(pendingDelete)} onClose={() => setPendingDelete(null)} titleId="review-delete-title" className="max-w-md">
         {pendingDelete ? (

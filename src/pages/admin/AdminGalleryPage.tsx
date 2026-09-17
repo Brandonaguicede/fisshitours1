@@ -3,11 +3,12 @@ import { useAdminPagedList } from '../../hooks/useAdminPagedList';
 import { adminSearchFilter, getAdminTablePage } from '../../services/adminListService';
 import { useQuery } from '@tanstack/react-query';
 import { readWithAdminSession } from '../../services/adminAuthService';
-import { Plus, Pencil, Trash2, X } from 'lucide-react';
+import { Eye, EyeOff, Plus, Pencil, Settings, Trash2, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
 import AdminImageManager from '../../components/admin/AdminImageManager';
-import { AdminBadge, AdminPageHeader, AdminToolbar } from '../../components/admin/AdminPrimitives';
+import { AdminFilterMenu, AdminListToolbar, AdminModuleSurface, AdminPageHeader } from '../../components/admin/AdminPrimitives';
+import FormSection from '../../components/admin/FormSection';
 import ModalFooter from '../../components/admin/ModalFooter';
 import { Modal } from '../../components/common/Modal';
 import { supabase } from '../../lib/supabase';
@@ -136,6 +137,7 @@ export default function AdminGalleryPage() {
       return;
     }
     setPendingDelete(null);
+    setEditing(null);
     setNotice('Imagen eliminada de la galería.');
     await loadImages();
   }
@@ -150,15 +152,27 @@ export default function AdminGalleryPage() {
 
   return (
     <div className="admin-page">
-      <AdminPageHeader title="Galeria" description="Imagenes publicas gestionadas con Cloudflare R2." actions={<button className="admin-btn" type="button" onClick={() => void createImage()}><Plus size={16} /> Nueva imagen</button>} />
+      <AdminPageHeader title="Galeria" description="Imagenes publicas gestionadas con Cloudflare R2." />
 
-      <AdminToolbar>
-        <select className="admin-select" value={filter} onChange={(event) => setFilter(event.target.value)}>
-          <option value="all">Todas las categorias</option>
-          {categories.map((category) => <option key={category} value={category}>{category}</option>)}
-        </select>
-        <input className="admin-input" placeholder="Buscar por alt o titulo" value={search} onChange={(event) => setSearch(event.target.value)} />
-      </AdminToolbar>
+      <AdminModuleSurface>
+        <AdminListToolbar
+          embedded
+          searchValue={search}
+          onSearchChange={setSearch}
+          searchPlaceholder="Buscar por alt o titulo"
+          filters={
+            <AdminFilterMenu panelLabel="Filtros de galeria" panelDescription="Refina la lista de imagenes." activeCount={Number(filter !== 'all')} onReset={() => setFilter('all')}>
+              <label className="admin-field">
+                <span className="admin-field__label">Categoria</span>
+                <select className="admin-select" value={filter} onChange={(event) => setFilter(event.target.value)}>
+                  <option value="all">Todas las categorias</option>
+                  {categories.map((category) => <option key={category} value={category}>{category}</option>)}
+                </select>
+              </label>
+            </AdminFilterMenu>
+          }
+          primaryAction={<button className="admin-btn" type="button" onClick={() => void createImage()}><Plus size={16} /> Nueva imagen</button>}
+        />
 
       {error || queryError ? (
         <div className="admin-alert admin-alert--danger">
@@ -182,9 +196,12 @@ export default function AdminGalleryPage() {
                 <strong>{image.category}</strong>
                 <span className="admin-muted">{image.alt}</span>
                 <div className="admin-actions">
-                  <AdminBadge value={image.active} />
-                  <button className="admin-btn admin-btn--ghost" type="button" disabled={loading} onClick={() => setEditing(image)}><Pencil size={14} /> Editar</button>
-                  <button className="admin-btn admin-btn--ghost" type="button" disabled={loading} onClick={() => setPendingDelete(image)}><Trash2 size={14} /></button>
+                  <span className="admin-visibility-indicator" title={image.active ? 'Visible en el sitio' : 'Oculta'} aria-label={image.active ? 'Visible en el sitio' : 'Oculta'}>
+                    {image.active ? <Eye size={15} /> : <EyeOff size={15} />}
+                  </span>
+                  <div className="admin-row-actions">
+                    <button className="admin-icon-action" type="button" disabled={loading} title="Editar imagen" aria-label={`Editar imagen ${image.alt || image.category}`} onClick={() => setEditing(image)}><Pencil size={17} /></button>
+                  </div>
                 </div>
               </div>
             </article>
@@ -194,6 +211,7 @@ export default function AdminGalleryPage() {
           ) : null}
         </section>
       <AdminPagination {...pagination} noun="imágenes" loading={loading} />
+      </AdminModuleSurface>
 
       <Modal open={Boolean(editing)} onClose={() => void closeEditor()} titleId="gallery-edit-title" className="max-w-2xl">
         {editing ? (
@@ -236,16 +254,37 @@ export default function AdminGalleryPage() {
                   <input className="admin-input" type="number" value={editing.sort_order} onChange={(event) => setEditing({ ...editing, sort_order: Number(event.target.value) })} />
                 </label>
               </div>
-              <label className="flex items-center gap-2">
-                <input type="checkbox" checked={editing.active} onChange={(event) => setEditing({ ...editing, active: event.target.checked })} />
-                <span className="admin-muted">Visible en el sitio</span>
-              </label>
+              <FormSection title="Configuracion" description="Controla si esta imagen se muestra en el sitio publico." icon={<Settings size={16} />}>
+                <div className="admin-config-row">
+                  <div>
+                    <p className="admin-config-row__label">Estado actual</p>
+                    <span className="admin-muted">{editing.active ? 'Visible: aparece en la galeria publica.' : 'Oculta: no aparece en la galeria publica.'}</span>
+                  </div>
+                  <button
+                    className={`admin-btn ${editing.active ? 'admin-btn--secondary' : ''}`}
+                    type="button"
+                    onClick={() => setEditing({ ...editing, active: !editing.active })}
+                  >
+                    {editing.active ? <EyeOff size={15} /> : <Eye size={15} />}
+                    {editing.active ? 'Ocultar imagen' : 'Mostrar imagen'}
+                  </button>
+                </div>
+              </FormSection>
+
+              <FormSection title="Zona de peligro" description="Esta accion no se puede deshacer." icon={<Trash2 size={16} />}>
+                <div className="admin-danger-zone">
+                  <p className="admin-muted">Elimina esta imagen de la galeria y de Storage.</p>
+                  <button className="admin-btn admin-btn--danger" type="button" onClick={() => setPendingDelete(editing)}>
+                    <Trash2 size={15} /> Eliminar imagen
+                  </button>
+                </div>
+              </FormSection>
             </div>
             <ModalFooter>
-              <button className="admin-btn admin-btn--secondary" type="button" onClick={() => void closeEditor()}>Cerrar</button>
               <button className="admin-btn" type="button" disabled={saving} onClick={() => void saveEditor()}>
                 {saving ? 'Guardando...' : 'Guardar cambios'}
               </button>
+              <button className="admin-btn admin-btn--secondary" type="button" onClick={() => void closeEditor()}>Cerrar</button>
             </ModalFooter>
           </div>
         ) : null}

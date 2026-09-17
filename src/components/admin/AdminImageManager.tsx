@@ -364,11 +364,11 @@ export default function AdminImageManager({
             </div>
           </div>
           <ModalFooter>
-            <button className="admin-btn admin-btn--ghost" type="button" disabled={processing} onClick={() => setCropFile(null)}>Cancelar</button>
             <button className="admin-btn" type="button" disabled={processing || !croppedAreaPixels} onClick={() => void confirmCrop()}>
               {processing ? <Loader2 className="animate-spin" size={16} /> : <UploadCloud size={16} />}
               {processing ? 'Procesando...' : 'Continuar y subir'}
             </button>
+            <button className="admin-btn admin-btn--ghost" type="button" disabled={processing} onClick={() => setCropFile(null)}>Cancelar</button>
           </ModalFooter>
         </div>
       </Modal>

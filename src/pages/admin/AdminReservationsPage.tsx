@@ -1,9 +1,9 @@
 import { formatTime } from '../../utils/format';
-import { Calendar, Check, CheckCircle2, Clock, Download, Filter, Loader2, Plus, Search, X, XCircle } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Calendar, Check, CheckCircle2, Clock, Download, Loader2, Pencil, Plus, RefreshCw, Trash2, X, XCircle } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
-import { AdminBadge, AdminModuleSurface, AdminStatCard, AdminTable, AdminToolbar } from '../../components/admin/AdminPrimitives';
+import { AdminBadge, AdminFilterMenu, AdminListToolbar, AdminModuleSurface, AdminStatCard, AdminTable } from '../../components/admin/AdminPrimitives';
 import { Modal } from '../../components/common/Modal';
 import { supabase } from '../../lib/supabase';
 import { readWithAdminSession } from '../../services/adminAuthService';
@@ -116,14 +116,11 @@ export default function AdminReservationsPage() {
   const [editSaving, setEditSaving] = useState(false);
   const [editingReservation, setEditingReservation] = useState<AdminReservation | null>(null);
   const [editForm, setEditForm] = useState<EditBookingForm | null>(null);
+  const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
   const [manualSaving, setManualSaving] = useState(false);
   const [manualForm, setManualForm] = useState<ManualBookingForm>(emptyManualBooking);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
-  const [filtersOpen, setFiltersOpen] = useState(false);
-  const filterTriggerRef = useRef<HTMLButtonElement>(null);
-  const filterPanelRef = useRef<HTMLDivElement>(null);
-  const firstFilterRef = useRef<HTMLSelectElement>(null);
   const activeFilterCount = Number(bookingStatus !== 'all') + Number(paymentStatus !== 'all') + Number(Boolean(date));
   const filters = { search, bookingStatus, paymentStatus, date };
   const pagination = useAdminPagedList<AdminReservation>('reservations', JSON.stringify(filters), (page, size) => getAdminReservationsPage(filters, page, size));
@@ -154,27 +151,6 @@ export default function AdminReservationsPage() {
     retry: false,
   });
   const stats = statsQuery.data;
-
-  useEffect(() => {
-    if (!filtersOpen) return;
-    firstFilterRef.current?.focus();
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setFiltersOpen(false);
-        filterTriggerRef.current?.focus();
-      }
-    };
-    const onPointerDown = (event: PointerEvent) => {
-      const target = event.target as Node;
-      if (!filterPanelRef.current?.contains(target) && !filterTriggerRef.current?.contains(target)) setFiltersOpen(false);
-    };
-    document.addEventListener('keydown', onKeyDown);
-    document.addEventListener('pointerdown', onPointerDown);
-    return () => {
-      document.removeEventListener('keydown', onKeyDown);
-      document.removeEventListener('pointerdown', onPointerDown);
-    };
-  }, [filtersOpen]);
 
   function resetFilters() {
     setBookingStatus('all');
@@ -455,34 +431,30 @@ export default function AdminReservationsPage() {
 
   function renderReservationActions(reservation: AdminReservation) {
     return (
-      <div className="admin-reservation-actions">
-        <button className="admin-btn admin-btn--secondary" type="button" disabled={loading || busyId === reservation.id} onClick={() => openEdit(reservation)}>Editar</button>
+      <div className="admin-row-actions admin-reservation-actions">
+        <button className="admin-icon-action" type="button" title="Editar reserva" aria-label={`Editar reserva ${reservation.booking_reference}`} disabled={loading || busyId === reservation.id} onClick={() => openEdit(reservation)}><Pencil size={17} /></button>
         <button
-          className="admin-btn admin-btn--success"
+          className="admin-icon-action admin-icon-action--success"
           type="button"
+          title="Confirmar reserva"
+          aria-label={`Confirmar reserva ${reservation.booking_reference}`}
           disabled={loading || busyId === reservation.id || reservation.booking_status === 'confirmed' || reservation.booking_status === 'cancelled' || (reservation.payment_method_key === 'paypal' && reservation.payment_status !== 'paid')}
           onClick={() => void updateReservationStatus(reservation, 'confirmed')}
         >
-          <Check size={14} /> Confirmar
+          <Check size={17} />
         </button>
         {reservation.booking_status === 'confirmed' && reservation.customers?.email && !confirmationSentByBooking[reservation.id] ? (
           <button
-            className="admin-btn admin-btn--secondary"
+            className="admin-icon-action"
             type="button"
+            title="Reintentar envío de email"
+            aria-label={`Reintentar envío de email de confirmación para ${reservation.booking_reference}`}
             disabled={loading || busyId === reservation.id}
             onClick={() => void retryReservationConfirmation(reservation)}
           >
-            Reintentar email
+            <RefreshCw size={17} />
           </button>
         ) : null}
-        <button
-          className="admin-btn admin-btn--danger"
-          type="button"
-          disabled={loading || busyId === reservation.id || reservation.booking_status === 'cancelled'}
-          onClick={() => void updateReservationStatus(reservation, 'cancelled')}
-        >
-          <X size={14} /> Cancelar
-        </button>
       </div>
     );
   }
@@ -496,60 +468,34 @@ export default function AdminReservationsPage() {
         <AdminStatCard label="Canceladas" value={statsQuery.isLoading ? '…' : String(stats?.cancelled ?? 0)} icon={XCircle} tone="danger" />
       </section>
       <AdminModuleSurface className="admin-reservations-surface">
-      <AdminToolbar embedded>
-        <div className="admin-search-field">
-          <Search aria-hidden="true" size={16} />
-          <input className="admin-input" aria-label="Buscar reservas" placeholder="Buscar reservas por cliente, email o WhatsApp" value={search} onChange={(event) => setSearch(event.target.value)} />
-        </div>
-        <div className="admin-filter-menu">
-          <button
-            ref={filterTriggerRef}
-            className="admin-btn admin-btn--secondary admin-filter-trigger"
-            type="button"
-            aria-expanded={filtersOpen}
-            aria-controls="reservation-filters"
-            onClick={() => setFiltersOpen((value) => !value)}
-          >
-            <Filter size={16} /> <span>Filtros</span>
-            {activeFilterCount > 0 ? <AdminBadge value={String(activeFilterCount)} /> : null}
-          </button>
-          {filtersOpen ? (
-            <>
-              <div className="admin-filter-backdrop" aria-hidden="true" />
-              <div ref={filterPanelRef} id="reservation-filters" className="admin-filter-panel" role="dialog" aria-label="Filtros de reservas">
-                <div className="admin-filter-panel__header">
-                  <div><strong>Filtros</strong><span>Refina la lista de reservas.</span></div>
-                  <button className="admin-icon-btn" type="button" aria-label="Cerrar filtros" onClick={() => { setFiltersOpen(false); filterTriggerRef.current?.focus(); }}><X size={17} /></button>
-                </div>
-                <label className="admin-field">
-                  <span className="admin-field__label">Estado de reserva</span>
-                  <select ref={firstFilterRef} className="admin-select" aria-label="Estado de reserva" value={bookingStatus} onChange={(event) => setBookingStatus(event.target.value)}>
-                    {bookingStatusOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-                  </select>
-                </label>
-                <label className="admin-field">
-                  <span className="admin-field__label">Estado de pago</span>
-                  <select className="admin-select" aria-label="Estado de pago" value={paymentStatus} onChange={(event) => setPaymentStatus(event.target.value)}>
-                    {paymentStatusOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-                  </select>
-                </label>
-                <label className="admin-field">
-                  <span className="admin-field__label">Fecha del tour</span>
-                  <input className="admin-input" aria-label="Fecha del tour" type="date" value={date} onChange={(event) => setDate(event.target.value)} />
-                </label>
-                <div className="admin-filter-panel__actions">
-                  <button className="admin-btn admin-btn--ghost" type="button" disabled={activeFilterCount === 0} onClick={resetFilters}>Limpiar</button>
-                  <button className="admin-btn" type="button" onClick={() => { setFiltersOpen(false); filterTriggerRef.current?.focus(); }}>Listo</button>
-                </div>
-              </div>
-            </>
-          ) : null}
-        </div>
-        <div className="admin-toolbar__actions">
-          <button className="admin-btn" type="button" onClick={() => setManualOpen(true)}><Plus size={16} /> Crear reserva</button>
-          <button className="admin-btn admin-btn--secondary" type="button" disabled={exporting} onClick={() => void exportCsv()}><Download size={16} /> {exporting ? 'Exportando...' : 'Exportar'}</button>
-        </div>
-      </AdminToolbar>
+      <AdminListToolbar
+        embedded
+        searchValue={search}
+        onSearchChange={setSearch}
+        searchPlaceholder="Buscar reservas por cliente, email o WhatsApp"
+        filters={
+          <AdminFilterMenu panelLabel="Filtros de reservas" panelDescription="Refina la lista de reservas." activeCount={activeFilterCount} onReset={resetFilters}>
+            <label className="admin-field">
+              <span className="admin-field__label">Estado de reserva</span>
+              <select className="admin-select" aria-label="Estado de reserva" value={bookingStatus} onChange={(event) => setBookingStatus(event.target.value)}>
+                {bookingStatusOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+              </select>
+            </label>
+            <label className="admin-field">
+              <span className="admin-field__label">Estado de pago</span>
+              <select className="admin-select" aria-label="Estado de pago" value={paymentStatus} onChange={(event) => setPaymentStatus(event.target.value)}>
+                {paymentStatusOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+              </select>
+            </label>
+            <label className="admin-field">
+              <span className="admin-field__label">Fecha del tour</span>
+              <input className="admin-input" aria-label="Fecha del tour" type="date" value={date} onChange={(event) => setDate(event.target.value)} />
+            </label>
+          </AdminFilterMenu>
+        }
+        primaryAction={<button className="admin-btn" type="button" onClick={() => setManualOpen(true)}><Plus size={16} /> Crear reserva</button>}
+        secondaryActions={<button className="admin-btn admin-btn--secondary" type="button" disabled={exporting} onClick={() => void exportCsv()}><Download size={16} /> {exporting ? 'Exportando...' : 'Exportar'}</button>}
+      />
 
       {error || listError ? (
         <div className="admin-alert admin-alert--danger" role="alert">
@@ -565,24 +511,32 @@ export default function AdminReservationsPage() {
       {loading ? <p className="admin-muted" role="status">Cargando reservas...</p> : null}
       <div className="admin-reservation-list" aria-busy={loading}>
       <div className="admin-reservations-table">
-        <AdminTable embedded headers={['Referencia', 'Cliente', 'Fecha', 'Bote / tour', 'Personas', 'Salida', 'Total', 'Metodo', 'Pago', 'Reserva', 'Acciones']}>
+        <AdminTable embedded headers={['Referencia', 'Cliente', 'Fecha', 'Reserva', 'Personas', 'Salida', 'Total', 'Pago', 'Estado', 'Acciones']}>
           {visibleReservations.map((reservation) => (
             <tr key={reservation.id}>
               <td>{reservation.booking_reference}</td>
               <td>
-                {reservation.customers?.full_name ?? '-'}
-                <div className="admin-muted">{reservation.customers?.email ?? reservation.customers?.whatsapp ?? '-'}</div>
+                <div className="admin-table__truncate" title={reservation.customers?.full_name ?? '-'}>{reservation.customers?.full_name ?? '-'}</div>
+                <div className="admin-muted admin-table__truncate" title={reservation.customers?.email ?? reservation.customers?.whatsapp ?? '-'}>{reservation.customers?.email ?? reservation.customers?.whatsapp ?? '-'}</div>
               </td>
               <td>
                 {reservation.tour_date}
                 <div className="admin-muted">{reservation.time_slots?.label ?? '-'}</div>
               </td>
-              <td>{reservation.boats?.name ?? '-'}<div className="admin-muted">{reservation.tours?.title ?? '-'}</div></td>
+              <td>
+                <div className="admin-table__truncate" title={reservation.boats?.name ?? '-'}>{reservation.boats?.name ?? '-'}</div>
+                <div className="admin-muted admin-table__truncate" title={reservation.tours?.title ?? '-'}>{reservation.tours?.title ?? '-'}</div>
+              </td>
               <td>{reservation.guests}</td>
-              <td>{reservation.departure_location_name_snapshot ?? '-'}<div className="admin-muted">{Number(reservation.departure_surcharge_snapshot ?? 0) > 0 ? money(Number(reservation.departure_surcharge_snapshot)) : 'Sin costo'}</div></td>
+              <td>
+                <div className="admin-table__truncate" title={reservation.departure_location_name_snapshot ?? '-'}>{reservation.departure_location_name_snapshot ?? '-'}</div>
+                <div className="admin-muted">{Number(reservation.departure_surcharge_snapshot ?? 0) > 0 ? money(Number(reservation.departure_surcharge_snapshot)) : 'Sin costo'}</div>
+              </td>
               <td>{money(Number(reservation.total_snapshot))}</td>
-              <td>{reservation.payment_method_key}</td>
-              <td><AdminBadge value={reservation.payment_status} /></td>
+              <td>
+                {reservation.payment_method_key}
+                <div><AdminBadge value={reservation.payment_status} /></div>
+              </td>
               <td><AdminBadge value={reservation.booking_status} /></td>
               <td>
                 {renderReservationActions(reservation)}
@@ -591,7 +545,7 @@ export default function AdminReservationsPage() {
           ))}
           {!loading && !listError && visibleReservations.length === 0 ? (
             <tr>
-              <td colSpan={11} className="admin-muted">No hay reservas para este filtro.</td>
+              <td colSpan={10} className="admin-muted">No hay reservas para este filtro.</td>
             </tr>
           ) : null}
         </AdminTable>
@@ -693,11 +647,11 @@ export default function AdminReservationsPage() {
             </div>
           </div>
           <footer className="admin-modal-footer">
-            <button className="admin-btn admin-btn--secondary" type="button" onClick={() => setManualOpen(false)}>Cancelar</button>
             <button className="admin-btn" type="submit" disabled={manualSaving || catalogLoading}>
               {manualSaving ? <Loader2 className="animate-spin" size={15} /> : <Check size={15} />}
               Crear reserva
             </button>
+            <button className="admin-btn admin-btn--secondary" type="button" onClick={() => setManualOpen(false)}>Cancelar</button>
           </footer>
         </form>
       </Modal>
@@ -719,9 +673,53 @@ export default function AdminReservationsPage() {
             <label className="admin-field"><span className="admin-field__label">Hora</span><select className="admin-select" required value={editForm.timeSlotId} onChange={(event) => updateEditForm('timeSlotId', event.target.value)}>{editTimeSlots.map((slot) => <option key={slot.id} value={slot.id}>{formatTime(slot.time)}</option>)}</select></label>
             <label className="admin-field"><span className="admin-field__label">Personas</span><input className="admin-input" required type="number" min={1} value={editForm.guests} onChange={(event) => updateEditForm('guests', Number(event.target.value))} /></label>
             <label className="admin-field admin-field--wide"><span className="admin-field__label">Notas</span><textarea className="admin-input admin-textarea-list" value={editForm.specialRequests} onChange={(event) => updateEditForm('specialRequests', event.target.value)} /></label>
-          </div></div></div> : null}
-          <footer className="admin-modal-footer"><button className="admin-btn admin-btn--secondary" type="button" onClick={() => setEditOpen(false)}>Cancelar</button><button className="admin-btn" type="submit" disabled={editSaving || !editForm}>{editSaving ? <Loader2 className="animate-spin" size={15} /> : <Check size={15} />} Guardar cambios</button></footer>
+          </div></div>
+          {editingReservation && editingReservation.booking_status !== 'cancelled' ? (
+            <div className="admin-form-section">
+              <header className="admin-form-section__head">
+                <span className="admin-form-section__icon"><Trash2 size={16} /></span>
+                <div>
+                  <h3 className="admin-form-section__title">Zona de peligro</h3>
+                  <p className="admin-form-section__description">Esta acción no se puede deshacer.</p>
+                </div>
+              </header>
+              <div className="admin-form-section__fields">
+                <div className="admin-danger-zone">
+                  <p className="admin-muted">Cancela esta reserva. El bloqueo de disponibilidad del bote se libera.</p>
+                  <button className="admin-btn admin-btn--danger" type="button" onClick={() => setCancelConfirmOpen(true)}>
+                    <Trash2 size={15} /> Cancelar reserva
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : null}
+          </div> : null}
+          <footer className="admin-modal-footer"><button className="admin-btn" type="submit" disabled={editSaving || !editForm}>{editSaving ? <Loader2 className="animate-spin" size={15} /> : <Check size={15} />} Guardar cambios</button><button className="admin-btn admin-btn--secondary" type="button" onClick={() => setEditOpen(false)}>Cerrar</button></footer>
         </form>
+      </Modal>
+
+      <Modal open={cancelConfirmOpen} onClose={() => setCancelConfirmOpen(false)} titleId="cancel-booking-title" className="max-w-md">
+        <div className="admin-modal-card">
+          <h2 id="cancel-booking-title" className="admin-card__title"><Trash2 size={18} /> Cancelar reserva</h2>
+          <p className="admin-muted mt-2">¿Cancelar esta reserva? Esta acción cambiará el estado de la reserva y puede afectar la disponibilidad.</p>
+          <div className="admin-actions mt-5">
+            <button className="admin-btn admin-btn--secondary" type="button" disabled={busyId === editingReservation?.id} onClick={() => setCancelConfirmOpen(false)}>Volver</button>
+            <button
+              className="admin-btn admin-btn--danger"
+              type="button"
+              disabled={busyId === editingReservation?.id}
+              onClick={() => {
+                if (!editingReservation) return;
+                void updateReservationStatus(editingReservation, 'cancelled').then(() => {
+                  setCancelConfirmOpen(false);
+                  setEditOpen(false);
+                });
+              }}
+            >
+              {busyId === editingReservation?.id ? <Loader2 className="animate-spin" size={15} /> : <Trash2 size={15} />} Sí, cancelar reserva
+            </button>
+          </div>
+        </div>
       </Modal>
     </div>
   );

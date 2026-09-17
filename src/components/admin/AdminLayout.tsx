@@ -1,4 +1,4 @@
-import { Bell, CalendarDays, CreditCard, FileText, Film, Gauge, Globe2, Image, LayoutDashboard, LifeBuoy, LogOut, MapPin, Menu, MessageSquare, Package, Settings, Ship, Star, Users, X } from 'lucide-react';
+import { Bell, CalendarDays, ChevronLeft, ChevronRight, CreditCard, FileText, Footprints, Gauge, Globe2, Image, LayoutDashboard, LifeBuoy, LogOut, MapPin, Menu, MessageSquare, Package, Settings, Ship, Star, Users } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, NavLink, Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom';
 
@@ -20,23 +20,22 @@ const navGroups = [
       { label: 'Tours', to: '/admin/tours', icon: Star },
       { label: 'Botes', to: '/admin/boats', icon: Ship },
       { label: 'Paquetes (todos)', to: '/admin/boat-tours', icon: Package },
+      { label: 'Destinos', to: '/admin/destinations', icon: Footprints },
+      { label: 'Lugares de salida', to: '/admin/departure-locations', icon: MapPin },
+      { label: 'Metodos de pago', to: '/admin/payment-methods', icon: CreditCard },
     ],
   },
   {
     caption: 'Contenido',
     items: [
-      { label: 'Textos editables', to: '/admin/content', icon: FileText },
-      { label: 'Videos', to: '/admin/videos', icon: Film },
+      { label: 'Hero Section', to: '/admin/content', icon: FileText },
       { label: 'Galeria', to: '/admin/gallery', icon: Image },
-      { label: 'Destinos', to: '/admin/destinations', icon: MapPin },
       { label: 'Comentarios', to: '/admin/reviews', icon: MessageSquare },
     ],
   },
   {
-    caption: 'Pagos y sistema',
+    caption: 'Sistema',
     items: [
-      { label: 'Metodos de pago', to: '/admin/payment-methods', icon: CreditCard },
-      { label: 'Lugares de salida', to: '/admin/departure-locations', icon: MapPin },
       { label: 'Settings', to: '/admin/settings', icon: Settings },
     ],
   },
@@ -51,8 +50,7 @@ const titles: Record<string, string> = {
   '/admin/reviews': 'Comentarios',
   '/admin/gallery': 'Galeria',
   '/admin/destinations': 'Destinos',
-  '/admin/content': 'Textos editables',
-  '/admin/videos': 'Videos del hero',
+  '/admin/content': 'Hero Section',
   '/admin/payment-methods': 'Metodos de pago',
   '/admin/departure-locations': 'Lugares de salida',
   '/admin/settings': 'Settings',
@@ -183,13 +181,9 @@ export default function AdminLayout() {
             <span className="admin-brand-logo admin-brand-logo--sidebar">
               <img src="/images/papagayo-logo.png" alt="" aria-hidden="true" />
             </span>
-            <span className="admin-sidebar__brand-copy">
-              <strong>Papagayo</strong>
-              <span>Admin console</span>
-            </span>
           </Link>
           <button className="admin-sidebar__toggle" type="button" aria-label={open ? 'Colapsar menu' : 'Expandir menu'} aria-expanded={open} aria-controls="admin-sidebar" onClick={() => setOpen((value) => !value)}>
-            {open ? <X size={18} /> : <Menu size={18} />}
+            {open ? <ChevronLeft size={18} /> : <ChevronRight size={18} />}
           </button>
         </div>
         <div className="admin-sidebar__scroll">

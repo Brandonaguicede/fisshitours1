@@ -1,8 +1,8 @@
 import { Pencil, Plus, X } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import AdminImageManager from '../../components/admin/AdminImageManager';
-import { AdminBadge, AdminPageHeader, AdminTable } from '../../components/admin/AdminPrimitives';
+import { AdminBadge, AdminFilterMenu, AdminListToolbar, AdminModuleSurface, AdminPageHeader, AdminTable } from '../../components/admin/AdminPrimitives';
 import ModalFooter from '../../components/admin/ModalFooter';
 import { Modal } from '../../components/common/Modal';
 import { supabase } from '../../lib/supabase';
@@ -30,6 +30,15 @@ export default function AdminDestinationsPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
+
+  const visibleDestinations = useMemo(
+    () => destinations
+      .filter((destination) => statusFilter === 'all' || (statusFilter === 'active') === destination.active)
+      .filter((destination) => `${destination.name} ${destination.region ?? ''}`.toLowerCase().includes(search.toLowerCase())),
+    [destinations, search, statusFilter],
+  );
 
   async function loadDestinations() {
     setLoading(true);
@@ -105,26 +114,51 @@ export default function AdminDestinationsPage() {
 
   return (
     <div className="admin-page">
-      <AdminPageHeader title="Destinos" description="Lugares y regiones mostrados en la pagina publica." actions={<button className="admin-btn" type="button" onClick={() => void createDestination()}><Plus size={16} /> Crear destino</button>} />
-      {error ? <div className="admin-alert admin-alert--danger">{error}</div> : null}
-      {notice ? <div className="admin-alert admin-alert--success">{notice}</div> : null}
-      {loading ? (
-        <p className="admin-muted">Cargando destinos...</p>
-      ) : (
-        <AdminTable headers={['Destino', 'Region', 'Descripcion', 'Orden', 'Estado', 'Acciones']}>
-          {destinations.map((destination) => (
-            <tr key={destination.id}>
-              <td>{destination.name}<div className="admin-muted">{destination.id}</div></td>
-              <td>{destination.region ?? '-'}</td>
-              <td>{destination.description ?? '-'}</td>
-              <td>{destination.sort_order}</td>
-              <td><AdminBadge value={destination.active} /></td>
-              <td><button className="admin-btn admin-btn--ghost" type="button" onClick={() => setEditing(destination)}><Pencil size={14} /> Editar</button></td>
-            </tr>
-          ))}
-          {destinations.length === 0 ? <tr><td colSpan={6} className="admin-muted">No hay destinos registrados.</td></tr> : null}
-        </AdminTable>
-      )}
+      <AdminPageHeader title="Destinos" description="Lugares y regiones mostrados en la pagina publica." />
+      <AdminModuleSurface>
+        <AdminListToolbar
+          embedded
+          searchValue={search}
+          onSearchChange={setSearch}
+          searchPlaceholder="Buscar destino por nombre o region"
+          filters={
+            <AdminFilterMenu panelLabel="Filtros de destinos" panelDescription="Refina la lista de destinos." activeCount={Number(statusFilter !== 'all')} onReset={() => setStatusFilter('all')}>
+              <label className="admin-field">
+                <span className="admin-field__label">Estado</span>
+                <select className="admin-select" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as 'all' | 'active' | 'inactive')}>
+                  <option value="all">Todos</option>
+                  <option value="active">Activos</option>
+                  <option value="inactive">Inactivos</option>
+                </select>
+              </label>
+            </AdminFilterMenu>
+          }
+          primaryAction={<button className="admin-btn" type="button" onClick={() => void createDestination()}><Plus size={16} /> Crear destino</button>}
+        />
+        {error ? <div className="admin-alert admin-alert--danger">{error}</div> : null}
+        {notice ? <div className="admin-alert admin-alert--success">{notice}</div> : null}
+        {loading ? (
+          <p className="admin-muted">Cargando destinos...</p>
+        ) : (
+          <AdminTable embedded headers={['Destino', 'Region', 'Descripcion', 'Orden', 'Estado', 'Acciones']}>
+            {visibleDestinations.map((destination) => (
+              <tr key={destination.id}>
+                <td>{destination.name}<div className="admin-muted">{destination.id}</div></td>
+                <td>{destination.region ?? '-'}</td>
+                <td>{destination.description ?? '-'}</td>
+                <td>{destination.sort_order}</td>
+                <td><AdminBadge value={destination.active} /></td>
+                <td>
+                  <div className="admin-row-actions">
+                    <button className="admin-icon-action" type="button" title="Editar destino" aria-label={`Editar destino ${destination.name}`} onClick={() => setEditing(destination)}><Pencil size={17} /></button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+            {visibleDestinations.length === 0 ? <tr><td colSpan={6} className="admin-muted">No hay destinos para esta busqueda.</td></tr> : null}
+          </AdminTable>
+        )}
+      </AdminModuleSurface>
 
       <Modal open={Boolean(editing)} onClose={() => setEditing(null)} titleId="destination-edit-title" className="max-w-2xl">
         {editing ? (
@@ -159,8 +193,8 @@ export default function AdminDestinationsPage() {
               <label className="flex items-center gap-2"><input type="checkbox" checked={editing.active} onChange={(event) => setEditing({ ...editing, active: event.target.checked })} /><span className="admin-muted">Activo</span></label>
             </div>
             <ModalFooter>
-              <button className="admin-btn admin-btn--secondary" type="button" onClick={() => setEditing(null)}>Cerrar</button>
               <button className="admin-btn" type="button" disabled={saving} onClick={() => void saveDestination()}>{saving ? 'Guardando...' : 'Guardar cambios'}</button>
+              <button className="admin-btn admin-btn--secondary" type="button" onClick={() => setEditing(null)}>Cerrar</button>
             </ModalFooter>
           </div>
         ) : null}

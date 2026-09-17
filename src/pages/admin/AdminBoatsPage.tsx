@@ -1,9 +1,9 @@
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Copy, Eye, EyeOff, Image as ImageIcon, ImagePlus, Info, Loader2, Pencil, Plus, Save, Settings2, Star, Trash2, Users, X } from 'lucide-react';
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Copy, Image as ImageIcon, ImagePlus, Info, Loader2, Pencil, Plus, Save, Settings2, Star, Trash2, Users, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 
 import AdminImageManager from '../../components/admin/AdminImageManager';
-import { AdminBadge, AdminPageHeader, AdminTable } from '../../components/admin/AdminPrimitives';
+import { AdminBadge, AdminFilterMenu, AdminListToolbar, AdminModuleSurface, AdminPageHeader, AdminTable } from '../../components/admin/AdminPrimitives';
 import BoatToursPackagesEditor from '../../components/admin/BoatToursPackagesEditor';
 import FormSection from '../../components/admin/FormSection';
 import ModalFooter from '../../components/admin/ModalFooter';
@@ -118,9 +118,10 @@ export default function AdminBoatsPage() {
   const [pendingBoatDelete, setPendingBoatDelete] = useState<BoatRow | null>(null);
   const [boatTab, setBoatTab] = useState<'general' | 'tours'>('general');
   const [saving, setSaving] = useState(false);
-  const [togglingBoatId, setTogglingBoatId] = useState<string | null>(null);
   const [startingPrices, setStartingPrices] = useState<Record<string, number>>({});
   const [fieldErrors, setFieldErrors] = useState<{ id?: string; slug?: string; name?: string; maxGuests?: string; images?: string }>({});
+  const [search, setSearch] = useState('');
+  const [boatStatusFilter, setBoatStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
 
   const isValidActiveImageCount = (count: number) => count >= 3 && count <= 6;
 
@@ -375,28 +376,6 @@ export default function AdminBoatsPage() {
     await loadBoats();
   }
 
-  async function toggleBoatActive(boat: BoatRow) {
-    const nextActive = !boat.active;
-    if (nextActive) {
-      const imageCount = (boat.boat_images?.length ? boat.boat_images : fallbackBoatImages(boat)).filter((image) => image.active).length;
-      if (!isValidActiveImageCount(imageCount)) {
-        setError('Para activar el bote necesitas entre 3 y 6 imágenes.');
-        return;
-      }
-    }
-    setTogglingBoatId(boat.id);
-    setError('');
-    setNotice('');
-    const { error: updateError } = await supabase.from('boats').update({ active: nextActive, updated_at: new Date().toISOString() }).eq('id', boat.id);
-    setTogglingBoatId(null);
-    if (updateError) {
-      setError(updateError.message);
-      return;
-    }
-    setBoats((current) => current?.map((item) => item.id === boat.id ? { ...item, active: nextActive } : item) ?? current);
-    setNotice(nextActive ? 'Bote activado.' : 'Bote desactivado.');
-  }
-
   async function onGalleryImageSaved(image: StorageImage) {
     if (!editing) return;
     const currentImages = editing.boat_images ?? [];
@@ -521,10 +500,33 @@ export default function AdminBoatsPage() {
   // True while we're showing the boat's legacy boats.images/image_url as a read-only
   // preview because it has no boat_images rows yet.
   const isLegacyPreview = Boolean(editing && !editing.boat_images?.length && editorImages.length > 0);
+  const visibleBoats = (boats ?? [])
+    .filter((boat) => boatStatusFilter === 'all' || (boatStatusFilter === 'active') === boat.active)
+    .filter((boat) => boat.name.toLowerCase().includes(search.toLowerCase()));
 
   return (
     <div className="admin-page">
-      <AdminPageHeader title="Botes" description="Flota disponible para paquetes reservables." actions={<button className="admin-btn" type="button" onClick={() => void createBoat()}><Plus size={16} /> Crear bote</button>} />
+      <AdminPageHeader title="Botes" description="Flota disponible para paquetes reservables." />
+      <AdminModuleSurface>
+        <AdminListToolbar
+          embedded
+          searchValue={search}
+          onSearchChange={setSearch}
+          searchPlaceholder="Buscar bote por nombre"
+          filters={
+            <AdminFilterMenu panelLabel="Filtros de botes" panelDescription="Refina la lista de botes." activeCount={Number(boatStatusFilter !== 'all')} onReset={() => setBoatStatusFilter('all')}>
+              <label className="admin-field">
+                <span className="admin-field__label">Estado</span>
+                <select className="admin-select" value={boatStatusFilter} onChange={(event) => setBoatStatusFilter(event.target.value as 'all' | 'active' | 'inactive')}>
+                  <option value="all">Todos</option>
+                  <option value="active">Activos</option>
+                  <option value="inactive">Inactivos</option>
+                </select>
+              </label>
+            </AdminFilterMenu>
+          }
+          primaryAction={<button className="admin-btn" type="button" onClick={() => void createBoat()}><Plus size={16} /> Crear bote</button>}
+        />
 
       {error ? (
         <div className="admin-alert admin-alert--danger">
@@ -538,8 +540,8 @@ export default function AdminBoatsPage() {
       {loading ? (
         <p className="admin-muted">Cargando botes...</p>
       ) : (
-        <AdminTable headers={['Bote', 'Capacidad fisica', 'Motor', 'Desde', 'Estado', 'Acciones']}>
-          {(boats ?? []).map((boat) => (
+        <AdminTable embedded headers={['Bote', 'Capacidad fisica', 'Motor', 'Desde', 'Estado', 'Acciones']}>
+          {visibleBoats.map((boat) => (
             <tr key={boat.id}>
               <td>{boat.name}<div className="admin-muted">{boat.length ?? '-'}</div></td>
               <td>{boat.max_guests} max</td>
@@ -547,23 +549,20 @@ export default function AdminBoatsPage() {
               <td>{boat.id in startingPrices ? money(startingPrices[boat.id]) : '-'}</td>
               <td><AdminBadge value={boat.active} /></td>
               <td>
-                <div className="admin-actions">
-                  <button className="admin-btn admin-btn--ghost" type="button" onClick={() => openEditor(boat)}><Pencil size={14} /> Editar</button>
-                  <button className={`admin-icon-action ${boat.active ? 'admin-icon-action--success' : 'admin-icon-action--warning'}`} type="button" title={boat.active ? 'Desactivar bote' : 'Activar bote'} aria-label={boat.active ? `Desactivar bote ${boat.name}` : `Activar bote ${boat.name}`} disabled={togglingBoatId === boat.id} onClick={() => void toggleBoatActive(boat)}>
-                    {togglingBoatId === boat.id ? <Loader2 className="animate-spin" size={16} /> : boat.active ? <Eye size={16} /> : <EyeOff size={16} />}
-                  </button>
-                  <button className="admin-btn admin-btn--danger" type="button" onClick={() => setPendingBoatDelete(boat)}><Trash2 size={14} /> Eliminar</button>
+                <div className="admin-row-actions">
+                  <button className="admin-icon-action" type="button" title="Editar bote" aria-label={`Editar bote ${boat.name}`} onClick={() => openEditor(boat)}><Pencil size={17} /></button>
                 </div>
               </td>
             </tr>
           ))}
-          {(boats ?? []).length === 0 ? (
+          {visibleBoats.length === 0 ? (
             <tr>
-              <td colSpan={6} className="admin-muted">No hay botes registrados.</td>
+              <td colSpan={6} className="admin-muted">No hay botes para esta busqueda.</td>
             </tr>
           ) : null}
         </AdminTable>
       )}
+      </AdminModuleSurface>
 
       <Modal open={Boolean(editing)} onClose={() => void closeEditor()} titleId="boat-edit-title" className="admin-boat-modal">
         {editing ? (
@@ -765,12 +764,19 @@ export default function AdminBoatsPage() {
                   <input id="boat-sort-order" name="sort_order" className="admin-input" type="number" value={editing.sort_order} onChange={(event) => setEditing({ ...editing, sort_order: Number(event.target.value) })} />
                 </label>
               </FormSection>
+              <FormSection title="Zona de peligro" description="Esta acción no se puede deshacer." icon={<Trash2 size={16} />}>
+                <div className="admin-danger-zone">
+                  <p className="admin-muted">Elimina este bote y su información asociada. Si tiene reservas o paquetes con historial, la base de datos bloqueará la eliminación.</p>
+                  <button className="admin-btn admin-btn--danger" type="button" onClick={() => setPendingBoatDelete(editing)}>
+                    <Trash2 size={15} /> Eliminar bote
+                  </button>
+                </div>
+              </FormSection>
               </>
               )}
             </div>
 
             <ModalFooter>
-              <button className="admin-btn admin-btn--secondary" type="button" disabled={saving} onClick={() => void closeEditor()}>Cancelar</button>
               <button className="admin-btn" type="submit" disabled={saving} aria-busy={saving}>
                 {saving ? (
                   <><Loader2 size={15} className="animate-spin" /> Guardando...</>
@@ -778,6 +784,7 @@ export default function AdminBoatsPage() {
                   <><Save size={15} /> Guardar cambios</>
                 )}
               </button>
+              <button className="admin-btn admin-btn--secondary" type="button" disabled={saving} onClick={() => void closeEditor()}>Cancelar</button>
             </ModalFooter>
           </form>
         ) : null}

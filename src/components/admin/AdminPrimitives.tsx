@@ -1,5 +1,7 @@
+import { Filter, Search, X } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 
 export function AdminPageHeader(props: { title: string; description: string; actions?: ReactNode }) {
   return (
@@ -56,6 +58,119 @@ export function AdminTable(props: { headers: string[]; children: ReactNode; embe
 
 export function AdminToolbar(props: { children: ReactNode; embedded?: boolean }) {
   return <div className={props.embedded ? 'admin-toolbar admin-toolbar--embedded' : 'admin-toolbar'}>{props.children}</div>;
+}
+
+/**
+ * Reuses the exact filter-menu markup/behavior already built for Reservas
+ * (`admin-filter-menu`/`admin-filter-trigger`/`admin-filter-backdrop`/
+ * `admin-filter-panel`) so every screen with real, existing filters gets the
+ * same accessible popover instead of a loose `<select>` next to the table.
+ */
+export function AdminFilterMenu(props: {
+  label?: string;
+  panelLabel: string;
+  panelTitle?: string;
+  panelDescription?: string;
+  activeCount?: number;
+  onReset?: () => void;
+  children: ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const panelId = useId();
+
+  useEffect(() => {
+    if (!open) return;
+    panelRef.current?.querySelector<HTMLElement>('select, input, textarea, button')?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setOpen(false);
+        triggerRef.current?.focus();
+      }
+    };
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (!panelRef.current?.contains(target) && !triggerRef.current?.contains(target)) setOpen(false);
+    };
+    document.addEventListener('keydown', onKeyDown);
+    document.addEventListener('pointerdown', onPointerDown);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      document.removeEventListener('pointerdown', onPointerDown);
+    };
+  }, [open]);
+
+  return (
+    <div className="admin-filter-menu">
+      <button ref={triggerRef} className="admin-btn admin-btn--secondary admin-filter-trigger" type="button" aria-expanded={open} aria-controls={panelId} onClick={() => setOpen((value) => !value)}>
+        <Filter size={16} /> <span>{props.label ?? 'Filtros'}</span>
+        {props.activeCount ? <AdminBadge value={String(props.activeCount)} /> : null}
+      </button>
+      {open ? (
+        <>
+          <div className="admin-filter-backdrop" aria-hidden="true" />
+          <div ref={panelRef} id={panelId} className="admin-filter-panel" role="dialog" aria-label={props.panelLabel}>
+            <div className="admin-filter-panel__header">
+              <div>
+                <strong>{props.panelTitle ?? 'Filtros'}</strong>
+                {props.panelDescription ? <span>{props.panelDescription}</span> : null}
+              </div>
+              <button className="admin-icon-btn" type="button" aria-label="Cerrar filtros" onClick={() => { setOpen(false); triggerRef.current?.focus(); }}><X size={17} /></button>
+            </div>
+            {props.children}
+            <div className="admin-filter-panel__actions">
+              {props.onReset ? <button className="admin-btn admin-btn--ghost" type="button" disabled={!props.activeCount} onClick={props.onReset}>Limpiar</button> : <span />}
+              <button className="admin-btn" type="button" onClick={() => { setOpen(false); triggerRef.current?.focus(); }}>Listo</button>
+            </div>
+          </div>
+        </>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * Shared search + filters + primary-action toolbar so every admin listing
+ * uses the same layout instead of each screen inventing its own. Pass
+ * `filters={<AdminFilterMenu ...>}` only when the screen has real, existing
+ * filter dimensions; omit `onSearchChange`/`primaryAction` when a listing has
+ * no search or is read-only.
+ */
+export function AdminListToolbar(props: {
+  searchValue?: string;
+  onSearchChange?: (value: string) => void;
+  searchPlaceholder?: string;
+  searchLabel?: string;
+  filters?: ReactNode;
+  primaryAction?: ReactNode;
+  /** Renders after primaryAction — e.g. "Exportar". Order is always: buscar, filtros, crear, secundarias. */
+  secondaryActions?: ReactNode;
+  embedded?: boolean;
+}) {
+  return (
+    <AdminToolbar embedded={props.embedded}>
+      {props.onSearchChange ? (
+        <div className="admin-search-field">
+          <Search aria-hidden="true" size={16} />
+          <input
+            className="admin-input"
+            aria-label={props.searchLabel ?? props.searchPlaceholder ?? 'Buscar'}
+            placeholder={props.searchPlaceholder ?? 'Buscar...'}
+            value={props.searchValue ?? ''}
+            onChange={(event) => props.onSearchChange?.(event.target.value)}
+          />
+        </div>
+      ) : null}
+      {props.filters}
+      {props.primaryAction || props.secondaryActions ? (
+        <div className="admin-toolbar__actions">
+          {props.primaryAction}
+          {props.secondaryActions}
+        </div>
+      ) : null}
+    </AdminToolbar>
+  );
 }
 
 export function AdminModuleSurface(props: { children: ReactNode; className?: string }) {

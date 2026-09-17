@@ -37,7 +37,8 @@ export function AppRoutes() {
         <Route path="gallery" element={<AdminGalleryPage />} />
         <Route path="destinations" element={<AdminDestinationsPage />} />
         <Route path="content" element={<AdminContentPage />} />
-        <Route path="videos" element={<AdminContentPage />} />
+        {/* Videos lived here before Hero Section grouped Media (photos + video) under one screen; kept as a redirect so old links/bookmarks keep working. */}
+        <Route path="videos" element={<Navigate to="/admin/content" replace />} />
         <Route path="payment-methods" element={<AdminPaymentMethodsPage />} />
         <Route path="departure-locations" element={<AdminDepartureLocationsPage />} />
         <Route path="settings" element={<AdminSettingsPage />} />

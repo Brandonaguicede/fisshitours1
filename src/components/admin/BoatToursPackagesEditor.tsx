@@ -1,4 +1,4 @@
-import { Check, Eye, EyeOff, Loader2, Package, Pencil, Plus, Trash2 } from 'lucide-react';
+import { Check, Eye, EyeOff, Loader2, Package, Pencil, Plus, Settings, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import {
@@ -14,6 +14,7 @@ import {
   type PackageInput,
 } from '../../services/adminBoatToursService';
 import FormSection from './FormSection';
+import { Modal } from '../common/Modal';
 import { formatTime } from '../../utils/format';
 import { parseMealOptions } from '../../utils/packageSettings';
 import { useQueryClient } from '@tanstack/react-query';
@@ -139,34 +140,12 @@ interface PackageDraftEditorProps {
 function PackageDraftEditor({ draft, fieldErrors, busy, boatMaxGuests, defaultTimes, onChange, onCancel, onSave, onDelete }: PackageDraftEditorProps) {
   const key = `pkg-${draft.id}`;
   const [newTime, setNewTime] = useState('');
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const timeChoices = Array.from(new Set([...defaultTimes, ...draft.departureTimes])).sort();
   return (
     <div className="admin-package-compact-editor">
       <div className="admin-package-editor__heading">
         <h3>{draft.isNew ? 'Agregar paquete' : `Editar ${draft.name || 'paquete'}`}</h3>
-        <div className="admin-package-editor__actions">
-          <button
-            className="admin-icon-btn"
-            type="button"
-            title={draft.active ? 'Desactivar' : 'Activar'}
-            aria-label={draft.active ? 'Desactivar paquete' : 'Activar paquete'}
-            onClick={() => onChange({ active: !draft.active })}
-          >
-            {draft.active ? <Eye size={16} /> : <EyeOff size={16} />}
-          </button>
-          {!draft.isNew ? (
-            <button
-              className="admin-icon-btn admin-icon-btn--danger"
-              type="button"
-              title="Eliminar"
-              aria-label="Eliminar paquete"
-              disabled={busy}
-              onClick={onDelete}
-            >
-              <Trash2 size={16} />
-            </button>
-          ) : null}
-        </div>
       </div>
       <div className="admin-form-columns">
         <label className="admin-field">
@@ -292,14 +271,58 @@ function PackageDraftEditor({ draft, fieldErrors, busy, boatMaxGuests, defaultTi
           Cotización personalizada (sin precio automático)
         </span>
       </label>
+
+      <FormSection title="Visibilidad" description="Controla si este paquete se muestra en el sitio público." icon={<Settings size={16} />}>
+        <div className="admin-config-row">
+          <div>
+            <p className="admin-config-row__label">Estado actual</p>
+            <span className="admin-muted">{draft.active ? 'Activo: visible y reservable.' : 'Inactivo: oculto y no reservable.'}</span>
+          </div>
+          <button
+            className={`admin-btn ${draft.active ? 'admin-btn--secondary' : ''}`}
+            type="button"
+            onClick={() => onChange({ active: !draft.active })}
+          >
+            {draft.active ? <EyeOff size={15} /> : <Eye size={15} />}
+            {draft.active ? 'Desactivar paquete' : 'Activar paquete'}
+          </button>
+        </div>
+      </FormSection>
+
+      {!draft.isNew ? (
+        <FormSection title="Zona de peligro" description="Esta acción no se puede deshacer." icon={<Trash2 size={16} />}>
+          <div className="admin-danger-zone">
+            <p className="admin-muted">Elimina este paquete de forma permanente.</p>
+            <button className="admin-btn admin-btn--danger" type="button" disabled={busy} onClick={() => setConfirmDeleteOpen(true)}>
+              <Trash2 size={15} /> Eliminar paquete
+            </button>
+          </div>
+        </FormSection>
+      ) : null}
+
       <div className="admin-actions">
-        <button className="admin-btn admin-btn--secondary" type="button" onClick={onCancel}>
-          Cancelar
-        </button>
         <button className="admin-btn" type="button" disabled={busy} onClick={onSave}>
           {busy ? <Loader2 className="animate-spin" size={15} /> : <Check size={15} />} Guardar paquete
         </button>
+        <button className="admin-btn admin-btn--secondary" type="button" onClick={onCancel}>
+          Cancelar
+        </button>
       </div>
+
+      <Modal open={confirmDeleteOpen} onClose={() => setConfirmDeleteOpen(false)} titleId="confirm-package-delete-title" className="max-w-md">
+        <div className="admin-modal-card">
+          <h2 id="confirm-package-delete-title" className="admin-card__title"><Trash2 size={18} /> Eliminar paquete</h2>
+          <p className="admin-muted mt-2">¿Eliminar "{draft.name || 'este paquete'}"? Esta acción no se puede deshacer.</p>
+          <div className="admin-actions mt-5">
+            <button className="admin-btn admin-btn--secondary" type="button" disabled={busy} onClick={() => setConfirmDeleteOpen(false)}>
+              Volver
+            </button>
+            <button className="admin-btn admin-btn--danger" type="button" disabled={busy} onClick={() => { setConfirmDeleteOpen(false); onDelete(); }}>
+              {busy ? <Loader2 className="animate-spin" size={15} /> : <Trash2 size={15} />} Sí, eliminar paquete
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }
