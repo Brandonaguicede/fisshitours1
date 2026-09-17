@@ -1,5 +1,5 @@
 import { createElement } from 'react';
-import type { ComponentPropsWithoutRef, ElementType, ImgHTMLAttributes, PropsWithChildren } from 'react';
+import type { ComponentPropsWithoutRef, ElementType, ImgHTMLAttributes, MouseEventHandler, PropsWithChildren } from 'react';
 
 import { cn } from '../../utils/cn';
 import { Button } from './Button';
@@ -62,9 +62,18 @@ export function CardContent({ children, className }: PropsWithChildren<{ classNa
   return <span className={cn('flex w-full flex-1 flex-col p-3.5 sm:p-4', className)}>{children}</span>;
 }
 
-export function CardActions({ children, className }: PropsWithChildren<{ className?: string }>) {
+interface CardActionsProps extends PropsWithChildren<{ className?: string }> {
+  'aria-label'?: string;
+  onClick?: MouseEventHandler<HTMLButtonElement>;
+}
+
+// A real <button>, not a styled span — it's the card's one actual point of
+// entry into whatever it opens (modal, detail page, etc.). CardShell
+// itself is a plain, non-interactive wrapper around this, so nesting a
+// real button here is valid HTML instead of a button-inside-a-button.
+export function CardActions({ 'aria-label': ariaLabel, children, className, onClick }: CardActionsProps) {
   return (
-    <Button as="span" className={cn('mt-3', className)} fullWidth size="xs" variant="primary">
+    <Button aria-label={ariaLabel} className={cn('mt-3', className)} fullWidth onClick={onClick} size="xs" type="button" variant="primary">
       {children}
     </Button>
   );

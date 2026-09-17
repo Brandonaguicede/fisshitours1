@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import type { Boat } from '../../types/boat';
 import type { BoatTour } from '../../types/boatTour';
@@ -23,10 +23,20 @@ export function TourCarouselSection({ boats, tours, selectedTour, onSelectTour }
   const { language } = useLanguage();
   const [visibleCardCount, setVisibleCardCount] = useState(getVisibleCardCount);
   const [activeBoatId, setActiveBoatId] = useState<string>('all');
+  // Single source of truth for which tour card is "active" (hover/focus/
+  // click/mobile-in-view) — lifted here instead of living as local state
+  // per card, so activating one card is guaranteed to deactivate whatever
+  // other card held it. Unrelated to `activeBoatId` above, which is the
+  // boat filter — kept separately named to avoid confusion.
+  const [activeTourCardId, setActiveTourCardId] = useState<string | null>(null);
   const visibleTours = useMemo(() => activeBoatId === 'all' ? tours : tours.filter((tour) => tour.boatId === activeBoatId), [activeBoatId, tours]);
   const groupedTours = useMemo(() => groupTourCatalog(visibleTours, boats), [visibleTours, boats]);
   const { scrollerRef, canScrollLeft, canScrollRight, updateControls, scrollByCards } = useCardCarousel(groupedTours);
   const selectedTourIndex = selectedTour ? groupedTours.findIndex((item) => item.boatOptions.some((option) => option.packages.some((tour) => tour.id === selectedTour.id))) : -1;
+
+  const handleTourCardActiveChange = useCallback((tourId: string, active: boolean) => {
+    setActiveTourCardId((current) => (active ? tourId : (current === tourId ? null : current)));
+  }, []);
 
   useEffect(() => {
     const updateVisibleCardCount = () => setVisibleCardCount(getVisibleCardCount());
@@ -112,8 +122,11 @@ export function TourCarouselSection({ boats, tours, selectedTour, onSelectTour }
                 >
                   <BoatTourCard
                     catalogItem={item}
+                    isActive={activeTourCardId === item.tourId}
                     isSelected={item.boatOptions.some((option) => option.packages.some((entry) => entry.id === selectedTour?.id))}
+                    onActiveChange={handleTourCardActiveChange}
                     onSelect={onSelectTour}
+                    scrollRootRef={scrollerRef}
                   />
                 </div>
               ))}

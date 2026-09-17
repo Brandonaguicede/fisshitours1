@@ -57,7 +57,16 @@ export function MainLayout() {
   }, [location.pathname, location.hash]);
 
   return (
-    <div className="min-h-screen bg-ocean-950 text-ocean-50">
+    // `min-h-[100dvh]`, not `min-h-screen` (100vh): on iOS Safari, 100vh is
+    // computed against the LARGEST possible viewport (as if the address
+    // bar/toolbar were fully collapsed), which is taller than what's
+    // actually visible once it's showing. Since this root div's own
+    // background is the same navy as the page, that phantom reserved
+    // height — real, scrollable space with nothing painted in it — showed
+    // as an empty navy block below the footer on iPad. `dvh` tracks the
+    // actual visible viewport as the toolbar shows/hides, so there's
+    // nothing left to reserve past the real content.
+    <div className="min-h-[100dvh] bg-ocean-950 text-ocean-50">
       <a className="skip-link" href="#main-content">
         Saltar al contenido
       </a>

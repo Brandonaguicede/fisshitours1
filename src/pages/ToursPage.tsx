@@ -24,8 +24,18 @@ export default function ToursPage() {
   const catalogTours = toursQuery.data ?? boatTours;
   const [selectedBoatId, setSelectedBoatId] = useState(boats[0].id);
   const [selectedTourId, setSelectedTourId] = useState<string | undefined>(boatTours.find((tour) => tour.boatId === boats[0].id)?.id);
+  const [activeBoatCardId, setActiveBoatCardId] = useState<string | null>(null);
+  const [activeTourCardId, setActiveTourCardId] = useState<string | null>(null);
   const toursRef = useRef<HTMLElement | null>(null);
   const bookingRef = useRef<HTMLElement | null>(null);
+
+  function handleBoatCardActiveChange(boatId: string, active: boolean) {
+    setActiveBoatCardId((current) => (active ? boatId : (current === boatId ? null : current)));
+  }
+
+  function handleTourCardActiveChange(tourId: string, active: boolean) {
+    setActiveTourCardId((current) => (active ? tourId : (current === tourId ? null : current)));
+  }
 
   const selectedBoat = useMemo(() => catalogBoats.find((boat) => boat.id === selectedBoatId) ?? catalogBoats[0], [catalogBoats, selectedBoatId]);
   const availableTours = useMemo(() => (selectedBoat ? catalogTours.filter((tour) => tour.boatId === selectedBoat.id) : []), [catalogTours, selectedBoat]);
@@ -100,7 +110,7 @@ export default function ToursPage() {
           />
           <div className="mt-10 grid gap-6 lg:grid-cols-3">
             {catalogBoats.map((boat) => (
-              <BoatCard key={boat.id} boat={boat} startingPrice={getBoatStartingPrice(boat.id, catalogTours)} isSelected={boat.id === selectedBoat.id} onSelect={selectBoat} />
+              <BoatCard key={boat.id} boat={boat} startingPrice={getBoatStartingPrice(boat.id, catalogTours)} isActive={activeBoatCardId === boat.id} isSelected={boat.id === selectedBoat.id} onActiveChange={handleBoatCardActiveChange} onSelect={selectBoat} />
             ))}
           </div>
         </Container>
@@ -134,7 +144,7 @@ export default function ToursPage() {
 
           <div className="mt-10 grid gap-6 lg:grid-cols-3">
             {groupedTours.map((item) => (
-              <BoatTourCard key={item.tourId} catalogItem={item} isSelected={item.boatOptions.some((option) => option.packages.some((entry) => entry.id === selectedTour?.id))} onSelect={selectTour} />
+              <BoatTourCard key={item.tourId} catalogItem={item} isActive={activeTourCardId === item.tourId} isSelected={item.boatOptions.some((option) => option.packages.some((entry) => entry.id === selectedTour?.id))} onActiveChange={handleTourCardActiveChange} onSelect={selectTour} />
             ))}
           </div>
         </Container>

@@ -654,17 +654,34 @@
      100px is the real measured height of pill + price + button + their
      gaps at this card padding — not a blind guess — so the title lands
      ~16-20px above the true bottom edge once revealed, matching where it
-     sits at rest. No `@media(hover)` branching: `:hover` never sticks on
-     touch, and tapping either card (a real <button>) already triggers
-     `:focus`, so the same rules serve mouse, touch and keyboard alike. */
+     sits at rest.
+
+     Three triggers, each exclusive on its own:
+     - `:hover` — real mouse/pointer only (a touchscreen doesn't hold a
+       persistent `:hover`), and physically exclusive: one pointer can
+       only be over one card at a time.
+     - `:focus-within` — real keyboard focus landing on the CTA button
+       (CardShell itself is a plain, non-focusable div; the CTA inside it
+       is the only real <button>). Exclusive by nature: only one element
+       in the document can hold focus at a time.
+     - `.is-active` — the single JS-tracked "which card is active" state,
+       lifted to the carousel section (FleetSection/TourCarouselSection)
+       instead of living locally per card, so activating one card is
+       guaranteed to deactivate whichever other card held it before (one
+       shared value can never be true for two cards at once). It's set by
+       clicking/tapping the card (desktop, tablet, mobile alike) and, on
+       mobile only (<560px, real hover unavailable — see
+       useIsCoarseMobile), by the card actually scrolled into view in the
+       carousel. Never gated by `@media(hover)` — the exclusivity already
+       lives in the JS state, not in CSS. */
   .media-card-content {
     transform: translateY(100px);
     transition: transform 350ms ease-out;
   }
 
   .group:hover .media-card-content,
-  .group:focus .media-card-content,
-  .group:focus-within .media-card-content {
+  .group:focus-within .media-card-content,
+  .group.is-active .media-card-content {
     transform: translateY(0);
   }
 
@@ -674,8 +691,8 @@
   }
 
   .group:hover .media-card-reveal,
-  .group:focus .media-card-reveal,
-  .group:focus-within .media-card-reveal {
+  .group:focus-within .media-card-reveal,
+  .group.is-active .media-card-reveal {
     opacity: 1;
   }
 

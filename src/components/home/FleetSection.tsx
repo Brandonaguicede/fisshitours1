@@ -27,12 +27,22 @@ interface FleetSectionProps {
 export function FleetSection({ boats, tours, selectedBoat, onSelectBoat, onViewTourType, onViewAllTours }: FleetSectionProps) {
   const { language } = useLanguage();
   const [modalBoat, setModalBoat] = useState<Boat | null>(null);
+  // Single source of truth for which boat card is "active" (hover/focus/
+  // click/mobile-in-view) — lifted here instead of living as local state
+  // per card, so activating one card is guaranteed to deactivate whatever
+  // other card held it (one shared value can never be true for two cards
+  // at once). See BoatCard.
+  const [activeBoatId, setActiveBoatId] = useState<string | null>(null);
   const { scrollerRef: carouselRef, canScrollLeft, canScrollRight, updateControls, scrollByCards } = useCardCarousel(boats);
   const modalBoatText = modalBoat ? getBoatText(modalBoat, language) : null;
   const modalTourTypes = getModalTourTypes(modalBoat, tours, language);
   const modalImages = getBoatImages(modalBoat);
 
   const closeBoatDetails = useCallback(() => setModalBoat(null), []);
+
+  const handleBoatActiveChange = useCallback((boatId: string, active: boolean) => {
+    setActiveBoatId((current) => (active ? boatId : (current === boatId ? null : current)));
+  }, []);
 
   function openBoatDetails(boat: Boat) {
     onSelectBoat(boat);
@@ -74,8 +84,11 @@ export function FleetSection({ boats, tours, selectedBoat, onSelectBoat, onViewT
               <div key={boat.id} className="w-full shrink-0 snap-start snap-always min-[560px]:w-[calc((100%-20px)/2)] lg:w-[calc((100%-40px)/3)]">
                 <BoatCard
                   boat={boat}
+                  isActive={activeBoatId === boat.id}
                   isSelected={boat.id === selectedBoat.id}
+                  onActiveChange={handleBoatActiveChange}
                   onSelect={openBoatDetails}
+                  scrollRootRef={carouselRef}
                   startingPrice={getBoatStartingPrice(boat.id, tours)}
                 />
               </div>
