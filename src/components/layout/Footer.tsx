@@ -14,10 +14,19 @@ import { IconButton } from '../ui';
 // separate band below. Neither is touched by the mobile block underneath.
 const SAND_MATCH = '#F1CFA9';
 const SHORELINE_URL = "url('/footer/footer-shoreline.webp')";
-const TABLET_BAND_FADE = {
-  maskImage: 'linear-gradient(to bottom, black 0%, black 85%, transparent 100%)',
-  WebkitMaskImage: 'linear-gradient(to bottom, black 0%, black 85%, transparent 100%)',
-};
+// Tablet (768-1023px): self-contained, like mobile below — About no longer
+// draws any shoreline in this range (see AboutPreview.tsx), so this single
+// layer owns the whole scene on its own: it reaches up behind the Contact
+// CTA, carries its own navy fade, and shows the photo at its real, un-
+// cropped 2.5:1 aspect ratio (via `aspectRatio`, not a zoomed `bg-cover`
+// slice) so what ends up under the content is the photo's own real sand,
+// not a flat color standing in for it. `SAND_MATCH` below stays only as
+// the (matching-toned) fallback for whatever sliver the photo doesn't
+// reach — same role it already plays, invisibly, under desktop.
+const TABLET_SCENE_REACH = 72;
+const TABLET_SCENE_HEIGHT = 'clamp(230px, 40vw, 380px)';
+const TABLET_NAVY_FADE =
+  'linear-gradient(to bottom, rgba(11,40,66,1) 0%, rgba(11,40,66,0.9) 20%, rgba(11,40,66,0.65) 40%, rgba(11,40,66,0.3) 60%, rgba(11,40,66,0.08) 80%, rgba(11,40,66,0) 100%)';
 
 // Mobile-only: a dedicated portrait shoreline photo (water near the top,
 // foam mid-frame, sand for the rest) instead of reusing the wide desktop
@@ -38,11 +47,21 @@ const MOBILE_SAND_MATCH = '#F9D4B0';
 // foam and never tinting the sand.
 const MOBILE_NAVY_FADE =
   'linear-gradient(to bottom, rgba(11,40,66,1) 0%, rgba(11,40,66,0.96) 15%, rgba(11,40,66,0.88) 30%, rgba(11,40,66,0.7) 45%, rgba(11,40,66,0.48) 60%, rgba(11,40,66,0.25) 75%, rgba(11,40,66,0.08) 90%, rgba(11,40,66,0) 100%)';
-// How far the image/fade extend up past the footer's own top, into
+// How far the scene band reaches up past the footer's own top, into
 // About's territory, so the water already reads as present behind/around
 // the contact card instead of starting only once the footer itself
-// begins.
-const MOBILE_SHORELINE_REACH = 90;
+// begins. Fixed (not content-derived) on purpose — see MOBILE_SCENE_HEIGHT.
+const MOBILE_SCENE_REACH = 64;
+// The scene band's OWN height, from the footer's top edge down to where
+// real content starts — sized purely off viewport width (vw), never off
+// the footer's rendered content height. The previous version sized the
+// photo at `auto 130%` of the surrounding box, whose height was however
+// tall the footer's own text content happened to render — at widths where
+// wrapping made that box tall, the photo (and the empty-water gap before
+// content) ballooned right along with it. A fixed, vw-only band decouples
+// the two completely, so the transition strip stays the same short height
+// everywhere from 320px to 767px, regardless of copy length.
+const MOBILE_SCENE_HEIGHT = 'clamp(130px, 30vw, 180px)';
 
 export function Footer() {
   const { language } = useLanguage();
@@ -50,43 +69,32 @@ export function Footer() {
   return (
     <footer className="relative text-ocean-900" id="footer">
       {/* Mobile (<768px): its own scene, self-contained — see notes above.
-          Desktop/tablet below are entirely untouched. */}
+          Desktop/tablet below are entirely untouched. A single fixed-height
+          band (MOBILE_SCENE_HEIGHT) covers the whole <768px range — no
+          separate sub-breakpoint inside it, so there is nothing that can
+          fall between two tuned widths the way 573px did before. */}
       <div className="relative overflow-visible md:hidden" style={{ backgroundColor: MOBILE_SAND_MATCH }}>
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute inset-x-0 bottom-0 z-0 bg-no-repeat"
+          className="pointer-events-none absolute inset-x-0 z-0 bg-cover bg-bottom bg-no-repeat"
           style={{
             backgroundImage: MOBILE_SHORELINE_URL,
-            top: `-${MOBILE_SHORELINE_REACH}px`,
-            /* A plain bg-cover shows the photo's full height (open water
-               down to sand) stretched across however tall the footer's
-               content makes this box — which left a long stretch of empty
-               open water before any content appeared. Sizing off the
-               box's OWN height (not width) keeps the cropped-away top
-               fraction constant across phone widths — width-relative
-               sizing here would crop far more on wide phones than narrow
-               ones, since content height barely changes with viewport
-               width. Zooming past cover's minimum height and pinning to
-               the bottom crops that dead water off the top instead, so
-               the wave curl shows up sooner. */
-            backgroundSize: 'auto 130%',
-            backgroundPosition: 'center bottom',
+            top: `-${MOBILE_SCENE_REACH}px`,
+            height: `calc(${MOBILE_SCENE_HEIGHT} + ${MOBILE_SCENE_REACH}px)`,
           }}
         />
         <div
           aria-hidden="true"
           className="pointer-events-none absolute inset-x-0 z-[1] h-[150px]"
-          style={{ top: `-${MOBILE_SHORELINE_REACH}px`, backgroundImage: MOBILE_NAVY_FADE }}
+          style={{ top: `-${MOBILE_SCENE_REACH}px`, backgroundImage: MOBILE_NAVY_FADE }}
         />
 
         <div
           className="relative z-10 px-6 pb-8"
           style={{
-            /* Just enough to clear the cropped-in wave/foam band above
-               (see the photo's backgroundSize/Position) before content
-               starts, without the large empty stretch of open water a
-               taller offset used to leave. */
-            paddingTop: `clamp(90px, calc(25vw + 10px), 150px)`,
+            /* Content starts exactly where the fixed scene band ends —
+               no dependency on the band's height in the other direction. */
+            paddingTop: MOBILE_SCENE_HEIGHT,
           }}
         >
           {/* Marca */}
@@ -153,33 +161,41 @@ export function Footer() {
         </div>
       </div>
 
-      {/* Tablet/desktop (≥768px): entirely unchanged. */}
+      {/* Tablet (768-1023px) self-contained scene + desktop (≥1024px, its
+          own background declared below, untouched). */}
       <div
-        className="relative hidden md:block lg:bg-no-repeat lg:bg-top lg:[background-image:url('/footer/footer-shoreline.webp')] lg:[background-size:100%_auto] lg:[background-position:center_calc(-1*clamp(220px,18vw,380px))]"
+        className="relative overflow-visible hidden md:block lg:bg-no-repeat lg:bg-top lg:[background-image:url('/footer/footer-shoreline.webp')] lg:[background-size:100%_auto] lg:[background-position:center_calc(-1*clamp(220px,18vw,380px))]"
         style={{ backgroundColor: SAND_MATCH }}
       >
-        {/* Tablet-only band. Padding-top below matches this band's own
-            height exactly, so content starts right where it ends (it's
-            `position:absolute`, so it would otherwise paint over content
-            that started earlier). lg keeps its own background, declared
-            above. */}
+        {/* Tablet-only scene: the real photo at its native aspect ratio
+            (never zoomed/cropped to a thin slice), reaching up behind the
+            Contact CTA with its own navy fade — see constants above. */}
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute inset-x-0 top-0 h-[clamp(220px,26vw,280px)] bg-cover bg-top bg-no-repeat lg:hidden"
-          style={{ backgroundImage: SHORELINE_URL, ...TABLET_BAND_FADE }}
+          className="pointer-events-none absolute inset-x-0 z-0 bg-cover bg-bottom bg-no-repeat lg:hidden"
+          style={{
+            backgroundImage: SHORELINE_URL,
+            top: `-${TABLET_SCENE_REACH}px`,
+            height: `calc(${TABLET_SCENE_HEIGHT} + ${TABLET_SCENE_REACH}px)`,
+          }}
+        />
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-x-0 z-[1] lg:hidden"
+          style={{ top: `-${TABLET_SCENE_REACH}px`, height: `calc(${TABLET_SCENE_HEIGHT} * 0.7)`, backgroundImage: TABLET_NAVY_FADE }}
         />
 
-        <div className="relative pt-[clamp(220px,26vw,280px)] lg:pt-[clamp(40px,5.2vw,150px)]">
+        <div className="relative z-10 pt-[clamp(230px,40vw,380px)] lg:z-auto lg:pt-[clamp(40px,5.2vw,150px)]">
           <Container className="grid gap-x-10 gap-y-3 pb-2 sm:pb-6 md:grid-cols-2 md:gap-y-6 md:gap-x-12 lg:grid-cols-[1.3fr_0.8fr_1fr_1fr] lg:gap-x-8 lg:gap-y-4 lg:pb-1">
             {/* A — Marca */}
             <div>
               <Link className="inline-flex flex-col items-start gap-2" to="/">
                 <img alt="" aria-hidden="true" className="h-auto w-[90px] brightness-0 lg:w-[115px]" src="/images/papagayo-logo.png" />
-                <span className="text-lg font-extrabold leading-tight text-ocean-950">
+                <span className="text-lg font-extrabold leading-tight text-ocean-950 md:text-xl lg:text-lg">
                   Papagayo <span className="text-ocean-700">Fishing Tours</span>
                 </span>
               </Link>
-              <p className="mt-2 max-w-xs text-[13px] leading-[1.45] text-ocean-800/85">
+              <p className="mt-2 max-w-xs text-[13px] leading-[1.45] text-ocean-800/85 md:text-sm lg:text-[13px]">
                 {language === 'es'
                   ? 'Charters de pesca, navegación privada, snorkeling, playa y bioluminiscencia en Costa Rica.'
                   : 'Fishing charters, private navigation, snorkeling, beach and bioluminescence in Costa Rica.'}
@@ -208,12 +224,16 @@ export function Footer() {
 
             {/* B — Navegación */}
             <div>
-              <h3 className="text-[11px] font-bold uppercase tracking-[0.14em] text-ocean-700">
+              <h3 className="text-[11px] font-bold uppercase tracking-[0.14em] text-ocean-700 md:text-xs lg:text-[11px]">
                 {language === 'es' ? 'Navegación' : 'Navigation'}
               </h3>
-              <div className="mt-2.5 grid grid-cols-1 gap-y-2 lg:gap-y-1">
+              {/* Tablet: 2 internal columns, filled column-first (items 1-4
+                  in col 1, 5-8 in col 2) so the 8-item list doesn't stretch
+                  the footer tall. Desktop (lg) restores the original single
+                  vertical list, untouched. */}
+              <div className="mt-2.5 grid grid-flow-col grid-rows-4 grid-cols-2 gap-x-4 gap-y-2 lg:grid-flow-row lg:grid-cols-1 lg:grid-rows-none lg:gap-x-0 lg:gap-y-1">
                 {navigationItems.map((item) => (
-                  <Link className="w-fit text-[13px] leading-[1.2] text-ocean-800 underline-offset-4 transition hover:text-ocean-950 hover:underline lg:text-sm" key={item.href} to={item.href}>
+                  <Link className="w-fit text-sm leading-[1.2] text-ocean-800 underline-offset-4 transition hover:text-ocean-950 hover:underline" key={item.href} to={item.href}>
                     {tr(item.label, language)}
                   </Link>
                 ))}
@@ -222,28 +242,28 @@ export function Footer() {
 
             {/* C — Contacto + Métodos de pago */}
             <div>
-              <h3 className="text-[11px] font-bold uppercase tracking-[0.14em] text-ocean-700">{tr(text.nav.contact, language)}</h3>
-              <div className="mt-2.5 grid gap-1.5 text-[13px] leading-[1.2] text-ocean-800 lg:text-sm">
+              <h3 className="text-[11px] font-bold uppercase tracking-[0.14em] text-ocean-700 md:text-xs lg:text-[11px]">{tr(text.nav.contact, language)}</h3>
+              <div className="mt-2.5 grid gap-1.5 text-sm leading-[1.2] text-ocean-800">
                 <span className="flex items-center gap-2"><MapPin size={16} /> San José, Costa Rica</span>
                 <span className="flex items-center gap-2"><Phone size={16} /> {DISPLAY_PHONE}</span>
                 <a className="flex items-center gap-2" href={`mailto:${CONTACT_EMAIL}`}><Mail className="shrink-0" size={16} /><span className="break-all">{CONTACT_EMAIL}</span></a>
               </div>
 
               <div className="mt-2.5">
-                <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-ocean-700">
+                <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-ocean-700 md:text-xs lg:text-[11px]">
                   {language === 'es' ? 'Métodos de pago' : 'Payment methods'}
                 </p>
                 <img
                   alt={language === 'es' ? 'Métodos de pago aceptados' : 'Accepted payment methods'}
-                  className="h-auto w-full max-w-[190px] object-contain"
+                  className="h-auto w-full max-w-[160px] object-contain lg:max-w-[190px]"
                   src="/footer/payment_methods.png"
                 />
               </div>
             </div>
 
             {/* D — Frase editorial */}
-            <div className="hidden md:block lg:flex lg:items-start lg:justify-end lg:text-right">
-              <p className="font-display max-w-[15rem] -rotate-1 text-[22px] italic leading-[1.15] text-ocean-900 lg:text-[26px]">
+            <div className="hidden md:block md:text-right lg:flex lg:items-start lg:justify-end lg:text-right">
+              <p className="font-display max-w-[15rem] -rotate-1 text-[24px] italic leading-[1.15] text-ocean-900 md:ml-auto lg:ml-0 lg:text-[26px]">
                 {language === 'es' ? (
                   <>
                     Más que un tour,
