@@ -7,21 +7,14 @@ import { Button, Chip, GlassPanel, SectionHeader } from '../ui';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { buildAboutCarouselImages, DEFAULT_ABOUT_SETTINGS, getAboutSettings, splitParagraphs, type AboutSettings } from '../../services/aboutSettings';
 
-// Desktop (lg+) only. Its continuity trick (background-position shifted up
-// by exactly this layer's own height, see Footer.tsx's lg: background) only
-// holds for desktop's `footer-shoreline.webp`. Below lg, Footer already
-// draws its own single, self-contained shoreline (mobile: the responsive
-// photo; tablet: its own band) — this layer used to also render at
-// `md:block`, independently re-drawing the SAME photo's top portion right
-// above where Footer's tablet band redrew it again from scratch, which is
-// exactly the duplicate "beach shows twice" bug. Restricting this to `lg:`
-// removes that duplicate; About now ends in plain navy below lg, and
-// Footer's own single layer owns the whole scene from there down.
-// Anchored with `bottom: 0` against the section itself (not `top`), so its
-// bottom edge is pinned exactly to the section's own end — i.e. exactly
-// where the Footer's own photo picks up, at any viewport height.
-// pointer-events-none, position:absolute — never affects About's own box
-// height, data-home-section, or nav/scroll geometry.
+// The shoreline photo starts appearing behind the contact card, tablet/
+// desktop only (mobile owns its own separate shoreline scene inside
+// Footer.tsx now — see notes there). Anchored with `bottom: 0` against the
+// section itself (not `top`), so its bottom edge is pinned exactly to the
+// section's own end — i.e. exactly where the Footer's own photo picks up,
+// at any viewport height. pointer-events-none, position:absolute — never
+// affects About's own box height, data-home-section, or nav/scroll
+// geometry.
 const SHORELINE_URL = "url('/footer/footer-shoreline.webp')";
 // The Footer's own photo there picks up exactly where this gradient
 // finishes resolving (see Footer.tsx), so it MUST reach fully transparent
@@ -65,7 +58,7 @@ export function AboutPreview() {
           own top, regardless of viewport height. Tablet/desktop only. */}
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute inset-x-0 bottom-0 z-0 hidden h-[130px] bg-top bg-no-repeat lg:block lg:h-[clamp(220px,18vw,380px)]"
+        className="pointer-events-none absolute inset-x-0 bottom-0 z-0 hidden h-[130px] bg-top bg-no-repeat md:block lg:h-[clamp(220px,18vw,380px)]"
         style={{
           backgroundImage: `${CONTACT_SHORELINE_REVEAL}, ${SHORELINE_URL}`,
           backgroundSize: '100% auto',
