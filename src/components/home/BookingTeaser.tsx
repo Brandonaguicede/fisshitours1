@@ -24,16 +24,6 @@ const steps = [
   { icon: CheckCircle2, es: { title: 'Confirma', sub: 'Revisa y asegura tu reserva' }, en: { title: 'Confirm', sub: 'Review and secure your booking' } },
 ];
 
-// Four true die-cut holes (left/right/top/bottom, all 12px radius) punched
-// through the ticket via mask instead of a painted circle — this reveals
-// whatever's genuinely behind the component instead of guessing its color.
-const NOTCH_MASK = [
-  'radial-gradient(circle 12px at 0% 50%, transparent 99%, #000 100%)',
-  'radial-gradient(circle 12px at 100% 50%, transparent 99%, #000 100%)',
-  'radial-gradient(circle 12px at 50% 0%, transparent 99%, #000 100%)',
-  'radial-gradient(circle 12px at 50% 100%, transparent 99%, #000 100%)',
-].join(', ');
-
 // Cinematic boarding-pass ticket: photo / info, 2 zones only, with the 3
 // booking steps living outside the ticket as their own row — full flow at /reservar.
 export function BookingTeaser({ selectedBoat, selectedTour, tours }: BookingTeaserProps) {
@@ -79,10 +69,7 @@ export function BookingTeaser({ selectedBoat, selectedTour, tours }: BookingTeas
 
       {/* Ticket */}
       <div className="card-shadow-pool mx-auto max-w-[1050px] lg:max-w-[1100px] [@media(min-width:1024px)_and_(max-height:800px)]:max-w-[720px]">
-        <div
-          className="relative overflow-hidden rounded-[30px] border border-white/25 bg-ocean-950"
-          style={{ maskImage: NOTCH_MASK, WebkitMaskImage: NOTCH_MASK, maskComposite: 'intersect', WebkitMaskComposite: 'intersect' as never }}
-        >
+        <div className="booking-teaser-notch-mask relative overflow-hidden rounded-[30px] border border-white/25 bg-ocean-950">
           <div className="grid grid-cols-1 sm:grid-cols-[50%_50%] [@media(min-width:1024px)_and_(min-height:801px)]:aspect-[2.8/1]">
             {/* Zone A — photo, full bleed */}
             <div className="relative h-52 overflow-hidden sm:h-full">
@@ -114,14 +101,16 @@ export function BookingTeaser({ selectedBoat, selectedTour, tours }: BookingTeas
               </div>
             </div>
 
-            {/* Zone B — info panel, deep navy */}
-            <div className="relative flex min-w-0 flex-col justify-center overflow-hidden border-t border-dashed border-white/15 bg-ocean-950 px-5 py-6 sm:border-t-0 sm:pl-10 sm:pr-10 [@media(min-width:1024px)_and_(max-height:800px)]:py-3.5">
-            <div className="max-w-full text-left sm:max-w-[300px] sm:self-start sm:mx-auto">
+            {/* Zone B — info panel: a hair lighter than bg-ocean-950 (the
+                page's own background) so the panel reads as its own block
+                instead of blending into whatever sits behind the card. */}
+            <div className="relative flex min-w-0 flex-col justify-center overflow-hidden bg-ocean-900 px-5 py-6 sm:pl-10 sm:pr-10 [@media(min-width:1024px)_and_(max-height:800px)]:py-3.5">
+            <div className="max-w-full text-center sm:max-w-[300px] sm:self-start sm:mx-auto">
               <p className="truncate text-center text-[0.62rem] font-bold uppercase tracking-[0.18em] text-ocean-300">{selectedBoat.name}</p>
               <h3 className="mt-1 line-clamp-2 font-display text-[1.6rem] font-bold leading-[1.1] text-white sm:text-[2rem] [@media(min-width:1024px)_and_(max-height:800px)]:mt-1 [@media(min-width:1024px)_and_(max-height:800px)]:text-[1.4rem]">{tourTitle}</h3>
 
               {tourText ? (
-                <div className="mt-2 flex items-center gap-3 text-xs text-ocean-100 [@media(min-width:1024px)_and_(max-height:800px)]:mt-1">
+                <div className="mt-2 flex items-center justify-center gap-3 text-xs text-ocean-100 [@media(min-width:1024px)_and_(max-height:800px)]:mt-1">
                   {selectedTour?.duration ? (
                     <span className="inline-flex items-center gap-1.5">
                       <Clock aria-hidden="true" className="text-ocean-300" size={13} strokeWidth={2} />
@@ -167,9 +156,10 @@ export function BookingTeaser({ selectedBoat, selectedTour, tours }: BookingTeas
             </div>
           </div>
 
-          {/* Perforation A/B — at the 50% split; the dashed line stops short of the
-              masked-through top/bottom notches instead of running under them. */}
-          <div aria-hidden="true" className="pointer-events-none absolute left-1/2 top-3 bottom-3 hidden border-l border-dashed border-white/30 sm:block" />
+          {/* Perforation A/B — direct children of this wrapper (not nested in
+              either zone), fully self-positioned via CSS; see index.css. */}
+          <div aria-hidden="true" className="booking-teaser-divider-h" />
+          <div aria-hidden="true" className="booking-teaser-divider-v" />
         </div>
       </div>
     </div>

@@ -62,7 +62,7 @@ export function MediaGallery({ images, label, nextLabel, previousLabel, unavaila
         <GalleryPagination currentPage={page} pageSize={pageSize} total={images.length} />
       </div>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 min-[560px]:grid-cols-2 lg:grid-cols-3">
         {visibleImages.map((image, index) => (
           <div key={image.src} className="h-48 overflow-hidden rounded-2xl border border-white/10 bg-ocean-900/60 shadow-[0_10px_28px_rgba(0,0,0,0.16)] sm:h-52">
             {!failedImages.has(image.src) ? (
@@ -106,6 +106,6 @@ function useGalleryPageSize() {
 function getGalleryPageSize() {
   if (typeof window === 'undefined') return 3;
   if (window.innerWidth >= 1024) return 3;
-  if (window.innerWidth >= 640) return 2;
+  if (window.innerWidth >= 560) return 2;
   return 1;
 }

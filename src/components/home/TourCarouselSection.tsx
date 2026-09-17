@@ -90,7 +90,7 @@ export function TourCarouselSection({ boats, tours, selectedTour, onSelectTour }
             <div
               ref={scrollerRef}
               className={cn(
-                'flex snap-x snap-mandatory gap-4 overflow-x-auto scroll-smooth pb-3 sm:gap-5',
+                'flex snap-x snap-mandatory gap-4 overflow-x-auto scroll-smooth pb-3 min-[560px]:gap-5',
                 'overscroll-x-contain [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden',
                 groupedTours.length < visibleCardCount && 'justify-center',
               )}
@@ -108,12 +108,11 @@ export function TourCarouselSection({ boats, tours, selectedTour, onSelectTour }
               {groupedTours.map((item) => (
                 <div
                   key={item.tourId}
-                  className="w-full shrink-0 snap-start snap-always sm:w-[calc((100%-1.5rem)/2)] lg:w-[calc((100%-3rem)/3)] xl:w-[calc((100%-4.5rem)/4)]"
+                  className="w-full shrink-0 snap-start snap-always min-[560px]:w-[calc((100%-20px)/2)] lg:w-[calc((100%-40px)/3)]"
                 >
                   <BoatTourCard
                     catalogItem={item}
                     isSelected={item.boatOptions.some((option) => option.packages.some((entry) => entry.id === selectedTour?.id))}
-                    mediaClassName="lg:h-28"
                     onSelect={onSelectTour}
                   />
                 </div>

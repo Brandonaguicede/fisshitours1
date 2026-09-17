@@ -64,18 +64,17 @@ export function FleetSection({ boats, tours, selectedBoat, onSelectBoat, onViewT
 
           <div
             ref={carouselRef}
-            className="mt-4 flex snap-x snap-mandatory gap-4 overflow-x-auto scroll-smooth pb-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:mt-5 sm:gap-5 [@media(min-width:1024px)_and_(max-height:800px)]:mt-2.5"
+            className="mt-4 flex snap-x snap-mandatory gap-4 overflow-x-auto scroll-smooth pb-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:mt-5 min-[560px]:gap-5 [@media(min-width:1024px)_and_(max-height:800px)]:mt-2.5"
             role="region"
             aria-label={language === 'es' ? 'Barcos disponibles' : 'Available boats'}
             onScroll={updateControls}
             {...reveal(1)}
           >
             {boats.map((boat) => (
-              <div key={boat.id} className="w-full shrink-0 snap-start snap-always sm:w-[calc((100%-1.5rem)/2)] lg:w-[calc((100%-3rem)/3)] xl:w-[calc((100%-4.5rem)/4)]">
+              <div key={boat.id} className="w-full shrink-0 snap-start snap-always min-[560px]:w-[calc((100%-20px)/2)] lg:w-[calc((100%-40px)/3)]">
                 <BoatCard
                   boat={boat}
                   isSelected={boat.id === selectedBoat.id}
-                  mediaClassName="[@media(min-width:1024px)_and_(max-height:800px)]:h-36"
                   onSelect={openBoatDetails}
                   startingPrice={getBoatStartingPrice(boat.id, tours)}
                 />

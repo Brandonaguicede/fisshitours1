@@ -17,7 +17,7 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement>, PropsWith
 }
 
 const variants: Record<ButtonVariant, string> = {
-  primary: 'glass-primary text-ocean-950',
+  primary: 'glass-primary text-white',
   secondary: 'glass-control bg-ocean-700/65 text-white',
   glass: 'glass-control text-white',
   ghost: 'bg-transparent text-ocean-100',

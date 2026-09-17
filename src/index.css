@@ -147,22 +147,25 @@
 
     --surface-border: rgba(var(--color-surface-light), 0.12);
     --surface-border-control: rgba(var(--color-surface-highlight), 0.16);
-    /* Selection/focus/active details across every glass control — was a
-       near-white highlight, now the site's celeste accent so those small
-       interactive details read as intentional rather than neutral. */
-    --glass-selected-border: rgba(126, 200, 227, 0.55);
-    --glass-focus-border: rgba(126, 200, 227, 0.45);
-    --glass-focus-outline: rgba(126, 200, 227, 0.65);
+    /* Selection/focus/active details across every glass control — the
+       site's celeste accent, #1F7FA8 (rgb(31,127,168)) — softer than the
+       first, near-pure-cyan attempt (#018FB8), still with more presence
+       than the old pale sky-blue. */
+    --glass-selected-border: rgba(31, 127, 168, 0.55);
+    --glass-focus-border: rgba(31, 127, 168, 0.45);
+    --glass-focus-outline: rgba(31, 127, 168, 0.65);
     --glass-accent-border: rgba(226, 168, 109, 0.46);
     --glass-surface-background: rgba(var(--color-surface-ocean), 0.4);
     --glass-panel-background: rgba(var(--color-surface-ocean), 0.5);
     --glass-control-background: rgba(var(--color-surface-light), 0.05);
-    /* Primary CTA (Book Now, View Tour): softer, less-saturated celeste
-       than a neon sky/cyan, desaturated enough to read as premium glass
-       rather than a bright brand chip. */
-    --glass-primary-background: rgba(126, 200, 227, 0.78);
-    --glass-primary-hover-background: rgba(155, 212, 232, 0.88);
-    --glass-primary-border: rgba(95, 168, 196, 0.55);
+    /* Primary CTA (Book Now, View Tour, Continue): solid #1F7FA8 — more
+       visual presence than the old translucent pale-celeste fill. Hover is
+       one step darker (#1B6E92, rgb(27,110,146)); :active's existing
+       brightness(0.98) filter (see .glass-interactive:active) darkens it
+       one step further on its own, no extra token needed. */
+    --glass-primary-background: #1F7FA8;
+    --glass-primary-hover-background: #1B6E92;
+    --glass-primary-border: rgba(27, 110, 146, 0.9);
     --glass-subtle-background: rgba(var(--color-surface-light), 0.035);
     --glass-accent-background: rgba(201, 132, 74, 0.16);
     --glass-blur-surface: 20px;
@@ -408,7 +411,7 @@
     right: 0.9rem;
     bottom: 0.35rem;
     height: 1.5px;
-    background: #7EC8E3;
+    background: #1F7FA8;
     transform: scaleX(0);
     transform-origin: center;
     transition: transform 460ms cubic-bezier(0.34, 1.56, 0.64, 1), opacity 220ms ease;
@@ -485,7 +488,7 @@
   .glass-primary {
     border: 1px solid var(--glass-primary-border);
     background: var(--glass-primary-background);
-    color: var(--color-text-on-light);
+    color: #fff;
     box-shadow: var(--shadow-glass-control);
     -webkit-backdrop-filter: blur(var(--glass-blur-control)) saturate(118%);
     backdrop-filter: blur(var(--glass-blur-control)) saturate(118%);
@@ -557,6 +560,123 @@
 
   .home-section {
     scroll-margin-top: var(--home-anchor-offset);
+  }
+
+  /* BookingTeaser ticket notches — left/right notches must sit on the same
+     Y as the horizontal perforation between the photo zone (a fixed 208px/
+     h-52 below sm) and the info zone below it. Below sm the mask uses that
+     same 208px, not 50%, since the info zone's height varies with content
+     and isn't actually half the stacked card's total height. From sm up,
+     the layout is a side-by-side row (zone heights equal via the grid), so
+     the perforation is vertical instead and 50% is correct again. */
+  .booking-teaser-notch-mask {
+    mask-image:
+      radial-gradient(circle 12px at 0% 208px, transparent 99%, #000 100%),
+      radial-gradient(circle 12px at 100% 208px, transparent 99%, #000 100%),
+      radial-gradient(circle 12px at 50% 0%, transparent 99%, #000 100%),
+      radial-gradient(circle 12px at 50% 100%, transparent 99%, #000 100%);
+    -webkit-mask-image:
+      radial-gradient(circle 12px at 0% 208px, transparent 99%, #000 100%),
+      radial-gradient(circle 12px at 100% 208px, transparent 99%, #000 100%),
+      radial-gradient(circle 12px at 50% 0%, transparent 99%, #000 100%),
+      radial-gradient(circle 12px at 50% 100%, transparent 99%, #000 100%);
+    mask-composite: intersect;
+    -webkit-mask-composite: intersect;
+  }
+
+  @media (min-width: 640px) {
+    .booking-teaser-notch-mask {
+      mask-image:
+        radial-gradient(circle 12px at 0% 50%, transparent 99%, #000 100%),
+        radial-gradient(circle 12px at 100% 50%, transparent 99%, #000 100%),
+        radial-gradient(circle 12px at 50% 0%, transparent 99%, #000 100%),
+        radial-gradient(circle 12px at 50% 100%, transparent 99%, #000 100%);
+      -webkit-mask-image:
+        radial-gradient(circle 12px at 0% 50%, transparent 99%, #000 100%),
+        radial-gradient(circle 12px at 100% 50%, transparent 99%, #000 100%),
+        radial-gradient(circle 12px at 50% 0%, transparent 99%, #000 100%),
+        radial-gradient(circle 12px at 50% 100%, transparent 99%, #000 100%);
+    }
+  }
+
+  /* Ticket perforation — both elements are direct children of the ticket's
+     own outer `.booking-teaser-notch-mask` wrapper (siblings of the photo/
+     info grid), never nested inside just the photo or just the info panel,
+     so neither can get clipped by either zone's own `overflow-hidden`.
+     Self-positioned (not dependent on Tailwind utility classes on the
+     element) with an explicit z-index so they always paint above the photo
+     and panel and below any interactive content. Below 640px (the same
+     breakpoint the ticket's own grid switches on) the horizontal one sits
+     at `top: 208px` — the real height of the photo zone (`h-52`) — i.e. the
+     actual seam, not an approximation. From 640px the grid is the [50%
+     photo | 50% info] row, so `left: 50%` is the real seam position. */
+  .booking-teaser-divider-h {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 208px;
+    height: 1px;
+    z-index: 20;
+    pointer-events: none;
+    background-image: repeating-linear-gradient(to right, rgba(232, 241, 247, 0.62) 0, rgba(232, 241, 247, 0.62) 5px, transparent 5px, transparent 10px);
+  }
+
+  .booking-teaser-divider-v {
+    display: none;
+  }
+
+  @media (min-width: 640px) {
+    .booking-teaser-divider-h {
+      display: none;
+    }
+
+    .booking-teaser-divider-v {
+      display: block;
+      position: absolute;
+      top: 12px;
+      bottom: 12px;
+      left: 50%;
+      width: 1px;
+      z-index: 20;
+      pointer-events: none;
+      background-image: repeating-linear-gradient(to bottom, rgba(232, 241, 247, 0.62) 0, rgba(232, 241, 247, 0.62) 5px, transparent 5px, transparent 10px);
+    }
+  }
+
+  /* Shared full-bleed media-card reveal — BoatTourCard and BoatCard both
+     use it. At rest only the title is visible, pinned near the card's
+     bottom edge; the hidden trio below it (pill + price + CTA, order
+     varies per card) sits low enough to fall outside the card's own
+     `overflow-hidden` box. `.media-card-content` (title + hidden trio
+     together) slides up on interaction, opening room for them;
+     `.media-card-reveal` (the trio itself) also fades in for a softer
+     entrance instead of just snapping into view as the slide uncovers it.
+     100px is the real measured height of pill + price + button + their
+     gaps at this card padding — not a blind guess — so the title lands
+     ~16-20px above the true bottom edge once revealed, matching where it
+     sits at rest. No `@media(hover)` branching: `:hover` never sticks on
+     touch, and tapping either card (a real <button>) already triggers
+     `:focus`, so the same rules serve mouse, touch and keyboard alike. */
+  .media-card-content {
+    transform: translateY(100px);
+    transition: transform 350ms ease-out;
+  }
+
+  .group:hover .media-card-content,
+  .group:focus .media-card-content,
+  .group:focus-within .media-card-content {
+    transform: translateY(0);
+  }
+
+  .media-card-reveal {
+    opacity: 0;
+    transition: opacity 300ms ease;
+  }
+
+  .group:hover .media-card-reveal,
+  .group:focus .media-card-reveal,
+  .group:focus-within .media-card-reveal {
+    opacity: 1;
   }
 
   /* Slow decorative drift for atmosphere blobs between sections (transform-only, GPU-cheap; neutralized by the reduced-motion rule below). */

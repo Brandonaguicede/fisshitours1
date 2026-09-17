@@ -48,9 +48,9 @@ const config: Config = {
           600: '#9E6234',
         },
         celeste: {
-          light: '#9BD4E8',
-          DEFAULT: '#7EC8E3',
-          dark: '#5FA8C4',
+          light: '#6DACC6',
+          DEFAULT: '#1F7FA8',
+          dark: '#1B6E92',
           ink: '#082F49',
         },
       },
