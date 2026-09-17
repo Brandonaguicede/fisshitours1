@@ -148,7 +148,12 @@ export function Navbar() {
 
         <nav
           className={cn(
-            'navbar-nav-shell pointer-events-auto hidden shrink-0 items-center gap-0 rounded-full px-1.5 py-1.5 transition-all duration-300 md:absolute md:left-1/2 md:flex md:-translate-x-1/2 lg:gap-0.5 lg:px-2',
+            // The full center nav (7 links) plus the EN/Book Now cluster
+            // don't fit next to the logo at tablet width without
+            // colliding — that showed up as both overlapping the nav pill
+            // on iPad. Both now wait for real desktop (lg, 1024px); the
+            // hamburger menu (already proven at mobile) covers tablet too.
+            'navbar-nav-shell pointer-events-auto hidden shrink-0 items-center gap-0 rounded-full px-1.5 py-1.5 transition-all duration-300 lg:absolute lg:left-1/2 lg:flex lg:-translate-x-1/2 lg:gap-0.5 lg:px-2',
             isScrolled && 'brightness-110',
           )}
           aria-label="Navegacion principal"
@@ -170,7 +175,7 @@ export function Navbar() {
           })}
         </nav>
 
-        <div className="pointer-events-auto hidden shrink-0 items-center gap-2 md:flex lg:gap-3">
+        <div className="pointer-events-auto hidden shrink-0 items-center gap-2 lg:flex lg:gap-3">
           <Button
             size="sm"
             variant="glass"
@@ -188,7 +193,7 @@ export function Navbar() {
         <span ref={menuButtonRef} className="contents">
           <IconButton
             className={cn(
-              'pointer-events-auto relative z-10 md:hidden',
+              'pointer-events-auto relative z-10 lg:hidden',
             )}
             icon={isOpen ? X : Menu}
             label={isOpen ? 'Cerrar menu' : 'Abrir menu'}
@@ -203,7 +208,7 @@ export function Navbar() {
         {isOpen ? (
           <motion.div
             ref={menuRef}
-            className="navbar-nav-shell pointer-events-auto mx-4 mt-2 overflow-hidden rounded-[var(--radius-panel)] md:hidden"
+            className="navbar-nav-shell pointer-events-auto mx-4 mt-2 overflow-hidden rounded-[var(--radius-panel)] lg:hidden"
             initial={reduceMotion ? false : { opacity: 0, y: -8, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -8, scale: 0.98 }}

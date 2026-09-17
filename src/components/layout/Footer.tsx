@@ -179,7 +179,15 @@ export function Footer() {
           in a separate band above it. Desktop (≥1024px) keeps its own
           background via the lg: classes here, entirely unchanged. */}
       <div
-        className="relative hidden md:-mt-24 md:block md:bg-top md:bg-no-repeat md:bg-[#F6D8AC] md:[background-image:url('/footer/footer-shoreline_tablet.png')] md:[background-size:100%_auto] lg:mt-0 lg:bg-[#F1CFA9] lg:bg-no-repeat lg:bg-top lg:[background-image:url('/footer/footer-shoreline.webp')] lg:[background-size:100%_auto] lg:[background-position:center_calc(-1*clamp(220px,18vw,380px))]"
+        // `top` + a compensating negative `margin-bottom`, not
+        // `margin-top: -6rem` — a negative top margin on the very last
+        // in-flow element of the page left real, reserved-but-unpainted
+        // height behind on some iOS Safari renders (the "empty navy block
+        // you can still scroll into" past the footer). `top` only shifts
+        // where this box paints, never its layout footprint; the matching
+        // `-mb-24` is what actually tells layout the page ends 6rem
+        // higher, without a negative-margin edge case doing that job.
+        className="relative hidden md:-top-24 md:-mb-24 md:block md:bg-top md:bg-no-repeat md:bg-[#F6D8AC] md:[background-image:url('/footer/footer-shoreline_tablet.png')] md:[background-size:100%_auto] lg:top-0 lg:mb-0 lg:bg-[#F1CFA9] lg:bg-no-repeat lg:bg-top lg:[background-image:url('/footer/footer-shoreline.webp')] lg:[background-size:100%_auto] lg:[background-position:center_calc(-1*clamp(220px,18vw,380px))]"
       >
         {/* Tablet-only navy fade: the wrapper above was already pulled up
             (negative margin) so this starts right behind the Contact CTA,
