@@ -20,6 +20,8 @@ export interface BoatTour {
   boatTourId?: string;
   tourId?: string;
   tourTitle?: string;
+  /** The parent tour's own `sort_order` — drives display order in grouped catalogs (one entry per tour, independent of package-level ordering). */
+  tourSortOrder?: number;
   /** Shared tour content; commercial fields below still belong to this package. */
   tourDetails?: {
     title: string;

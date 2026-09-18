@@ -1,4 +1,4 @@
-import { formatTime } from '../../utils/format';
+import { formatTime, money } from '../../utils/format';
 import { Calendar, Check, CheckCircle2, Clock, Download, Loader2, Pencil, Plus, RefreshCw, Trash2, X, XCircle } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -13,7 +13,6 @@ import { getAdminReservationsPage } from '../../services/adminListService';
 import { getActiveBoatTours, getActiveTimeSlots } from '../../services/boatTourService';
 import { adminCreateBooking, confirmBooking, getActiveDepartureLocations, retryConfirmationEmail, updateBooking, type DepartureLocation } from '../../services/bookingService';
 import type { BoatTour, TourTimeSlot } from '../../types/boatTour';
-import { money } from './adminMockData';
 
 interface AdminReservation {
   id: string;
@@ -104,6 +103,7 @@ export default function AdminReservationsPage() {
   const [tours, setTours] = useState<BoatTour[]>([]);
   const [timeSlots, setTimeSlots] = useState<TourTimeSlot[]>([]);
   const [departureLocations, setDepartureLocations] = useState<DepartureLocation[]>([]);
+  const [paymentMethodNames, setPaymentMethodNames] = useState<Record<string, string>>({});
   const [search, setSearch] = useState('');
   const [bookingStatus, setBookingStatus] = useState('all');
   const [paymentStatus, setPaymentStatus] = useState('all');
@@ -199,7 +199,25 @@ export default function AdminReservationsPage() {
     }
 
     void loadCatalog();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    // Independent of the manual-booking catalog above: reservations can
+    // reference a payment method that's since been renamed or deactivated,
+    // so this loads every row (active or not) purely to show a readable
+    // name instead of the raw key — never blocks or errors the page if it
+    // fails, it just falls back to the key itself (see paymentMethodLabel).
+    async function loadPaymentMethodNames() {
+      const { data } = await db.from('payment_methods').select('key, name');
+      if (data) setPaymentMethodNames(Object.fromEntries((data as Array<{ key: string; name: string }>).map((row) => [row.key, row.name])));
+    }
+    void loadPaymentMethodNames();
+  }, []);
+
+  function paymentMethodLabel(key: string) {
+    return paymentMethodNames[key] ?? key;
+  }
 
   async function updateReservationStatus(reservation: AdminReservation, nextBookingStatus: 'confirmed' | 'cancelled') {
     setBusyId(reservation.id);
@@ -369,7 +387,7 @@ export default function AdminReservationsPage() {
         'Lugar de salida': reservation.departure_location_name_snapshot ?? '',
         'Cargo de salida (USD)': Number(reservation.departure_surcharge_snapshot ?? 0).toFixed(2),
         'Total (USD)': Number(reservation.total_snapshot ?? 0).toFixed(2),
-        'Método de pago': reservation.payment_method_key,
+        'Método de pago': paymentMethodLabel(reservation.payment_method_key),
         'Estado del pago': reservation.payment_status,
         'Estado de reserva': reservation.booking_status,
         'Creada el': new Date(reservation.created_at).toLocaleString('es-CR'),
@@ -534,7 +552,7 @@ export default function AdminReservationsPage() {
               </td>
               <td>{money(Number(reservation.total_snapshot))}</td>
               <td>
-                {reservation.payment_method_key}
+                {paymentMethodLabel(reservation.payment_method_key)}
                 <div><AdminBadge value={reservation.payment_status} /></div>
               </td>
               <td><AdminBadge value={reservation.booking_status} /></td>
@@ -563,7 +581,7 @@ export default function AdminReservationsPage() {
               <div><dt>Personas</dt><dd>{reservation.guests}</dd></div>
               <div><dt>Lugar de salida</dt><dd>{reservation.departure_location_name_snapshot ?? '-'}<div className="admin-muted">{Number(reservation.departure_surcharge_snapshot ?? 0) > 0 ? money(Number(reservation.departure_surcharge_snapshot)) : 'Sin costo'}</div></dd></div>
               <div><dt>Total</dt><dd>{money(Number(reservation.total_snapshot))}</dd></div>
-              <div><dt>Método de pago</dt><dd>{reservation.payment_method_key}</dd></div>
+              <div><dt>Método de pago</dt><dd>{paymentMethodLabel(reservation.payment_method_key)}</dd></div>
               <div><dt>Estado de pago</dt><dd><AdminBadge value={reservation.payment_status} /></dd></div>
               <div><dt>Estado de reserva</dt><dd><AdminBadge value={reservation.booking_status} /></dd></div>
             </dl>

@@ -10,6 +10,7 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "test:e2e": "playwright test",
+    "test:admin": "node tests/run-admin-tests.mjs",
     "test:hero": "node tests/hero/media.mjs && playwright test --config tests/hero/playwright.config.ts",
     "test:packages": "node tests/package-settings/database.mjs && playwright test --config tests/package-settings/playwright.config.ts",
     "test:e2e:ui": "playwright test --ui",
@@ -40,7 +41,7 @@
     "@vitejs/plugin-react": "^4.2.1",
     "autoprefixer": "^10.4.14",
     "postcss": "^8.4.24",
-    "supabase": "^2.114.0",
+    "supabase": "^2.117.0",
     "tailwindcss": "^3.4.17",
     "typescript": "^5.6.4",
     "vite": "^5.2.7"

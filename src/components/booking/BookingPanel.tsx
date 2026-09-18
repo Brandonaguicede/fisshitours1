@@ -32,21 +32,34 @@ interface BookingPanelProps {
   onTourChange: (tour?: BoatTour) => void;
 }
 
-const paymentMethods: Array<{ id: BookingPaymentMethod; title: string; description: string; icon: typeof CreditCard; logo?: string; logoAlt?: string }> = [
-  { id: 'paypal', title: 'Pay with PayPal', description: 'Secure USD checkout.', icon: CreditCard, logo: '/images/paypal.png', logoAlt: 'PayPal' },
-  { id: 'whatsapp-link', title: 'Request Payment Link via WhatsApp', description: 'Request a payment link.', icon: MessageCircle, logo: '/images/whatsapp.png', logoAlt: 'WhatsApp' },
-  { id: 'pay-on-day', title: 'Pay on the Day of the Tour', description: 'Pay when the tour starts.', icon: WalletCards },
+// `type` is what actually has a working checkout integration below
+// (handlePaymentMethodAction dispatches on it) — a payment_methods row with
+// any other `type` (e.g. bank_transfer, sinpe, cash, manual — all valid per
+// the DB's own CHECK constraint) has no real handler yet, so it's filtered
+// out rather than rendered as a card that does nothing when clicked.
+type SupportedPaymentType = 'paypal' | 'whatsapp_link' | 'pay_on_day';
+const SUPPORTED_PAYMENT_TYPES: SupportedPaymentType[] = ['paypal', 'whatsapp_link', 'pay_on_day'];
+
+const paymentMethods: Array<{ id: BookingPaymentMethod; type: SupportedPaymentType; title: string; description: string; icon: typeof CreditCard; logo?: string; logoAlt?: string }> = [
+  { id: 'paypal', type: 'paypal', title: 'Pay with PayPal', description: 'Secure USD checkout.', icon: CreditCard, logo: '/images/paypal.png', logoAlt: 'PayPal' },
+  { id: 'whatsapp-link', type: 'whatsapp_link', title: 'Request Payment Link via WhatsApp', description: 'Request a payment link.', icon: MessageCircle, logo: '/images/whatsapp.png', logoAlt: 'WhatsApp' },
+  { id: 'pay-on-day', type: 'pay_on_day', title: 'Pay on the Day of the Tour', description: 'Pay when the tour starts.', icon: WalletCards },
 ];
 
-function getPaymentMethodCopy(id: BookingPaymentMethod, language: 'es' | 'en') {
-  if (language === 'en') return paymentMethods.find((method) => method.id === id) ?? paymentMethods[0];
-  const copy: Record<BookingPaymentMethod, { title: string; description: string }> = {
-    paypal: { title: 'Pagar con PayPal', description: 'Checkout seguro en USD.' },
-    'whatsapp-link': { title: 'Solicitar enlace por WhatsApp', description: 'Solicita un enlace de pago.' },
-    'pay-on-day': { title: 'Pagar el día del tour', description: 'Paga cuando inicie el tour.' },
-  };
-  const method = paymentMethods.find((item) => item.id === id) ?? paymentMethods[0];
-  return { ...method, ...copy[id] };
+// Spanish copy for the 3 known integrations, keyed by `type` (not `key`/`id`)
+// so it survives an admin renaming a method's name or key. `payment_methods`
+// only stores one (English) name/description, so this is the only source of
+// Spanish text for these — a method with a custom name still gets an
+// accurate Spanish label for what kind of checkout it actually is.
+const SPANISH_COPY_BY_TYPE: Record<SupportedPaymentType, { title: string; description: string }> = {
+  paypal: { title: 'Pagar con PayPal', description: 'Checkout seguro en USD.' },
+  whatsapp_link: { title: 'Solicitar enlace por WhatsApp', description: 'Solicita un enlace de pago.' },
+  pay_on_day: { title: 'Pagar el día del tour', description: 'Paga cuando inicie el tour.' },
+};
+
+function getPaymentMethodCopy(method: { title: string; description: string; type: SupportedPaymentType }, language: 'es' | 'en') {
+  if (language === 'en') return method;
+  return { ...method, ...SPANISH_COPY_BY_TYPE[method.type] };
 }
 
 export function getBookingTerms(language: 'es' | 'en') {
@@ -131,14 +144,20 @@ export function BookingPanel({ selectedBoat, selectedTour: requestedTour, boats,
   const departureLocationsQuery = useQuery({ queryKey: ['departureLocations', 'active'], queryFn: getActiveDepartureLocations });
   const departureLocations = departureLocationsQuery.data ?? [];
   const selectedDepartureLocation = departureLocations.find((location) => location.id === departureLocationId);
-  const remotePaymentMethods = paymentMethodsQuery.data?.map((method) => ({
-    id: method.key as BookingPaymentMethod,
-    title: method.name,
-    description: method.description ?? '',
-    icon: method.key === 'paypal' ? CreditCard : method.key === 'whatsapp-link' ? MessageCircle : WalletCards,
-    logo: method.logo_url ?? undefined,
-    logoAlt: method.name,
-  }));
+  const remotePaymentMethods = paymentMethodsQuery.data
+    // A row with no usable `key` can't be safely persisted as
+    // payment_method_key later — exclude it rather than silently falling
+    // back to some other key at submit time (see submitBooking).
+    ?.filter((method): method is typeof method & { type: SupportedPaymentType } => Boolean(method.key) && SUPPORTED_PAYMENT_TYPES.includes(method.type as SupportedPaymentType))
+    .map((method) => ({
+      id: method.key as BookingPaymentMethod,
+      type: method.type,
+      title: method.name,
+      description: method.description ?? '',
+      icon: method.type === 'paypal' ? CreditCard : method.type === 'whatsapp_link' ? MessageCircle : WalletCards,
+      logo: method.logo_url ?? undefined,
+      logoAlt: method.name,
+    }));
   const backendPaymentMethods = remotePaymentMethods?.length ? remotePaymentMethods : paymentMethods;
   const priceQuery = useQuery({
     queryKey: ['bookingPrice', selectedBoat.id, selectedTour?.tourId, selectedTour?.id, guests, departureLocationId],
@@ -362,10 +381,10 @@ export function BookingPanel({ selectedBoat, selectedTour: requestedTour, boats,
     window.location.assign(url);
   }
 
-  function handlePaymentLinkRequest() {
-    submitBooking('whatsapp-link').then((result) => {
+  function handlePaymentLinkRequest(key: BookingPaymentMethod) {
+    submitBooking(key).then((result) => {
       if (!result || !bookingPayload) return;
-      setPaymentMethod('whatsapp-link');
+      setPaymentMethod(key);
       setBookingStatus('pending_confirmation');
       setPaymentStatus('pending');
       setPaypalVisible(false);
@@ -379,17 +398,21 @@ export function BookingPanel({ selectedBoat, selectedTour: requestedTour, boats,
     }).catch(() => undefined);
   }
 
-  function handlePayOnDayRequest() {
+  function handlePayOnDayRequest(key: BookingPaymentMethod) {
     const booking = validateBookingForPayment();
     if (!booking) return;
-    setPaymentMethod('pay-on-day');
+    // The actual submission happens later, in handleConfirmPayOnDay, once the
+    // user confirms the dialog this opens — by then `paymentMethod` state
+    // (set here) has settled through a real render, so reading it there is
+    // safe (unlike calling submitBooking synchronously in this same tick).
+    setPaymentMethod(key);
     setIsPayOnDayOpen(true);
   }
 
   function handleConfirmPayOnDay() {
     const booking = validateBookingForPayment();
     if (!booking) return;
-    submitBooking('pay-on-day').then((result) => {
+    submitBooking(paymentMethod).then((result) => {
       if (!result || !bookingPayload) return;
       setBookingStatus('pending_confirmation');
       setPaymentStatus('not_required_yet');
@@ -403,11 +426,11 @@ export function BookingPanel({ selectedBoat, selectedTour: requestedTour, boats,
     }).catch(() => undefined);
   }
 
-  function handlePayPalRequest() {
+  function handlePayPalRequest(key: BookingPaymentMethod) {
     const booking = validateBookingForPayment();
     if (!booking) return;
-    submitBooking('paypal').then(() => {
-      setPaymentMethod('paypal');
+    submitBooking(key).then(() => {
+      setPaymentMethod(key);
       setBookingStatus('pending_payment');
       setPaymentStatus('pending');
       setPaypalError('');
@@ -1092,9 +1115,14 @@ function CustomerStep(props: {
   onSpecialRequestsChange: (value: string) => void;
   onTurnstileTokenChange: (token: string) => void;
   onPaymentMethodChange: (method: BookingPaymentMethod) => void;
-  onPayPalRequest: () => void;
-  onPaymentLinkRequest: () => void;
-  onPayOnDayRequest: () => void;
+  // Take the selected row's real key as a parameter rather than reading
+  // `paymentMethod` state inside the handler: `onPaymentMethodChange` above
+  // schedules a state update that hasn't committed yet when these run in the
+  // same click, so a handler reading state here would see the *previous*
+  // render's value, not the one just selected (classic stale-closure trap).
+  onPayPalRequest: (key: BookingPaymentMethod) => void;
+  onPaymentLinkRequest: (key: BookingPaymentMethod) => void;
+  onPayOnDayRequest: (key: BookingPaymentMethod) => void;
   onPayPalSuccess: (result: PayPalCaptureResult) => void;
   onPayPalError: (message: string) => void;
   onPayPalCancel: () => void;
@@ -1102,12 +1130,19 @@ function CustomerStep(props: {
 }) {
   const { language } = useLanguage();
 
-  function handlePaymentMethodAction(method: BookingPaymentMethod) {
+  function handlePaymentMethodAction(method: BookingPaymentMethod, type: SupportedPaymentType) {
     if (props.isSubmitting) return;
+    // `key` (`method`) is what gets persisted as payment_method_key — real,
+    // schema-backed identity of the exact row the customer picked. `type`
+    // only decides which integration to run; two rows can share a `type`
+    // (e.g. a second PayPal-style method) and must still be told apart here.
+    // A row with no usable key never makes it into props.paymentMethods (see
+    // remotePaymentMethods' filter in the parent), so `method` is always a
+    // real, non-empty key by the time this runs.
     props.onPaymentMethodChange(method);
-    if (method === 'paypal') props.onPayPalRequest();
-    if (method === 'whatsapp-link') props.onPaymentLinkRequest();
-    if (method === 'pay-on-day') props.onPayOnDayRequest();
+    if (type === 'paypal') props.onPayPalRequest(method);
+    if (type === 'whatsapp_link') props.onPaymentLinkRequest(method);
+    if (type === 'pay_on_day') props.onPayOnDayRequest(method);
   }
 
   return (
@@ -1146,7 +1181,7 @@ function CustomerStep(props: {
         <p className="text-xs font-extrabold uppercase tracking-[0.12em] text-ocean-400">{language === 'es' ? 'Método de pago' : 'Payment method'}</p>
         <div className="mt-2.5 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
           {props.paymentMethods.map((method) => {
-            const methodCopy = getPaymentMethodCopy(method.id, language);
+            const methodCopy = getPaymentMethodCopy(method, language);
             const selected = props.paymentMethod === method.id;
             return (
               <ChoiceCard
@@ -1156,7 +1191,7 @@ function CustomerStep(props: {
                 className="relative flex min-w-0 flex-col justify-center gap-1 p-3 text-left"
                 disabled={props.isSubmitting}
                 selected={selected}
-                onClick={() => handlePaymentMethodAction(method.id)}
+                onClick={() => handlePaymentMethodAction(method.id, method.type)}
               >
                 <span className="flex items-center gap-2">
                   <span className={cn('grid size-4 shrink-0 place-items-center rounded-full border', selected ? 'border-ocean-100 bg-ocean-100' : 'border-white/25')}>

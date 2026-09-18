@@ -6,7 +6,7 @@ import { Link } from 'react-router-dom';
 import { AdminBadge, AdminModuleSurface, AdminStatCard, AdminTable } from '../../components/admin/AdminPrimitives';
 import { supabase } from '../../lib/supabase';
 import { readWithAdminSession } from '../../services/adminAuthService';
-import { money } from './adminMockData';
+import { money } from '../../utils/format';
 
 type DashboardReservation = {
   id: string;

@@ -6,14 +6,17 @@ import { readWithAdminSession } from '../../services/adminAuthService';
 import { Eye, EyeOff, Plus, Pencil, Settings, Trash2, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
+import AdminConfirmDialog from '../../components/admin/AdminConfirmDialog';
 import AdminImageManager from '../../components/admin/AdminImageManager';
-import { AdminFilterMenu, AdminListToolbar, AdminModuleSurface, AdminPageHeader } from '../../components/admin/AdminPrimitives';
+import { AdminFilterMenu, AdminListToolbar, AdminModuleSurface, AdminPageHeader, AdminReorderHandle, AdminReorderToolbar } from '../../components/admin/AdminPrimitives';
 import FormSection from '../../components/admin/FormSection';
 import ModalFooter from '../../components/admin/ModalFooter';
 import { Modal } from '../../components/common/Modal';
+import { useAdminReorder } from '../../hooks/useAdminReorder';
 import { supabase } from '../../lib/supabase';
 import { deleteStorageImage } from '../../services/imageService';
 import type { StorageImage } from '../../services/imageService';
+import { friendlyDeleteError } from '../../utils/adminErrors';
 
 interface GalleryRow {
   id: string;
@@ -51,6 +54,31 @@ export default function AdminGalleryPage() {
   const loading = pagination.query.isFetching;
   const queryError = pagination.query.error instanceof Error ? pagination.query.error.message : '';
   async function loadImages() { setError(''); await pagination.query.refetch(); }
+
+  // `pagination.rows` just gives the hook a stable reference while not
+  // reordering; `startReorder()` below overrides it with the full,
+  // unpaginated set before switching into reorder mode.
+  const reorder = useAdminReorder<GalleryRow>(pagination.rows);
+  const [reorderLoading, setReorderLoading] = useState(false);
+  const canReorder = filter === 'all' && search.trim() === '';
+
+  async function startReorder() {
+    setReorderLoading(true);
+    setError('');
+    const { data, error } = await supabase.from('gallery_images').select('id, src, image_url, image_public_id, alt, category, title, active, sort_order').order('sort_order', { ascending: true }).order('id');
+    setReorderLoading(false);
+    if (error) { setError(error.message); return; }
+    reorder.start((data ?? []) as GalleryRow[]);
+  }
+
+  async function persistOrder(updates: Array<{ id: string; sort_order: number }>) {
+    for (const update of updates) {
+      const { error } = await supabase.from('gallery_images').update({ sort_order: update.sort_order }).eq('id', update.id);
+      if (error) { setError(error.message); throw new Error(error.message); }
+    }
+    setNotice('Orden actualizado.');
+    await loadImages();
+  }
 
   async function createImage() {
     setNotice('');
@@ -133,7 +161,7 @@ export default function AdminGalleryPage() {
     }
     const { error } = await supabase.from('gallery_images').delete().eq('id', row.id);
     if (error) {
-      setError(error.message);
+      setError(friendlyDeleteError(error, 'esta imagen'));
       return;
     }
     setPendingDelete(null);
@@ -171,7 +199,17 @@ export default function AdminGalleryPage() {
               </label>
             </AdminFilterMenu>
           }
-          primaryAction={<button className="admin-btn" type="button" onClick={() => void createImage()}><Plus size={16} /> Nueva imagen</button>}
+          primaryAction={<button className="admin-btn" type="button" disabled={reorder.reordering} onClick={() => void createImage()}><Plus size={16} /> Nueva imagen</button>}
+          secondaryActions={
+            <AdminReorderToolbar
+              reordering={reorder.reordering}
+              saving={reorder.saving || reorderLoading}
+              onStart={() => void startReorder()}
+              onCancel={reorder.cancel}
+              onSave={() => void reorder.save(persistOrder)}
+              disabledReason={canReorder ? undefined : 'Limpia la búsqueda y el filtro de categoría para reordenar.'}
+            />
+          }
         />
 
       {error || queryError ? (
@@ -185,23 +223,39 @@ export default function AdminGalleryPage() {
 
       {loading ? <p className="admin-muted" role="status">Cargando galería...</p> : null}
         <section className="admin-media-grid" aria-busy={loading}>
-          {visibleImages.map((image) => (
-            <article className="admin-media-card" key={image.id}>
+          {(reorder.reordering ? reorder.order : visibleImages).map((image, index) => (
+            <article
+              className={`admin-media-card${reorder.reordering ? ' admin-sortable-row' : ''}${reorder.dragId === image.id ? ' admin-sortable-row--dragging' : ''}`}
+              key={image.id}
+              {...(reorder.reordering ? reorder.dragHandlers(image.id) : {})}
+            >
               {image.src ?? image.image_url ? (
                 <img src={image.src ?? image.image_url ?? ''} alt={image.alt} loading="lazy" decoding="async" width={1600} height={1200} />
               ) : (
-                <div className="grid aspect-[4/3] place-items-center bg-ocean-950/10 text-sm font-semibold text-ocean-600">Sin imagen</div>
+                <div className="grid aspect-[4/3] place-items-center text-sm font-semibold admin-media-card__empty">Sin imagen</div>
               )}
               <div className="admin-media-card__body">
                 <strong>{image.category}</strong>
                 <span className="admin-muted">{image.alt}</span>
                 <div className="admin-actions">
-                  <span className="admin-visibility-indicator" title={image.active ? 'Visible en el sitio' : 'Oculta'} aria-label={image.active ? 'Visible en el sitio' : 'Oculta'}>
-                    {image.active ? <Eye size={15} /> : <EyeOff size={15} />}
-                  </span>
-                  <div className="admin-row-actions">
-                    <button className="admin-icon-action" type="button" disabled={loading} title="Editar imagen" aria-label={`Editar imagen ${image.alt || image.category}`} onClick={() => setEditing(image)}><Pencil size={17} /></button>
-                  </div>
+                  {reorder.reordering ? (
+                    <AdminReorderHandle
+                      position={index + 1}
+                      total={reorder.order.length}
+                      dragging={reorder.dragId === image.id}
+                      onMoveUp={() => reorder.moveBy(image.id, -1)}
+                      onMoveDown={() => reorder.moveBy(image.id, 1)}
+                    />
+                  ) : (
+                    <>
+                      <span className="admin-visibility-indicator" title={image.active ? 'Visible en el sitio' : 'Oculta'} aria-label={image.active ? 'Visible en el sitio' : 'Oculta'}>
+                        {image.active ? <Eye size={15} /> : <EyeOff size={15} />}
+                      </span>
+                      <div className="admin-row-actions">
+                        <button className="admin-icon-action" type="button" disabled={loading} title="Editar imagen" aria-label={`Editar imagen ${image.alt || image.category}`} onClick={() => setEditing(image)}><Pencil size={17} /></button>
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
             </article>
@@ -210,7 +264,7 @@ export default function AdminGalleryPage() {
             <div className="admin-empty">No hay imágenes en este estado.</div>
           ) : null}
         </section>
-      <AdminPagination {...pagination} noun="imágenes" loading={loading} />
+      {reorder.reordering ? null : <AdminPagination {...pagination} noun="imágenes" loading={loading} />}
       </AdminModuleSurface>
 
       <Modal open={Boolean(editing)} onClose={() => void closeEditor()} titleId="gallery-edit-title" className="max-w-2xl">
@@ -249,11 +303,8 @@ export default function AdminGalleryPage() {
                     {categories.map((category) => <option key={category} value={category}>{category}</option>)}
                   </select>
                 </label>
-                <label className="grid gap-1">
-                  <span className="admin-muted">Orden</span>
-                  <input className="admin-input" type="number" value={editing.sort_order} onChange={(event) => setEditing({ ...editing, sort_order: Number(event.target.value) })} />
-                </label>
               </div>
+              <p className="admin-field-help">Orden actual: {editing.sort_order}. Se reordena desde la lista con el botón "Reordenar".</p>
               <FormSection title="Configuracion" description="Controla si esta imagen se muestra en el sitio publico." icon={<Settings size={16} />}>
                 <div className="admin-config-row">
                   <div>
@@ -290,19 +341,19 @@ export default function AdminGalleryPage() {
         ) : null}
       </Modal>
 
-      <Modal open={Boolean(pendingDelete)} onClose={() => setPendingDelete(null)} titleId="gallery-delete-title" className="max-w-md">
-        {pendingDelete ? (
-          <div className="admin-modal-card">
-            <h2 id="gallery-delete-title" className="admin-card__title"><Trash2 size={18} /> Eliminar imagen</h2>
-            <p className="admin-muted mt-2">Se solicitara borrar el objeto en Storage y luego se eliminara la referencia de la galeria.</p>
-            <p className="mt-3 font-semibold text-ocean-950">{pendingDelete.title ?? pendingDelete.alt}</p>
-            <div className="admin-image-manager__actions mt-5">
-              <button className="admin-btn admin-btn--danger" type="button" onClick={() => void deleteRow(pendingDelete)}>Eliminar</button>
-              <button className="admin-btn admin-btn--ghost" type="button" onClick={() => setPendingDelete(null)}>Cancelar</button>
-            </div>
-          </div>
-        ) : null}
-      </Modal>
+      <AdminConfirmDialog
+        open={Boolean(pendingDelete)}
+        onClose={() => setPendingDelete(null)}
+        onConfirm={() => pendingDelete && deleteRow(pendingDelete)}
+        titleId="gallery-delete-title"
+        title="Eliminar imagen"
+        message={
+          <>
+            <p>Se solicitara borrar el objeto en Storage y luego se eliminara la referencia de la galeria.</p>
+            {pendingDelete ? <p className="mt-3 font-semibold">{pendingDelete.title ?? pendingDelete.alt}</p> : null}
+          </>
+        }
+      />
     </div>
   );
 }

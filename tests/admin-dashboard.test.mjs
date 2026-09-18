@@ -6,7 +6,7 @@ test('dashboard displays reservations, reports load failures and recovers on ret
   const browser = await chromium.launch({ headless: true, channel: 'msedge' });
   try {
     const page = await browser.newPage();
-    const base = process.env.ADMIN_TEST_BASE_URL ?? 'http://127.0.0.1:5174';
+    const base = process.env.ADMIN_TEST_BASE_URL ?? 'http://localhost:5174';
     let fail = true;
     const user = { id: '00000000-0000-4000-8000-000000000001', aud: 'authenticated', role: 'authenticated', email: 'admin@example.com', app_metadata: {}, user_metadata: {}, created_at: new Date().toISOString() };
     await page.route('https://admin-test.supabase.co/**', async (route) => {
@@ -36,7 +36,7 @@ test('dashboard displays reservations, reports load failures and recovers on ret
     await page.goto(`${base}/admin/reservations`);
     await expect(page.getByRole('cell', { name: 'PFT-3BD31A7A', exact: true })).toBeVisible();
     await expect(page.getByRole('cell', { name: 'PFT-60E8EAA3', exact: true })).toBeVisible();
-    await expect(page.getByRole('row').filter({ hasText: 'PFT-3BD31A7A' }).getByRole('button', { name: 'Confirmar', exact: true })).toBeEnabled();
+    await expect(page.getByRole('row').filter({ hasText: 'PFT-3BD31A7A' }).getByRole('button', { name: /Confirmar reserva/ })).toBeEnabled();
     assert.equal(new URL(page.url()).pathname, '/admin/reservations');
   } finally {
     await browser.close();

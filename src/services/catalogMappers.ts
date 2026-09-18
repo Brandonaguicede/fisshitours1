@@ -61,6 +61,7 @@ export function mapBoatTour(
     boatTourId: row.boat_tours.id,
     tourId: row.boat_tours.tour_id,
     tourTitle: tour.title,
+    tourSortOrder: tour.sort_order,
     tourDetails: {
       title: tour.title,
       description: tour.description ?? '',

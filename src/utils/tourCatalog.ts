@@ -41,5 +41,9 @@ export function groupTourCatalog(packages: BoatTour[], boats: Boat[]): TourCatal
     }
     if (!option.packages.some((entry) => entry.id === item.id)) option.packages.push(item);
   }
-  return [...groups.values()];
+  // `groups` preserves insertion order (first-seen package), which follows
+  // `tour_packages.sort_order` — not the tour's own `sort_order` that the
+  // Admin's Tours reorder actually writes. Re-sort explicitly by the tour's
+  // order so the public catalog matches what Admin persists.
+  return [...groups.values()].sort((a, b) => (a.tour.tourSortOrder ?? 0) - (b.tour.tourSortOrder ?? 0));
 }

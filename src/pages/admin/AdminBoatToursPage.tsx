@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom';
 
 import { AdminBadge, AdminFilterMenu, AdminListToolbar, AdminModuleSurface, AdminPageHeader, AdminTable } from '../../components/admin/AdminPrimitives';
 import { supabase } from '../../lib/supabase';
-import { money } from './adminMockData';
+import { money } from '../../utils/format';
 import AdminPagination from '../../components/admin/AdminPagination';
 import { useAdminPagedList } from '../../hooks/useAdminPagedList';
 import { getAdminTablePage } from '../../services/adminListService';

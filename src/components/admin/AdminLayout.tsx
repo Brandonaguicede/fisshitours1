@@ -1,4 +1,4 @@
-import { Bell, CalendarDays, ChevronLeft, ChevronRight, CreditCard, FileText, Footprints, Gauge, Globe2, Image, LayoutDashboard, LifeBuoy, LogOut, MapPin, Menu, MessageSquare, Package, Settings, Ship, Star, Users } from 'lucide-react';
+import { CalendarDays, ChevronLeft, ChevronRight, CreditCard, FileText, Gauge, Globe2, Image, LayoutDashboard, LifeBuoy, LogOut, MapPin, Menu, MessageSquare, Package, Ship, Star, Users } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, NavLink, Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom';
 
@@ -20,7 +20,6 @@ const navGroups = [
       { label: 'Tours', to: '/admin/tours', icon: Star },
       { label: 'Botes', to: '/admin/boats', icon: Ship },
       { label: 'Paquetes (todos)', to: '/admin/boat-tours', icon: Package },
-      { label: 'Destinos', to: '/admin/destinations', icon: Footprints },
       { label: 'Lugares de salida', to: '/admin/departure-locations', icon: MapPin },
       { label: 'Metodos de pago', to: '/admin/payment-methods', icon: CreditCard },
     ],
@@ -33,12 +32,6 @@ const navGroups = [
       { label: 'Comentarios', to: '/admin/reviews', icon: MessageSquare },
     ],
   },
-  {
-    caption: 'Sistema',
-    items: [
-      { label: 'Settings', to: '/admin/settings', icon: Settings },
-    ],
-  },
 ];
 
 const titles: Record<string, string> = {
@@ -49,11 +42,9 @@ const titles: Record<string, string> = {
   '/admin/boat-tours': 'Paquetes (todos los tours)',
   '/admin/reviews': 'Comentarios',
   '/admin/gallery': 'Galeria',
-  '/admin/destinations': 'Destinos',
   '/admin/content': 'Hero Section',
   '/admin/payment-methods': 'Metodos de pago',
   '/admin/departure-locations': 'Lugares de salida',
-  '/admin/settings': 'Settings',
 };
 
 export default function AdminLayout() {
@@ -63,20 +54,63 @@ export default function AdminLayout() {
   const [authError, setAuthError] = useState('');
   const [accountOpen, setAccountOpen] = useState(false);
   const [mobile, setMobile] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 960px)').matches);
+  // True for one paint right after the desktop/mobile breakpoint itself is
+  // crossed (matchMedia 'change'), so the sidebar's width/transform CSS
+  // transition doesn't animate across that jump. Reproduced live: resizing
+  // the window through 960px flips `.admin-sidebar` from `position: static`
+  // (in flow) to `position: fixed` (off-canvas) in the same tick that
+  // `.admin-main` re-expands to full width — but the sidebar's own
+  // translateX kept easing over its normal 0.22s, so for that window it sat
+  // as a fixed overlay sliding across the now-full-width main content
+  // underneath it. A manual open/close click while already mobile is a
+  // different interaction and should still animate, so this only guards the
+  // breakpoint-crossing case, not the general transition.
+  const [suppressSidebarTransition, setSuppressSidebarTransition] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
   const title = titles[location.pathname] ?? 'Panel admin';
   const crumb = useMemo(() => `Fishing Tours / Admin / ${title}`, [title]);
   const sidebarRef = useRef<HTMLElement>(null);
+  const sidebarScrollRef = useRef<HTMLDivElement>(null);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
   const accountRef = useRef<HTMLDivElement>(null);
   const accountTriggerRef = useRef<HTMLButtonElement>(null);
+  // The sidebar's own scrollbar chrome is hidden (see .admin-sidebar__scroll
+  // in admin.css), so when the nav list doesn't fit, there's otherwise no
+  // hint that more items exist below the fold. This tracks real scroll
+  // position (not just "is it scrollable") so the fade only shows while
+  // there's actually more to see, and disappears exactly at the bottom.
+  const [sidebarHasMoreBelow, setSidebarHasMoreBelow] = useState(false);
+
+  useEffect(() => {
+    // `sidebarScrollRef` is only attached once the real shell renders (not
+    // during the "Validando acceso..." loading screen, which returns early
+    // before that JSX exists) — re-run once `loading` flips so this doesn't
+    // silently no-op forever by only depending on `open`.
+    const el = sidebarScrollRef.current;
+    if (!el) return;
+    const check = () => setSidebarHasMoreBelow(el.scrollHeight - el.scrollTop - el.clientHeight > 2);
+    check();
+    el.addEventListener('scroll', check, { passive: true });
+    window.addEventListener('resize', check);
+    return () => {
+      el.removeEventListener('scroll', check);
+      window.removeEventListener('resize', check);
+    };
+  }, [open, loading]);
 
   useEffect(() => {
     const media = window.matchMedia('(max-width: 960px)');
     const onChange = (event: MediaQueryListEvent) => {
+      setSuppressSidebarTransition(true);
       setMobile(event.matches);
       setOpen(!event.matches);
+      // Two rAFs: the first lets React commit the new classes/layout while
+      // transitions are still suppressed, the second waits for that frame to
+      // actually paint before re-enabling transitions for future toggles.
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => setSuppressSidebarTransition(false));
+      });
     };
     media.addEventListener('change', onChange);
     return () => media.removeEventListener('change', onChange);
@@ -173,7 +207,7 @@ export default function AdminLayout() {
   }
 
   return (
-    <div className={open ? 'admin-shell admin-shell--sidebar-open' : 'admin-shell admin-shell--sidebar-closed'}>
+    <div className={`${open ? 'admin-shell admin-shell--sidebar-open' : 'admin-shell admin-shell--sidebar-closed'}${suppressSidebarTransition ? ' admin-shell--no-transition' : ''}`}>
       <div className={open ? 'admin-mobile-overlay admin-mobile-overlay--visible' : 'admin-mobile-overlay'} onClick={() => { setOpen(false); menuButtonRef.current?.focus(); }} />
       <aside ref={sidebarRef} id="admin-sidebar" className={open ? 'admin-sidebar admin-sidebar--open' : 'admin-sidebar'} aria-hidden={mobile && !open}>
         <div className="admin-sidebar__header">
@@ -186,7 +220,7 @@ export default function AdminLayout() {
             {open ? <ChevronLeft size={18} /> : <ChevronRight size={18} />}
           </button>
         </div>
-        <div className="admin-sidebar__scroll">
+        <div ref={sidebarScrollRef} className={sidebarHasMoreBelow ? 'admin-sidebar__scroll admin-sidebar__scroll--has-more' : 'admin-sidebar__scroll'}>
           {navGroups.map((group) => (
             <div key={group.caption}>
               <p className="admin-sidebar__caption">{group.caption}</p>
@@ -225,9 +259,6 @@ export default function AdminLayout() {
               <Globe2 size={18} />
             </Link>
             <ThemeToggle />
-            <button className="admin-icon-btn" type="button" aria-label="Notificaciones">
-              <Bell size={18} />
-            </button>
             <div ref={accountRef} className="admin-account">
               <button ref={accountTriggerRef} className="admin-account__trigger" type="button" aria-label="Abrir menu de cuenta" aria-expanded={accountOpen} aria-controls="admin-account-menu" title="Cuenta" onClick={() => setAccountOpen((value) => !value)}>
                 <span className="admin-account__avatar" aria-hidden="true">{initials}</span>

@@ -35,11 +35,15 @@ export async function getActiveBoatTours(): Promise<BoatTour[]> {
 }
 
 export async function getActivePaymentMethods() {
+  // `active` is the single source of truth for availability — admin toggles
+  // it, customers see the change. Which of those active rows can actually be
+  // checked out is a separate, frontend-side concern (only `type`s with a
+  // real integration are offered — see BookingPanel's SUPPORTED_PAYMENT_TYPES),
+  // not something this query should hardcode by `key`.
   const { data, error } = await supabase
     .from('payment_methods')
     .select('key, name, description, type, logo_url, sort_order')
     .eq('active', true)
-    .in('key', ['paypal', 'whatsapp-link', 'pay-on-day'])
     .order('sort_order');
 
   if (error) throw new Error(error.message);

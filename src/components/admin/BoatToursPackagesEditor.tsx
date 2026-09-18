@@ -13,8 +13,9 @@ import {
   type BoatToursPackagesData,
   type PackageInput,
 } from '../../services/adminBoatToursService';
+import AdminConfirmDialog from './AdminConfirmDialog';
 import FormSection from './FormSection';
-import { Modal } from '../common/Modal';
+import { friendlyDeleteError } from '../../utils/adminErrors';
 import { formatTime } from '../../utils/format';
 import { parseMealOptions } from '../../utils/packageSettings';
 import { useQueryClient } from '@tanstack/react-query';
@@ -309,20 +310,17 @@ function PackageDraftEditor({ draft, fieldErrors, busy, boatMaxGuests, defaultTi
         </button>
       </div>
 
-      <Modal open={confirmDeleteOpen} onClose={() => setConfirmDeleteOpen(false)} titleId="confirm-package-delete-title" className="max-w-md">
-        <div className="admin-modal-card">
-          <h2 id="confirm-package-delete-title" className="admin-card__title"><Trash2 size={18} /> Eliminar paquete</h2>
-          <p className="admin-muted mt-2">¿Eliminar "{draft.name || 'este paquete'}"? Esta acción no se puede deshacer.</p>
-          <div className="admin-actions mt-5">
-            <button className="admin-btn admin-btn--secondary" type="button" disabled={busy} onClick={() => setConfirmDeleteOpen(false)}>
-              Volver
-            </button>
-            <button className="admin-btn admin-btn--danger" type="button" disabled={busy} onClick={() => { setConfirmDeleteOpen(false); onDelete(); }}>
-              {busy ? <Loader2 className="animate-spin" size={15} /> : <Trash2 size={15} />} Sí, eliminar paquete
-            </button>
-          </div>
-        </div>
-      </Modal>
+      <AdminConfirmDialog
+        open={confirmDeleteOpen}
+        onClose={() => setConfirmDeleteOpen(false)}
+        onConfirm={() => { setConfirmDeleteOpen(false); onDelete(); }}
+        titleId="confirm-package-delete-title"
+        title="Eliminar paquete"
+        loading={busy}
+        cancelLabel="Volver"
+        confirmLabel="Sí, eliminar paquete"
+        message={`¿Eliminar "${draft.name || 'este paquete'}"? Esta acción no se puede deshacer.`}
+      />
     </div>
   );
 }
@@ -462,7 +460,11 @@ export default function BoatToursPackagesEditor({ boatId, boatName, boatMaxGuest
   async function removeDraft() {
     if (!draft) return;
     await run(async () => {
-      await deletePackage(draft.id);
+      try {
+        await deletePackage(draft.id);
+      } catch (caught) {
+        throw new Error(friendlyDeleteError({ message: caught instanceof Error ? caught.message : String(caught) }, 'este paquete'));
+      }
       closeEditor();
     }, 'Paquete eliminado.');
   }

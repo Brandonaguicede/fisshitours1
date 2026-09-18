@@ -110,7 +110,7 @@ export function ModalShell({ open, onClose, titleId, children, className, tone =
               aria-modal="true"
               aria-labelledby={titleId}
               tabIndex={-1}
-              className={cn('app-modal-panel outline-none', tone === 'glass' && 'glass-surface', className)}
+              className={cn('app-modal-panel outline-none', tone === 'glass' && 'glass-surface', tone === 'light' && 'admin-modal-panel', className)}
               initial={{ opacity: 0, scale: reduceMotion ? 1 : 0.95, y: reduceMotion ? 0 : 14 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: reduceMotion ? 1 : 0.97, y: reduceMotion ? 0 : 8 }}

@@ -3,7 +3,7 @@ import fs from 'node:fs/promises';
 import test from 'node:test';
 import { chromium, expect } from '@playwright/test';
 
-const base = process.env.ADMIN_TEST_BASE_URL ?? 'http://127.0.0.1:5180';
+const base = process.env.ADMIN_TEST_BASE_URL ?? 'http://localhost:5174';
 const user = { id: '00000000-0000-4000-8000-000000000001', aud: 'authenticated', role: 'authenticated', email: 'admin@example.com', app_metadata: {}, user_metadata: {}, created_at: new Date().toISOString() };
 const initialBookings = Array.from({ length: 76 }, (_, i) => ({
   id: `booking-${i}`, booking_reference: `PFT-${String(i + 1).padStart(3, '0')}`, boat_id: 'boat-1', tour_id: 'tour-1', tour_package_id: 'package-1', time_slot_id: 'time-1',
@@ -110,10 +110,12 @@ test('reservations paginate on the server, preserve filters, export all matches 
     assert.equal(request.p_booking_status, 'pending_payment'); assert.equal(request.p_search, 'Second Wind');
     await page.getByLabel('Buscar reservas').fill('PFT-002');
     await expect(nav).toContainText('Mostrando 1–1 de 1 reservas');
-    await page.locator('.admin-reservations-table').getByRole('button', { name: 'Editar', exact: true }).click();
+    await page.locator('.admin-reservations-table').getByRole('button', { name: /Editar reserva/ }).click();
     await expect(page.getByRole('heading', { name: 'Editar reserva' })).toBeVisible();
-    await page.getByRole('button', { name: 'Cerrar', exact: true }).click();
-    await page.locator('.admin-reservations-table').getByRole('button', { name: 'Confirmar', exact: true }).click();
+    // The modal has two "Cerrar" controls: the header's icon-only close button
+    // (aria-label) and the footer's text button — scope to the footer.
+    await page.locator('.admin-modal-footer').getByRole('button', { name: 'Cerrar', exact: true }).click();
+    await page.locator('.admin-reservations-table').getByRole('button', { name: /Confirmar reserva/ }).click();
     await expect(nav).toContainText('Mostrando 0–0 de 0 reservas');
     assert.equal(f.writes[0].bookingId, 'booking-1');
     await page.getByLabel('Buscar reservas').fill('no existen resultados');
@@ -145,8 +147,14 @@ test('responsive reservations contain scroll, preserve the sidebar and use cards
     await page.getByRole('button', { name: 'Abrir menu', exact: true }).click();
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
     await page.getByRole('button', { name: 'Colapsar menu', exact: true }).click();
-    await page.locator('.admin-reservation-card').nth(1).getByRole('button', { name: 'Cancelar', exact: true }).click();
-    await expect(page.locator('.admin-reservation-card').nth(1)).toContainText('cancelled');
+    // Cancelar ya no es un botón directo en la card — vive dentro de "Editar" >
+    // zona de peligro, con una confirmación explícita separada.
+    const card = page.locator('.admin-reservation-card').nth(1);
+    await card.getByRole('button', { name: /Editar reserva/ }).click();
+    await expect(page.getByRole('heading', { name: 'Editar reserva' })).toBeVisible();
+    await page.getByRole('button', { name: 'Cancelar reserva' }).click();
+    await page.getByRole('button', { name: 'Sí, cancelar reserva' }).click();
+    await expect(card).toContainText('cancelled');
     assert.equal(f.writes[0].p_booking_id, 'booking-1');
   } finally { await f.browser.close(); }
 });
@@ -192,7 +200,7 @@ test('filter round trips reset the page and confirming the last match returns to
       await expect(nav).toHaveAttribute('aria-busy', 'false');
     }
     await expect(page.locator('.admin-reservations-table tbody tr')).toHaveCount(1);
-    await page.locator('.admin-reservations-table').getByRole('button', { name: 'Confirmar', exact: true }).click();
+    await page.locator('.admin-reservations-table').getByRole('button', { name: /Confirmar reserva/ }).click();
     await expect(nav).toContainText('Mostrando 1–10 de 10 reservas');
     await expect(nav.getByRole('button', { name: 'Siguiente' })).toBeDisabled();
   } finally { await f.browser.close(); }
@@ -208,9 +216,11 @@ test('reviews, gallery and package lists use backend ranges and reset filters', 
       await nav.getByRole('button', { name: 'Siguiente' }).click();
       await expect(nav).toContainText(`Mostrando 11–20 de 76 ${noun}`);
       assert.equal(f.requests.filter((r) => r.table === table).at(-1).start, 10);
-      if (route === 'reviews') await page.locator('.admin-toolbar select').selectOption('pending');
-      if (route === 'gallery') { await expect(page.locator('.admin-toolbar select option[value="custom"]')).toHaveCount(1); await page.locator('.admin-toolbar select').selectOption('custom'); }
-      if (route === 'boat-tours') await page.locator('.admin-toolbar select').selectOption('boat-2');
+      // Los filtros ahora viven dentro del popover "Filtros", no como <select> suelto en el toolbar.
+      await page.getByRole('button', { name: /^Filtros/ }).click();
+      if (route === 'reviews') await page.locator('.admin-filter-panel select').selectOption('pending');
+      if (route === 'gallery') { await expect(page.locator('.admin-filter-panel select option[value="custom"]')).toHaveCount(1); await page.locator('.admin-filter-panel select').selectOption('custom'); }
+      if (route === 'boat-tours') await page.locator('.admin-filter-panel select').first().selectOption('boat-2');
       await expect(nav).toContainText('Mostrando 1–10');
       const request = f.requests.filter((r) => r.table === table).at(-1);
       assert.equal(request.start, 0);

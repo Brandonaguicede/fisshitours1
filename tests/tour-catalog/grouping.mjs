@@ -22,4 +22,14 @@ assert.equal(groupTourCatalog(input.filter(p=>p.boatId==='c'),boats).length,0);
 assert.equal(groupTourCatalog([input[0],input[0]],boats)[0].boatOptions[0].packages.length,1);
 assert.equal(groupTourCatalog([make('x','a',650),make('y','a',680,{boatTourId:'another-link'})],boats)[0].boatOptions.length,2);
 assert.deepEqual(groupTourCatalog([],boats),[]);
-console.log('Tour grouping, independent identities, invalid prices and filtered catalogs passed.');
+
+// Admin's Tours reorder writes tours.sort_order; the public catalog must
+// follow it even when the underlying packages arrive in a different order
+// (tour_packages.sort_order, which drove Map insertion order before this fix).
+const orderInput = [
+  make('t2-full', 'a', 500, { tourId: 'tour-2', tourSortOrder: 2 }),
+  make('t1-full', 'b', 500, { tourId: 'tour-1', tourSortOrder: 1 }),
+];
+assert.deepEqual(groupTourCatalog(orderInput, boats).map((g) => g.tourId), ['tour-1', 'tour-2']);
+
+console.log('Tour grouping, independent identities, invalid prices, filtered catalogs and tourSortOrder respected passed.');

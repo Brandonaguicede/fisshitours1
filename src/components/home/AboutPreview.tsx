@@ -50,6 +50,8 @@ export function AboutPreview() {
   }, [images.length]);
 
   const paragraphs = splitParagraphs(about[`about.preview_text.${locale}` as keyof AboutSettings]);
+  const storyParagraphs = splitParagraphs(about[`about.story.${locale}` as keyof AboutSettings]);
+  const [showStory, setShowStory] = useState(false);
 
   return (
     <section className="home-section section-y relative overflow-hidden bg-ocean-950 text-white" data-home-section data-nav-href="/#about" id="about">
@@ -71,11 +73,32 @@ export function AboutPreview() {
         <div className="relative grid gap-5 lg:grid-cols-[minmax(0,0.82fr)_minmax(520px,1.18fr)] lg:items-start">
           <div className="max-w-2xl lg:[&_h2]:text-[clamp(2.125rem,1.33rem+1.08vw,2.75rem)] lg:[&_h2]:leading-[1.12]">
             <SectionHeader align="left" title={about[`about.title.${locale}` as keyof AboutSettings]} variant="default" />
+            <p className="mt-2 max-w-md text-[0.92rem] font-semibold text-ocean-200 sm:max-w-lg sm:text-base">
+              {about[`about.description.${locale}` as keyof AboutSettings]}
+            </p>
             <div className="mt-3 grid max-w-md gap-2.5 text-left text-[0.92rem] leading-7 text-ocean-100/90 sm:max-w-lg sm:text-[0.95rem] lg:max-w-xl lg:gap-2 lg:text-base lg:text-justify">
               {paragraphs.map((paragraph) => (
                 <p key={paragraph.slice(0, 32)}>{paragraph}</p>
               ))}
             </div>
+            {storyParagraphs.length ? (
+              <div className="mt-3 max-w-md sm:max-w-lg lg:max-w-xl">
+                <button
+                  type="button"
+                  className="text-[0.85rem] font-extrabold text-ocean-200 underline decoration-ocean-300/60 underline-offset-4 hover:text-white"
+                  onClick={() => setShowStory((current) => !current)}
+                >
+                  {showStory ? (language === 'es' ? 'Ocultar historia' : 'Hide our story') : (language === 'es' ? 'Leer nuestra historia' : 'Read our story')}
+                </button>
+                {showStory ? (
+                  <div className="mt-2 grid gap-2.5 text-left text-[0.92rem] leading-7 text-ocean-100/90 sm:text-[0.95rem] lg:text-base lg:text-justify">
+                    {storyParagraphs.map((paragraph) => (
+                      <p key={paragraph.slice(0, 32)}>{paragraph}</p>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
           </div>
 
           <div className="relative">
@@ -113,10 +136,10 @@ export function AboutPreview() {
             </GlassPanel>
             <div className="min-w-0">
               <h3 className="text-[0.88rem] font-extrabold leading-tight text-white">
-                {language === 'es' ? '¿Quieres hablar con nosotros?' : 'Want to talk with us?'}
+                {about[`about.cta_title.${locale}` as keyof AboutSettings]}
               </h3>
               <p className="mt-0.5 truncate text-[0.78rem] text-ocean-100/80">
-                {language === 'es' ? 'Escríbenos y con gusto te ayudamos.' : "Send us a message and we'll be happy to help."}
+                {about[`about.cta_text.${locale}` as keyof AboutSettings]}
               </p>
             </div>
           </div>

@@ -17,11 +17,9 @@ const AdminBoatsPage = lazy(() => import('../pages/admin/AdminBoatsPage'));
 const AdminBoatToursPage = lazy(() => import('../pages/admin/AdminBoatToursPage'));
 const AdminReviewsPage = lazy(() => import('../pages/admin/AdminReviewsPage'));
 const AdminGalleryPage = lazy(() => import('../pages/admin/AdminGalleryPage'));
-const AdminDestinationsPage = lazy(() => import('../pages/admin/AdminDestinationsPage'));
 const AdminContentPage = lazy(() => import('../pages/admin/AdminContentPage'));
 const AdminPaymentMethodsPage = lazy(() => import('../pages/admin/AdminPaymentMethodsPage'));
 const AdminDepartureLocationsPage = lazy(() => import('../pages/admin/AdminDepartureLocationsPage'));
-const AdminSettingsPage = lazy(() => import('../pages/admin/AdminSettingsPage'));
 
 export function AppRoutes() {
   return (
@@ -35,13 +33,13 @@ export function AppRoutes() {
         <Route path="boat-tours" element={<AdminBoatToursPage />} />
         <Route path="reviews" element={<AdminReviewsPage />} />
         <Route path="gallery" element={<AdminGalleryPage />} />
-        <Route path="destinations" element={<AdminDestinationsPage />} />
+        {/* Destinos was removed as a product feature — kept as a redirect so any old bookmark/link doesn't 404. */}
+        <Route path="destinations" element={<Navigate to="/admin" replace />} />
         <Route path="content" element={<AdminContentPage />} />
         {/* Videos lived here before Hero Section grouped Media (photos + video) under one screen; kept as a redirect so old links/bookmarks keep working. */}
         <Route path="videos" element={<Navigate to="/admin/content" replace />} />
         <Route path="payment-methods" element={<AdminPaymentMethodsPage />} />
         <Route path="departure-locations" element={<AdminDepartureLocationsPage />} />
-        <Route path="settings" element={<AdminSettingsPage />} />
       </Route>
       <Route element={<MainLayout />}>
         <Route index element={<HomePage />} />

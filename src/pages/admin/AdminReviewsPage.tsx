@@ -4,9 +4,12 @@ import { adminSearchFilter, getAdminTablePage } from '../../services/adminListSe
 import { Check, EyeOff, Star, Trash2, X } from 'lucide-react';
 import { useState } from 'react';
 
-import { AdminBadge, AdminFilterMenu, AdminListToolbar, AdminModuleSurface, AdminPageHeader, AdminTable } from '../../components/admin/AdminPrimitives';
+import AdminConfirmDialog from '../../components/admin/AdminConfirmDialog';
+import { AdminBadge, AdminFilterMenu, AdminListToolbar, AdminModuleSurface, AdminPageHeader, AdminReorderHandle, AdminReorderToolbar, AdminTable } from '../../components/admin/AdminPrimitives';
 import { Modal } from '../../components/common/Modal';
+import { useAdminReorder } from '../../hooks/useAdminReorder';
 import { supabase } from '../../lib/supabase';
+import { friendlyDeleteError } from '../../utils/adminErrors';
 
 interface AdminReview {
   id: string;
@@ -93,7 +96,7 @@ export default function AdminReviewsPage() {
     setError('');
     const { error } = await db.from('reviews').delete().eq('id', review.id);
     if (error) {
-      setError(error.message);
+      setError(friendlyDeleteError(error, 'este comentario'));
       return;
     }
     setPendingDelete(null);
@@ -102,6 +105,31 @@ export default function AdminReviewsPage() {
   }
 
   const visibleReviews = pagination.rows;
+  // `pagination.rows` just gives the hook a stable reference while not
+  // reordering; `startReorder()` overrides it with the full, unpaginated
+  // set (in the same featured-first order the public site uses) before
+  // switching into reorder mode.
+  const reorder = useAdminReorder<AdminReview>(pagination.rows);
+  const [reorderLoading, setReorderLoading] = useState(false);
+  const canReorder = filter === 'all' && search.trim() === '';
+
+  async function startReorder() {
+    setReorderLoading(true);
+    setError('');
+    const { data, error } = await db.from('reviews').select('id, name, country, quote, rating, status, featured, active, sort_order, image_url, image_public_id, created_at').order('featured', { ascending: false }).order('sort_order', { ascending: true }).order('created_at', { ascending: false }).order('id');
+    setReorderLoading(false);
+    if (error) { setError(error.message); return; }
+    reorder.start((data ?? []) as AdminReview[]);
+  }
+
+  async function persistOrder(updates: Array<{ id: string; sort_order: number }>) {
+    for (const update of updates) {
+      const { error } = await db.from('reviews').update({ sort_order: update.sort_order }).eq('id', update.id);
+      if (error) { setError(error.message); throw new Error(error.message); }
+    }
+    setNotice('Orden actualizado.');
+    await loadReviews();
+  }
 
   return (
     <div className="admin-page">
@@ -125,6 +153,16 @@ export default function AdminReviewsPage() {
               </label>
             </AdminFilterMenu>
           }
+          secondaryActions={
+            <AdminReorderToolbar
+              reordering={reorder.reordering}
+              saving={reorder.saving || reorderLoading}
+              onStart={() => void startReorder()}
+              onCancel={reorder.cancel}
+              onSave={() => void reorder.save(persistOrder)}
+              disabledReason={canReorder ? undefined : 'Limpia la búsqueda y el filtro de estado para reordenar.'}
+            />
+          }
         />
 
       {error || queryError ? (
@@ -139,9 +177,24 @@ export default function AdminReviewsPage() {
 
       {loading ? <p className="admin-muted" role="status">Cargando comentarios...</p> : null}
       <div aria-busy={loading}>
-        <AdminTable embedded headers={['Cliente', 'Pais', 'Comentario', 'Rating', 'Estado', 'Acciones']}>
-          {visibleReviews.map((review) => (
-            <tr key={review.id}>
+        <AdminTable embedded headers={reorder.reordering ? ['Orden', 'Cliente', 'Pais', 'Comentario', 'Rating', 'Estado'] : ['Cliente', 'Pais', 'Comentario', 'Rating', 'Estado', 'Acciones']}>
+          {(reorder.reordering ? reorder.order : visibleReviews).map((review, index) => (
+            <tr
+              key={review.id}
+              className={reorder.reordering ? `admin-sortable-row${reorder.dragId === review.id ? ' admin-sortable-row--dragging' : ''}` : undefined}
+              {...(reorder.reordering ? reorder.dragHandlers(review.id) : {})}
+            >
+              {reorder.reordering ? (
+                <td>
+                  <AdminReorderHandle
+                    position={index + 1}
+                    total={reorder.order.length}
+                    dragging={reorder.dragId === review.id}
+                    onMoveUp={() => reorder.moveBy(review.id, -1)}
+                    onMoveDown={() => reorder.moveBy(review.id, 1)}
+                  />
+                </td>
+              ) : null}
               <td>
                 <div className="flex items-center gap-3">
                   {review.image_url ? (
@@ -162,25 +215,27 @@ export default function AdminReviewsPage() {
                 </span>
               </td>
               <td><AdminBadge value={review.status} /></td>
-              <td>
-                <div className="admin-row-actions">
-                  <button className="admin-icon-action admin-icon-action--success" type="button" disabled={loading || review.status === 'approved'} title="Aprobar comentario" aria-label={`Aprobar comentario de ${review.name}`} onClick={() => void setStatus(review.id, 'approved')}>
-                    <Check size={17} />
-                  </button>
-                  <button className="admin-icon-action admin-icon-action--danger" type="button" disabled={loading || review.status === 'rejected'} title="Rechazar comentario" aria-label={`Rechazar comentario de ${review.name}`} onClick={() => void setStatus(review.id, 'rejected')}>
-                    <X size={17} />
-                  </button>
-                  <button className="admin-icon-action" type="button" disabled={loading} title={review.active ? 'Ocultar comentario' : 'Mostrar comentario'} aria-label={review.active ? `Ocultar comentario de ${review.name}` : `Mostrar comentario de ${review.name}`} onClick={() => void setActive(review.id, !review.active)}>
-                    <EyeOff size={17} />
-                  </button>
-                  <button className="admin-icon-action admin-icon-action--warning" type="button" disabled={loading} title={review.featured ? 'Quitar de destacados' : 'Destacar comentario'} aria-label={review.featured ? `Quitar de destacados el comentario de ${review.name}` : `Destacar comentario de ${review.name}`} onClick={() => void setFeatured(review.id, !review.featured)}>
-                    <Star size={17} />
-                  </button>
-                  <button className="admin-icon-action admin-icon-action--danger" type="button" disabled={loading} title="Eliminar comentario" aria-label={`Eliminar comentario de ${review.name}`} onClick={() => setPendingDelete(review)}>
-                    <Trash2 size={17} />
-                  </button>
-                </div>
-              </td>
+              {reorder.reordering ? null : (
+                <td>
+                  <div className="admin-row-actions">
+                    <button className="admin-icon-action admin-icon-action--success" type="button" disabled={loading || review.status === 'approved'} title="Aprobar comentario" aria-label={`Aprobar comentario de ${review.name}`} onClick={() => void setStatus(review.id, 'approved')}>
+                      <Check size={17} />
+                    </button>
+                    <button className="admin-icon-action admin-icon-action--danger" type="button" disabled={loading || review.status === 'rejected'} title="Rechazar comentario" aria-label={`Rechazar comentario de ${review.name}`} onClick={() => void setStatus(review.id, 'rejected')}>
+                      <X size={17} />
+                    </button>
+                    <button className="admin-icon-action" type="button" disabled={loading} title={review.active ? 'Ocultar comentario' : 'Mostrar comentario'} aria-label={review.active ? `Ocultar comentario de ${review.name}` : `Mostrar comentario de ${review.name}`} onClick={() => void setActive(review.id, !review.active)}>
+                      <EyeOff size={17} />
+                    </button>
+                    <button className="admin-icon-action admin-icon-action--warning" type="button" disabled={loading} title={review.featured ? 'Quitar de destacados' : 'Destacar comentario'} aria-label={review.featured ? `Quitar de destacados el comentario de ${review.name}` : `Destacar comentario de ${review.name}`} onClick={() => void setFeatured(review.id, !review.featured)}>
+                      <Star size={17} />
+                    </button>
+                    <button className="admin-icon-action admin-icon-action--danger" type="button" disabled={loading} title="Eliminar comentario" aria-label={`Eliminar comentario de ${review.name}`} onClick={() => setPendingDelete(review)}>
+                      <Trash2 size={17} />
+                    </button>
+                  </div>
+                </td>
+              )}
             </tr>
           ))}
           {!loading && !queryError && visibleReviews.length === 0 ? (
@@ -190,22 +245,22 @@ export default function AdminReviewsPage() {
           ) : null}
         </AdminTable>
       </div>
-      <AdminPagination {...pagination} noun="reseñas" loading={loading} />
+      {reorder.reordering ? null : <AdminPagination {...pagination} noun="reseñas" loading={loading} />}
       </AdminModuleSurface>
 
-      <Modal open={Boolean(pendingDelete)} onClose={() => setPendingDelete(null)} titleId="review-delete-title" className="max-w-md">
-        {pendingDelete ? (
-          <div className="admin-modal-card">
-            <h2 id="review-delete-title" className="admin-card__title"><Trash2 size={18} /> Eliminar comentario</h2>
-            <p className="admin-muted mt-2">El comentario se quitara del panel y de la pagina publica.</p>
-            <p className="mt-3 font-semibold text-ocean-950">{pendingDelete.name}</p>
-            <div className="admin-image-manager__actions mt-5">
-              <button className="admin-btn admin-btn--danger" type="button" onClick={() => void deleteReview(pendingDelete)}>Eliminar</button>
-              <button className="admin-btn admin-btn--ghost" type="button" onClick={() => setPendingDelete(null)}>Cancelar</button>
-            </div>
-          </div>
-        ) : null}
-      </Modal>
+      <AdminConfirmDialog
+        open={Boolean(pendingDelete)}
+        onClose={() => setPendingDelete(null)}
+        onConfirm={() => pendingDelete && deleteReview(pendingDelete)}
+        titleId="review-delete-title"
+        title="Eliminar comentario"
+        message={
+          <>
+            <p>El comentario se quitara del panel y de la pagina publica.</p>
+            {pendingDelete ? <p className="mt-3 font-semibold">{pendingDelete.name}</p> : null}
+          </>
+        }
+      />
     </div>
   );
 }

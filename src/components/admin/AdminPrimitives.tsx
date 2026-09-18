@@ -1,4 +1,4 @@
-import { Filter, Search, X } from 'lucide-react';
+import { ArrowUpDown, ChevronDown, ChevronUp, Filter, GripVertical, Search, X } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useEffect, useId, useRef, useState } from 'react';
@@ -33,7 +33,7 @@ export function AdminBadge({ value }: { value: string | boolean }) {
   const tone =
     normalized.includes('paid') || normalized.includes('confirmed') || normalized === 'true' || normalized.includes('approved')
         ? 'success'
-        : normalized.includes('pending') || normalized.includes('requested') || normalized.includes('day')
+        : normalized.includes('pending') || normalized.includes('requested') || normalized.includes('day') || normalized.includes('draft') || normalized.includes('borrador')
           ? 'warning'
           : normalized.includes('cancel') || normalized.includes('failed') || normalized.includes('rejected') || normalized === 'false'
             ? 'danger'
@@ -175,4 +175,53 @@ export function AdminListToolbar(props: {
 
 export function AdminModuleSurface(props: { children: ReactNode; className?: string }) {
   return <section className={`admin-module-surface${props.className ? ` ${props.className}` : ''}`}>{props.children}</section>;
+}
+
+/**
+ * Toolbar control for `useAdminReorder` (see src/hooks/useAdminReorder.ts).
+ * Normal mode shows a single "Reordenar" button; reorder mode swaps it for
+ * Cancelar/Guardar orden. `disabledReason` (e.g. "Limpia la búsqueda para
+ * reordenar") both disables and explains why reordering isn't available —
+ * reordering while a search/filter hides rows would silently misnumber
+ * whatever isn't currently visible.
+ */
+export function AdminReorderToolbar(props: {
+  reordering: boolean;
+  saving?: boolean;
+  onStart: () => void;
+  onCancel: () => void;
+  onSave: () => void;
+  disabledReason?: string;
+}) {
+  if (!props.reordering) {
+    return (
+      <button className="admin-btn admin-btn--secondary" type="button" onClick={props.onStart} disabled={Boolean(props.disabledReason)} title={props.disabledReason}>
+        <ArrowUpDown size={16} /> Reordenar
+      </button>
+    );
+  }
+  return (
+    <div className="admin-toolbar__actions">
+      <button className="admin-btn admin-btn--secondary" type="button" onClick={props.onCancel} disabled={props.saving}>Cancelar</button>
+      <button className="admin-btn" type="button" onClick={props.onSave} disabled={props.saving}>{props.saving ? 'Guardando...' : 'Guardar orden'}</button>
+    </div>
+  );
+}
+
+/**
+ * One row's drag handle + visible position number + Up/Down fallback
+ * (keyboard/touch-friendly, doesn't require a successful native drag).
+ * Renders only while `useAdminReorder` is in reorder mode.
+ */
+export function AdminReorderHandle(props: { position: number; total: number; dragging?: boolean; onMoveUp: () => void; onMoveDown: () => void }) {
+  return (
+    <div className={`admin-reorder-handle${props.dragging ? ' admin-reorder-handle--dragging' : ''}`}>
+      <GripVertical size={16} aria-hidden="true" className="admin-reorder-handle__grip" />
+      <span className="admin-reorder-handle__position">{props.position}</span>
+      <div className="admin-reorder-handle__buttons">
+        <button type="button" className="admin-icon-btn" aria-label="Subir" disabled={props.position === 1} onClick={props.onMoveUp}><ChevronUp size={14} /></button>
+        <button type="button" className="admin-icon-btn" aria-label="Bajar" disabled={props.position === props.total} onClick={props.onMoveDown}><ChevronDown size={14} /></button>
+      </div>
+    </div>
+  );
 }

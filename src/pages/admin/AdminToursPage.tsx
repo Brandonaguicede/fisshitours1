@@ -2,13 +2,16 @@ import { Check, ChevronLeft, ChevronRight, Eye, EyeOff, Image as ImageIcon, Info
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
+import AdminConfirmDialog from '../../components/admin/AdminConfirmDialog';
 import AdminImageManager from '../../components/admin/AdminImageManager';
-import { AdminBadge, AdminFilterMenu, AdminListToolbar, AdminModuleSurface, AdminTable } from '../../components/admin/AdminPrimitives';
+import { AdminBadge, AdminFilterMenu, AdminListToolbar, AdminModuleSurface, AdminReorderHandle, AdminReorderToolbar, AdminTable } from '../../components/admin/AdminPrimitives';
 import FormSection from '../../components/admin/FormSection';
 import ModalFooter from '../../components/admin/ModalFooter';
 import { Modal } from '../../components/common/Modal';
+import { useAdminReorder } from '../../hooks/useAdminReorder';
 import { supabase } from '../../lib/supabase';
 import { deleteStorageImage, type StorageImage } from '../../services/imageService';
+import { friendlyDeleteError } from '../../utils/adminErrors';
 import type { Tables } from '../../types/supabase';
 
 type TourRow = Tables<'tours'>;
@@ -17,7 +20,6 @@ type BoatTourRow = Tables<'boat_tours'>;
 type PackageRow = Tables<'tour_packages'>;
 type TourImageRow = Tables<'tour_images'>;
 type TourInclusionRow = Tables<'tour_inclusions'>;
-type TourLocationRow = Tables<'tour_locations'>;
 type PublicationStatus = 'draft' | 'published' | 'inactive';
 type EditorStep = 'info' | 'gallery' | 'experience' | 'packages' | 'config';
 
@@ -56,7 +58,6 @@ interface TourEditor {
   id: string;
   title: string;
   slug: string;
-  locations: string[];
   description: string;
   longDescription: string;
   category: string;
@@ -93,11 +94,10 @@ function publicationStatus(tour: TourRow): PublicationStatus {
     : tour.active ? 'published' : 'inactive';
 }
 
-function createEditor(tour: TourRow, packages: PackageRow[], relations: BoatTourRow[], images: TourImageRow[], inclusions: TourInclusionRow[], locations: TourLocationRow[]): TourEditor {
+function createEditor(tour: TourRow, packages: PackageRow[], relations: BoatTourRow[], images: TourImageRow[], inclusions: TourInclusionRow[]): TourEditor {
   const boatByBoatTour = new Map(relations.map((relation) => [relation.id, relation.boat_id]));
   return {
     id: tour.id, title: tour.title, slug: tour.slug,
-    locations: locations.filter((item) => item.tour_id === tour.id).sort((a, b) => a.sort_order - b.sort_order).map((item) => item.location).concat(locations.some((item) => item.tour_id === tour.id) || !tour.location?.trim() ? [] : [tour.location.trim()]),
     description: tour.description ?? '',
     longDescription: tour.long_description ?? '', category: tour.category, publicationStatus: publicationStatus(tour), featured: tour.featured,
     sortOrder: tour.sort_order, activities: stringList(tour.highlights),
@@ -117,7 +117,6 @@ export default function AdminToursPage() {
   const navigate = useNavigate();
   const [tours, setTours] = useState<TourRow[]>([]);
   const [boats, setBoats] = useState<BoatRow[]>([]);
-  const [locationRows, setLocationRows] = useState<TourLocationRow[]>([]);
   const [relations, setRelations] = useState<BoatTourRow[]>([]);
   const [packageRows, setPackageRows] = useState<PackageRow[]>([]);
   const [imageRows, setImageRows] = useState<TourImageRow[]>([]);
@@ -131,7 +130,6 @@ export default function AdminToursPage() {
   const [deletingTour, setDeletingTour] = useState(false);
   const [activityInput, setActivityInput] = useState('');
   const [inclusionInput, setInclusionInput] = useState('');
-  const [locationInput, setLocationInput] = useState('');
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | PublicationStatus>('all');
   const [loading, setLoading] = useState(true);
@@ -143,19 +141,18 @@ export default function AdminToursPage() {
 
   async function loadTours() {
     setLoading(true);
-    const [tourResult, boatResult, relationResult, packageResult, imageResult, inclusionResult, locationResult] = await Promise.all([
+    const [tourResult, boatResult, relationResult, packageResult, imageResult, inclusionResult] = await Promise.all([
       supabase.from('tours').select('*').order('sort_order'),
       supabase.from('boats').select('id, name, max_guests, active, sort_order').order('sort_order'),
       supabase.from('boat_tours').select('*').order('sort_order'),
       supabase.from('tour_packages').select('*').order('sort_order'),
       supabase.from('tour_images').select('*').eq('active', true).order('sort_order'),
       supabase.from('tour_inclusions').select('*').order('sort_order'),
-      supabase.from('tour_locations').select('*').order('sort_order'),
     ]);
     setLoading(false);
-    const loadError = tourResult.error ?? boatResult.error ?? relationResult.error ?? packageResult.error ?? imageResult.error ?? inclusionResult.error ?? locationResult.error;
+    const loadError = tourResult.error ?? boatResult.error ?? relationResult.error ?? packageResult.error ?? imageResult.error ?? inclusionResult.error;
     if (loadError) { setError(loadError.message); return; }
-    setTours(tourResult.data ?? []); setBoats(boatResult.data ?? []); setLocationRows(locationResult.data ?? []);
+    setTours(tourResult.data ?? []); setBoats(boatResult.data ?? []);
     setRelations(relationResult.data ?? []); setPackageRows(packageResult.data ?? []); setImageRows(imageResult.data ?? []); setInclusionRows(inclusionResult.data ?? []);
   }
 
@@ -165,15 +162,15 @@ export default function AdminToursPage() {
 
   function openEditor(tour: TourRow) {
     const tourRelations = relations.filter((item) => item.tour_id === tour.id);
-    setEditing(createEditor(tour, packageRows.filter((item) => tourRelations.some((relation) => relation.id === item.boat_tour_id)), tourRelations, imageRows.filter((item) => item.tour_id === tour.id), inclusionRows.filter((item) => item.tour_id === tour.id), locationRows));
-    setStep('info'); setFieldErrors({}); setGallerySlot(null); setLocationInput(''); setDirty(false); setError('');
+    setEditing(createEditor(tour, packageRows.filter((item) => tourRelations.some((relation) => relation.id === item.boat_tour_id)), tourRelations, imageRows.filter((item) => item.tour_id === tour.id), inclusionRows.filter((item) => item.tour_id === tour.id)));
+    setStep('info'); setFieldErrors({}); setGallerySlot(null); setDirty(false); setError('');
   }
 
   async function createTour() {
     const id = `tour-${crypto.randomUUID().slice(0, 8)}`;
     const { data, error: insertError } = await supabase.from('tours').insert({ id, title: 'Nuevo tour', slug: id, category: 'Snorkeling & Beach', publication_status: 'draft', active: false, featured: false, rating: 5, sort_order: tours.length + 1, description: '', long_description: '', highlights: [], included: [] }).select('*').single();
     if (insertError) { setError(insertError.message); return; }
-    await loadTours(); setEditing(createEditor(data, [], [], [], [], [])); setStep('info'); setDirty(true);
+    await loadTours(); setEditing(createEditor(data, [], [], [], [])); setStep('info'); setDirty(true);
   }
 
   async function toggleTourPublication(tour: TourRow) {
@@ -194,7 +191,7 @@ export default function AdminToursPage() {
     setDeletingTour(false);
     if (deleteError) {
       setPendingTourDelete(null);
-      setError(`${deleteError.message}. Si el tour tiene reservas o paquetes con historial, desactívalo en lugar de eliminarlo.`);
+      setError(friendlyDeleteError(deleteError, 'este tour'));
       return;
     }
     setPendingTourDelete(null);
@@ -215,16 +212,13 @@ export default function AdminToursPage() {
     return errors;
   }
 
+  // `tours.location` and `tour_locations` are no longer written here — the
+  // "Ubicaciones" feature was retired from the Admin (no public consumer
+  // ever read either). Existing values are left exactly as they are in the
+  // database; this simply stops touching them.
   async function persistInfo(editor: TourEditor) {
-    const locations = editor.locations.map((item) => item.trim()).filter(Boolean);
-    const { error: tourError } = await supabase.from('tours').update({ title: editor.title.trim(), slug: editor.slug, location: locations[0] ?? null, description: editor.description.trim(), long_description: editor.longDescription.trim() || null, category: editor.category, sort_order: editor.sortOrder, updated_at: new Date().toISOString() }).eq('id', editor.id);
+    const { error: tourError } = await supabase.from('tours').update({ title: editor.title.trim(), slug: editor.slug, description: editor.description.trim(), long_description: editor.longDescription.trim() || null, category: editor.category, sort_order: editor.sortOrder, updated_at: new Date().toISOString() }).eq('id', editor.id);
     if (tourError) throw new Error(tourError.message);
-    const { error: removeError } = await supabase.from('tour_locations').delete().eq('tour_id', editor.id);
-    if (removeError) throw new Error(removeError.message);
-    if (locations.length) {
-      const { error: insertError } = await supabase.from('tour_locations').insert(locations.map((location, index) => ({ tour_id: editor.id, location, sort_order: index })));
-      if (insertError) throw new Error(insertError.message);
-    }
   }
 
   async function persistExperience(editor: TourEditor) {
@@ -247,6 +241,30 @@ export default function AdminToursPage() {
       if (step === 'experience') await persistExperience(editing);
       setSaving(false); setDirty(false); await loadTours(); return true;
     } catch (caught) { setSaving(false); setError(caught instanceof Error ? caught.message : 'No se pudo guardar este paso.'); return false; }
+  }
+
+  // "Guardar borrador" — available on every step, unlike "Finalizar" which
+  // only validates once all steps are done. Persists whatever is filled in
+  // so far and forces the tour back to draft/hidden; nothing here requires
+  // the full set of publish-only fields (photos, etc.).
+  async function saveDraftAndClose() {
+    if (!editing || saving) return;
+    if (!editing.title.trim()) {
+      setFieldErrors({ title: 'El nombre del tour es obligatorio.' });
+      setStep('info');
+      setError('Completa el nombre antes de guardar el borrador.');
+      return;
+    }
+    setSaving(true); setError('');
+    try {
+      await persistInfo(editing); await persistExperience(editing);
+      const { error } = await supabase.from('tours').update({ publication_status: 'draft', active: false, updated_at: new Date().toISOString() }).eq('id', editing.id);
+      if (error) throw new Error(error.message);
+      setSaving(false); setDirty(false); setEditing(null); setNotice('Borrador guardado.'); await loadTours();
+    } catch (caught) {
+      setSaving(false);
+      setError(caught instanceof Error ? caught.message : 'No se pudo guardar el borrador.');
+    }
   }
 
   async function finishTour() {
@@ -311,7 +329,6 @@ export default function AdminToursPage() {
     setStep(steps[Math.max(0, Math.min(3, index + direction))].id);
   }
 
-  const locationsByTour = useMemo(() => new Map(tours.map((tour) => [tour.id, locationRows.filter((item) => item.tour_id === tour.id).sort((a, b) => a.sort_order - b.sort_order).map((item) => item.location)])), [tours, locationRows]);
   const boatNamesByTour = useMemo(() => {
     const names = new Map<string, string[]>();
     for (const relation of relations) {
@@ -322,8 +339,19 @@ export default function AdminToursPage() {
   }, [boats, relations]);
   const visibleTours = tours
     .filter((tour) => statusFilter === 'all' || publicationStatus(tour) === statusFilter)
-    .filter((tour) => `${tour.title} ${(locationsByTour.get(tour.id) ?? [tour.location ?? '']).join(' ')} ${(boatNamesByTour.get(tour.id) ?? []).join(' ')}`.toLowerCase().includes(search.toLowerCase()));
+    .filter((tour) => `${tour.title} ${(boatNamesByTour.get(tour.id) ?? []).join(' ')}`.toLowerCase().includes(search.toLowerCase()));
   const visiblePackages = useMemo(() => editing?.packages.slice().sort((a, b) => a.sortOrder - b.sortOrder) ?? [], [editing]);
+  const reorder = useAdminReorder<TourRow>(tours);
+  const canReorder = search.trim() === '' && statusFilter === 'all';
+
+  async function persistTourOrder(updates: Array<{ id: string; sort_order: number }>) {
+    for (const update of updates) {
+      const { error } = await supabase.from('tours').update({ sort_order: update.sort_order }).eq('id', update.id);
+      if (error) { setError(error.message); throw new Error(error.message); }
+    }
+    setNotice('Orden actualizado.');
+    await loadTours();
+  }
 
   return (
     <div className="admin-page">
@@ -346,13 +374,52 @@ export default function AdminToursPage() {
               </label>
             </AdminFilterMenu>
           }
-          primaryAction={<button className="admin-btn" type="button" onClick={() => void createTour()}><Plus size={16} /> Crear tour</button>}
+          primaryAction={<button className="admin-btn" type="button" disabled={reorder.reordering} onClick={() => void createTour()}><Plus size={16} /> Crear tour</button>}
+          secondaryActions={
+            <AdminReorderToolbar
+              reordering={reorder.reordering}
+              saving={reorder.saving}
+              onStart={() => reorder.start()}
+              onCancel={reorder.cancel}
+              onSave={() => void reorder.save(persistTourOrder)}
+              disabledReason={canReorder ? undefined : 'Limpia la búsqueda y el filtro de publicación para reordenar.'}
+            />
+          }
         />
         {error && !editing ? <div className="admin-alert admin-alert--danger">{error}</div> : null}
         {notice && !editing ? <div className="admin-alert admin-alert--success">{notice}</div> : null}
-        {loading ? <p className="admin-muted">Cargando tours...</p> : <AdminTable embedded headers={['Tour', 'Ubicaciones', 'Botes', 'Publicación', 'Orden', 'Acciones']}>{visibleTours.map((tour) => <tr key={tour.id}><td>{tour.title}<div className="admin-muted admin-table__truncate" title={tour.description || tour.slug}>{tour.description || tour.slug}</div></td><td>{(locationsByTour.get(tour.id) ?? [tour.location ?? '']).filter(Boolean).join(', ') || '-'}</td><td>{(boatNamesByTour.get(tour.id) ?? []).length ? (boatNamesByTour.get(tour.id) ?? []).join(', ') : <span className="admin-muted">Sin bote asignado</span>}</td><td><AdminBadge value={publicationStatus(tour) === 'draft' ? 'Borrador' : publicationStatus(tour) === 'published' ? 'Activo' : 'Inactivo'} /></td><td>{tour.sort_order}</td><td><div className="admin-row-actions">
-          <button className="admin-icon-action" type="button" title="Editar tour" aria-label={`Editar tour ${tour.title}`} onClick={() => openEditor(tour)}><Pencil size={17} /></button>
-        </div></td></tr>)}{visibleTours.length === 0 ? <tr><td colSpan={6} className="admin-muted">No hay tours para esta búsqueda.</td></tr> : null}</AdminTable>}
+        {loading ? <p className="admin-muted">Cargando tours...</p> : (
+          <AdminTable embedded headers={['Tour', 'Botes', 'Publicación', 'Orden', 'Acciones']}>
+            {(reorder.reordering ? reorder.order : visibleTours).map((tour, index) => (
+              <tr
+                key={tour.id}
+                className={reorder.reordering ? `admin-sortable-row${reorder.dragId === tour.id ? ' admin-sortable-row--dragging' : ''}` : undefined}
+                {...(reorder.reordering ? reorder.dragHandlers(tour.id) : {})}
+              >
+                <td>{tour.title}<div className="admin-muted admin-table__truncate" title={tour.description || tour.slug}>{tour.description || tour.slug}</div></td>
+                <td>{(boatNamesByTour.get(tour.id) ?? []).length ? (boatNamesByTour.get(tour.id) ?? []).join(', ') : <span className="admin-muted">Sin bote asignado</span>}</td>
+                <td><AdminBadge value={publicationStatus(tour) === 'draft' ? 'Borrador' : publicationStatus(tour) === 'published' ? 'Activo' : 'Inactivo'} /></td>
+                <td>
+                  {reorder.reordering ? (
+                    <AdminReorderHandle
+                      position={index + 1}
+                      total={reorder.order.length}
+                      dragging={reorder.dragId === tour.id}
+                      onMoveUp={() => reorder.moveBy(tour.id, -1)}
+                      onMoveDown={() => reorder.moveBy(tour.id, 1)}
+                    />
+                  ) : tour.sort_order}
+                </td>
+                <td>
+                  <div className="admin-row-actions">
+                    <button className="admin-icon-action" type="button" disabled={reorder.reordering} title="Editar tour" aria-label={`Editar tour ${tour.title}`} onClick={() => openEditor(tour)}><Pencil size={17} /></button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+            {visibleTours.length === 0 ? <tr><td colSpan={5} className="admin-muted">No hay tours para esta búsqueda.</td></tr> : null}
+          </AdminTable>
+        )}
       </AdminModuleSurface>
 
       <Modal open={Boolean(editing)} onClose={requestClose} titleId="tour-edit-title" className="admin-tour-modal">
@@ -360,39 +427,45 @@ export default function AdminToursPage() {
           <header className="admin-modal-header"><div><h2 id="tour-edit-title" className="admin-card__title"><Pencil size={18} /> {editing.title}</h2><p className="admin-muted">{steps.findIndex((item) => item.id === step) + 1} de {steps.length} · {steps.find((item) => item.id === step)?.label}</p></div><button className="admin-icon-btn" type="button" aria-label="Cerrar editor" onClick={requestClose}><X size={18} /></button></header>
           <ol className="admin-stepper" aria-label="Progreso del Tour">{steps.map((item, index) => <li key={item.id} aria-current={step === item.id ? 'step' : undefined} className={step === item.id ? 'admin-stepper__item admin-stepper__item--active' : 'admin-stepper__item'}><button type="button" onClick={() => setStep(item.id)}><span>{index + 1}</span><strong>{item.label}</strong></button></li>)}</ol>
           <div className="admin-modal-body admin-tour-step-body">{error ? <div className="admin-alert admin-alert--danger" role="alert">{error}</div> : null}
-            {step === 'info' ? <InfoStep editing={editing} locationInput={locationInput} setLocationInput={setLocationInput} errors={fieldErrors} onChange={markEditing} /> : null}
+            {step === 'info' ? <InfoStep editing={editing} errors={fieldErrors} onChange={markEditing} /> : null}
             {step === 'gallery' ? <GalleryStep editing={editing} errors={fieldErrors} selectedSlot={gallerySlot} setSelectedSlot={setGallerySlot} setDeleteImage={setDeleteImage} saveImage={saveGalleryImage} /> : null}
             {step === 'experience' ? <ExperienceStep editing={editing} activityInput={activityInput} inclusionInput={inclusionInput} setActivityInput={setActivityInput} setInclusionInput={setInclusionInput} addActivity={addActivity} addInclusion={addInclusion} onChange={markEditing} /> : null}
             {step === 'packages' ? <PackagesStep boats={boats} relations={relations.filter((relation) => relation.tour_id === editing.id)} packages={visiblePackages} onManageBoat={(boatId) => navigate(boatId ? `/admin/boats?boatId=${boatId}` : '/admin/boats')} /> : null}
             {step === 'config' ? <ConfigStep tour={tours.find((item) => item.id === editing.id) ?? null} togglingTourId={togglingTourId} onToggle={toggleTourPublication} onRequestDelete={setPendingTourDelete} /> : null}
           </div>
-          <ModalFooter><button className="admin-btn admin-btn--secondary" type="button" onClick={requestClose}>Cancelar</button>{step !== 'info' ? <button className="admin-btn admin-btn--ghost" type="button" onClick={() => void navigateStep(-1)}><ChevronLeft size={15} /> Anterior</button> : null}{step !== 'config' ? <button className="admin-btn" type="button" disabled={saving} onClick={() => void navigateStep(1)}>{saving ? <Loader2 className="animate-spin" size={15} /> : null} Siguiente <ChevronRight size={15} /></button> : <button className="admin-btn" type="submit" disabled={saving}>{saving ? <Loader2 className="animate-spin" size={15} /> : <Save size={15} />} Finalizar</button>}</ModalFooter>
+          <ModalFooter>
+            <button className="admin-btn admin-btn--ghost" type="button" disabled={saving} onClick={requestClose}>Cancelar</button>
+            <button className="admin-btn admin-btn--secondary" type="button" disabled={saving} onClick={() => void saveDraftAndClose()}>{saving ? <Loader2 className="animate-spin" size={15} /> : <Save size={15} />} Guardar borrador</button>
+            {step !== 'info' ? <button className="admin-btn admin-btn--ghost" type="button" onClick={() => void navigateStep(-1)}><ChevronLeft size={15} /> Anterior</button> : null}
+            {step !== 'config' ? <button className="admin-btn" type="button" disabled={saving} onClick={() => void navigateStep(1)}>{saving ? <Loader2 className="animate-spin" size={15} /> : null} Siguiente <ChevronRight size={15} /></button> : <button className="admin-btn" type="submit" disabled={saving}>{saving ? <Loader2 className="animate-spin" size={15} /> : <Save size={15} />} Guardar</button>}
+          </ModalFooter>
         </form> : null}
       </Modal>
 
-      <Modal open={Boolean(deleteImage)} onClose={() => setDeleteImage(null)} titleId="image-delete-title" className="max-w-md">{deleteImage ? <div className="admin-modal-card"><h2 id="image-delete-title" className="admin-card__title"><Trash2 size={18} /> Eliminar fotografía</h2><p className="admin-muted mt-2">Las siguientes fotografías se reordenarán automáticamente.</p><div className="admin-actions mt-5"><button className="admin-btn admin-btn--secondary" type="button" onClick={() => setDeleteImage(null)}>Cancelar</button><button className="admin-btn admin-btn--danger" type="button" onClick={() => void removeGalleryImage(deleteImage)}>Eliminar</button></div></div> : null}</Modal>
+      <AdminConfirmDialog
+        open={Boolean(deleteImage)}
+        onClose={() => setDeleteImage(null)}
+        onConfirm={() => deleteImage && removeGalleryImage(deleteImage)}
+        titleId="image-delete-title"
+        title="Eliminar fotografía"
+        message="Las siguientes fotografías se reordenarán automáticamente."
+      />
 
-      <Modal open={Boolean(pendingTourDelete)} onClose={() => setPendingTourDelete(null)} titleId="tour-delete-title" className="max-w-md">
-        {pendingTourDelete ? <div className="admin-modal-card">
-          <h2 id="tour-delete-title" className="admin-card__title"><Trash2 size={18} /> Eliminar tour</h2>
-          <p className="admin-muted mt-2">Esta acción elimina "{pendingTourDelete.title}" y sus paquetes asociados. Si tiene reservas históricas, la base de datos bloqueará la eliminación.</p>
-          <div className="admin-actions mt-5">
-            <button className="admin-btn admin-btn--secondary" type="button" disabled={deletingTour} onClick={() => setPendingTourDelete(null)}>Cancelar</button>
-            <button className="admin-btn admin-btn--danger" type="button" disabled={deletingTour} onClick={() => void deleteTour(pendingTourDelete)}>{deletingTour ? <Loader2 className="animate-spin" size={15} /> : <Trash2 size={15} />} Eliminar</button>
-          </div>
-        </div> : null}
-      </Modal>
+      <AdminConfirmDialog
+        open={Boolean(pendingTourDelete)}
+        onClose={() => setPendingTourDelete(null)}
+        onConfirm={() => pendingTourDelete && deleteTour(pendingTourDelete)}
+        titleId="tour-delete-title"
+        title="Eliminar tour"
+        loading={deletingTour}
+        message={pendingTourDelete ? `Esta acción elimina "${pendingTourDelete.title}" y sus paquetes asociados. Si tiene reservas históricas, la base de datos bloqueará la eliminación.` : ''}
+      />
     </div>
   );
 }
 
-function InfoStep({ editing, locationInput, setLocationInput, errors, onChange }: { editing: TourEditor; locationInput: string; setLocationInput: (value: string) => void; errors: FieldErrors; onChange: (value: TourEditor) => void }) {
-  const addLocation = () => {
-    const value = locationInput.trim();
-    if (!value || editing.locations.some((item) => item.localeCompare(value, undefined, { sensitivity: 'accent' }) === 0)) return;
-    onChange({ ...editing, locations: [...editing.locations, value] }); setLocationInput('');
-  };
-  return <FormSection title="Información general" description="Los datos esenciales que describen el Tour." icon={<Info size={16} />}><div className="admin-form-columns"><label className="admin-field"><span className="admin-field__label">Nombre del tour</span><input className="admin-input" aria-invalid={Boolean(errors.title) || undefined} value={editing.title} onChange={(event) => onChange({ ...editing, title: event.target.value, slug: slugify(event.target.value) })} />{errors.title ? <span className="admin-field-error">{errors.title}</span> : null}</label><div className="admin-field"><span className="admin-field__label">Ubicaciones</span><div className="admin-list-editor__add"><input className="admin-input" value={locationInput} placeholder="Ej. Papagayo" onChange={(event) => setLocationInput(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); addLocation(); } }} /><button className="admin-btn admin-btn--secondary" type="button" onClick={addLocation}><Plus size={14} /> Agregar</button></div><div className="admin-location-chips">{editing.locations.map((location) => <span className="admin-location-chip" key={location.toLocaleLowerCase()}>{location}<button type="button" aria-label={`Eliminar ubicación ${location}`} onClick={() => onChange({ ...editing, locations: editing.locations.filter((item) => item !== location) })}><X size={13} /></button></span>)}</div></div></div><label className="admin-field"><span className="admin-field__label">Frase</span><textarea className="admin-input" rows={3} value={editing.description} onChange={(event) => onChange({ ...editing, description: event.target.value })} /></label><label className="admin-field"><span className="admin-field__label">Descripción</span><textarea className="admin-input admin-textarea-list" value={editing.longDescription} onChange={(event) => onChange({ ...editing, longDescription: event.target.value })} /></label><label className="admin-field"><span className="admin-field__label">Orden de aparición</span><input className="admin-input" type="number" value={editing.sortOrder} onChange={(event) => onChange({ ...editing, sortOrder: Number(event.target.value) })} /></label></FormSection>;
+function InfoStep({ editing, errors, onChange }: { editing: TourEditor; errors: FieldErrors; onChange: (value: TourEditor) => void }) {
+  return <FormSection title="Información general" description="Los datos esenciales que describen el Tour." icon={<Info size={16} />}><label className="admin-field"><span className="admin-field__label">Nombre del tour</span><input className="admin-input" aria-invalid={Boolean(errors.title) || undefined} value={editing.title} onChange={(event) => onChange({ ...editing, title: event.target.value, slug: slugify(event.target.value) })} />{errors.title ? <span className="admin-field-error">{errors.title}</span> : null}</label><label className="admin-field"><span className="admin-field__label">Frase</span><textarea className="admin-input" rows={3} value={editing.description} onChange={(event) => onChange({ ...editing, description: event.target.value })} /></label><label className="admin-field"><span className="admin-field__label">Descripción</span><textarea className="admin-input admin-textarea-list" value={editing.longDescription} onChange={(event) => onChange({ ...editing, longDescription: event.target.value })} /></label><p className="admin-field-help">Orden de aparición actual: {editing.sortOrder}. Se reordena desde la lista de tours.</p></FormSection>;
 }
 
 function GalleryStep({ editing, errors, selectedSlot, setSelectedSlot, setDeleteImage, saveImage }: { editing: TourEditor; errors: FieldErrors; selectedSlot: number | null; setSelectedSlot: (value: number | null) => void; setDeleteImage: (value: TourImageRow | null) => void; saveImage: (image: StorageImage, slot: number) => Promise<void> }) {

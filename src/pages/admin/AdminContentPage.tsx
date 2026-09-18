@@ -1,12 +1,13 @@
-import { ChevronDown, ChevronRight, Eye, FileText, Image as ImageIcon, Save } from 'lucide-react';
+import { ChevronDown, ChevronRight, Eye, FileText, Save } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 
 import AdminImageManager from '../../components/admin/AdminImageManager';
 import AdminVideoManager from '../../components/admin/AdminVideoManager';
-import { AdminBadge, AdminPageHeader, AdminTable } from '../../components/admin/AdminPrimitives';
+import { AdminPageHeader } from '../../components/admin/AdminPrimitives';
 import { supabase } from '../../lib/supabase';
 import { ABOUT_CAROUSEL_DEFAULTS, buildAboutCarouselImages } from '../../services/aboutSettings';
-import { deleteStorageImage, type StorageImage } from '../../services/imageService';
+import type { StorageImage } from '../../services/imageService';
+import { translateAndSaveContent } from '../../services/translationService';
 
 interface SiteSettingRow {
   key: string;
@@ -20,6 +21,14 @@ interface ContentField {
   label: string;
   type: 'text' | 'textarea' | 'url' | 'boolean' | 'image' | 'video' | 'media_mode';
   fallback: string;
+  /**
+   * True for editorial text the admin only ever writes in Spanish — `key` is
+   * the BASE site_settings key (no `.es`/`.en`). Guardar sends the Spanish
+   * value to translate-content, which translates it server-side and
+   * persists BOTH `${key}.es` and `${key}.en` atomically. Non-bilingual
+   * fields (images, video, booleans, media_mode) upsert directly as before.
+   */
+  bilingual?: boolean;
   aspect?: number;
   maxWidth?: number;
   maxHeight?: number;
@@ -40,54 +49,40 @@ const HERO_IMAGE_FIELDS: ContentField[] = [
   { key: 'home.hero.slide_4.mobile_image', label: 'Slide 4 - celular', type: 'image', fallback: '', aspect: 4 / 5, maxWidth: 1200, maxHeight: 1500 },
 ];
 
+// The primary/secondary CTA buttons (label, link, enabled toggle) are
+// deliberately NOT in this list — see the CIERRE DE SEGURIDAD pass. They
+// control site structure/navigation (where a button goes, whether it shows
+// at all), not editorial content, and a wrong value here breaks the booking
+// entry point. `Hero.tsx` still reads `home.hero.primary_label.*` /
+// `primary_href` / `primary_enabled` (and the secondary equivalents) exactly
+// as before — those DB rows and the public rendering are untouched, only the
+// Admin's ability to edit them is gone.
 const HERO_FIELDS: ContentField[] = [
   { key: 'home.hero.media_mode', label: 'Modo del hero', type: 'media_mode', fallback: 'image' },
-  { key: 'home.hero.title.es', label: 'Titulo principal ES', type: 'text', fallback: 'Experimenta el oceano' },
-  { key: 'home.hero.title.en', label: 'Titulo principal EN', type: 'text', fallback: 'Experience the Ocean' },
-  { key: 'home.hero.eyebrow.es', label: 'Etiqueta ES', type: 'text', fallback: 'Charters privados - Costa Rica' },
-  { key: 'home.hero.eyebrow.en', label: 'Etiqueta EN', type: 'text', fallback: 'Private charters - Costa Rica' },
-  { key: 'home.hero.subtitle.es', label: 'Subtitulo ES', type: 'textarea', fallback: 'Pesca de clase mundial, vistas impresionantes y recuerdos inolvidables.' },
-  { key: 'home.hero.subtitle.en', label: 'Subtitulo EN', type: 'textarea', fallback: 'World-class fishing, stunning views, and unforgettable memories.' },
-  { key: 'home.hero.primary_label.es', label: 'Boton principal ES', type: 'text', fallback: 'Reservar ahora' },
-  { key: 'home.hero.primary_label.en', label: 'Boton principal EN', type: 'text', fallback: 'Book now' },
-  { key: 'home.hero.primary_href', label: 'Enlace boton principal', type: 'url', fallback: '#booking' },
-  { key: 'home.hero.secondary_label.es', label: 'Boton secundario ES', type: 'text', fallback: 'Ver tours' },
-  { key: 'home.hero.secondary_label.en', label: 'Boton secundario EN', type: 'text', fallback: 'View tours' },
-  { key: 'home.hero.secondary_href', label: 'Enlace boton secundario', type: 'url', fallback: '#tours' },
-  { key: 'home.hero.image_alt.es', label: 'Texto alternativo imagen ES', type: 'text', fallback: 'Bote privado navegando en el Pacifico de Costa Rica' },
-  { key: 'home.hero.image_alt.en', label: 'Texto alternativo imagen EN', type: 'text', fallback: 'Private boat sailing Costa Rica Pacific waters' },
+  { key: 'home.hero.title', label: 'Titulo principal', type: 'text', fallback: 'Experimenta el oceano', bilingual: true },
+  { key: 'home.hero.eyebrow', label: 'Etiqueta', type: 'text', fallback: 'Charters privados - Costa Rica', bilingual: true },
+  { key: 'home.hero.subtitle', label: 'Subtitulo', type: 'textarea', fallback: 'Pesca de clase mundial, vistas impresionantes y recuerdos inolvidables.', bilingual: true },
+  { key: 'home.hero.image_alt', label: 'Texto alternativo de la imagen', type: 'text', fallback: 'Bote privado navegando en el Pacifico de Costa Rica', bilingual: true },
   { key: 'home.hero.video', label: 'Video de fondo', type: 'video', fallback: '' },
   { key: 'home.hero.mobile_video', label: 'Video de fondo - celular', type: 'video', fallback: '' },
   { key: 'home.hero.video_poster', label: 'Imagen mientras carga el video', type: 'image', fallback: '', aspect: 16 / 9, maxWidth: 1920, maxHeight: 1080 },
   ...HERO_IMAGE_FIELDS,
-  { key: 'home.hero.primary_enabled', label: 'Activar boton principal', type: 'boolean', fallback: 'true' },
-  { key: 'home.hero.secondary_enabled', label: 'Activar boton secundario', type: 'boolean', fallback: 'true' },
 ];
 
+// Etiqueta (eyebrow) and both button labels are deliberately NOT in this
+// list — see the CIERRE DE SEGURIDAD pass. They're structural CTA copy, not
+// editorial content, and stay controlled by code.
 const ABOUT_FIELDS: ContentField[] = [
   ...Object.entries(ABOUT_CAROUSEL_DEFAULTS).map(([key, fallback], index): ContentField => ({
     key, fallback, label: `Carrusel About - foto ${index + 1}`, type: 'image', aspect: 16 / 9, maxWidth: 1920, maxHeight: 1080,
   })),
-  { key: 'about.eyebrow.es', label: 'Etiqueta ES', type: 'text', fallback: 'Sobre nosotros' },
-  { key: 'about.eyebrow.en', label: 'Etiqueta EN', type: 'text', fallback: 'About us' },
-  { key: 'about.title.es', label: 'Titulo ES', type: 'text', fallback: 'Pasion local y excelencia en el Pacifico de Costa Rica' },
-  { key: 'about.title.en', label: 'Titulo EN', type: 'text', fallback: 'Local passion and excellence on Costa Rica Pacific' },
-  { key: 'about.description.es', label: 'Descripcion del hero ES', type: 'textarea', fallback: 'Sube a bordo de Second Wind y descubre una experiencia sofisticada donde el lujo se encuentra con la naturaleza.' },
-  { key: 'about.description.en', label: 'Descripcion del hero EN', type: 'textarea', fallback: 'Step aboard Second Wind and discover a sophisticated ocean experience where luxury meets nature.' },
-  { key: 'about.preview_text.es', label: 'Texto de inicio (home) ES - parrafos separados por linea vacia', type: 'textarea', fallback: 'Papagayo Fishing Tour es una empresa familiar fundada por los jovenes emprendedores locales Gabriel y Joshua, orgullosamente de Playas del Coco.\n\nCada salida esta disenada con cuidado para ofrecer exclusividad, comodidad y autenticidad en las aguas de la Peninsula de Papagayo.' },
-  { key: 'about.preview_text.en', label: 'Texto de inicio (home) EN - parrafos separados por linea vacia', type: 'textarea', fallback: 'Papagayo Fishing Tour is a family-owned company founded by young local entrepreneurs Gabriel and Joshua, proudly from Playas del Coco.\n\nEvery journey is thoughtfully designed to deliver exclusivity, comfort and authenticity across the waters of the Papagayo Peninsula.' },
-  { key: 'about.story.es', label: 'Historia (pagina Nosotros) ES - parrafos separados por linea vacia', type: 'textarea', fallback: 'Papagayo Fishing Tour es una empresa familiar fundada por los jovenes emprendedores locales Gabriel y Joshua, orgullosamente de Playas del Coco. Su conexion profunda con el oceano redefine las experiencias de pesca en las aguas de la Peninsula de Papagayo.\n\nNavega por mares cristalinos reconocidos por pesca, surf y snorkeling de clase mundial. Cada viaje esta disenado para ofrecer exclusividad, comodidad y autenticidad.' },
-  { key: 'about.story.en', label: 'Historia (pagina Nosotros) EN - parrafos separados por linea vacia', type: 'textarea', fallback: 'Papagayo Fishing Tour is a family-owned company founded by young local entrepreneurs Gabriel and Joshua, proudly from Playas del Coco. Driven by a deep connection to the ocean, they have redefined fishing experiences in the waters of the Papagayo Peninsula.\n\nSail across crystal-clear seas renowned for world-class fishing, surfing and snorkeling. Every journey is thoughtfully designed to deliver exclusivity, comfort and authenticity.' },
-  { key: 'about.cta_title.es', label: 'Titulo final ES', type: 'text', fallback: 'Listo para planear tu salida?' },
-  { key: 'about.cta_title.en', label: 'Titulo final EN', type: 'text', fallback: 'Ready to plan your trip?' },
-  { key: 'about.cta_text.es', label: 'Texto final ES', type: 'textarea', fallback: 'Elige tu barco, horario y tipo de experiencia. Nosotros nos encargamos del resto.' },
-  { key: 'about.cta_text.en', label: 'Texto final EN', type: 'textarea', fallback: 'Choose your boat, time and experience. We handle the rest.' },
-  { key: 'about.preview_button_label.es', label: 'Boton en inicio ES', type: 'text', fallback: 'Conocer la empresa' },
-  { key: 'about.preview_button_label.en', label: 'Boton en inicio EN', type: 'text', fallback: 'Meet the company' },
-  { key: 'about.cta_button_label.es', label: 'Boton final ES', type: 'text', fallback: 'Reservar ahora' },
-  { key: 'about.cta_button_label.en', label: 'Boton final EN', type: 'text', fallback: 'Book now' },
-  { key: 'about.image_alt.es', label: 'Texto alternativo imagen ES', type: 'text', fallback: 'Tripulacion con pesca en aguas de Guanacaste' },
-  { key: 'about.image_alt.en', label: 'Texto alternativo imagen EN', type: 'text', fallback: 'Crew with a catch in Guanacaste waters' },
+  { key: 'about.title', label: 'Titulo', type: 'text', fallback: 'Pasion local y excelencia en el Pacifico de Costa Rica', bilingual: true },
+  { key: 'about.description', label: 'Descripcion', type: 'textarea', fallback: 'Sube a bordo de Second Wind y descubre una experiencia sofisticada donde el lujo se encuentra con la naturaleza.', bilingual: true },
+  { key: 'about.preview_text', label: 'Texto de inicio (home) - parrafos separados por linea vacia', type: 'textarea', fallback: 'Papagayo Fishing Tour es una empresa familiar fundada por los jovenes emprendedores locales Gabriel y Joshua, orgullosamente de Playas del Coco.\n\nCada salida esta disenada con cuidado para ofrecer exclusividad, comodidad y autenticidad en las aguas de la Peninsula de Papagayo.', bilingual: true },
+  { key: 'about.story', label: 'Historia (pagina Nosotros) - parrafos separados por linea vacia', type: 'textarea', fallback: 'Papagayo Fishing Tour es una empresa familiar fundada por los jovenes emprendedores locales Gabriel y Joshua, orgullosamente de Playas del Coco. Su conexion profunda con el oceano redefine las experiencias de pesca en las aguas de la Peninsula de Papagayo.\n\nNavega por mares cristalinos reconocidos por pesca, surf y snorkeling de clase mundial. Cada viaje esta disenado para ofrecer exclusividad, comodidad y autenticidad.', bilingual: true },
+  { key: 'about.cta_title', label: 'Titulo final', type: 'text', fallback: 'Listo para planear tu salida?', bilingual: true },
+  { key: 'about.cta_text', label: 'Texto final', type: 'textarea', fallback: 'Elige tu barco, horario y tipo de experiencia. Nosotros nos encargamos del resto.', bilingual: true },
+  { key: 'about.image_alt', label: 'Texto alternativo de la imagen', type: 'text', fallback: 'Tripulacion con pesca en aguas de Guanacaste', bilingual: true },
   { key: 'about.image', label: 'Carrusel About - foto 5 (opcional)', type: 'image', fallback: '', aspect: 16 / 9, maxWidth: 1920, maxHeight: 1080 },
 ];
 
@@ -102,12 +97,9 @@ function storagePathFromPublicUrl(value?: string | null) {
   }
 }
 
-type LangFilter = 'all' | 'es' | 'en';
-
-function fieldLang(key: string): 'es' | 'en' | null {
-  if (key.endsWith('.es')) return 'es';
-  if (key.endsWith('.en')) return 'en';
-  return null;
+/** The `site_settings` row a field actually reads/writes for Spanish. */
+function storageKey(field: ContentField) {
+  return field.bilingual ? `${field.key}.es` : field.key;
 }
 
 function defaultsFrom(fields: ContentField[]): Draft {
@@ -129,30 +121,28 @@ interface ContentSectionProps {
 }
 
 function ContentSection({ title, description, fields, saveLabel, imageRequireReplacement = false, preview, mediaTextTabs = false }: ContentSectionProps) {
-  const keys = useMemo(() => fields.map((field) => field.key), [fields]);
-  const [settings, setSettings] = useState<SiteSettingRow[]>([]);
+  const keyToField = useMemo(() => new Map(fields.map((field) => [storageKey(field), field])), [fields]);
+  const dbKeys = useMemo(() => fields.map(storageKey), [fields]);
   const [draft, setDraft] = useState<Draft>(() => defaultsFrom(fields));
+  // Snapshot of what's actually persisted (Spanish side) — saveSettings only
+  // sends a bilingual field to translation if its value changed since this,
+  // so re-saving a section never re-translates copy nobody touched.
+  const [loadedDraft, setLoadedDraft] = useState<Draft>(() => defaultsFrom(fields));
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
-  const [langFilter, setLangFilter] = useState<LangFilter>('all');
   const [showExtraSlides, setShowExtraSlides] = useState(false);
-  const [showTable, setShowTable] = useState(false);
   const [heroMediaMode, setHeroMediaMode] = useState<'image' | 'video'>('image');
   const [switchingMediaMode, setSwitchingMediaMode] = useState(false);
   const [innerTab, setInnerTab] = useState<'media' | 'texts'>('media');
 
-  const rowsByKey = useMemo(() => new Map(settings.map((setting) => [setting.key, setting])), [settings]);
   const imageFields = useMemo(() => fields.filter((field) => field.type === 'image'), [fields]);
   const primaryImageFields = useMemo(() => imageFields.filter((field) => !field.key.includes('.slide_') && field.key !== 'home.hero.video_poster'), [imageFields]);
   const extraImageFields = useMemo(() => imageFields.filter((field) => field.key.includes('.slide_')), [imageFields]);
   const videoFields = useMemo(() => fields.filter((field) => field.type === 'video'), [fields]);
   const videoPosterField = useMemo(() => fields.find((field) => field.key === 'home.hero.video_poster'), [fields]);
-  const textFields = useMemo(
-    () => fields.filter((field) => !['image', 'video', 'media_mode'].includes(field.type) && (langFilter === 'all' || fieldLang(field.key) === null || fieldLang(field.key) === langFilter)),
-    [fields, langFilter],
-  );
+  const textFields = useMemo(() => fields.filter((field) => !['image', 'video', 'media_mode'].includes(field.type)), [fields]);
 
   async function loadSettings() {
     setLoading(true);
@@ -160,24 +150,25 @@ function ContentSection({ title, description, fields, saveLabel, imageRequireRep
     const { data, error } = await supabase
       .from('site_settings')
       .select('key, value, type, active')
-      .in('key', keys)
+      .in('key', dbKeys)
       .order('key');
 
     setLoading(false);
     if (error) {
       setError(error.message);
-      setSettings([]);
       setDraft(defaultsFrom(fields));
+      setLoadedDraft(defaultsFrom(fields));
       return;
     }
 
     const rows = (data ?? []) as SiteSettingRow[];
     const nextDraft = defaultsFrom(fields);
     rows.forEach((row) => {
-      if (row.key in nextDraft && row.value) nextDraft[row.key] = row.value;
+      const field = keyToField.get(row.key);
+      if (field && row.value) nextDraft[field.key] = row.value;
     });
-    setSettings(rows);
     setDraft(nextDraft);
+    setLoadedDraft(nextDraft);
     if (videoFields.length) setHeroMediaMode(nextDraft['home.hero.media_mode'] === 'video' ? 'video' : 'image');
   }
 
@@ -202,13 +193,22 @@ function ContentSection({ title, description, fields, saveLabel, imageRequireRep
     setError('');
     setNotice('');
     try {
+      const bilingualChanges: Array<{ key: string; value: string }> = [];
       for (const field of fields) {
+        if (field.type === 'image' || field.type === 'video') continue; // saved by their own upload managers
         const raw = draft[field.key];
-        const value = field.type === 'boolean'
-          ? (raw !== 'false' ? 'true' : 'false')
-          : ((raw ?? '').trim() || field.fallback);
+        if (field.bilingual) {
+          const value = (raw ?? '').trim() || field.fallback;
+          if (value !== (loadedDraft[field.key] ?? '').trim()) bilingualChanges.push({ key: field.key, value });
+          continue;
+        }
+        const value = field.type === 'boolean' ? (raw !== 'false' ? 'true' : 'false') : ((raw ?? '').trim() || field.fallback);
         await upsertKey(field.key, value, field.type);
       }
+      // Translated as one batch, atomically: if any field fails to
+      // translate, nothing in this batch is written — the previous ES/EN
+      // stay exactly as they were.
+      if (bilingualChanges.length > 0) await translateAndSaveContent(bilingualChanges);
       setNotice(`${title} actualizado. La pagina publica usara estos valores sin redesplegar.`);
       await loadSettings();
     } catch (saveError) {
@@ -282,26 +282,6 @@ function ContentSection({ title, description, fields, saveLabel, imageRequireRep
     } finally {
       setSwitchingMediaMode(false);
     }
-    /*
-      // The Hero always prefers a configured video over the image slideshow, so
-      // switching back to "Imágenes" has to actually clear it, not just hide the field.
-      setSwitchingMediaMode(true);
-      try {
-        for (const videoField of configuredVideoFields) {
-          await upsertKey(videoField.key, videoField.fallback, 'video');
-          const storagePath = storagePathFromPublicUrl(draft[videoField.key]);
-          if (storagePath) await deleteStorageImage({ storagePath, resourceTable: 'site_settings', resourceId: videoField.key }).catch(() => undefined);
-        }
-        setNotice('Video eliminado. El Hero vuelve a mostrar las imágenes.');
-        await loadSettings();
-      } catch (switchError) {
-        setError(switchError instanceof Error ? switchError.message : 'No se pudo quitar el video actual.');
-        setSwitchingMediaMode(false);
-        return;
-      }
-      setSwitchingMediaMode(false);
-    }
-    */
   }
 
   return (
@@ -357,7 +337,7 @@ function ContentSection({ title, description, fields, saveLabel, imageRequireRep
                     folder="general"
                     currentImageUrl={draft[imageField.key]}
                     currentStoragePath={storagePathFromPublicUrl(draft[imageField.key])}
-                    label={draft[`${imageField.key.replace(/\.mobile_image$/, '').replace(/\.image$/, '')}.image_alt.es`] ?? imageField.label}
+                    label={draft[`${imageField.key.replace(/\.mobile_image$/, '').replace(/\.image$/, '')}.image_alt`] ?? imageField.label}
                     aspect={imageField.aspect ?? 16 / 9}
                     previewAspect={imageField.aspect ?? 16 / 9}
                     maxWidth={imageField.maxWidth ?? 1920}
@@ -395,7 +375,7 @@ function ContentSection({ title, description, fields, saveLabel, imageRequireRep
                         folder="general"
                         currentImageUrl={draft[imageField.key]}
                         currentStoragePath={storagePathFromPublicUrl(draft[imageField.key])}
-                        label={draft[`${imageField.key.replace(/\.mobile_image$/, '').replace(/\.image$/, '')}.image_alt.es`] ?? imageField.label}
+                        label={draft[`${imageField.key.replace(/\.mobile_image$/, '').replace(/\.image$/, '')}.image_alt`] ?? imageField.label}
                         aspect={imageField.aspect ?? 16 / 9}
                         previewAspect={imageField.aspect ?? 16 / 9}
                         maxWidth={imageField.maxWidth ?? 1920}
@@ -454,21 +434,8 @@ function ContentSection({ title, description, fields, saveLabel, imageRequireRep
           </div>
 
           <div style={mediaTextTabs && innerTab !== 'texts' ? { display: 'none' } : undefined} className="grid gap-5">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="admin-muted font-extrabold">Textos</p>
-            <div className="admin-segmented" role="group" aria-label="Filtrar por idioma">
-              {(['all', 'es', 'en'] as LangFilter[]).map((lang) => (
-                <button
-                  key={lang}
-                  type="button"
-                  className={langFilter === lang ? 'admin-segmented__option--active' : ''}
-                  onClick={() => setLangFilter(lang)}
-                >
-                  {lang === 'all' ? 'Todos' : lang === 'es' ? 'Español' : 'English'}
-                </button>
-              ))}
-            </div>
-          </div>
+          <p className="admin-muted font-extrabold">Textos</p>
+          <p className="admin-field-help">Escribe en español. El inglés se genera automáticamente al guardar.</p>
 
           <div className="grid gap-3 lg:grid-cols-2">
             {textFields.map((field) => (
@@ -507,35 +474,6 @@ function ContentSection({ title, description, fields, saveLabel, imageRequireRep
               <Save size={16} /> {saving ? 'Guardando...' : saveLabel}
             </button>
             <button className="admin-btn admin-btn--ghost" type="button" onClick={() => void loadSettings()}>Descartar cambios</button>
-          </div>
-
-          <div>
-            <button
-              className="admin-btn admin-btn--ghost"
-              type="button"
-              onClick={() => setShowTable((current) => !current)}
-              style={{ justifySelf: 'start' }}
-            >
-              {showTable ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-              {showTable ? 'Ocultar tabla tecnica de claves' : `Ver tabla tecnica de claves (${fields.length})`}
-            </button>
-            {showTable ? (
-              <div className="mt-3">
-                <AdminTable headers={['Key', 'Tipo', 'Valor', 'Estado']}>
-                  {fields.map((field) => {
-                    const row = rowsByKey.get(field.key);
-                    return (
-                      <tr key={field.key}>
-                        <td>{field.key}</td>
-                        <td>{row?.type ?? field.type}</td>
-                        <td className="admin-muted max-w-[24rem] truncate" title={draft[field.key]}>{field.type === 'image' ? (draft[field.key] || '(por defecto)') : draft[field.key]}</td>
-                        <td><AdminBadge value={row?.active ?? true} /></td>
-                      </tr>
-                    );
-                  })}
-                </AdminTable>
-              </div>
-            ) : null}
           </div>
         </div>
       )}
@@ -576,14 +514,14 @@ export default function AdminContentPage() {
         preview={(draft) => (
           <div className="relative overflow-hidden rounded-xl">
             {draft['home.hero.mobile_image'] ? (
-              <img className="aspect-[4/5] w-full object-cover sm:hidden" src={draft['home.hero.mobile_image']} alt={draft['home.hero.image_alt.es']} />
+              <img className="aspect-[4/5] w-full object-cover sm:hidden" src={draft['home.hero.mobile_image']} alt={draft['home.hero.image_alt']} />
             ) : (
               <div className="grid aspect-[4/5] w-full place-items-center border border-dashed border-white/25 text-xs text-white/60 sm:hidden">
                 Sin imagen de celular
               </div>
             )}
             {draft['home.hero.image'] ? (
-              <img className="hidden aspect-video w-full object-cover sm:block" src={draft['home.hero.image']} alt={draft['home.hero.image_alt.es']} />
+              <img className="hidden aspect-video w-full object-cover sm:block" src={draft['home.hero.image']} alt={draft['home.hero.image_alt']} />
             ) : (
               <div className="hidden aspect-video w-full place-items-center border border-dashed border-white/25 text-xs text-white/60 sm:grid">
                 Sin imagen de compu
@@ -592,9 +530,9 @@ export default function AdminContentPage() {
             <div className="absolute inset-0 bg-ocean-950/45" />
             <div className="absolute inset-0 grid place-items-center p-5 text-center">
               <div>
-                <p className="text-xs font-extrabold uppercase tracking-[0.16em] text-white/75">{draft['home.hero.eyebrow.es']}</p>
-                <h3 className="mt-2 font-display text-3xl font-extrabold leading-tight sm:text-5xl">{draft['home.hero.title.es']}</h3>
-                <p className="mx-auto mt-2 max-w-xl text-sm font-medium text-white/80 sm:text-base">{draft['home.hero.subtitle.es']}</p>
+                <p className="text-xs font-extrabold uppercase tracking-[0.16em] text-white/75">{draft['home.hero.eyebrow']}</p>
+                <h3 className="mt-2 font-display text-3xl font-extrabold leading-tight sm:text-5xl">{draft['home.hero.title']}</h3>
+                <p className="mx-auto mt-2 max-w-xl text-sm font-medium text-white/80 sm:text-base">{draft['home.hero.subtitle']}</p>
               </div>
             </div>
           </div>
@@ -611,12 +549,8 @@ export default function AdminContentPage() {
         preview={(draft) => (
           <div className="grid items-center gap-4 sm:grid-cols-[minmax(0,1fr)_220px]">
             <div>
-              <p className="text-xs font-extrabold uppercase tracking-[0.14em] text-ocean-400">{draft['about.eyebrow.es']}</p>
-              <h3 className="mt-2 font-display text-2xl font-extrabold leading-tight sm:text-3xl">{draft['about.title.es']}</h3>
-              <p className="mt-3 text-sm leading-6 text-white/80">{draft['about.preview_text.es'].split('\n')[0]}</p>
-              <p className="mt-4 inline-flex items-center gap-2 rounded-full border border-white/25 px-4 py-2 text-xs font-extrabold">
-                <ImageIcon size={13} /> {draft['about.preview_button_label.es']}
-              </p>
+              <h3 className="font-display text-2xl font-extrabold leading-tight sm:text-3xl">{draft['about.title']}</h3>
+              <p className="mt-3 text-sm leading-6 text-white/80">{draft['about.preview_text'].split('\n')[0]}</p>
             </div>
             {buildAboutCarouselImages(draft).length ? (
               <div className="grid grid-cols-2 gap-2">{buildAboutCarouselImages(draft).map((src, index) => <img key={src} className="aspect-video w-full rounded-xl object-cover" src={src} alt={`Foto ${index + 1}`} />)}</div>

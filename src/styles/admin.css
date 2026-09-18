@@ -39,6 +39,13 @@ body:has(.admin-login) {
   --admin-danger-ink: #991b1b;
   --admin-neutral-soft: #eef2f7;
   --admin-neutral-ink: #475569;
+  /* Text/icons sitting directly on a saturated --admin-primary fill (buttons,
+     the active stepper dot, the account avatar). This is deliberately the
+     same literal white in both themes — --admin-primary stays bright/dark
+     enough in light AND dark mode that it never needs anything else — unlike
+     --admin-surface, which flips from white to near-black between themes and
+     was being reused here by mistake, turning that text dark-on-dark. */
+  --admin-on-primary: #ffffff;
   --admin-radius-sm: 8px;
   --admin-radius-md: 12px;
   --admin-shadow: 0 1px 3px rgba(11, 40, 66, 0.08), 0 12px 28px -22px rgba(11, 40, 66, 0.42);
@@ -89,6 +96,7 @@ html[data-theme='dark'] body:has(.admin-login) {
   --admin-danger-ink: #fca5a5;
   --admin-neutral-soft: #1c2c3a;
   --admin-neutral-ink: #a8c0d2;
+  --admin-on-primary: #ffffff;
   --admin-shadow: 0 1px 3px rgba(0, 0, 0, 0.4), 0 16px 32px -20px rgba(0, 0, 0, 0.65);
   --admin-shadow-elevated: 0 24px 48px -20px rgba(0, 0, 0, 0.75);
 }
@@ -154,6 +162,11 @@ body:has(.admin-shell) {
   width: 4.75rem;
 }
 
+/* Set for one paint when the desktop/mobile breakpoint itself is crossed (see AdminLayout.tsx) — kills the width/transform transition only for that jump. */
+.admin-shell--no-transition .admin-sidebar {
+  transition: none;
+}
+
 .admin-sidebar__header {
   display: flex;
   flex-direction: column;
@@ -208,6 +221,7 @@ body:has(.admin-shell) {
 }
 
 .admin-sidebar__scroll {
+  position: relative;
   flex: 1;
   overflow-y: auto;
   padding: 0.75rem;
@@ -224,6 +238,32 @@ body:has(.admin-shell) {
 .admin-sidebar__scroll::-webkit-scrollbar {
   width: 0;
   height: 0;
+}
+
+/*
+ * Subtle "there's more below" cue for when the nav list doesn't fit (its
+ * scrollbar is intentionally hidden above). Sticky keeps it pinned to the
+ * bottom of the visible scroll area; the opacity toggle (driven by real
+ * scroll position in AdminLayout.tsx, not just "is this scrollable") is what
+ * makes it disappear exactly when there's nothing left to scroll to.
+ */
+.admin-sidebar__scroll::after {
+  content: '';
+  position: sticky;
+  display: block;
+  bottom: -0.75rem;
+  left: 0;
+  right: 0;
+  height: 1.5rem;
+  margin-top: -1.5rem;
+  background: linear-gradient(to bottom, transparent, var(--admin-primary-dark));
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  pointer-events: none;
+}
+
+.admin-sidebar__scroll--has-more::after {
+  opacity: 1;
 }
 
 .admin-sidebar__toggle {
@@ -429,6 +469,49 @@ body:has(.admin-shell) {
   gap: 0.35rem;
 }
 
+.admin-reorder-handle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--admin-muted);
+}
+
+.admin-reorder-handle__grip {
+  cursor: grab;
+}
+
+.admin-reorder-handle__position {
+  display: inline-grid;
+  min-width: 1.4rem;
+  height: 1.4rem;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--admin-primary-soft);
+  color: var(--admin-ink);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.admin-reorder-handle__buttons {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.admin-reorder-handle__buttons .admin-icon-btn {
+  width: 1.5rem;
+  height: 1.1rem;
+}
+
+tr.admin-sortable-row {
+  cursor: grab;
+}
+
+tr.admin-sortable-row--dragging {
+  opacity: 0.5;
+  background: var(--admin-selected);
+}
+
 /* Non-interactive visibility indicator (e.g. gallery cards): shows state, never toggles it — toggling lives in the edit form. */
 .admin-visibility-indicator {
   display: inline-grid;
@@ -489,7 +572,7 @@ body:has(.admin-shell) {
   place-items: center;
   border-radius: 50%;
   background: var(--admin-primary);
-  color: var(--admin-surface);
+  color: var(--admin-on-primary);
   font-size: 0.72rem;
   font-weight: 700;
 }
@@ -612,7 +695,7 @@ body:has(.admin-shell) {
   border: 1px solid color-mix(in srgb, var(--admin-primary) 18%, transparent);
   border-radius: var(--admin-radius-sm);
   background: var(--admin-primary);
-  color: var(--admin-surface);
+  color: var(--admin-on-primary);
   font-size: 0.84rem;
   font-weight: 600;
   line-height: 1.1;
@@ -626,7 +709,7 @@ body:has(.admin-shell) {
 .admin-shell a.admin-btn,
 .admin-shell label.admin-btn {
   background-color: var(--admin-primary);
-  color: var(--admin-surface);
+  color: var(--admin-on-primary);
 }
 
 .admin-btn svg {
@@ -638,7 +721,7 @@ body:has(.admin-shell) {
 .admin-btn:hover {
   background: var(--admin-primary-hover);
   border-color: var(--admin-primary-hover);
-  color: var(--admin-surface);
+  color: var(--admin-on-primary);
   box-shadow: 0 8px 18px -12px rgba(11, 37, 51, 0.55);
   transform: translateY(-1px);
 }
@@ -671,7 +754,7 @@ body:has(.admin-shell) {
 .admin-shell a.admin-btn:hover,
 .admin-shell label.admin-btn:hover {
   background-color: var(--admin-primary-hover);
-  color: var(--admin-surface);
+  color: var(--admin-on-primary);
 }
 
 .admin-shell button.admin-btn--secondary:hover,
@@ -1319,7 +1402,11 @@ body:has(.admin-shell) {
   padding: 1rem;
   border: 1px solid var(--admin-line-soft);
   border-radius: var(--admin-radius-md);
-  background: var(--admin-canvas);
+  /* Same surface as a normal Admin card (.admin-card), not --admin-canvas
+     (the page-level background): --admin-canvas is far darker than the
+     --admin-surface-elevated modal it sits inside in dark mode, which made
+     this section read as a near-black hole instead of part of the modal. */
+  background: var(--admin-surface);
 }
 
 .admin-form-section__head {
@@ -1434,6 +1521,16 @@ body:has(.admin-shell) {
   font-weight: 700;
 }
 
+.admin-check input[type='checkbox'],
+.admin-check input[type='radio'] {
+  accent-color: var(--admin-primary);
+}
+
+.admin-check:has(input:disabled) {
+  color: var(--admin-muted);
+  opacity: 0.7;
+}
+
 .admin-field__label {
   color: var(--admin-ink);
   font-size: 0.78rem;
@@ -1520,8 +1617,13 @@ body:has(.admin-shell) {
 .admin-media-card {
   overflow: hidden;
   border-radius: var(--admin-radius-md);
-  background: white;
+  background: var(--admin-surface);
   box-shadow: var(--admin-shadow);
+}
+
+.admin-media-card__empty {
+  background: var(--admin-surface-subtle);
+  color: var(--admin-muted);
 }
 
 .admin-media-card img {
@@ -2098,6 +2200,21 @@ body:has(.admin-shell) {
   padding: 1.25rem;
 }
 
+/*
+ * `.app-modal-panel` (index.css, shared with the public site) hardcodes a
+ * literal white background for its default/"light" tone, since the public
+ * site has no dark mode. Every admin CRUD modal renders through `Modal`
+ * (components/common/Modal.tsx, tone="light" only — the public site always
+ * uses "glass" and never reaches this class), so this class opts those
+ * modals back into the themed admin surface instead of that hardcoded white:
+ * without it, the sticky header/footer (which set their own background)
+ * looked themed while the scrollable body showed the white panel through.
+ */
+.admin-modal-panel {
+  background: var(--admin-surface-elevated);
+  color: var(--admin-ink);
+}
+
 .admin-modal-header .admin-icon-btn {
   border: 1px solid var(--admin-line);
   background: var(--admin-surface);
@@ -2240,7 +2357,7 @@ body:has(.admin-shell) {
 .admin-stepper__item--active button span {
   border-color: var(--admin-primary);
   background: var(--admin-primary);
-  color: var(--admin-surface);
+  color: var(--admin-on-primary);
   box-shadow: 0 6px 16px -9px var(--admin-primary-dark);
 }
 
@@ -2501,7 +2618,7 @@ body:has(.admin-shell) {
   padding: 0.75rem;
   border: 1px solid var(--admin-line-soft);
   border-radius: var(--admin-radius-md);
-  background: white;
+  background: var(--admin-surface);
 }
 
 .admin-package-editor,
@@ -2512,7 +2629,7 @@ body:has(.admin-shell) {
   padding: 1rem;
   border: 1px solid var(--admin-line-soft);
   border-radius: var(--admin-radius-md);
-  background: white;
+  background: var(--admin-surface);
 }
 
 .admin-package-editor > header {
