@@ -10,9 +10,18 @@ import { text, tr } from '../i18n/translations';
 
 export default function BookingPage() {
   const { language } = useLanguage();
-  const { catalogBoats, catalogTours, catalogLoading, selectedBoat, selectedTour, changeBoat, changeTour } = useBookingCatalog();
+  const { catalogBoats, catalogTours, catalogLoading, catalogReady, catalogError, retryCatalog, selectedBoat, selectedTour, changeBoat, changeTour } = useBookingCatalog();
 
-  if (!selectedBoat) return null;
+  if (!selectedBoat) return (
+    <main className="min-h-screen px-6 pt-28 text-center text-white" role="status">
+      <p>{catalogError
+        ? (language === 'es' ? 'No pudimos cargar las opciones de reserva.' : 'We could not load booking options.')
+        : catalogLoading
+          ? (language === 'es' ? 'Cargando opciones de reserva...' : 'Loading booking options...')
+          : (language === 'es' ? 'No hay barcos disponibles.' : 'No boats available.')}</p>
+      {catalogError ? <button type="button" onClick={retryCatalog}>{language === 'es' ? 'Reintentar' : 'Retry'}</button> : null}
+    </main>
+  );
 
   return (
     <main className="tours-ocean-atmosphere text-white">
@@ -29,7 +38,7 @@ export default function BookingPage() {
           <div className="mt-4 lg:mt-5">
             <BookingPanel
               boats={catalogBoats}
-              catalogLoading={catalogLoading}
+              catalogLoading={!catalogReady}
               onBoatChange={changeBoat}
               onTourChange={changeTour}
               selectedBoat={selectedBoat}

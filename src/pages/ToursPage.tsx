@@ -1,16 +1,12 @@
 ﻿import { useMemo, useRef, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useBookingCatalog } from '../hooks/useBookingCatalog';
 
 import { BoatCard } from '../components/boats/BoatCard';
 import { BookingPanel } from '../components/booking/BookingPanel';
 import { Container } from '../components/common/Container';
 import { Button, GlassPanel, SectionHeader } from '../components/ui';
 import { BoatTourCard } from '../components/tours/BoatTourCard';
-import { boatTours } from '../data/boatTours';
-import { boats } from '../data/boats';
 import { useLanguage } from '../i18n/LanguageContext';
-import { getActiveBoats } from '../services/boatService';
-import { getActiveBoatTours } from '../services/boatTourService';
 import type { Boat } from '../types/boat';
 import type { BoatTour } from '../types/boatTour';
 import { groupTourCatalog } from '../utils/tourCatalog';
@@ -18,12 +14,7 @@ import { getBoatStartingPrice } from '../utils/bookingPricing';
 
 export default function ToursPage() {
   const { language } = useLanguage();
-  const boatsQuery = useQuery({ queryKey: ['boats', 'active'], queryFn: getActiveBoats });
-  const toursQuery = useQuery({ queryKey: ['boatTours', 'active'], queryFn: getActiveBoatTours });
-  const catalogBoats = boatsQuery.data ?? boats;
-  const catalogTours = toursQuery.data ?? boatTours;
-  const [selectedBoatId, setSelectedBoatId] = useState(boats[0].id);
-  const [selectedTourId, setSelectedTourId] = useState<string | undefined>(boatTours.find((tour) => tour.boatId === boats[0].id)?.id);
+  const { catalogBoats, catalogTours, catalogLoading, catalogError, catalogReady, selectedBoat, selectedTour, changeBoat, changeTour, retryCatalog } = useBookingCatalog();
   const [activeBoatCardId, setActiveBoatCardId] = useState<string | null>(null);
   const [activeTourCardId, setActiveTourCardId] = useState<string | null>(null);
   const toursRef = useRef<HTMLElement | null>(null);
@@ -37,30 +28,33 @@ export default function ToursPage() {
     setActiveTourCardId((current) => (active ? tourId : (current === tourId ? null : current)));
   }
 
-  const selectedBoat = useMemo(() => catalogBoats.find((boat) => boat.id === selectedBoatId) ?? catalogBoats[0], [catalogBoats, selectedBoatId]);
   const availableTours = useMemo(() => (selectedBoat ? catalogTours.filter((tour) => tour.boatId === selectedBoat.id) : []), [catalogTours, selectedBoat]);
-  const selectedTour = useMemo(() => availableTours.find((tour) => tour.id === selectedTourId), [availableTours, selectedTourId]);
   const groupedTours = useMemo(() => groupTourCatalog(availableTours, catalogBoats), [availableTours, catalogBoats]);
-  const catalogLoading = boatsQuery.isLoading || toursQuery.isLoading;
-  const catalogError = boatsQuery.isError || toursQuery.isError;
 
   function selectBoat(boat: Boat) {
-    setSelectedBoatId(boat.id);
-    setSelectedTourId(undefined);
+    changeBoat(boat);
     window.setTimeout(() => toursRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80);
   }
 
   function selectTour(tour: BoatTour) {
-    setSelectedTourId(tour.id);
+    changeTour(tour);
     window.setTimeout(() => bookingRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80);
   }
 
   function changeBoatFromBooking(boat: Boat) {
-    setSelectedBoatId(boat.id);
-    setSelectedTourId(undefined);
+    changeBoat(boat);
   }
 
-  if (!selectedBoat) return null;
+  if (!selectedBoat) return (
+    <main className="section-y pt-28 text-center text-white" role="status">
+      <p>{catalogError
+        ? (language === 'es' ? 'No pudimos cargar los tours.' : 'Unable to load tours.')
+        : catalogLoading
+          ? (language === 'es' ? 'Cargando tours...' : 'Loading tours...')
+          : (language === 'es' ? 'No hay tours disponibles.' : 'No tours available.')}</p>
+      {catalogError ? <button type="button" onClick={retryCatalog}>{language === 'es' ? 'Reintentar' : 'Retry'}</button> : null}
+    </main>
+  );
 
   return (
     <>
@@ -75,8 +69,7 @@ export default function ToursPage() {
                   variant="secondary"
                   type="button"
                   onClick={() => {
-                    void boatsQuery.refetch();
-                    void toursQuery.refetch();
+                    retryCatalog();
                   }}
                 >
                   {language === 'es' ? 'Reintentar' : 'Retry'}
@@ -166,9 +159,9 @@ export default function ToursPage() {
               selectedTour={selectedTour}
               boats={catalogBoats}
               tours={catalogTours}
-              catalogLoading={catalogLoading}
+              catalogLoading={!catalogReady}
               onBoatChange={changeBoatFromBooking}
-              onTourChange={(tour) => setSelectedTourId(tour?.id)}
+              onTourChange={changeTour}
             />
           </div>
         </Container>

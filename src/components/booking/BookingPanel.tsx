@@ -87,7 +87,8 @@ export function BookingPanel({ selectedBoat, selectedTour: requestedTour, boats,
   const queryClient = useQueryClient();
   const selectedTour = tours.find((item) => item.id === requestedTour?.id && item.boatId === selectedBoat.id
     && item.tourId === requestedTour?.tourId && item.boatTourId === requestedTour?.boatTourId
-    && isBookableCatalogPackage(item));
+    && item.boatTourId && item.tourId && item.catalogActive === true && isBookableCatalogPackage(item));
+  const selectionReady = !catalogLoading && Boolean(selectedTour && boats.some((boat) => boat.id === selectedBoat.id));
   const [activeStep, setActiveStep] = useState(0);
   const [date, setDate] = useState(() => new Date(Date.now() + 86400000).toISOString().slice(0, 10));
   const [timeSlotId, setTimeSlotId] = useState(selectedTimeSlotId ?? selectedTour?.timeSlots[0]?.id ?? '');
@@ -136,9 +137,9 @@ export function BookingPanel({ selectedBoat, selectedTour: requestedTour, boats,
 
   const availableTours = useMemo(() => tours.filter((tour) => tour.boatId === selectedBoat.id && isBookableCatalogPackage(tour)), [selectedBoat.id, tours]);
   const availabilityQuery = useQuery({
-    queryKey: ['availability', selectedBoat.id, selectedTour?.tourId, selectedTour?.id, date],
-    queryFn: () => getBookingAvailability(selectedBoat.id, selectedTour?.tourId ?? '', selectedTour?.id ?? '', date),
-    enabled: Boolean(selectedBoat.id && selectedTour?.tourId && selectedTour?.id && date),
+    queryKey: ['availability', selectedBoat.id, selectedTour?.tourId, selectedTour?.id, date, selectedTour?.boatTourId],
+    queryFn: ({ signal }) => getBookingAvailability(selectedBoat.id, selectedTour!.tourId!, selectedTour!.id, date, signal),
+    enabled: selectionReady && Boolean(date),
   });
   const paymentMethodsQuery = useQuery({ queryKey: ['paymentMethods', 'active'], queryFn: getActivePaymentMethods });
   const departureLocationsQuery = useQuery({ queryKey: ['departureLocations', 'active'], queryFn: getActiveDepartureLocations });
@@ -160,17 +161,17 @@ export function BookingPanel({ selectedBoat, selectedTour: requestedTour, boats,
     }));
   const backendPaymentMethods = remotePaymentMethods?.length ? remotePaymentMethods : paymentMethods;
   const priceQuery = useQuery({
-    queryKey: ['bookingPrice', selectedBoat.id, selectedTour?.tourId, selectedTour?.id, guests, departureLocationId],
-    queryFn: () => calculateBookingPrice({
+    queryKey: ['bookingPrice', selectedBoat.id, selectedTour?.tourId, selectedTour?.id, guests, selectedDepartureLocation?.id, selectedTour?.boatTourId],
+    queryFn: ({ signal }) => calculateBookingPrice({
       boatId: selectedBoat.id,
       tourId: selectedTour?.tourId ?? '',
       boatTourId: selectedTour?.boatTourId,
       tourPackageId: selectedTour?.id ?? '',
       guests,
-      departureLocationId: departureLocationId || undefined,
+      departureLocationId: selectedDepartureLocation?.id,
       extras: [],
-    }),
-    enabled: Boolean(selectedTour?.id && guests > 0),
+    }, signal),
+    enabled: selectionReady && guests > 0 && departureLocationsQuery.isSuccess && !departureLocationsQuery.isFetching && (!departureLocationId || Boolean(selectedDepartureLocation)),
     staleTime: 250,
   });
   const pricing = mapBackendPricing(selectedBoat, selectedTour, guests, selectedDepartureLocation, priceQuery.data);
@@ -182,11 +183,11 @@ export function BookingPanel({ selectedBoat, selectedTour: requestedTour, boats,
   const selectedPayment = backendPaymentMethods.find((method) => method.id === paymentMethod) ?? backendPaymentMethods[0];
   const steps = [tr(text.booking.steps.boat, language), tr(text.booking.steps.tour, language), language === 'es' ? 'Lugar de salida' : 'Departure location', language === 'es' ? 'Tus datos y pago' : 'Your details and payment'];
   const hasCapacityError = guests > effectiveMaxGuests;
-  const canContinueToCustomer = Boolean(selectedTour && selectedTimeSlot && !hasCapacityError && !priceQuery.isError && !availabilityQuery.isError && !availabilityQuery.isFetching && selectedTimeSlot.available !== false);
+  const canContinueToCustomer = Boolean(selectionReady && selectedTimeSlot && !hasCapacityError && priceQuery.data && !priceQuery.isFetching && !priceQuery.isError && availabilityQuery.data && !availabilityQuery.isError && !availabilityQuery.isFetching && selectedTimeSlot.available !== false);
   const hasTurnstileToken = USE_LOCAL_TURNSTILE_MOCK || Boolean(turnstileToken);
   const canContinueToPayment = Boolean(canContinueToCustomer && selectedDepartureLocation);
   const canReview = Boolean(canContinueToPayment && customerName.trim() && customerEmail.trim() && customerWhatsapp.trim() && isValidEmail(customerEmail) && hasTurnstileToken);
-  const bookingPayload = selectedTour
+  const bookingPayload = selectionReady && selectedTour
     ? buildBookingPaymentPayload({
         bookingReference: createdBooking?.booking_reference ?? 'Pending',
         customerName,
@@ -231,10 +232,15 @@ export function BookingPanel({ selectedBoat, selectedTour: requestedTour, boats,
   }, [activeStep]);
 
   useEffect(() => {
+    if (!departureLocationsQuery.isSuccess || departureLocationsQuery.isFetching) return;
+    if (departureLocationId && !departureLocations.some((location) => location.id === departureLocationId)) {
+      setDepartureLocationId('');
+      return;
+    }
     if (departureLocationId || !departureLocations.length) return;
     const defaultLocation = departureLocations.find((location) => location.is_default) ?? departureLocations[0];
     setDepartureLocationId(defaultLocation.id);
-  }, [departureLocationId, departureLocations]);
+  }, [departureLocationId, departureLocations, departureLocationsQuery.isSuccess, departureLocationsQuery.isFetching]);
 
   function handleBoatChange(boatId: string) {
     const nextBoat = boats.find((boat) => boat.id === boatId);
@@ -280,6 +286,10 @@ export function BookingPanel({ selectedBoat, selectedTour: requestedTour, boats,
 
   function validateBookingForPayment() {
     setValidationMessage('');
+    if (!selectionReady || priceQuery.isFetching || priceQuery.isError || !priceQuery.data || availabilityQuery.isFetching || availabilityQuery.isError || !availabilityQuery.data || departureLocationsQuery.isFetching || departureLocationsQuery.isError) {
+      setValidationMessage(language === 'es' ? 'Espera a que se verifiquen las opciones de reserva.' : 'Please wait for booking options to be verified.');
+      return null;
+    }
     if (!selectedTour) {
       setActiveStep(1);
       setValidationMessage('Please select a tour.');
@@ -364,7 +374,7 @@ export function BookingPanel({ selectedBoat, selectedTour: requestedTour, boats,
       tourDate: date,
       timeSlotId,
       guests,
-      departureLocationId,
+      departureLocationId: selectedDepartureLocation!.id,
       mealOption: mealOption || undefined,
       specialRequests: specialRequests || undefined,
       paymentMethodKey: method,
@@ -585,6 +595,8 @@ export function BookingPanel({ selectedBoat, selectedTour: requestedTour, boats,
                 onPaymentLinkRequest={handlePaymentLinkRequest}
                 onPayOnDayRequest={handlePayOnDayRequest}
                 onPayPalSuccess={(result) => {
+                  setPaypalError('');
+                  setPaypalInfo('');
                   setPaypalSuccess(result);
                   if (result.paymentStatus === 'paid') {
                     setBookingStatus('confirmed');
@@ -604,9 +616,16 @@ export function BookingPanel({ selectedBoat, selectedTour: requestedTour, boats,
                   setPaymentStatus('pending');
                 }}
                 onPayPalCancel={() => {
-                  setPaypalError('Payment was cancelled. You can try again or select another payment method.');
+                  setPaypalError('');
+                  setPaypalInfo(language === 'es'
+                    ? 'La ventana de PayPal se cerró sin completar el pago. Puedes volver a intentarlo con el botón de PayPal o elegir otro método de pago.'
+                    : 'The PayPal window closed without completing payment. You can try again using the PayPal button or choose another payment method.');
                   setBookingStatus('pending_payment');
                   setPaymentStatus('pending');
+                }}
+                onPayPalStart={() => {
+                  setPaypalError('');
+                  setPaypalInfo('');
                 }}
                 onSendPaidConfirmation={() => {
                   const booking = validateBookingForPayment();
@@ -1126,6 +1145,7 @@ function CustomerStep(props: {
   onPayPalSuccess: (result: PayPalCaptureResult) => void;
   onPayPalError: (message: string) => void;
   onPayPalCancel: () => void;
+  onPayPalStart: () => void;
   onSendPaidConfirmation: () => void;
 }) {
   const { language } = useLanguage();
@@ -1206,12 +1226,12 @@ function CustomerStep(props: {
         </div>
       </div>
 
-      {props.paypalVisible && props.booking && props.createdBooking ? (
+      {props.paypalVisible && props.booking && props.createdBooking && props.paypalInfo ? (
         <div className="mt-4 rounded-2xl border border-ocean-300/30 bg-ocean-400/10 p-4 text-sm leading-6 text-ocean-100" role="status">{props.paypalInfo}</div>
       ) : null}
 
       {props.paypalVisible && props.booking && props.createdBooking ? (
-        <PayPalCheckoutBox booking={props.booking} createdBooking={props.createdBooking} onSuccess={props.onPayPalSuccess} onError={props.onPayPalError} onCancel={props.onPayPalCancel} />
+        <PayPalCheckoutBox booking={props.booking} createdBooking={props.createdBooking} onSuccess={props.onPayPalSuccess} onError={props.onPayPalError} onCancel={props.onPayPalCancel} onStart={props.onPayPalStart} />
       ) : null}
 
       {props.paypalError ? (
@@ -1295,16 +1315,17 @@ function PayPalCheckoutBox(props: {
   onSuccess: (result: PayPalCaptureResult) => void;
   onError: (message: string) => void;
   onCancel: () => void;
+  onStart: () => void;
 }) {
-  const { createdBooking, onSuccess, onError, onCancel } = props;
+  const { createdBooking, onSuccess, onError, onCancel, onStart } = props;
   const clientId = import.meta.env.VITE_PAYPAL_CLIENT_ID;
   const containerId = `paypal-button-container-${createdBooking.booking_id}`;
-  const callbacksRef = useRef({ onSuccess, onError, onCancel });
+  const callbacksRef = useRef({ onSuccess, onError, onCancel, onStart });
   const activeOrderIdRef = useRef<string>('');
 
   useEffect(() => {
-    callbacksRef.current = { onSuccess, onError, onCancel };
-  }, [onSuccess, onError, onCancel]);
+    callbacksRef.current = { onSuccess, onError, onCancel, onStart };
+  }, [onSuccess, onError, onCancel, onStart]);
 
   const buttonStyle = useMemo(
     () => ({
@@ -1320,7 +1341,9 @@ function PayPalCheckoutBox(props: {
 
   useEffect(() => {
     let isMounted = true;
-    let rendered = false;
+    let buttons: ReturnType<NonNullable<Window['paypal']>['Buttons']> | undefined;
+    let approved = false;
+    let cancellation: Promise<unknown> = Promise.resolve();
     const container = document.getElementById(containerId);
     if (container) container.innerHTML = '';
 
@@ -1335,40 +1358,46 @@ function PayPalCheckoutBox(props: {
         .then((result) => {
           if (isMounted) callbacksRef.current.onSuccess(result);
         })
-        .catch((error: Error) => callbacksRef.current.onError(error.message));
-      return;
+        .catch((error: Error) => { if (isMounted) callbacksRef.current.onError(error.message); });
+      return () => { isMounted = false; };
     }
 
     loadPayPalSdk(clientId)
       .then(() => {
         if (!isMounted || !window.paypal) return;
-        rendered = true;
-        return window.paypal.Buttons({
+        buttons = window.paypal.Buttons({
           style: buttonStyle,
           createOrder: async () => {
+            callbacksRef.current.onStart();
+            await cancellation;
+            approved = false;
+            activeOrderIdRef.current = '';
             const orderId = await createPayPalOrder(createdBooking.booking_id);
             activeOrderIdRef.current = orderId;
             return orderId;
           },
           onApprove: async (data) => {
+            if (!isMounted) return;
+            approved = true;
             const result = await capturePayPalOrder(data.orderID, createdBooking.booking_id, createdBooking.booking_reference);
-            callbacksRef.current.onSuccess(result);
+            if (isMounted) callbacksRef.current.onSuccess(result);
           },
-          onCancel: () => {
-            void cancelPayPalOrder(createdBooking.booking_id, activeOrderIdRef.current).catch(() => undefined);
+          onCancel: (data) => {
+            if (!isMounted || approved) return;
+            const orderId = data.orderID || activeOrderIdRef.current;
+            if (orderId && activeOrderIdRef.current && orderId !== activeOrderIdRef.current) return;
+            if (orderId) cancellation = cancelPayPalOrder(createdBooking.booking_id, orderId).catch(() => undefined);
             callbacksRef.current.onCancel();
           },
-          onError: (error) => callbacksRef.current.onError(getPayPalErrorMessage(error)),
-        }).render(`#${containerId}`);
+          onError: (error) => { if (isMounted) callbacksRef.current.onError(getPayPalErrorMessage(error)); },
+        });
+        return buttons.render(`#${containerId}`);
       })
-      .catch((error: Error) => callbacksRef.current.onError(error.message));
+      .catch((error: Error) => { if (isMounted) callbacksRef.current.onError(error.message); });
 
     return () => {
       isMounted = false;
-      if (!rendered) {
-        const container = document.getElementById(containerId);
-        if (container) container.innerHTML = '';
-      }
+      if (buttons) void buttons.close().catch(() => undefined);
     };
   }, [buttonStyle, clientId, containerId, createdBooking.booking_id, createdBooking.booking_reference]);
 

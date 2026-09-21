@@ -3,7 +3,7 @@ import { functionsUrl, supabase } from '../lib/supabase';
 declare global {
   interface Window {
     paypal?: {
-      Buttons: (options: PayPalButtonOptions) => { render: (selector: string) => Promise<void> };
+      Buttons: (options: PayPalButtonOptions) => { render: (selector: string) => Promise<void>; close: () => Promise<void> };
     };
   }
 }
@@ -12,7 +12,7 @@ interface PayPalButtonOptions {
   style?: Record<string, string | number | boolean>;
   createOrder: () => Promise<string>;
   onApprove: (data: { orderID: string }) => Promise<void>;
-  onCancel?: () => void;
+  onCancel?: (data: { orderID?: string }) => void;
   onError?: (error: unknown) => void;
 }
 
@@ -38,7 +38,11 @@ export function loadPayPalSdk(clientId: string) {
     script.src = `https://www.paypal.com/sdk/js?client-id=${encodeURIComponent(clientId)}&currency=USD&intent=capture&components=buttons`;
     script.async = true;
     script.onload = () => resolve();
-    script.onerror = () => reject(new Error('PayPal could not be loaded. Please try again.'));
+    script.onerror = () => {
+      paypalSdkPromise = null;
+      script.remove();
+      reject(new Error('PayPal could not be loaded. Please try again.'));
+    };
     document.head.appendChild(script);
   });
 

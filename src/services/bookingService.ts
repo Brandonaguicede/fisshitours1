@@ -91,11 +91,12 @@ export interface BookingResult {
   departure_currency_snapshot: string | null;
 }
 
-async function callFunction<T>(name: string, body: unknown): Promise<T> {
+async function callFunction<T>(name: string, body: unknown, signal?: AbortSignal): Promise<T> {
   const { data: session } = await supabase.auth.getSession();
   const token = session.session?.access_token ?? import.meta.env.VITE_SUPABASE_ANON_KEY;
   const response = await fetch(`${functionsUrl}/${name}`, {
     method: 'POST',
+    signal,
     headers: {
       Authorization: `Bearer ${token}`,
       apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
@@ -112,8 +113,8 @@ async function callFunction<T>(name: string, body: unknown): Promise<T> {
   return data as T;
 }
 
-export function calculateBookingPrice(input: PriceRequest) {
-  return callFunction<PriceResult>('calculate-booking-price', input);
+export function calculateBookingPrice(input: PriceRequest, signal?: AbortSignal) {
+  return callFunction<PriceResult>('calculate-booking-price', input, signal);
 }
 
 export function createBooking(input: CreateBookingRequest) {

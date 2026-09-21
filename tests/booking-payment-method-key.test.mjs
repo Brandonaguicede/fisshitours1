@@ -20,10 +20,12 @@ async function chooseDepartureLocation(page, label) {
   await page.locator('main label').filter({ hasText: label }).first().click();
 }
 
-async function fixture(paymentMethods) {
+async function fixture(paymentMethods, options = {}) {
   const browser = await chromium.launch({ headless: true, channel: 'msedge' });
   const page = await browser.newPage({ viewport: { width: 1366, height: 1200 } });
   const createBookingRequests = [];
+  const availabilityRequests = [];
+  const priceRequests = [];
 
   // Real (minimal) catalog rows, shaped to match mapBoat/mapBoatTour exactly —
   // returning an error here to force the static-data fallback was tried
@@ -47,8 +49,14 @@ async function fixture(paymentMethods) {
     const request = route.request();
     const url = new URL(request.url());
     const path = url.pathname;
-    if (path.endsWith('/boats')) return route.fulfill({ json: [boatRow] });
-    if (path.endsWith('/tour_packages')) return route.fulfill({ json: [tourPackageRow] });
+    if (path.endsWith('/boats')) {
+      if (options.catalogGate) await options.catalogGate;
+      return route.fulfill({ json: [boatRow] });
+    }
+    if (path.endsWith('/tour_packages')) {
+      if (options.catalogGate) await options.catalogGate;
+      return route.fulfill({ json: options.emptyCatalog ? [] : [tourPackageRow] });
+    }
     if (path.endsWith('/time_slots')) return route.fulfill({ json: [timeSlotRow] });
     if (path.endsWith('/tour_images') || path.endsWith('/tour_inclusions')) return route.fulfill({ json: [] });
     if (path.endsWith('/departure_locations')) {
@@ -58,8 +66,12 @@ async function fixture(paymentMethods) {
     // replicate that filtering here rather than relying on the frontend to
     // do it (it doesn't; only `active` gates availability, per the fix).
     if (path.endsWith('/payment_methods')) return route.fulfill({ json: paymentMethods.filter((method) => method.active) });
-    if (path.endsWith('/functions/v1/get-booking-availability')) return route.fulfill({ json: { slots: [{ id: 'slot-1', label: 'Morning', time: '07:00', available: true }] } });
+    if (path.endsWith('/functions/v1/get-booking-availability')) {
+      availabilityRequests.push(request.postDataJSON());
+      return route.fulfill({ json: { slots: [{ id: 'slot-1', label: 'Morning', time: '07:00', available: true }] } });
+    }
     if (path.endsWith('/functions/v1/calculate-booking-price')) {
+      priceRequests.push(request.postDataJSON());
       return route.fulfill({ json: { custom_quote: false, base_price: 650, included_guests: 4, max_guests: 10, extra_guest_price: 50, extra_guests: 0, extra_guests_total: 0, extras: [], extras_total: 0, total: 650, currency: 'USD' } });
     }
     if (path.endsWith('/functions/v1/create-booking')) {
@@ -70,7 +82,7 @@ async function fixture(paymentMethods) {
   });
   await page.route('https://wa.me/**', (route) => route.abort());
 
-  return { browser, page, createBookingRequests };
+  return { browser, page, createBookingRequests, availabilityRequests, priceRequests };
 }
 
 async function runBookingFlowToPaymentStep(page) {
@@ -152,4 +164,41 @@ test('a payment method with an unsupported type never renders a dead-end card', 
   } finally {
     await f.browser.close();
   }
+});
+
+test('delayed remote catalog never sends static IDs; guest changes and create-booking use remote selection', async () => {
+  let release;
+  const catalogGate = new Promise(resolve => { release = resolve; });
+  const f = await fixture([{ key: 'paypal', name: 'PayPal', type: 'paypal', active: true }], { catalogGate });
+  try {
+    await f.page.goto(`${base}/reservar`);
+    await expect(f.page.getByText('Loading booking options...')).toBeVisible();
+    assert.equal(f.priceRequests.length, 0);
+    assert.equal(f.availabilityRequests.length, 0);
+    release();
+    await expect(f.page.getByRole('button', { name: 'Continue', exact: true })).toBeVisible();
+    assert.equal(f.priceRequests.length, 0);
+    assert.equal(f.availabilityRequests.length, 0);
+    await runBookingFlowToPaymentStep(f.page);
+    await f.page.locator('[data-payment-method="paypal"]').click();
+    await expect.poll(() => f.createBookingRequests.length).toBe(1);
+    for (const input of [...f.priceRequests, ...f.availabilityRequests, ...f.createBookingRequests]) {
+      assert.equal(input.boatId, 'boat-1');
+      assert.equal(input.tourId, 'tour-1');
+      assert.equal(input.tourPackageId, 'pkg-1');
+    }
+    assert.equal(f.priceRequests.at(-1).boatTourId, 'link-1');
+    assert.equal(f.createBookingRequests[0].departureLocationId, 'loc-1');
+  } finally { release(); await f.browser.close(); }
+});
+
+test('empty remote catalog never falls back to static booking packages', async () => {
+  const f = await fixture([], { emptyCatalog: true });
+  try {
+    await f.page.goto(`${base}/reservar`);
+    await f.page.getByRole('button', { name: 'Continue', exact: true }).click();
+    await expect(f.page.locator('input[name="tourPackage"]')).toHaveCount(0);
+    assert.deepEqual(f.priceRequests, []);
+    assert.deepEqual(f.availabilityRequests, []);
+  } finally { await f.browser.close(); }
 });

@@ -155,3 +155,60 @@ test('empty package catalogs and boats without valid packages never use fallback
   await expect(page.getByText('No tours available for this filter.',{exact:true})).toBeVisible();
   await expect(page.getByRole('region',{name:'Available tours'}).locator('article')).toHaveCount(0);
 });
+
+test('obsolete context selections are discarded and never restored on reload', async ({page}) => {
+  const {priceRequests} = await mockCatalog(page);
+  await page.getByRole('button', {name:'Inject obsolete selection'}).click();
+  await expect(page.getByTestId('stored-package')).toHaveText('');
+  await expect(page.getByTestId('selection')).toHaveText(JSON.stringify({boatId:'a'}));
+  expect(priceRequests).toHaveLength(0);
+  await page.reload();
+  await expect(page.getByTestId('stored-package')).toHaveText('');
+  expect(priceRequests).toHaveLength(0);
+});
+
+test('a selected package removed remotely is cleared after catalog refresh', async ({page}) => {
+  await mockCatalog(page);
+  await page.getByRole('button',{name:'View tour Beach & Snorkeling',exact:true}).click();
+  const dialog=page.getByRole('dialog');
+  await dialog.getByRole('button',{name:/Boat A Boat capacity/}).click();
+  await dialog.getByRole('button',{name:/Full Day/}).click();
+  await dialog.getByRole('button',{name:'Reserve',exact:true}).click();
+  await expect(page.getByTestId('stored-package')).toHaveText('a-full');
+  await page.route(/\/rest\/v1\/tour_packages/, route => route.fulfill({json:[]}));
+  await page.getByRole('button',{name:'Refresh catalog'}).click();
+  await expect(page.getByTestId('stored-package')).toHaveText('');
+  await expect(page.getByTestId('selection')).toHaveText(JSON.stringify({boatId:'a'}));
+});
+
+test('guest changes keep the remote package and changing tour removes the previous package', async ({page}) => {
+  const {priceRequests} = await mockCatalog(page);
+  await page.getByRole('button',{name:'View tour Beach & Snorkeling',exact:true}).click();
+  const dialog=page.getByRole('dialog');
+  await dialog.getByRole('button',{name:/Boat A Boat capacity/}).click();
+  await dialog.getByRole('button',{name:/Full Day/}).click();
+  await dialog.getByRole('button',{name:'Reserve',exact:true}).click();
+  await page.getByRole('button',{name:'Continue',exact:true}).click();
+  await page.locator('#booking-guests').fill('6');
+  await expect.poll(()=>priceRequests.at(-1)?.guests).toBe(6);
+  expect(priceRequests.at(-1)).toMatchObject({boatId:'a',tourId:'beach',boatTourId:'a-beach',tourPackageId:'a-full'});
+  await page.getByRole('button',{name:/Another Beach From/}).click();
+  await expect(page.getByTestId('stored-package')).not.toHaveText('a-full');
+  await expect.poll(()=>priceRequests.at(-1)?.tourId).toBe('other');
+  expect(priceRequests.at(-1)?.tourPackageId).toBe('other-half');
+});
+
+test('changing boat clears the previous tour and package before any new price request', async ({page}) => {
+  const {priceRequests} = await mockCatalog(page);
+  await page.getByRole('button',{name:'View tour Beach & Snorkeling',exact:true}).click();
+  const dialog=page.getByRole('dialog');
+  await dialog.getByRole('button',{name:/Boat A Boat capacity/}).click();
+  await dialog.getByRole('button',{name:/Full Day/}).click();
+  await dialog.getByRole('button',{name:'Reserve',exact:true}).click();
+  await page.getByRole('button',{name:'Continue',exact:true}).click();
+  await page.getByRole('button',{name:'Back',exact:true}).click();
+  await page.getByRole('button',{name:/^Boat B/}).click();
+  await expect(page.getByTestId('selection')).toHaveText(JSON.stringify({boatId:'b'}));
+  await expect(page.getByTestId('stored-package')).toHaveText('');
+  expect(priceRequests.filter(input=>input.boatId==='b')).toHaveLength(0);
+});

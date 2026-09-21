@@ -1,7 +1,5 @@
 import { createContext, useContext, useState, type PropsWithChildren } from 'react';
 
-import { boatTours } from '../data/boatTours';
-import { boats } from '../data/boats';
 
 interface BookingSelectionContextValue {
   selectedBoatId: string;
@@ -20,8 +18,8 @@ const BookingSelectionContext = createContext<BookingSelectionContextValue | nul
  * details, payment) stays local to `BookingPanel`, which is unaffected.
  */
 export function BookingSelectionProvider({ children }: PropsWithChildren) {
-  const [selectedBoatId, setSelectedBoatId] = useState(boats[0].id);
-  const [selectedTourId, setSelectedTourId] = useState<string | undefined>(boatTours.find((tour) => tour.boatId === boats[0].id)?.id);
+  const [selectedBoatId, setSelectedBoatId] = useState('');
+  const [selectedTourId, setSelectedTourId] = useState<string | undefined>();
 
   return (
     <BookingSelectionContext.Provider value={{ selectedBoatId, selectedTourId, setSelectedBoatId, setSelectedTourId }}>
