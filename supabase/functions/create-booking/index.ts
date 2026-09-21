@@ -24,6 +24,10 @@ const schema = z.object({
   paymentMethodKey: z.enum(['paypal', 'whatsapp-link', 'pay-on-day']),
   extras: z.array(z.object({ key: z.string().min(1).max(80), quantity: z.number().int().positive() })).default([]),
   turnstileToken: z.string().optional(),
+  // Not persisted (bookings has no language column) — used only to pick the
+  // language of the immediate request-received email sent below, since the
+  // client knows it in real time and it would otherwise be lost.
+  language: z.enum(['es', 'en']).optional().default('es'),
 });
 
 serve(withCors(async (req) => {
@@ -150,6 +154,7 @@ function sanitizePayload(value: z.infer<typeof schema>) {
       key: clean(extra.key),
       quantity: extra.quantity,
     })),
+    language: value.language,
   };
 }
 
@@ -163,39 +168,69 @@ async function sendBookingEmails(supabase: ReturnType<typeof createClient>, book
   // function queues the paid confirmation once PayPal returns COMPLETED.
   if (payload.paymentMethodKey === 'paypal') return;
 
-  const summary = [
-    `Reserva: ${booking.booking_reference}`,
-    `Cliente: ${payload.customer.fullName}`,
-    `Email: ${customerEmail}`,
-    `WhatsApp: ${payload.customer.whatsapp}`,
-    `Bote: ${booking.boat_id}`,
-    `Tour: ${booking.tour_id}`,
-    `Paquete: ${booking.tour_package_id}`,
-    `Fecha: ${booking.tour_date}`,
-    `Hora: ${booking.time_slot_id}`,
-    `Personas: ${booking.guests}`,
-    `Lugar de salida: ${booking.departure_location_name_snapshot ?? '-'}`,
-    `Cargo salida: ${formatUsd(Number(booking.departure_surcharge_snapshot ?? 0))}`,
-    `Total: ${formatUsd(Number(booking.total_snapshot ?? 0))}`,
-    `Metodo de pago: ${payload.paymentMethodKey}`,
-    `Estado reserva: ${booking.booking_status}`,
-    `Estado pago: ${booking.payment_status}`,
-    `Notas: ${payload.specialRequests ?? 'None'}`,
-  ].join('\n');
+  const es = payload.language !== 'en';
+  const summary = es
+    ? [
+        `Reserva: ${booking.booking_reference}`,
+        `Cliente: ${payload.customer.fullName}`,
+        `Correo: ${customerEmail}`,
+        `WhatsApp: ${payload.customer.whatsapp}`,
+        `Bote: ${booking.boat_id}`,
+        `Tour: ${booking.tour_id}`,
+        `Paquete: ${booking.tour_package_id}`,
+        `Fecha: ${booking.tour_date}`,
+        `Hora: ${booking.time_slot_id}`,
+        `Personas: ${booking.guests}`,
+        `Lugar de salida: ${booking.departure_location_name_snapshot ?? '-'}`,
+        `Cargo por salida: ${formatUsd(Number(booking.departure_surcharge_snapshot ?? 0))}`,
+        `Total: ${formatUsd(Number(booking.total_snapshot ?? 0))}`,
+        `Metodo de pago: ${payload.paymentMethodKey}`,
+        `Estado de la reserva: ${booking.booking_status}`,
+        `Estado del pago: ${booking.payment_status}`,
+        `Notas: ${payload.specialRequests ?? 'Ninguna'}`,
+      ].join('\n')
+    : [
+        `Booking: ${booking.booking_reference}`,
+        `Customer: ${payload.customer.fullName}`,
+        `Email: ${customerEmail}`,
+        `WhatsApp: ${payload.customer.whatsapp}`,
+        `Boat: ${booking.boat_id}`,
+        `Tour: ${booking.tour_id}`,
+        `Package: ${booking.tour_package_id}`,
+        `Date: ${booking.tour_date}`,
+        `Time: ${booking.time_slot_id}`,
+        `Guests: ${booking.guests}`,
+        `Departure location: ${booking.departure_location_name_snapshot ?? '-'}`,
+        `Departure surcharge: ${formatUsd(Number(booking.departure_surcharge_snapshot ?? 0))}`,
+        `Total: ${formatUsd(Number(booking.total_snapshot ?? 0))}`,
+        `Payment method: ${payload.paymentMethodKey}`,
+        `Booking status: ${booking.booking_status}`,
+        `Payment status: ${booking.payment_status}`,
+        `Notes: ${payload.specialRequests ?? 'None'}`,
+      ].join('\n');
+  // Admin summary always in Spanish — the business's own operating language,
+  // same reasoning as buildBookingRequestAdminHtml.
+  const adminSummary = es ? summary : summary
+    .replace('Booking:', 'Reserva:').replace('Customer:', 'Cliente:').replace('Boat:', 'Bote:').replace('Package:', 'Paquete:')
+    .replace('Date:', 'Fecha:').replace('Time:', 'Hora:').replace('Guests:', 'Personas:').replace('Departure location:', 'Lugar de salida:')
+    .replace('Departure surcharge:', 'Cargo por salida:').replace('Payment method:', 'Metodo de pago:').replace('Booking status:', 'Estado de la reserva:')
+    .replace('Payment status:', 'Estado del pago:').replace('Notes:', 'Notas:');
 
   const messages = [
     payload.paymentMethodKey !== 'whatsapp-link' ? {
       to: customerEmail,
-      subject: `Solicitud de reserva ${booking.booking_reference}`,
-      html: await buildBookingRequestCustomerHtml(supabase, booking.booking_id),
-      text: `Hemos recibido tu solicitud de reserva.\n\n${summary}\n\nNuestro equipo confirmará la disponibilidad y te contactará pronto.`,
+      subject: es ? `Solicitud de reserva ${booking.booking_reference}` : `Booking request ${booking.booking_reference}`,
+      html: await buildBookingRequestCustomerHtml(supabase, booking.booking_id, es ? 'es' : 'en'),
+      text: es
+        ? `Hemos recibido tu solicitud de reserva.\n\n${summary}\n\nNuestro equipo confirmará la disponibilidad y te contactará pronto.`
+        : `We have received your booking request.\n\n${summary}\n\nOur team will confirm availability and contact you soon.`,
       dedupe: `booking:${booking.booking_id}:customer-email`,
     } : null,
     adminEmail ? {
       to: adminEmail,
       subject: `Nueva reserva ${booking.booking_reference}`,
       html: await buildBookingRequestAdminHtml(supabase, booking.booking_id),
-      text: `Nueva reserva recibida.\n\n${summary}`,
+      text: `Nueva reserva recibida.\n\n${adminSummary}`,
       dedupe: `booking:${booking.booking_id}:admin-email`,
     } : null,
   ].filter(Boolean) as Array<{ to: string; subject: string; text: string; html?: string; dedupe: string }>;

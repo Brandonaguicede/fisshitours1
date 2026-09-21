@@ -163,33 +163,49 @@ test('About content edited in the Admin reaches the public homepage', async () =
   }
 });
 
-test('Hero Section only exposes Spanish text fields, and Guardar sends them to translate-content', async () => {
+test('Hero and About save both ES and EN manually, with no call to any translation service', async () => {
   const f = await loggedInFixture();
   const { page } = f;
-  const translateCalls = [];
+  const settingsWrites = [];
+  const translationRequests = [];
   try {
-    await page.route('https://admin-test.supabase.co/functions/v1/translate-content', async (route) => {
-      const body = route.request().postDataJSON();
-      translateCalls.push(body);
-      route.fulfill({ json: { fields: body.fields.map((field) => ({ key: field.key, es: field.value, en: `[EN] ${field.value}` })) } });
+    page.on('request', (request) => { if (/\/functions\/v1\/|translation\.googleapis|deepl/i.test(request.url())) translationRequests.push(request.url()); });
+    await page.route('https://admin-test.supabase.co/rest/v1/site_settings*', async (route) => {
+      const request = route.request();
+      if (request.method() === 'POST') {
+        const body = request.postDataJSON();
+        for (const row of Array.isArray(body) ? body : [body]) settingsWrites.push(row);
+        return route.fulfill({ status: 201, json: [] });
+      }
+      return route.fulfill({ json: [], headers: { 'access-control-expose-headers': 'content-range', 'content-range': '0-0/0' } });
     });
 
     await page.goto(`${base}/admin/content`);
     await page.getByRole('button', { name: 'Textos' }).click();
 
-    // No manual English fields and no ES/EN language selector anywhere.
-    await expect(page.getByText('Titulo principal EN')).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'English' })).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Todos' })).toHaveCount(0);
+    // Both languages are directly editable, with the original language selector.
+    await expect(page.getByText('Titulo principal EN')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'English' })).toBeVisible();
 
-    const titleField = page.locator('label', { hasText: 'Titulo principal' }).locator('input');
-    await titleField.fill('Nuevo titulo en español');
+    await page.locator('label', { hasText: 'Titulo principal ES' }).locator('input').fill('Nuevo titulo en español');
+    await page.locator('label', { hasText: 'Titulo principal EN' }).locator('input').fill('New title in English');
     await page.getByRole('button', { name: 'Guardar hero' }).click();
 
-    await expect.poll(() => translateCalls.length).toBeGreaterThan(0);
-    const sentField = translateCalls[0].fields.find((field) => field.key === 'home.hero.title');
-    assert.ok(sentField, 'expected home.hero.title to be sent for translation');
-    assert.equal(sentField.value, 'Nuevo titulo en español');
+    await expect.poll(() => ['home.hero.title.es', 'home.hero.title.en'].every((key) => settingsWrites.some((row) => row.key === key))).toBe(true);
+    assert.equal(settingsWrites.find((row) => row.key === 'home.hero.title.es').value, 'Nuevo titulo en español');
+    assert.equal(settingsWrites.find((row) => row.key === 'home.hero.title.en').value, 'New title in English');
+
+    // About: same manual pattern.
+    settingsWrites.length = 0;
+    await page.getByRole('button', { name: 'Nosotros / About' }).click();
+    await page.locator('label', { hasText: 'Titulo ES' }).locator('input').fill('Titulo About ES');
+    await page.locator('label', { hasText: 'Titulo EN' }).locator('input').fill('About Title EN');
+    await page.getByRole('button', { name: 'Guardar Nosotros' }).click();
+    await expect.poll(() => ['about.title.es', 'about.title.en'].every((key) => settingsWrites.some((row) => row.key === key))).toBe(true);
+    assert.equal(settingsWrites.find((row) => row.key === 'about.title.es').value, 'Titulo About ES');
+    assert.equal(settingsWrites.find((row) => row.key === 'about.title.en').value, 'About Title EN');
+
+    assert.deepEqual(translationRequests, [], 'saving content must never call a translation service');
   } finally {
     await f.browser.close();
   }

@@ -1822,7 +1822,7 @@ tr.admin-sortable-row--dragging {
 
 .admin-login__card h1 {
   margin: 0;
-  color: var(--admin-ink);
+  color: var(--login-ink);
   font-size: clamp(1.4rem, 4.5vw, 1.6rem);
   font-weight: 700;
   letter-spacing: -0.015em;
@@ -1833,7 +1833,7 @@ tr.admin-sortable-row--dragging {
 .admin-login__card > .admin-muted {
   display: block;
   margin: 0.4rem 0 0;
-  color: var(--admin-muted);
+  color: var(--login-ink-medium);
   font-size: 0.86rem;
   line-height: 1.45;
   text-align: center;
@@ -1860,7 +1860,7 @@ tr.admin-sortable-row--dragging {
 }
 
 .admin-login__label {
-  color: var(--admin-ink);
+  color: var(--login-ink-medium);
   font-size: 0.78rem;
   font-weight: 700;
 }
@@ -1875,7 +1875,7 @@ tr.admin-sortable-row--dragging {
   left: 0.9rem;
   top: 50%;
   transform: translateY(-50%);
-  color: var(--admin-primary);
+  color: var(--login-primary);
   pointer-events: none;
 }
 
@@ -1890,12 +1890,28 @@ tr.admin-sortable-row--dragging {
   border: 0;
   border-radius: 999px;
   background: transparent;
-  color: var(--admin-primary);
+  color: var(--login-primary);
   cursor: pointer;
 }
 
 .admin-login__input-toggle:hover {
   background: rgba(43, 95, 130, 0.1);
+}
+
+/* The card is light glass in BOTH themes, but --admin-ink / --admin-surface /
+   --admin-muted flip to near-white / near-black in dark mode — which made the
+   typed text (and the base hover/focus fills) unreadable on this light input.
+   These are the light-theme values of the same tokens, pinned for the form
+   only, so the field looks identical whichever theme is active. */
+.admin-login__card {
+  --login-ink: #0b2842;                                    /* = --admin-ink (light): title, typed text */
+  --login-ink-medium: #133e62;                             /* = --admin-primary-dark (light): subtitle, labels, secondary text */
+  --login-placeholder: color-mix(in srgb, #0b2842 60%, transparent);
+  --login-primary: #2b5f82;                                /* = --admin-primary (light): icons, primary button */
+  --login-primary-hover: #214f72;                          /* = --admin-primary-hover (light) */
+  --login-focus: #6eacc9;                                  /* = --admin-focus (light) */
+  --login-field-solid: #f2fafd;                            /* = --admin-primary-soft (light) */
+  color-scheme: light;
 }
 
 .admin-login__form .admin-input {
@@ -1905,15 +1921,53 @@ tr.admin-sortable-row--dragging {
   border-color: rgba(255, 255, 255, 0.7);
   border-radius: 1rem;
   background: rgba(255, 255, 255, 0.55);
+  color: var(--login-ink);
+  caret-color: var(--login-ink);
   font-size: 0.95rem;
+}
+
+.admin-login__form .admin-input::placeholder {
+  color: var(--login-placeholder);
+  opacity: 1;
 }
 
 .admin-login__form input[type='password'].admin-input {
   padding-right: 2.6rem;
 }
 
+.admin-login__form .admin-input:hover {
+  border-color: var(--login-focus);
+  background: rgba(255, 255, 255, 0.68);
+}
+
 .admin-login__form .admin-input:focus {
+  border-color: var(--login-primary);
   background: rgba(255, 255, 255, 0.85);
+  box-shadow: 0 0 0 3px rgba(110, 172, 201, 0.3);
+}
+
+/* Chrome autofill paints its own fill and text colour over the field; pin
+   both so autofilled email/password match the typed state instead of the
+   default yellow/blue or a dark-mode override. */
+.admin-login__form .admin-input:-webkit-autofill,
+.admin-login__form .admin-input:-webkit-autofill:hover,
+.admin-login__form .admin-input:-webkit-autofill:focus,
+.admin-login__form .admin-input:-webkit-autofill:active {
+  -webkit-text-fill-color: var(--login-ink);
+  caret-color: var(--login-ink);
+  -webkit-box-shadow: 0 0 0 1000px var(--login-field-solid) inset;
+  box-shadow: 0 0 0 1000px var(--login-field-solid) inset;
+  transition: background-color 9999s ease-in-out 0s;
+}
+
+.admin-login__form .admin-input:-webkit-autofill:hover {
+  border-color: var(--login-focus);
+}
+
+.admin-login__form .admin-input:-webkit-autofill:focus {
+  border-color: var(--login-primary);
+  -webkit-box-shadow: 0 0 0 1000px var(--login-field-solid) inset, 0 0 0 3px rgba(110, 172, 201, 0.3);
+  box-shadow: 0 0 0 1000px var(--login-field-solid) inset, 0 0 0 3px rgba(110, 172, 201, 0.3);
 }
 
 .admin-login__form .admin-btn {
@@ -1923,9 +1977,35 @@ tr.admin-sortable-row--dragging {
   border-radius: 999px;
 }
 
+/* Primary keeps white-on-fill, but pinned to the light-theme fill: dark mode's
+   turquoise --admin-primary gives only ~3.7:1 against that white text. */
+.admin-login__form .admin-btn:not(.admin-btn--secondary) {
+  border-color: var(--login-primary);
+  background: var(--login-primary);
+}
+
+.admin-login__form .admin-btn:not(.admin-btn--secondary):hover {
+  border-color: var(--login-primary-hover);
+  background: var(--login-primary-hover);
+}
+
+.admin-login__form .admin-btn:not(.admin-btn--secondary):disabled,
+.admin-login__form .admin-btn:not(.admin-btn--secondary):disabled:hover {
+  border-color: var(--login-primary);
+  background: var(--login-primary);
+  opacity: 0.75;
+}
+
 .admin-login__form .admin-btn--secondary {
   border-color: rgba(255, 255, 255, 0.7);
   background: rgba(255, 255, 255, 0.4);
+  color: var(--login-ink);
+}
+
+.admin-login__form .admin-btn--secondary:hover {
+  border-color: var(--login-primary);
+  background: rgba(255, 255, 255, 0.62);
+  color: var(--login-ink);
 }
 
 .admin-login__form .admin-alert {
@@ -1937,7 +2017,7 @@ tr.admin-sortable-row--dragging {
   align-items: center;
   gap: 0.65rem;
   margin-top: 1.5rem;
-  color: var(--admin-ink);
+  color: var(--login-ink);
   font-size: 0.72rem;
   font-weight: 800;
   letter-spacing: 0.14em;

@@ -1,5 +1,6 @@
 import { functionsUrl, supabase } from '../lib/supabase';
 import type { BookingPaymentMethod } from '../utils/bookingPayment';
+import { getStoredLanguage } from '../i18n/LanguageContext';
 
 export interface PriceRequest {
   boatId: string;
@@ -53,6 +54,7 @@ export interface CreateBookingRequest {
   paymentMethodKey: BookingPaymentMethod;
   extras: Array<{ key: string; quantity: number }>;
   turnstileToken?: string;
+  language?: 'es' | 'en';
 }
 
 export interface AdminCreateBookingRequest extends Omit<CreateBookingRequest, 'turnstileToken' | 'customer'> {
@@ -106,7 +108,7 @@ async function callFunction<T>(name: string, body: unknown, signal?: AbortSignal
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const error = new Error(data?.message ?? 'Request failed') as Error & { status?: number };
+    const error = new Error(data?.message ?? (getStoredLanguage() === 'es' ? 'La solicitud falló.' : 'Request failed')) as Error & { status?: number };
     error.status = response.status;
     throw error;
   }

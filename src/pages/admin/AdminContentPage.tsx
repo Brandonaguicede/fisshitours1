@@ -5,9 +5,8 @@ import AdminImageManager from '../../components/admin/AdminImageManager';
 import AdminVideoManager from '../../components/admin/AdminVideoManager';
 import { AdminPageHeader } from '../../components/admin/AdminPrimitives';
 import { supabase } from '../../lib/supabase';
-import { ABOUT_CAROUSEL_DEFAULTS, buildAboutCarouselImages } from '../../services/aboutSettings';
+import { ABOUT_CAROUSEL_DEFAULTS, buildAboutCarouselImages, DEFAULT_ABOUT_SETTINGS } from '../../services/aboutSettings';
 import type { StorageImage } from '../../services/imageService';
-import { translateAndSaveContent } from '../../services/translationService';
 
 interface SiteSettingRow {
   key: string;
@@ -21,14 +20,6 @@ interface ContentField {
   label: string;
   type: 'text' | 'textarea' | 'url' | 'boolean' | 'image' | 'video' | 'media_mode';
   fallback: string;
-  /**
-   * True for editorial text the admin only ever writes in Spanish — `key` is
-   * the BASE site_settings key (no `.es`/`.en`). Guardar sends the Spanish
-   * value to translate-content, which translates it server-side and
-   * persists BOTH `${key}.es` and `${key}.en` atomically. Non-bilingual
-   * fields (images, video, booleans, media_mode) upsert directly as before.
-   */
-  bilingual?: boolean;
   aspect?: number;
   maxWidth?: number;
   maxHeight?: number;
@@ -59,10 +50,14 @@ const HERO_IMAGE_FIELDS: ContentField[] = [
 // Admin's ability to edit them is gone.
 const HERO_FIELDS: ContentField[] = [
   { key: 'home.hero.media_mode', label: 'Modo del hero', type: 'media_mode', fallback: 'image' },
-  { key: 'home.hero.title', label: 'Titulo principal', type: 'text', fallback: 'Experimenta el oceano', bilingual: true },
-  { key: 'home.hero.eyebrow', label: 'Etiqueta', type: 'text', fallback: 'Charters privados - Costa Rica', bilingual: true },
-  { key: 'home.hero.subtitle', label: 'Subtitulo', type: 'textarea', fallback: 'Pesca de clase mundial, vistas impresionantes y recuerdos inolvidables.', bilingual: true },
-  { key: 'home.hero.image_alt', label: 'Texto alternativo de la imagen', type: 'text', fallback: 'Bote privado navegando en el Pacifico de Costa Rica', bilingual: true },
+  { key: 'home.hero.title.es', label: 'Titulo principal ES', type: 'text', fallback: 'Experimenta el oceano' },
+  { key: 'home.hero.title.en', label: 'Titulo principal EN', type: 'text', fallback: 'Experience the Ocean' },
+  { key: 'home.hero.eyebrow.es', label: 'Etiqueta ES', type: 'text', fallback: 'Charters privados - Costa Rica' },
+  { key: 'home.hero.eyebrow.en', label: 'Etiqueta EN', type: 'text', fallback: 'Private charters - Costa Rica' },
+  { key: 'home.hero.subtitle.es', label: 'Subtitulo ES', type: 'textarea', fallback: 'Pesca de clase mundial, vistas impresionantes y recuerdos inolvidables.' },
+  { key: 'home.hero.subtitle.en', label: 'Subtitulo EN', type: 'textarea', fallback: 'World-class fishing, stunning views, and unforgettable memories.' },
+  { key: 'home.hero.image_alt.es', label: 'Texto alternativo imagen ES', type: 'text', fallback: 'Bote privado navegando en el Pacifico de Costa Rica' },
+  { key: 'home.hero.image_alt.en', label: 'Texto alternativo imagen EN', type: 'text', fallback: 'Private boat sailing Costa Rica Pacific waters' },
   { key: 'home.hero.video', label: 'Video de fondo', type: 'video', fallback: '' },
   { key: 'home.hero.mobile_video', label: 'Video de fondo - celular', type: 'video', fallback: '' },
   { key: 'home.hero.video_poster', label: 'Imagen mientras carga el video', type: 'image', fallback: '', aspect: 16 / 9, maxWidth: 1920, maxHeight: 1080 },
@@ -76,13 +71,22 @@ const ABOUT_FIELDS: ContentField[] = [
   ...Object.entries(ABOUT_CAROUSEL_DEFAULTS).map(([key, fallback], index): ContentField => ({
     key, fallback, label: `Carrusel About - foto ${index + 1}`, type: 'image', aspect: 16 / 9, maxWidth: 1920, maxHeight: 1080,
   })),
-  { key: 'about.title', label: 'Titulo', type: 'text', fallback: 'Pasion local y excelencia en el Pacifico de Costa Rica', bilingual: true },
-  { key: 'about.description', label: 'Descripcion', type: 'textarea', fallback: 'Sube a bordo de Second Wind y descubre una experiencia sofisticada donde el lujo se encuentra con la naturaleza.', bilingual: true },
-  { key: 'about.preview_text', label: 'Texto de inicio (home) - parrafos separados por linea vacia', type: 'textarea', fallback: 'Papagayo Fishing Tour es una empresa familiar fundada por los jovenes emprendedores locales Gabriel y Joshua, orgullosamente de Playas del Coco.\n\nCada salida esta disenada con cuidado para ofrecer exclusividad, comodidad y autenticidad en las aguas de la Peninsula de Papagayo.', bilingual: true },
-  { key: 'about.story', label: 'Historia (pagina Nosotros) - parrafos separados por linea vacia', type: 'textarea', fallback: 'Papagayo Fishing Tour es una empresa familiar fundada por los jovenes emprendedores locales Gabriel y Joshua, orgullosamente de Playas del Coco. Su conexion profunda con el oceano redefine las experiencias de pesca en las aguas de la Peninsula de Papagayo.\n\nNavega por mares cristalinos reconocidos por pesca, surf y snorkeling de clase mundial. Cada viaje esta disenado para ofrecer exclusividad, comodidad y autenticidad.', bilingual: true },
-  { key: 'about.cta_title', label: 'Titulo final', type: 'text', fallback: 'Listo para planear tu salida?', bilingual: true },
-  { key: 'about.cta_text', label: 'Texto final', type: 'textarea', fallback: 'Elige tu barco, horario y tipo de experiencia. Nosotros nos encargamos del resto.', bilingual: true },
-  { key: 'about.image_alt', label: 'Texto alternativo de la imagen', type: 'text', fallback: 'Tripulacion con pesca en aguas de Guanacaste', bilingual: true },
+  // Fallbacks come from DEFAULT_ABOUT_SETTINGS — the exact copy the public
+  // page renders while no row exists — so opening this form shows what
+  // visitors actually see, and a Guardar without edits can't silently swap
+  // the public text for different placeholder copy.
+  ...(([
+    ['about.title', 'Titulo', 'text'],
+    ['about.description', 'Descripcion', 'textarea'],
+    ['about.preview_text', 'Texto de inicio (home) - parrafos separados por linea vacia', 'textarea'],
+    ['about.story', 'Historia (pagina Nosotros) - parrafos separados por linea vacia', 'textarea'],
+    ['about.cta_title', 'Titulo final', 'text'],
+    ['about.cta_text', 'Texto final', 'textarea'],
+    ['about.image_alt', 'Texto alternativo imagen', 'text'],
+  ] as const).flatMap(([base, label, type]): ContentField[] => (['es', 'en'] as const).map((lang) => {
+    const key = `${base}.${lang}` as keyof typeof DEFAULT_ABOUT_SETTINGS;
+    return { key, label: `${label} ${lang.toUpperCase()}`, type, fallback: DEFAULT_ABOUT_SETTINGS[key] };
+  }))),
   { key: 'about.image', label: 'Carrusel About - foto 5 (opcional)', type: 'image', fallback: '', aspect: 16 / 9, maxWidth: 1920, maxHeight: 1080 },
 ];
 
@@ -97,9 +101,12 @@ function storagePathFromPublicUrl(value?: string | null) {
   }
 }
 
-/** The `site_settings` row a field actually reads/writes for Spanish. */
-function storageKey(field: ContentField) {
-  return field.bilingual ? `${field.key}.es` : field.key;
+type LangFilter = 'all' | 'es' | 'en';
+
+function fieldLang(key: string): 'es' | 'en' | null {
+  if (key.endsWith('.es')) return 'es';
+  if (key.endsWith('.en')) return 'en';
+  return null;
 }
 
 function defaultsFrom(fields: ContentField[]): Draft {
@@ -121,17 +128,13 @@ interface ContentSectionProps {
 }
 
 function ContentSection({ title, description, fields, saveLabel, imageRequireReplacement = false, preview, mediaTextTabs = false }: ContentSectionProps) {
-  const keyToField = useMemo(() => new Map(fields.map((field) => [storageKey(field), field])), [fields]);
-  const dbKeys = useMemo(() => fields.map(storageKey), [fields]);
+  const keys = useMemo(() => fields.map((field) => field.key), [fields]);
   const [draft, setDraft] = useState<Draft>(() => defaultsFrom(fields));
-  // Snapshot of what's actually persisted (Spanish side) — saveSettings only
-  // sends a bilingual field to translation if its value changed since this,
-  // so re-saving a section never re-translates copy nobody touched.
-  const [loadedDraft, setLoadedDraft] = useState<Draft>(() => defaultsFrom(fields));
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [langFilter, setLangFilter] = useState<LangFilter>('all');
   const [showExtraSlides, setShowExtraSlides] = useState(false);
   const [heroMediaMode, setHeroMediaMode] = useState<'image' | 'video'>('image');
   const [switchingMediaMode, setSwitchingMediaMode] = useState(false);
@@ -142,7 +145,10 @@ function ContentSection({ title, description, fields, saveLabel, imageRequireRep
   const extraImageFields = useMemo(() => imageFields.filter((field) => field.key.includes('.slide_')), [imageFields]);
   const videoFields = useMemo(() => fields.filter((field) => field.type === 'video'), [fields]);
   const videoPosterField = useMemo(() => fields.find((field) => field.key === 'home.hero.video_poster'), [fields]);
-  const textFields = useMemo(() => fields.filter((field) => !['image', 'video', 'media_mode'].includes(field.type)), [fields]);
+  const textFields = useMemo(
+    () => fields.filter((field) => !['image', 'video', 'media_mode'].includes(field.type) && (langFilter === 'all' || fieldLang(field.key) === null || fieldLang(field.key) === langFilter)),
+    [fields, langFilter],
+  );
 
   async function loadSettings() {
     setLoading(true);
@@ -150,25 +156,22 @@ function ContentSection({ title, description, fields, saveLabel, imageRequireRep
     const { data, error } = await supabase
       .from('site_settings')
       .select('key, value, type, active')
-      .in('key', dbKeys)
+      .in('key', keys)
       .order('key');
 
     setLoading(false);
     if (error) {
       setError(error.message);
       setDraft(defaultsFrom(fields));
-      setLoadedDraft(defaultsFrom(fields));
       return;
     }
 
     const rows = (data ?? []) as SiteSettingRow[];
     const nextDraft = defaultsFrom(fields);
     rows.forEach((row) => {
-      const field = keyToField.get(row.key);
-      if (field && row.value) nextDraft[field.key] = row.value;
+      if (row.key in nextDraft && row.value) nextDraft[row.key] = row.value;
     });
     setDraft(nextDraft);
-    setLoadedDraft(nextDraft);
     if (videoFields.length) setHeroMediaMode(nextDraft['home.hero.media_mode'] === 'video' ? 'video' : 'image');
   }
 
@@ -193,22 +196,12 @@ function ContentSection({ title, description, fields, saveLabel, imageRequireRep
     setError('');
     setNotice('');
     try {
-      const bilingualChanges: Array<{ key: string; value: string }> = [];
       for (const field of fields) {
         if (field.type === 'image' || field.type === 'video') continue; // saved by their own upload managers
         const raw = draft[field.key];
-        if (field.bilingual) {
-          const value = (raw ?? '').trim() || field.fallback;
-          if (value !== (loadedDraft[field.key] ?? '').trim()) bilingualChanges.push({ key: field.key, value });
-          continue;
-        }
         const value = field.type === 'boolean' ? (raw !== 'false' ? 'true' : 'false') : ((raw ?? '').trim() || field.fallback);
         await upsertKey(field.key, value, field.type);
       }
-      // Translated as one batch, atomically: if any field fails to
-      // translate, nothing in this batch is written — the previous ES/EN
-      // stay exactly as they were.
-      if (bilingualChanges.length > 0) await translateAndSaveContent(bilingualChanges);
       setNotice(`${title} actualizado. La pagina publica usara estos valores sin redesplegar.`);
       await loadSettings();
     } catch (saveError) {
@@ -337,7 +330,7 @@ function ContentSection({ title, description, fields, saveLabel, imageRequireRep
                     folder="general"
                     currentImageUrl={draft[imageField.key]}
                     currentStoragePath={storagePathFromPublicUrl(draft[imageField.key])}
-                    label={draft[`${imageField.key.replace(/\.mobile_image$/, '').replace(/\.image$/, '')}.image_alt`] ?? imageField.label}
+                    label={draft[`${imageField.key.replace(/\.mobile_image$/, '').replace(/\.image$/, '')}.image_alt.es`] ?? imageField.label}
                     aspect={imageField.aspect ?? 16 / 9}
                     previewAspect={imageField.aspect ?? 16 / 9}
                     maxWidth={imageField.maxWidth ?? 1920}
@@ -375,7 +368,7 @@ function ContentSection({ title, description, fields, saveLabel, imageRequireRep
                         folder="general"
                         currentImageUrl={draft[imageField.key]}
                         currentStoragePath={storagePathFromPublicUrl(draft[imageField.key])}
-                        label={draft[`${imageField.key.replace(/\.mobile_image$/, '').replace(/\.image$/, '')}.image_alt`] ?? imageField.label}
+                        label={draft[`${imageField.key.replace(/\.mobile_image$/, '').replace(/\.image$/, '')}.image_alt.es`] ?? imageField.label}
                         aspect={imageField.aspect ?? 16 / 9}
                         previewAspect={imageField.aspect ?? 16 / 9}
                         maxWidth={imageField.maxWidth ?? 1920}
@@ -434,8 +427,21 @@ function ContentSection({ title, description, fields, saveLabel, imageRequireRep
           </div>
 
           <div style={mediaTextTabs && innerTab !== 'texts' ? { display: 'none' } : undefined} className="grid gap-5">
-          <p className="admin-muted font-extrabold">Textos</p>
-          <p className="admin-field-help">Escribe en español. El inglés se genera automáticamente al guardar.</p>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="admin-muted font-extrabold">Textos</p>
+            <div className="admin-segmented" role="group" aria-label="Filtrar por idioma">
+              {(['all', 'es', 'en'] as LangFilter[]).map((lang) => (
+                <button
+                  key={lang}
+                  type="button"
+                  className={langFilter === lang ? 'admin-segmented__option--active' : ''}
+                  onClick={() => setLangFilter(lang)}
+                >
+                  {lang === 'all' ? 'Todos' : lang === 'es' ? 'Español' : 'English'}
+                </button>
+              ))}
+            </div>
+          </div>
 
           <div className="grid gap-3 lg:grid-cols-2">
             {textFields.map((field) => (
@@ -514,14 +520,14 @@ export default function AdminContentPage() {
         preview={(draft) => (
           <div className="relative overflow-hidden rounded-xl">
             {draft['home.hero.mobile_image'] ? (
-              <img className="aspect-[4/5] w-full object-cover sm:hidden" src={draft['home.hero.mobile_image']} alt={draft['home.hero.image_alt']} />
+              <img className="aspect-[4/5] w-full object-cover sm:hidden" src={draft['home.hero.mobile_image']} alt={draft['home.hero.image_alt.es']} />
             ) : (
               <div className="grid aspect-[4/5] w-full place-items-center border border-dashed border-white/25 text-xs text-white/60 sm:hidden">
                 Sin imagen de celular
               </div>
             )}
             {draft['home.hero.image'] ? (
-              <img className="hidden aspect-video w-full object-cover sm:block" src={draft['home.hero.image']} alt={draft['home.hero.image_alt']} />
+              <img className="hidden aspect-video w-full object-cover sm:block" src={draft['home.hero.image']} alt={draft['home.hero.image_alt.es']} />
             ) : (
               <div className="hidden aspect-video w-full place-items-center border border-dashed border-white/25 text-xs text-white/60 sm:grid">
                 Sin imagen de compu
@@ -530,9 +536,9 @@ export default function AdminContentPage() {
             <div className="absolute inset-0 bg-ocean-950/45" />
             <div className="absolute inset-0 grid place-items-center p-5 text-center">
               <div>
-                <p className="text-xs font-extrabold uppercase tracking-[0.16em] text-white/75">{draft['home.hero.eyebrow']}</p>
-                <h3 className="mt-2 font-display text-3xl font-extrabold leading-tight sm:text-5xl">{draft['home.hero.title']}</h3>
-                <p className="mx-auto mt-2 max-w-xl text-sm font-medium text-white/80 sm:text-base">{draft['home.hero.subtitle']}</p>
+                <p className="text-xs font-extrabold uppercase tracking-[0.16em] text-white/75">{draft['home.hero.eyebrow.es']}</p>
+                <h3 className="mt-2 font-display text-3xl font-extrabold leading-tight sm:text-5xl">{draft['home.hero.title.es']}</h3>
+                <p className="mx-auto mt-2 max-w-xl text-sm font-medium text-white/80 sm:text-base">{draft['home.hero.subtitle.es']}</p>
               </div>
             </div>
           </div>
@@ -549,8 +555,8 @@ export default function AdminContentPage() {
         preview={(draft) => (
           <div className="grid items-center gap-4 sm:grid-cols-[minmax(0,1fr)_220px]">
             <div>
-              <h3 className="font-display text-2xl font-extrabold leading-tight sm:text-3xl">{draft['about.title']}</h3>
-              <p className="mt-3 text-sm leading-6 text-white/80">{draft['about.preview_text'].split('\n')[0]}</p>
+              <h3 className="font-display text-2xl font-extrabold leading-tight sm:text-3xl">{draft['about.title.es']}</h3>
+              <p className="mt-3 text-sm leading-6 text-white/80">{draft['about.preview_text.es'].split('\n')[0]}</p>
             </div>
             {buildAboutCarouselImages(draft).length ? (
               <div className="grid grid-cols-2 gap-2">{buildAboutCarouselImages(draft).map((src, index) => <img key={src} className="aspect-video w-full rounded-xl object-cover" src={src} alt={`Foto ${index + 1}`} />)}</div>

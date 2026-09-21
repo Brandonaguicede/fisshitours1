@@ -5,9 +5,10 @@ import { AppErrorBoundary } from './components/common/AppErrorBoundary';
 import { BookingSelectionProvider } from './contexts/BookingSelectionContext';
 import { SeoMetadata } from './components/common/SeoMetadata';
 import { AppRoutes } from './routes/AppRoutes';
+import { getStoredLanguage } from './i18n/LanguageContext';
 
 function LoadingFallback() {
-  const language = typeof window !== 'undefined' && window.localStorage.getItem('language') !== 'es' ? 'en' : 'es';
+  const language = getStoredLanguage();
   return <div>{language === 'es' ? 'Cargando...' : 'Loading...'}</div>;
 }
 

@@ -11,6 +11,16 @@ interface LanguageContextValue {
 
 const LanguageContext = createContext<LanguageContextValue | null>(null);
 
+/**
+ * Reads the saved language outside React (module-level services, class
+ * components) without needing a hook. Same source of truth and same
+ * default as LanguageProvider's own initial state.
+ */
+export function getStoredLanguage(): Language {
+  if (typeof window === 'undefined') return 'en';
+  return window.localStorage.getItem('language') === 'es' ? 'es' : 'en';
+}
+
 export function LanguageProvider({ children }: PropsWithChildren) {
   const [language, setLanguageState] = useState<Language>(() => {
     const savedLanguage = window.localStorage.getItem('language');

@@ -1,4 +1,5 @@
 import { functionsUrl, supabase } from '../lib/supabase';
+import { getStoredLanguage } from '../i18n/LanguageContext';
 
 export interface ApprovedReview {
   id: string;
@@ -50,7 +51,7 @@ export async function submitReview(input: SubmitReviewRequest): Promise<SubmitRe
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const error = new Error(data?.message ?? 'Request failed') as Error & { status?: number };
+    const error = new Error(data?.message ?? (getStoredLanguage() === 'es' ? 'La solicitud falló.' : 'Request failed')) as Error & { status?: number };
     error.status = response.status;
     throw error;
   }

@@ -57,7 +57,7 @@ let exitCode = 1;
 try {
   await waitForServer(`${BASE_URL}/admin/login`);
   const extraArgs = process.argv.slice(2);
-  const testFiles = ['tests/admin-dashboard.test.mjs', 'tests/admin-confirm-booking.test.mjs', 'tests/admin-list-service.test.mjs', 'tests/admin-pagination.test.mjs', 'tests/admin-critical-flows.test.mjs', 'tests/booking-payment-method-key.test.mjs', 'tests/admin-security-hardening.test.mjs', 'tests/admin-management-rules.test.mjs', 'tests/admin-drafts-and-reorder.test.mjs', 'tests/public-catalog-order.test.mjs'];
+  const testFiles = ['tests/admin-dashboard.test.mjs', 'tests/admin-confirm-booking.test.mjs', 'tests/admin-list-service.test.mjs', 'tests/admin-pagination.test.mjs', 'tests/admin-critical-flows.test.mjs', 'tests/booking-payment-method-key.test.mjs', 'tests/admin-security-hardening.test.mjs', 'tests/admin-management-rules.test.mjs', 'tests/admin-drafts-and-reorder.test.mjs', 'tests/public-catalog-order.test.mjs', 'tests/i18n-static-content.test.mjs', 'tests/paypal-checkout-lifecycle.test.mjs'];
   const node = spawn(process.execPath, ['--test', ...testFiles, ...extraArgs], {
     stdio: 'inherit',
     env: { ...process.env, ADMIN_TEST_BASE_URL: BASE_URL },

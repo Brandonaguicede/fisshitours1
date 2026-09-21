@@ -406,11 +406,6 @@ verify_jwt = false
 [functions.storage-delete-image]
 verify_jwt = false
 
-# Validates the bearer token and the active admin/editor profile inside the
-# function itself (same pattern as storage-upload-image above).
-[functions.translate-content]
-verify_jwt = false
-
 # These functions validate the bearer token and the active admin/editor profile
 # inside the Edge Function. Disabling gateway JWT verification lets the browser
 # preflight (OPTIONS) reach the function's CORS handler.

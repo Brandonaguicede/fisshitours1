@@ -1,4 +1,5 @@
 import { functionsUrl, supabase } from '../lib/supabase';
+import { getStoredLanguage } from '../i18n/LanguageContext';
 
 export interface AvailabilitySlot {
   id: string;
@@ -21,6 +22,6 @@ export async function getBookingAvailability(boatId: string, tourId: string, tou
     body: JSON.stringify({ boatId, tourId, tourPackageId, date }),
   });
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data?.message ?? 'Availability could not be loaded.');
+  if (!response.ok) throw new Error(data?.message ?? (getStoredLanguage() === 'es' ? 'No se pudo cargar la disponibilidad.' : 'Availability could not be loaded.'));
   return data.slots;
 }

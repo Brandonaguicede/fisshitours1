@@ -1,5 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
 import { Button, GlassPanel } from '../ui';
+import { getStoredLanguage } from '../../i18n/LanguageContext';
 
 interface AppErrorBoundaryProps {
   children: ReactNode;
@@ -25,13 +26,19 @@ export class AppErrorBoundary extends Component<AppErrorBoundaryProps, AppErrorB
 
   render() {
     if (this.state.hasError) {
+      // A class component can't use useLanguage() — LanguageProvider sits
+      // above this boundary in main.tsx and is unaffected by whatever threw
+      // below it, but reading its context here needs `static contextType`
+      // wiring we don't otherwise need. getStoredLanguage() reads the same
+      // localStorage key LanguageProvider itself initializes from.
+      const language = getStoredLanguage();
       return (
         <main className="grid min-h-screen place-items-center bg-ocean-950 px-6 text-center text-white">
           <GlassPanel as="section" className="max-w-md rounded-2xl p-6" variant="surface">
-            <h1 className="text-2xl font-extrabold">Something went wrong</h1>
-            <p className="mt-3 text-sm leading-6 text-ocean-100">Please refresh the page or try again in a moment.</p>
+            <h1 className="text-2xl font-extrabold">{language === 'es' ? 'Algo salió mal' : 'Something went wrong'}</h1>
+            <p className="mt-3 text-sm leading-6 text-ocean-100">{language === 'es' ? 'Actualiza la página o inténtalo de nuevo en un momento.' : 'Please refresh the page or try again in a moment.'}</p>
             <Button className="mt-5" type="button" onClick={() => window.location.reload()}>
-              Reload
+              {language === 'es' ? 'Actualizar' : 'Reload'}
             </Button>
           </GlassPanel>
         </main>

@@ -146,7 +146,7 @@ export default function ContactPage() {
           ...values,
           language,
           tourType: tourOptions.find((tour) => tour.id === values.tourType)?.title ?? values.tourType,
-          departureTime: departureTimes.find((time) => time.id === values.departureTime)?.label ?? values.departureTime,
+          departureTime: departureTimes.find((time) => time.id === values.departureTime)?.label[language] ?? values.departureTime,
         },
       });
       if (error) throw error;
@@ -213,7 +213,7 @@ export default function ContactPage() {
                       shape="soft"
                     >
                       <input className="sr-only" type="radio" value={departure.id} {...register('departureTime')} />
-                      <span className="text-sm font-extrabold text-white">{departure.label}</span>
+                      <span className="text-sm font-extrabold text-white">{departure.label[language]}</span>
                       <span className="mt-0.5 block text-lg font-extrabold text-ocean-300">{departure.time}</span>
                     </ChoiceCard>
                   ))}

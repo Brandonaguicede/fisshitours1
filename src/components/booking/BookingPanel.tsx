@@ -202,6 +202,7 @@ export function BookingPanel({ selectedBoat, selectedTour: requestedTour, boats,
         departureLocation: selectedDepartureLocation,
         extras: priceQuery.data?.extras,
         specialRequests,
+        language,
       })
     : null;
 
@@ -292,47 +293,47 @@ export function BookingPanel({ selectedBoat, selectedTour: requestedTour, boats,
     }
     if (!selectedTour) {
       setActiveStep(1);
-      setValidationMessage('Please select a tour.');
+      setValidationMessage(language === 'es' ? 'Selecciona un tour.' : 'Please select a tour.');
       return null;
     }
     if (!selectedTimeSlot) {
       setActiveStep(1);
-      setValidationMessage('Please select a departure time.');
+      setValidationMessage(language === 'es' ? 'Selecciona una hora de salida.' : 'Please select a departure time.');
       return null;
     }
     if (!date) {
       setActiveStep(1);
-      setValidationMessage('Please select a date.');
+      setValidationMessage(language === 'es' ? 'Selecciona una fecha.' : 'Please select a date.');
       return null;
     }
     if (guests < 1 || guests > effectiveMaxGuests) {
       setActiveStep(1);
-      setValidationMessage(`Please select between 1 and ${effectiveMaxGuests} guests.`);
+      setValidationMessage(language === 'es' ? `Selecciona entre 1 y ${effectiveMaxGuests} personas.` : `Please select between 1 and ${effectiveMaxGuests} guests.`);
       return null;
     }
     if (!selectedDepartureLocation) {
       setActiveStep(2);
-      setValidationMessage('Please select a departure location.');
+      setValidationMessage(language === 'es' ? 'Selecciona un lugar de salida.' : 'Please select a departure location.');
       return null;
     }
     if (!customerName.trim()) {
       setActiveStep(3);
-      setValidationMessage('Please enter the customer name.');
+      setValidationMessage(language === 'es' ? 'Ingresa el nombre del cliente.' : 'Please enter the customer name.');
       return null;
     }
     if (!customerWhatsapp.trim()) {
       setActiveStep(3);
-      setValidationMessage('Please enter the phone number.');
+      setValidationMessage(language === 'es' ? 'Ingresa el número de teléfono.' : 'Please enter the phone number.');
       return null;
     }
     if (!isValidEmail(customerEmail)) {
       setActiveStep(3);
-      setValidationMessage('Please enter a valid email.');
+      setValidationMessage(language === 'es' ? 'Ingresa un correo electrónico válido.' : 'Please enter a valid email.');
       return null;
     }
     if (pricing.isCustomQuote || pricing.total <= 0 || !bookingPayload) {
       setActiveStep(1);
-      setValidationMessage('Please select a priced tour package.');
+      setValidationMessage(language === 'es' ? 'Selecciona un paquete de tour con precio.' : 'Please select a priced tour package.');
       return null;
     }
     return bookingPayload;
@@ -355,7 +356,7 @@ export function BookingPanel({ selectedBoat, selectedTour: requestedTour, boats,
         setActiveStep(1);
         return;
       }
-      setValidationMessage(error.message || 'We couldn’t create the booking. Please try again.');
+      setValidationMessage(error.message || (language === 'es' ? 'No pudimos crear la reserva. Inténtalo de nuevo.' : 'We couldn’t create the booking. Please try again.'));
     },
   });
 
@@ -380,6 +381,7 @@ export function BookingPanel({ selectedBoat, selectedTour: requestedTour, boats,
       paymentMethodKey: method,
       extras: [],
       turnstileToken: USE_LOCAL_TURNSTILE_MOCK ? MOCK_TURNSTILE_TOKEN : turnstileToken,
+      language,
     });
     setTurnstileToken('');
     setTurnstileResetKey((value) => value + 1);
@@ -387,7 +389,7 @@ export function BookingPanel({ selectedBoat, selectedTour: requestedTour, boats,
   }
 
   function openWhatsAppBooking(booking: BookingPaymentPayload, variant: 'payment_link' | 'pay_on_day' | 'paid_confirmation') {
-    const url = getWhatsAppBookingUrl(createWhatsAppBookingMessage(booking, variant));
+    const url = getWhatsAppBookingUrl(createWhatsAppBookingMessage(booking, variant, language));
     window.location.assign(url);
   }
 
@@ -399,7 +401,7 @@ export function BookingPanel({ selectedBoat, selectedTour: requestedTour, boats,
       setPaymentStatus('pending');
       setPaypalVisible(false);
       setSuccessNotice(null);
-      openWhatsAppBooking({ ...bookingPayload, bookingReference: result.booking_reference, total: result.total_snapshot, paymentMethod: 'WhatsApp payment link', paymentStatus: 'pending' }, 'payment_link');
+      openWhatsAppBooking({ ...bookingPayload, bookingReference: result.booking_reference, total: result.total_snapshot, paymentMethod: language === 'es' ? 'Enlace de pago por WhatsApp' : 'WhatsApp payment link', paymentStatus: 'pending' }, 'payment_link');
       setSuccessNotice({
         title: language === 'es' ? 'Reserva creada' : 'Booking created',
         message: language === 'es' ? 'Recibimos tu reserva. Abre WhatsApp para solicitar el enlace de pago.' : 'We received your booking. Open WhatsApp to request the payment link.',
@@ -427,7 +429,7 @@ export function BookingPanel({ selectedBoat, selectedTour: requestedTour, boats,
       setBookingStatus('pending_confirmation');
       setPaymentStatus('not_required_yet');
       setIsPayOnDayOpen(false);
-      openWhatsAppBooking({ ...bookingPayload, bookingReference: result.booking_reference, total: result.total_snapshot, paymentMethod: 'Pay on the day of the tour', paymentStatus: 'not_required_yet' }, 'pay_on_day');
+      openWhatsAppBooking({ ...bookingPayload, bookingReference: result.booking_reference, total: result.total_snapshot, paymentMethod: language === 'es' ? 'Pago el día del tour' : 'Pay on the day of the tour', paymentStatus: 'not_required_yet' }, 'pay_on_day');
       setSuccessNotice({
         title: language === 'es' ? 'Reserva recibida' : 'Booking received',
         message: language === 'es' ? 'Tu solicitud fue creada y queda pendiente de confirmacion.' : 'Your request was created and is pending confirmation.',
@@ -694,14 +696,14 @@ export function BookingPanel({ selectedBoat, selectedTour: requestedTour, boats,
           selectedBoat={selectedBoat}
           selectedTour={selectedTour}
           date={date}
-          departure={selectedTimeSlot ? formatTime(selectedTimeSlot.time) : 'Not selected'}
+          departure={selectedTimeSlot ? formatTime(selectedTimeSlot.time) : (language === 'es' ? 'No seleccionado' : 'Not selected')}
           guests={guests}
           mealOption={mealOption}
           customerName={customerName}
           customerEmail={customerEmail}
           customerWhatsapp={customerWhatsapp}
           specialRequests={specialRequests}
-          paymentMethod="Pay on the Day of the Tour"
+          paymentMethod={language === 'es' ? 'Pagar el día del tour' : 'Pay on the Day of the Tour'}
           pricing={pricing}
           departureLocation={selectedDepartureLocation}
           onBack={() => setIsPayOnDayOpen(false)}
@@ -993,8 +995,8 @@ function TourDetailsStep(props: {
             ))}
           </div>
           {!props.availabilityLoading && !props.availabilityError && !props.availabilitySlots.length ? <p className="mt-2 text-sm text-ocean-200">{language === 'es' ? 'Este paquete no tiene horas de salida disponibles.' : 'This package has no available departure times.'}</p> : null}
-          {props.availabilityLoading ? <p className="mt-2 text-xs font-semibold text-ocean-300">Checking availability...</p> : null}
-          {props.availabilityError ? <p className="mt-2 text-xs font-semibold text-red-200">We couldn’t load the booking information. Please try again.</p> : null}
+          {props.availabilityLoading ? <p className="mt-2 text-xs font-semibold text-ocean-300">{language === 'es' ? 'Verificando disponibilidad...' : 'Checking availability...'}</p> : null}
+          {props.availabilityError ? <p className="mt-2 text-xs font-semibold text-red-200">{language === 'es' ? 'No pudimos cargar la información de la reserva. Inténtalo de nuevo.' : 'We couldn’t load the booking information. Please try again.'}</p> : null}
         </fieldset>
       ) : null}
     </div>
@@ -1231,7 +1233,7 @@ function CustomerStep(props: {
       ) : null}
 
       {props.paypalVisible && props.booking && props.createdBooking ? (
-        <PayPalCheckoutBox booking={props.booking} createdBooking={props.createdBooking} onSuccess={props.onPayPalSuccess} onError={props.onPayPalError} onCancel={props.onPayPalCancel} onStart={props.onPayPalStart} />
+        <PayPalCheckoutBox booking={props.booking} createdBooking={props.createdBooking} onSuccess={props.onPayPalSuccess} onError={props.onPayPalError} onCancel={props.onPayPalCancel} onStart={props.onPayPalStart} language={language} />
       ) : null}
 
       {props.paypalError ? (
@@ -1316,8 +1318,12 @@ function PayPalCheckoutBox(props: {
   onError: (message: string) => void;
   onCancel: () => void;
   onStart: () => void;
+  language?: 'es' | 'en';
 }) {
-  const { createdBooking, onSuccess, onError, onCancel, onStart } = props;
+  // `language` is passed in (not read via useLanguage) so this box stays a
+  // plain function of its props — tests/paypal-checkout-lifecycle.test.mjs
+  // runs its source with hook doubles and no i18n context.
+  const { createdBooking, onSuccess, onError, onCancel, onStart, language = 'en' } = props;
   const clientId = import.meta.env.VITE_PAYPAL_CLIENT_ID;
   const containerId = `paypal-button-container-${createdBooking.booking_id}`;
   const callbacksRef = useRef({ onSuccess, onError, onCancel, onStart });
@@ -1348,7 +1354,7 @@ function PayPalCheckoutBox(props: {
     if (container) container.innerHTML = '';
 
     if (!clientId) {
-      callbacksRef.current.onError('PayPal is not configured. Set VITE_PAYPAL_CLIENT_ID to enable sandbox checkout.');
+      callbacksRef.current.onError(language === 'es' ? 'PayPal no está configurado. Define VITE_PAYPAL_CLIENT_ID para habilitar el checkout de prueba.' : 'PayPal is not configured. Set VITE_PAYPAL_CLIENT_ID to enable sandbox checkout.');
       return;
     }
 
@@ -1399,6 +1405,10 @@ function PayPalCheckoutBox(props: {
       isMounted = false;
       if (buttons) void buttons.close().catch(() => undefined);
     };
+    // `language` only picks the wording of the "not configured" message on
+    // mount; re-running this effect on a language toggle would tear down and
+    // re-render the PayPal buttons mid-checkout.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [buttonStyle, clientId, containerId, createdBooking.booking_id, createdBooking.booking_reference]);
 
   return (

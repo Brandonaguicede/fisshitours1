@@ -1,4 +1,5 @@
 import { functionsUrl, supabase } from '../lib/supabase';
+import { getStoredLanguage } from '../i18n/LanguageContext';
 
 declare global {
   interface Window {
@@ -41,7 +42,7 @@ export function loadPayPalSdk(clientId: string) {
     script.onerror = () => {
       paypalSdkPromise = null;
       script.remove();
-      reject(new Error('PayPal could not be loaded. Please try again.'));
+      reject(new Error(getStoredLanguage() === 'es' ? 'No se pudo cargar PayPal. Inténtalo de nuevo.' : 'PayPal could not be loaded. Please try again.'));
     };
     document.head.appendChild(script);
   });
@@ -62,7 +63,7 @@ async function callPayPalFunction<T>(name: string, body: unknown): Promise<T> {
     body: JSON.stringify(body),
   });
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data?.message || 'PayPal request could not be completed.');
+  if (!response.ok) throw new Error(data?.message || (getStoredLanguage() === 'es' ? 'No se pudo completar la solicitud a PayPal.' : 'PayPal request could not be completed.'));
   return data as T;
 }
 
@@ -72,7 +73,7 @@ export function getPayPalErrorMessage(error: unknown) {
   try {
     return JSON.stringify(error);
   } catch {
-    return 'PayPal returned an error. Please try again or choose another payment method.';
+    return getStoredLanguage() === 'es' ? 'PayPal devolvió un error. Inténtalo de nuevo o elige otro método de pago.' : 'PayPal returned an error. Please try again or choose another payment method.';
   }
 }
 
