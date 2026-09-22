@@ -36,6 +36,30 @@ interface BoatImageRow {
   synthetic?: boolean;
 }
 
+// One row per equipment item (boat_equipment), replacing the old single
+// comma-separated featured_spec text field — each item can be added/
+// removed/reordered on its own, instead of editing one big blob of text.
+// `id` is generated client-side (crypto.randomUUID()) even for a brand-new
+// item, exactly like tour_inclusions' pattern, so the same id can be used
+// directly in the upsert on save.
+//
+// labelEs/labelEn are directly editable here (not just filled by "Traducir
+// todo el sitio") — DeepL can mistranslate a technical term (e.g. "tuna
+// tube" once came back as "Remember the tube"), and the admin needs a real
+// way to fix that without it being silently overwritten by the next
+// translation run. `label` (legacy) is kept in sync automatically on save
+// — es || en || label — purely for whatever, if anything, still reads it
+// internally; it has no input of its own anymore.
+interface BoatEquipmentEditItem {
+  id: string;
+  label: string;
+  labelEs: string;
+  labelEn: string;
+  sortOrder: number;
+  isNew?: boolean;
+  pendingDelete?: boolean;
+}
+
 interface BoatRow {
   id: string;
   slug: string;
@@ -51,6 +75,7 @@ interface BoatRow {
   active: boolean;
   sort_order: number;
   boat_images?: BoatImageRow[];
+  equipment: BoatEquipmentEditItem[];
 }
 
 function needsEditorNotice(message: string) {
@@ -112,21 +137,6 @@ function uniqueBoatId(name: string, existingIds: ReadonlySet<string>) {
   return `${base}-${suffix}`;
 }
 
-function equipmentTextToItems(value?: string | null) {
-  return (value ?? '')
-    .split(/\n|,/)
-    .map((item) => item.trim().replace(/\.$/, ''))
-    .filter(Boolean);
-}
-
-function equipmentItemsToStorageValue(value?: string | null) {
-  return equipmentTextToItems(value).join(', ');
-}
-
-function equipmentStorageToTextarea(value?: string | null) {
-  return equipmentTextToItems(value).join('\n');
-}
-
 export default function AdminBoatsPage() {
   const db = supabase as any;
   const [searchParams, setSearchParams] = useSearchParams();
@@ -144,6 +154,7 @@ export default function AdminBoatsPage() {
   const [fieldErrors, setFieldErrors] = useState<{ name?: string; maxGuests?: string; images?: string }>({});
   const [search, setSearch] = useState('');
   const [boatStatusFilter, setBoatStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
+  const [equipmentInput, setEquipmentInput] = useState('');
 
   const isValidActiveImageCount = (count: number) => count >= 3 && count <= 6;
 
@@ -172,6 +183,14 @@ export default function AdminBoatsPage() {
           .eq('active', true)
           .order('sort_order', { ascending: true })
       : { data: [], error: null };
+    const equipmentResult = boatIds.length
+      ? await db
+          .from('boat_equipment')
+          .select('id, boat_id, label, label_es, label_en, sort_order, active')
+          .in('boat_id', boatIds)
+          .eq('active', true)
+          .order('sort_order', { ascending: true })
+      : { data: [], error: null };
 
     const imagesByBoat = new Map<string, BoatImageRow[]>();
     if (!imagesResult.error) {
@@ -181,13 +200,21 @@ export default function AdminBoatsPage() {
         imagesByBoat.set(image.boat_id, current);
       }
     }
+    const equipmentByBoat = new Map<string, BoatEquipmentEditItem[]>();
+    if (!equipmentResult.error) {
+      for (const item of equipmentResult.data ?? []) {
+        const current = equipmentByBoat.get(item.boat_id) ?? [];
+        current.push({ id: item.id, label: item.label, labelEs: item.label_es ?? '', labelEn: item.label_en ?? '', sortOrder: item.sort_order });
+        equipmentByBoat.set(item.boat_id, current);
+      }
+    }
 
     // Read-only: boat_images rows as-is, or [] when a boat has none yet. NEVER
     // fallbackBoatImages() here — that would put synthetic, unpersisted rows into
     // editing.boat_images, which the write handlers (onGalleryImageSaved,
     // deleteBoatImage, setPrimaryImage, moveImage) trust as real. The synthetic
     // read-only preview is applied only at render time, in editorImages below.
-    setBoats(rows.map((boat) => ({ ...boat, boat_images: imagesByBoat.get(boat.id) ?? [] })));
+    setBoats(rows.map((boat) => ({ ...boat, boat_images: imagesByBoat.get(boat.id) ?? [], equipment: equipmentByBoat.get(boat.id) ?? [] })));
     setLoading(false);
     await loadStartingPrices();
   }
@@ -234,6 +261,7 @@ export default function AdminBoatsPage() {
     setEditing(boat);
     setBoatTab('general');
     setFieldErrors({});
+    setEquipmentInput('');
     const images = boat.boat_images?.length ? boat.boat_images : fallbackBoatImages(boat);
     setSelectedImageId((images.find((image) => image.is_primary) ?? images[0])?.id ?? null);
   }
@@ -259,8 +287,10 @@ export default function AdminBoatsPage() {
       active: false,
       sort_order: (boats?.length ?? 0) + 1,
       boat_images: [],
+      equipment: [],
     });
     setSelectedImageId(null);
+    setEquipmentInput('');
   }
 
   async function closeEditor() {
@@ -300,13 +330,22 @@ export default function AdminBoatsPage() {
       .eq('boat_id', boatId)
       .eq('active', true)
       .order('sort_order', { ascending: true });
+    const equipmentResult = await db
+      .from('boat_equipment')
+      .select('id, boat_id, label, label_es, label_en, sort_order, active')
+      .eq('boat_id', boatId)
+      .eq('active', true)
+      .order('sort_order', { ascending: true });
     const rawBoat = data as unknown as BoatRow;
     const boat = {
       ...rawBoat,
       images: Array.isArray(rawBoat.images) ? rawBoat.images.filter((item): item is string => typeof item === 'string') : [],
       boat_images: (imagesResult.data ?? []) as BoatImageRow[],
+      equipment: ((equipmentResult.data ?? []) as Array<{ id: string; label: string; label_es: string | null; label_en: string | null; sort_order: number }>)
+        .map((item) => ({ id: item.id, label: item.label, labelEs: item.label_es ?? '', labelEn: item.label_en ?? '', sortOrder: item.sort_order })),
     };
     setEditing(boat);
+    setEquipmentInput('');
     const images = boat.boat_images?.length ? boat.boat_images : fallbackBoatImages(boat);
     setSelectedImageId((current) => current ?? (images.find((image) => image.is_primary) ?? images[0])?.id ?? null);
   }
@@ -353,7 +392,8 @@ export default function AdminBoatsPage() {
       badge: editing.badge?.trim() || null,
       length: editing.length?.trim() || null,
       engine: editing.engine?.trim() || null,
-      featured_spec: equipmentItemsToStorageValue(editing.featured_spec) || null,
+      // featured_spec is no longer written here — "Equipamiento" now lives
+      // in boat_equipment, one row per item, edited below.
       max_guests: editing.max_guests,
       active: mode === 'publish',
       sort_order: editing.sort_order,
@@ -365,13 +405,98 @@ export default function AdminBoatsPage() {
     const { error } = isExisting
       ? await supabase.from('boats').update(payload).eq('id', editing.id)
       : await supabase.from('boats').insert({ ...payload, id });
-    setSaving(false);
     if (error) {
+      setSaving(false);
       setError(error.message);
       return;
     }
+
+    for (const item of editing.equipment) {
+      if (item.pendingDelete) {
+        if (!item.isNew) await supabase.from('boat_equipment').delete().eq('id', item.id);
+        continue;
+      }
+      const labelEs = item.labelEs.trim();
+      const labelEn = item.labelEn.trim();
+      // `label` (legacy) is kept in sync automatically — es first, then en,
+      // then whatever was already there — never a separate input of its
+      // own. A row needs at least one of the three to be worth saving.
+      const label = labelEs || labelEn || item.label.trim();
+      if (!label) continue;
+      const { error: equipmentError } = await supabase.from('boat_equipment').upsert({
+        id: item.id,
+        boat_id: id,
+        label,
+        label_es: labelEs || null,
+        label_en: labelEn || null,
+        sort_order: item.sortOrder,
+        active: true,
+        updated_at: new Date().toISOString(),
+      });
+      if (equipmentError) {
+        setSaving(false);
+        setError(equipmentError.message);
+        return;
+      }
+    }
+
+    setSaving(false);
     setNotice(mode === 'publish' ? 'Bote publicado.' : 'Borrador guardado.');
     await refreshEditing(id);
+  }
+
+  // Quick-add: typed once, goes straight into the Español field (same
+  // "admin writes Spanish" convention as the rest of this admin) so it's
+  // immediately visible instead of landing in two blank inputs — English is
+  // left empty, which is exactly the signal "Traducir todo el sitio" (or
+  // the admin, directly in the English field below) needs to fill it in.
+  // If what was typed is actually already English, DeepL just returns it
+  // unchanged when asked to translate it "to English" — self-correcting,
+  // no harm either way.
+  function addEquipmentItem() {
+    if (!editing || !equipmentInput.trim()) return;
+    const text = equipmentInput.trim();
+    setEditing({
+      ...editing,
+      equipment: [...editing.equipment, { id: crypto.randomUUID(), label: text, labelEs: text, labelEn: '', sortOrder: editing.equipment.length + 1, isNew: true }],
+    });
+    setEquipmentInput('');
+  }
+
+  function updateEquipmentLabelEs(itemId: string, labelEs: string) {
+    if (!editing) return;
+    setEditing({ ...editing, equipment: editing.equipment.map((item) => (item.id === itemId ? { ...item, labelEs } : item)) });
+  }
+
+  function updateEquipmentLabelEn(itemId: string, labelEn: string) {
+    if (!editing) return;
+    setEditing({ ...editing, equipment: editing.equipment.map((item) => (item.id === itemId ? { ...item, labelEn } : item)) });
+  }
+
+  function removeEquipmentItem(itemId: string) {
+    if (!editing) return;
+    setEditing({ ...editing, equipment: editing.equipment.map((item) => (item.id === itemId ? { ...item, pendingDelete: true } : item)) });
+  }
+
+  // Swaps sort_order with the neighboring visible item — simple, and
+  // consistent with how tour_inclusions/activities order themselves in
+  // this admin (no drag-and-drop elsewhere in these list fields either).
+  function moveEquipmentItem(itemId: string, direction: -1 | 1) {
+    if (!editing) return;
+    const visible = editing.equipment.filter((item) => !item.pendingDelete).sort((a, b) => a.sortOrder - b.sortOrder);
+    const index = visible.findIndex((item) => item.id === itemId);
+    const targetIndex = index + direction;
+    if (index === -1 || targetIndex < 0 || targetIndex >= visible.length) return;
+    const current = visible[index];
+    const target = visible[targetIndex];
+    setEditing({
+      ...editing,
+      equipment: editing.equipment.map((item) => {
+        if (item.id === current.id) return { ...item, sortOrder: target.sortOrder };
+        if (item.id === target.id) return { ...item, sortOrder: current.sortOrder };
+        return item;
+      }),
+    });
   }
 
   async function deleteBoat(boat: BoatRow) {
@@ -784,17 +909,61 @@ export default function AdminBoatsPage() {
                 </FormSection>
               </div>
 
+              <FormSection title="Equipamiento" description="Un item por bote. Español/English se traducen automaticamente con 'Traducir todo el sitio' en Admin > Contenido cuando falten, pero siempre puedes corregirlos aqui a mano — una correccion manual nunca se sobrescribe." icon={<Settings2 size={16} />}>
+                <div className="admin-field">
+                  <span className="admin-field__label">Equipamiento a bordo</span>
+                  {(() => {
+                    const visibleEquipment = editing.equipment.filter((item) => !item.pendingDelete).sort((a, b) => a.sortOrder - b.sortOrder);
+                    return visibleEquipment.length ? (
+                      <ul className="admin-token-list grid gap-2" aria-label="Lista de equipamiento">
+                        {visibleEquipment.map((item, index) => (
+                          <li className="grid gap-2 rounded-lg border border-white/10 p-2.5 sm:grid-cols-[1fr_1fr_auto] sm:items-end" key={item.id}>
+                            <label className="grid gap-1">
+                              <span className="text-xs font-bold uppercase tracking-wide text-white/60">Español</span>
+                              <input
+                                className="admin-input"
+                                value={item.labelEs}
+                                placeholder={item.label || 'Ej. GPS Garmin'}
+                                onChange={(event) => updateEquipmentLabelEs(item.id, event.target.value)}
+                                aria-label={`Español: ${item.labelEs || item.label}`}
+                              />
+                            </label>
+                            <label className="grid gap-1">
+                              <span className="text-xs font-bold uppercase tracking-wide text-white/60">English</span>
+                              <input
+                                className="admin-input"
+                                value={item.labelEn}
+                                placeholder={item.label || 'e.g. Garmin GPS'}
+                                onChange={(event) => updateEquipmentLabelEn(item.id, event.target.value)}
+                                aria-label={`English: ${item.labelEn || item.label}`}
+                              />
+                            </label>
+                            <div className="flex items-center gap-1.5">
+                              <button type="button" className="admin-icon-action" aria-label={`Subir ${item.label}`} title="Subir" disabled={index === 0} onClick={() => moveEquipmentItem(item.id, -1)}><ArrowUp size={14} /></button>
+                              <button type="button" className="admin-icon-action" aria-label={`Bajar ${item.label}`} title="Bajar" disabled={index === visibleEquipment.length - 1} onClick={() => moveEquipmentItem(item.id, 1)}><ArrowDown size={14} /></button>
+                              <button type="button" className="admin-icon-action admin-icon-action--danger" aria-label={`Eliminar ${item.label}`} title="Quitar" onClick={() => removeEquipmentItem(item.id)}><Trash2 size={14} /></button>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null;
+                  })()}
+                  <div className="admin-tour-list-field__add">
+                    <input
+                      id="boat-equipment-input"
+                      className="admin-input"
+                      value={equipmentInput}
+                      placeholder="Ej. Garmin GPS"
+                      onChange={(event) => setEquipmentInput(event.target.value)}
+                      onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); addEquipmentItem(); } }}
+                    />
+                    <button className="admin-btn admin-btn--secondary" type="button" aria-label="Agregar equipamiento" disabled={!equipmentInput.trim()} onClick={addEquipmentItem}><Plus size={14} /> Agregar</button>
+                  </div>
+                  <span className="admin-field-help">Lo que escribas arriba se agrega en Español; English queda pendiente hasta que lo traduzcas o lo escribas tu. Se mostraran como chips de equipamiento en la pagina.</span>
+                </div>
+              </FormSection>
+
               <FormSection title="Estado y configuracion" description="Controla visibilidad y orden en el sitio publico." icon={<Settings2 size={16} />}>
-                <label className="admin-field">
-                  <span className="admin-field__label">Especificaciones destacadas</span>
-                  <textarea
-                    className="admin-input admin-textarea-list"
-                    value={equipmentStorageToTextarea(editing.featured_spec)}
-                    onChange={(event) => setEditing({ ...editing, featured_spec: event.target.value || null })}
-                    placeholder={'Garmin GPS\nVHF radio\nPremium JBL sound\nBluetooth\nRestroom\nWater toys\nSafety equipment'}
-                  />
-                  <span className="admin-field-help">Escribe un item por linea. Se mostraran como chips de equipamiento en la pagina.</span>
-                </label>
                 <div className="admin-config-row">
                   <div>
                     <p className="admin-config-row__label">Estado actual</p>

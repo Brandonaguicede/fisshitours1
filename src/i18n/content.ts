@@ -9,23 +9,38 @@ type TourText = {
   duration?: string;
   activities: string[];
   included: string[];
+  /** Resolved from `description`/`descriptionEs`/`descriptionEn` — the tour or package's own description field. */
+  description: string;
+  /** Resolved from `shortDescription`/`shortDescriptionEs`/`shortDescriptionEn` — the package-aware variant used in the Home teaser and modal header. */
+  shortDescription: string;
 };
 
-// Picks the requested language's text, falling back to whichever side
-// actually has content — the site must never show an empty field just
-// because "Traducir todo el sitio" hasn't run yet or a DeepL call failed.
-function pick(language: Language, es: string | null | undefined, en: string | null | undefined): string {
+// Three-tier fallback, per language:
+//   ES: campo_es -> legacy -> campo_en
+//   EN: campo_en -> legacy -> campo_es
+// `legacy` is the single original admin-edited field — its language is
+// whatever the admin happened to write (this fleet's real content turned
+// out to be a mix of Spanish and English, not uniformly Spanish), so it's
+// never assumed to be either language, just used as a last-known-good value
+// when the dedicated column for the requested language is still empty (not
+// yet translated, or a DeepL call failed). After "Traducir todo el sitio"
+// has run, both `_es` and `_en` are normally populated and `legacy` is
+// never actually needed.
+export function pick(language: Language, es: string | null | undefined, legacy: string | null | undefined, en: string | null | undefined): string {
   const esText = (es ?? '').trim();
+  const legacyText = (legacy ?? '').trim();
   const enText = (en ?? '').trim();
-  if (language === 'en') return enText || esText;
-  return esText || enText;
+  if (language === 'en') return enText || legacyText || esText;
+  return esText || legacyText || enText;
 }
 
-function pickArray(language: Language, es: string[] | null | undefined, en: string[] | null | undefined): string[] {
-  const esArr = Array.isArray(es) ? es.filter((item) => typeof item === 'string' && item.trim()) : [];
-  const enArr = Array.isArray(en) ? en.filter((item) => typeof item === 'string' && item.trim()) : [];
-  if (language === 'en') return enArr.length > 0 ? enArr : esArr;
-  return esArr.length > 0 ? esArr : enArr;
+function pickArray(language: Language, es: string[] | null | undefined, legacy: string[] | null | undefined, en: string[] | null | undefined): string[] {
+  const clean = (arr: string[] | null | undefined) => (Array.isArray(arr) ? arr.filter((item) => typeof item === 'string' && item.trim()) : []);
+  const esArr = clean(es);
+  const legacyArr = clean(legacy);
+  const enArr = clean(en);
+  if (language === 'en') return enArr.length > 0 ? enArr : legacyArr.length > 0 ? legacyArr : esArr;
+  return esArr.length > 0 ? esArr : legacyArr.length > 0 ? legacyArr : enArr;
 }
 
 export function getTourGroupKey(tour: BoatTour) {
@@ -34,23 +49,25 @@ export function getTourGroupKey(tour: BoatTour) {
 }
 
 // Reads the tour/package's own admin-entered content (title, activities,
-// included) translated per language, with the same-language fallback from
+// included) translated per language, with the three-tier fallback from
 // pick()/pickArray() above. This used to fall back to a hardcoded, five-
 // category dictionary whenever a tour had real data — meaning any tour with
-// admin-authored content bypassed translation entirely and showed raw
-// Spanish to English visitors. Now that title_en/highlights_en/included_en
-// exist in the database (filled by "Traducir todo el sitio"), that
-// dictionary is gone; a tour with no content at all just shows its
-// category name, in the site's static i18n (translated elsewhere), not a
-// per-tour dictionary.
+// admin-authored content bypassed translation entirely and showed raw,
+// whatever-language-it-was-written-in text to every visitor. Now that
+// title_es/title_en/highlights_es/highlights_en/etc. exist in the database
+// (filled by "Traducir todo el sitio", bidirectionally), that dictionary is
+// gone; a tour with no content at all just shows its category name, in the
+// site's static i18n (translated elsewhere), not a per-tour dictionary.
 export function getTourText(tour: BoatTour, language: Language): TourText {
   // tourTitle is always set by catalogMappers' mapBoatTour (the only real
   // data source); this fallback only matters for a BoatTour built by hand
   // without it, same as the pre-existing behavior.
   const fallbackTitle = tour.tourTitle ?? tour.name.replace(/\s+-\s+.*$/, '');
-  const title = pick(language, fallbackTitle, tour.tourTitleEn).replace(/\s+Tour$/i, '');
-  const activities = pickArray(language, tour.activities, tour.activitiesEn);
-  const included = pickArray(language, tour.included, tour.includedEn);
+  const title = pick(language, tour.tourTitleEs, fallbackTitle, tour.tourTitleEn).replace(/\s+Tour$/i, '');
+  const activities = pickArray(language, tour.activitiesEs, tour.activities, tour.activitiesEn);
+  const included = pickArray(language, tour.includedEs, tour.included, tour.includedEn);
+  const description = pick(language, tour.descriptionEs, tour.description, tour.descriptionEn);
+  const shortDescription = pick(language, tour.shortDescriptionEs, tour.shortDescription, tour.shortDescriptionEn);
 
   return {
     title,
@@ -59,19 +76,26 @@ export function getTourText(tour: BoatTour, language: Language): TourText {
     duration: tour.duration ? `${tour.duration} ${language === 'es' ? 'horas' : 'hours'}` : undefined,
     activities: activities.length > 0 ? activities : [tour.category],
     included,
+    description,
+    shortDescription,
   };
 }
 
 export function getBoatText(boat: Boat, language: Language) {
   return {
-    badge: pick(language, boat.badge, boat.badgeEn),
+    badge: pick(language, boat.badgeEs, boat.badge, boat.badgeEn),
     // A physical spec ("32 pies" / "32ft"), not prose — shown as-is in both
     // languages, same as engine/length elsewhere. Previously this hardcoded
     // one specific boat's Spanish description for every boat in the fleet
-    // and showed the raw (Spanish) DB value to English visitors; both are
-    // fixed by just rendering the real field directly.
+    // and showed the raw (whatever-language) DB value to English visitors;
+    // both are fixed by just rendering the real field directly.
     length: boat.length,
-    featuredSpec: pick(language, boat.featuredSpec, boat.featuredSpecEn),
+    // Each equipment item is its own row (boat_equipment), independently
+    // translated — this joins them back into the same comma-separated
+    // shape FleetSection's getEquipmentItems() already splits on, so that
+    // display code didn't need to change. featuredSpec/_es/_en (the old
+    // single free-text column) are no longer read here at all.
+    featuredSpec: boat.equipment.map((item) => pick(language, item.labelEs, item.label, item.labelEn)).join(', '),
   };
 }
 

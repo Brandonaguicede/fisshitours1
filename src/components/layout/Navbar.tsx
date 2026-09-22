@@ -156,7 +156,7 @@ export function Navbar() {
             'navbar-nav-shell pointer-events-auto hidden shrink-0 items-center gap-0 rounded-full px-1.5 py-1.5 transition-all duration-300 lg:absolute lg:left-1/2 lg:flex lg:-translate-x-1/2 lg:gap-0.5 lg:px-2',
             isScrolled && 'brightness-110',
           )}
-          aria-label="Navegacion principal"
+          aria-label={language === 'es' ? 'Navegacion principal' : 'Main navigation'}
         >
           {primaryNavigationItems.map((item) => {
             const isActive = activeHref === item.href;
@@ -196,7 +196,7 @@ export function Navbar() {
               'pointer-events-auto relative z-10 lg:hidden',
             )}
             icon={isOpen ? X : Menu}
-            label={isOpen ? 'Cerrar menu' : 'Abrir menu'}
+            label={language === 'es' ? (isOpen ? 'Cerrar menu' : 'Abrir menu') : (isOpen ? 'Close menu' : 'Open menu')}
             size="lg"
             aria-expanded={isOpen}
             onClick={() => setIsOpen((value) => !value)}

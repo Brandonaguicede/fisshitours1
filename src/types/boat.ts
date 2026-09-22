@@ -1,3 +1,10 @@
+export interface BoatEquipmentItem {
+  id: string;
+  label: string;
+  labelEs?: string;
+  labelEn?: string;
+}
+
 export interface Boat {
   id: string;
   slug: string;
@@ -5,14 +12,26 @@ export interface Boat {
   image: string;
   images?: string[];
   badge?: string;
-  /** English translation of `badge`, filled by "Traducir todo el sitio"; falls back to `badge` when missing. */
+  /** Spanish version of `badge`, filled by "Traducir todo el sitio" — `badge` itself may already be in either language. */
+  badgeEs?: string;
+  /** English version of `badge`, filled by "Traducir todo el sitio" — `badge` itself may already be in either language. */
   badgeEn?: string;
   length: string;
   engine: string;
   /** Physical capacity of the boat. Not a pricing default — see tour_packages for commercial terms. */
   maxGuests: number;
+  /**
+   * @deprecated Superseded by `equipment` (one row per item, in
+   * boat_equipment, each independently bilingual). Kept only so a boat
+   * saved before that migration still has a value here; the admin no
+   * longer writes to it and the public site no longer reads it.
+   */
   featuredSpec: string;
-  /** English translation of `featuredSpec`, filled by "Traducir todo el sitio"; falls back to `featuredSpec` when missing. */
+  /** @deprecated See `featuredSpec`. */
+  featuredSpecEs?: string;
+  /** @deprecated See `featuredSpec`. */
   featuredSpecEn?: string;
+  /** The boat's own "Equipamiento" list — each item translated independently by "Traducir todo el sitio". */
+  equipment: BoatEquipmentItem[];
   tours: string[];
 }

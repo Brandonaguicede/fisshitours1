@@ -10,11 +10,23 @@ export async function getActiveBoats(): Promise<Boat[]> {
     .order('sort_order');
 
   if (error) throw new Error(error.message);
-  const mapped = (data ?? []).map(mapBoat);
-  const boatIds = mapped.map((boat) => boat.id);
-  if (boatIds.length === 0) return mapped;
+  const boatRows = data ?? [];
+  const boatIds = boatRows.map((boat) => boat.id);
 
   const db = supabase as any;
+  const equipmentResult = boatIds.length
+    ? await db
+        .from('boat_equipment')
+        .select('id, boat_id, label, label_es, label_en, sort_order, active')
+        .in('boat_id', boatIds)
+        .eq('active', true)
+        .order('sort_order', { ascending: true })
+    : { data: [], error: null };
+  const equipmentRows = equipmentResult.error ? [] : (equipmentResult.data ?? []);
+
+  const mapped = boatRows.map((row) => mapBoat(row, equipmentRows));
+  if (boatIds.length === 0) return mapped;
+
   const imagesResult = await db
     .from('boat_images')
     .select('boat_id, image_url, alt_text, is_primary, sort_order')

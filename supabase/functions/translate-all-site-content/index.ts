@@ -2,84 +2,106 @@ import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { corsHeaders as getCorsHeaders, withCors } from '../_shared/cors.ts';
 
-// The site's "Traducir todo el sitio" button. Fills in ONLY missing English
-// (or, for site_settings' already-bilingual Hero/About keys, whichever side
-// is missing) — it never overwrites text that's already there, manual or
-// translated. Safe to run repeatedly: a second run with nothing new to
-// translate just reports everything as "sin cambios".
+// The site's "Traducir todo el sitio" button. Fills in whichever language
+// side is missing — for tours/packages/inclusions/boats/gallery/payment
+// methods/departure locations that means es AND en, since the legacy
+// single field's language varies per row (this fleet's real content turned
+// out to be a mix of Spanish and English, not uniformly Spanish as first
+// assumed). For site_settings' already-bilingual Hero/About .es/.en pairs,
+// it fills whichever side an admin left blank. It never overwrites text
+// that's already there, manual or translated. Safe to run repeatedly.
 //
-// Scope (see the audit delivered alongside this function for why):
+// Per scalar/array field, three cases (es/en both read from their own
+// columns, `legacy` is the single original field admins still edit):
+//   es set, en set       -> nothing to do
+//   es set, en missing    -> translate es -> en
+//   es missing, en set    -> translate en -> es
+//   neither set            -> translate legacy -> es AND legacy -> en
+//                             (DeepL returns text unchanged when it's
+//                             already in the target language, so this
+//                             works whether legacy happens to be Spanish,
+//                             English, or something else, with no
+//                             language-detection code of our own needed —
+//                             same trick reviews already uses)
+//   neither set, legacy empty -> nothing to translate
+//
+// Scope:
 //   - tours, tour_packages, tour_inclusions, boats, gallery_images,
-//     payment_methods, departure_locations: each has exactly one
-//     admin-authored field today, always written in Spanish, so we only add
-//     and fill an _en counterpart. The original column stays the single
-//     Spanish source of truth — admin forms are unchanged.
+//     payment_methods, departure_locations: bidirectional as above.
 //   - site_settings (Hero/About): already has manually-editable .es/.en
 //     pairs; this only fills a side an admin left blank.
-//   - reviews: already has its own tested flow (create-review translates on
-//     submit; backfill-review-translations catches old rows). This function
-//     calls that existing Edge Function rather than re-implementing it, so
-//     there's exactly one place that knows how to translate a review.
+//   - reviews: already has its own tested flow (create-review translates
+//     both sides on submit; backfill-review-translations catches old
+//     rows). This function calls that existing Edge Function rather than
+//     re-implementing it, so there's exactly one place that knows how to
+//     translate a review.
 //
-// Known limitation, accepted for this pass: if an admin edits the Spanish
-// source again after it was translated, the _en column is NOT invalidated —
-// this only fills gaps, it never re-translates. A `force` re-translate mode
-// is a plausible future addition but deliberately left out for now.
+// Known limitation, accepted for this pass: if an admin edits the legacy
+// field again after both sides were translated, neither _es nor _en is
+// invalidated — this only fills gaps, it never re-translates. A `force`
+// re-translate mode is a plausible future addition but deliberately left
+// out for now.
 
-interface FieldPair { source: string; target: string }
-interface TableConfig { scalarFields: FieldPair[]; arrayFields: FieldPair[] }
+interface FieldConfig { legacy: string; es: string; en: string }
+interface TableConfig { scalarFields: FieldConfig[]; arrayFields: FieldConfig[] }
 
 const TABLE_JOBS: Record<string, TableConfig> = {
   tours: {
     scalarFields: [
-      { source: 'title', target: 'title_en' },
-      { source: 'description', target: 'description_en' },
-      { source: 'long_description', target: 'long_description_en' },
-      { source: 'image_alt', target: 'image_alt_en' },
+      { legacy: 'title', es: 'title_es', en: 'title_en' },
+      { legacy: 'description', es: 'description_es', en: 'description_en' },
+      { legacy: 'long_description', es: 'long_description_es', en: 'long_description_en' },
+      { legacy: 'image_alt', es: 'image_alt_es', en: 'image_alt_en' },
     ],
     arrayFields: [
-      { source: 'highlights', target: 'highlights_en' },
-      { source: 'included', target: 'included_en' },
+      { legacy: 'highlights', es: 'highlights_es', en: 'highlights_en' },
+      { legacy: 'included', es: 'included_es', en: 'included_en' },
     ],
   },
   tour_packages: {
     scalarFields: [
-      { source: 'name', target: 'name_en' },
-      { source: 'description', target: 'description_en' },
+      { legacy: 'name', es: 'name_es', en: 'name_en' },
+      { legacy: 'description', es: 'description_es', en: 'description_en' },
     ],
-    arrayFields: [{ source: 'package_included', target: 'package_included_en' }],
+    arrayFields: [{ legacy: 'package_included', es: 'package_included_es', en: 'package_included_en' }],
   },
-  tour_inclusions: { scalarFields: [{ source: 'label', target: 'label_en' }], arrayFields: [] },
+  tour_inclusions: { scalarFields: [{ legacy: 'label', es: 'label_es', en: 'label_en' }], arrayFields: [] },
+  // boat_equipment replaces boats.featured_spec (a single comma-separated
+  // blob) with one row per item — each independently bilingual. The public
+  // site no longer reads featured_spec/_es/_en at all, so they're
+  // deliberately left out of this job list (nothing left to gain by
+  // spending DeepL quota translating a field nothing displays anymore).
+  boat_equipment: { scalarFields: [{ legacy: 'label', es: 'label_es', en: 'label_en' }], arrayFields: [] },
   boats: {
-    scalarFields: [
-      { source: 'badge', target: 'badge_en' },
-      { source: 'featured_spec', target: 'featured_spec_en' },
-    ],
+    scalarFields: [{ legacy: 'badge', es: 'badge_es', en: 'badge_en' }],
     arrayFields: [],
   },
   gallery_images: {
     scalarFields: [
-      { source: 'title', target: 'title_en' },
-      { source: 'alt', target: 'alt_en' },
+      { legacy: 'title', es: 'title_es', en: 'title_en' },
+      { legacy: 'alt', es: 'alt_es', en: 'alt_en' },
     ],
     arrayFields: [],
   },
+  tour_images: { scalarFields: [{ legacy: 'alt_text', es: 'alt_text_es', en: 'alt_text_en' }], arrayFields: [] },
   payment_methods: {
     scalarFields: [
-      { source: 'description', target: 'description_en' },
-      { source: 'instructions', target: 'instructions_en' },
+      { legacy: 'description', es: 'description_es', en: 'description_en' },
+      { legacy: 'instructions', es: 'instructions_es', en: 'instructions_en' },
     ],
     arrayFields: [],
   },
-  departure_locations: { scalarFields: [{ source: 'description', target: 'description_en' }], arrayFields: [] },
+  departure_locations: { scalarFields: [{ legacy: 'description', es: 'description_es', en: 'description_en' }], arrayFields: [] },
 };
 
 const DISPLAY_NAMES: Record<string, string> = {
   tours: 'Tours',
   tour_packages: 'Paquetes',
   tour_inclusions: 'Inclusiones',
+  boat_equipment: 'Equipamiento de botes',
   boats: 'Botes',
   gallery_images: 'Galería',
+  tour_images: 'Fotos de tours',
   payment_methods: 'Métodos de pago',
   departure_locations: 'Ubicaciones de salida',
   site_settings: 'Secciones',
@@ -149,6 +171,12 @@ serve(withCors(async (req) => {
 
 // --- table content (tours, packages, boats, etc.) ---------------------------
 
+// One pending translation: text -> targetLang. Registered during the
+// collection pass, resolved during the apply pass via the shared cache.
+function registerPending(pendingTexts: Set<string>, targetLang: 'ES' | 'EN', text: string) {
+  pendingTexts.add(cacheKey(targetLang, text));
+}
+
 async function processTable(
   supabase: ReturnType<typeof getServiceClient>,
   table: string,
@@ -159,8 +187,8 @@ async function processTable(
 ): Promise<TableResult> {
   const columns = [...new Set([
     'id',
-    ...config.scalarFields.flatMap((field) => [field.source, field.target]),
-    ...config.arrayFields.flatMap((field) => [field.source, field.target]),
+    ...config.scalarFields.flatMap((field) => [field.legacy, field.es, field.en]),
+    ...config.arrayFields.flatMap((field) => [field.legacy, field.es, field.en]),
   ])];
 
   const { data: rows, error } = await supabase.from(table).select(columns.join(', ')).order('id').limit(ROW_CAP);
@@ -169,20 +197,31 @@ async function processTable(
     return { updated: 0, skipped: 0, errors: 1 };
   }
 
-  const pendingTexts = new Set<string>();
+  // Pass 1: collect every text this table needs translated, as plain
+  // cacheKey(targetLang, text) strings — translateUnique below only cares
+  // about unique (text, targetLang) pairs, not which field/row asked for it.
+  const pendingKeys = new Set<string>();
   for (const row of (rows ?? []) as Array<Record<string, unknown>>) {
     for (const field of config.scalarFields) {
-      const source = normalizeText(row[field.source]);
-      const target = normalizeText(row[field.target]);
-      if (source && !target) pendingTexts.add(source);
+      const legacy = normalizeText(row[field.legacy]);
+      const esVal = normalizeText(row[field.es]);
+      const enVal = normalizeText(row[field.en]);
+      if (esVal && enVal) continue;
+      if (esVal && !enVal) registerPending(pendingKeys, 'EN', esVal);
+      else if (!esVal && enVal) registerPending(pendingKeys, 'ES', enVal);
+      else if (legacy) { registerPending(pendingKeys, 'ES', legacy); registerPending(pendingKeys, 'EN', legacy); }
     }
     for (const field of config.arrayFields) {
-      const sourceArr = normalizeArray(row[field.source]);
-      const targetArr = normalizeArray(row[field.target]);
-      if (sourceArr.length > 0 && targetArr.length === 0) sourceArr.forEach((item) => pendingTexts.add(item));
+      const legacyArr = normalizeArray(row[field.legacy]);
+      const esArr = normalizeArray(row[field.es]);
+      const enArr = normalizeArray(row[field.en]);
+      if (esArr.length > 0 && enArr.length > 0) continue;
+      if (esArr.length > 0 && enArr.length === 0) esArr.forEach((item) => registerPending(pendingKeys, 'EN', item));
+      else if (esArr.length === 0 && enArr.length > 0) enArr.forEach((item) => registerPending(pendingKeys, 'ES', item));
+      else if (legacyArr.length > 0) legacyArr.forEach((item) => { registerPending(pendingKeys, 'ES', item); registerPending(pendingKeys, 'EN', item); });
     }
   }
-  await translateUnique(pendingTexts, 'EN', apiKey, cache, failed);
+  await translateUnique(pendingKeys, apiKey, cache, failed);
 
   let updated = 0;
   let skipped = 0;
@@ -194,23 +233,55 @@ async function processTable(
     let rowHasError = false;
 
     for (const field of config.scalarFields) {
-      const source = normalizeText(row[field.source]);
-      const target = normalizeText(row[field.target]);
-      if (!source || target) continue;
-      rowHasWork = true;
-      const key = cacheKey('EN', source);
-      if (failed.has(key)) { rowHasError = true; continue; }
-      patch[field.target] = cache.get(key) ?? source;
+      const legacy = normalizeText(row[field.legacy]);
+      const esVal = normalizeText(row[field.es]);
+      const enVal = normalizeText(row[field.en]);
+      if (esVal && enVal) continue;
+
+      if (esVal && !enVal) {
+        rowHasWork = true;
+        const key = cacheKey('EN', esVal);
+        if (failed.has(key)) { rowHasError = true; continue; }
+        patch[field.en] = cache.get(key) ?? esVal;
+      } else if (!esVal && enVal) {
+        rowHasWork = true;
+        const key = cacheKey('ES', enVal);
+        if (failed.has(key)) { rowHasError = true; continue; }
+        patch[field.es] = cache.get(key) ?? enVal;
+      } else if (legacy) {
+        rowHasWork = true;
+        const keyEs = cacheKey('ES', legacy);
+        const keyEn = cacheKey('EN', legacy);
+        if (failed.has(keyEs) || failed.has(keyEn)) { rowHasError = true; continue; }
+        patch[field.es] = cache.get(keyEs) ?? legacy;
+        patch[field.en] = cache.get(keyEn) ?? legacy;
+      }
     }
 
     for (const field of config.arrayFields) {
-      const sourceArr = normalizeArray(row[field.source]);
-      const targetArr = normalizeArray(row[field.target]);
-      if (sourceArr.length === 0 || targetArr.length > 0) continue;
-      rowHasWork = true;
-      const keys = sourceArr.map((item) => cacheKey('EN', item));
-      if (keys.some((key) => failed.has(key))) { rowHasError = true; continue; }
-      patch[field.target] = sourceArr.map((item) => cache.get(cacheKey('EN', item)) ?? item);
+      const legacyArr = normalizeArray(row[field.legacy]);
+      const esArr = normalizeArray(row[field.es]);
+      const enArr = normalizeArray(row[field.en]);
+      if (esArr.length > 0 && enArr.length > 0) continue;
+
+      if (esArr.length > 0 && enArr.length === 0) {
+        rowHasWork = true;
+        const keys = esArr.map((item) => cacheKey('EN', item));
+        if (keys.some((key) => failed.has(key))) { rowHasError = true; continue; }
+        patch[field.en] = esArr.map((item) => cache.get(cacheKey('EN', item)) ?? item);
+      } else if (esArr.length === 0 && enArr.length > 0) {
+        rowHasWork = true;
+        const keys = enArr.map((item) => cacheKey('ES', item));
+        if (keys.some((key) => failed.has(key))) { rowHasError = true; continue; }
+        patch[field.es] = enArr.map((item) => cache.get(cacheKey('ES', item)) ?? item);
+      } else if (legacyArr.length > 0) {
+        rowHasWork = true;
+        const keysEs = legacyArr.map((item) => cacheKey('ES', item));
+        const keysEn = legacyArr.map((item) => cacheKey('EN', item));
+        if (keysEs.some((key) => failed.has(key)) || keysEn.some((key) => failed.has(key))) { rowHasError = true; continue; }
+        patch[field.es] = legacyArr.map((item) => cache.get(cacheKey('ES', item)) ?? item);
+        patch[field.en] = legacyArr.map((item) => cache.get(cacheKey('EN', item)) ?? item);
+      }
     }
 
     if (!rowHasWork) { skipped += 1; continue; }
@@ -264,16 +335,14 @@ async function processSiteSettings(
     byBase.set(base, entry);
   }
 
-  const pendingEsToEn = new Set<string>();
-  const pendingEnToEs = new Set<string>();
+  const pendingKeys = new Set<string>();
   for (const { es, en } of byBase.values()) {
     const esText = normalizeText(es?.value);
     const enText = normalizeText(en?.value);
-    if (esText && !enText) pendingEsToEn.add(esText);
-    else if (enText && !esText) pendingEnToEs.add(enText);
+    if (esText && !enText) registerPending(pendingKeys, 'EN', esText);
+    else if (enText && !esText) registerPending(pendingKeys, 'ES', enText);
   }
-  await translateUnique(pendingEsToEn, 'EN', apiKey, cache, failed);
-  await translateUnique(pendingEnToEs, 'ES', apiKey, cache, failed);
+  await translateUnique(pendingKeys, apiKey, cache, failed);
 
   let updated = 0;
   let skipped = 0;
@@ -352,22 +421,35 @@ function cacheKey(targetLang: 'ES' | 'EN', text: string) {
   return `${targetLang}::${text}`;
 }
 
+function splitCacheKey(key: string): { targetLang: 'ES' | 'EN'; text: string } {
+  const targetLang = key.slice(0, 2) as 'ES' | 'EN';
+  return { targetLang, text: key.slice(4) };
+}
+
 async function translateUnique(
-  texts: Set<string>,
-  targetLang: 'ES' | 'EN',
+  keys: Set<string>,
   apiKey: string,
   cache: Map<string, string>,
   failed: Set<string>,
 ) {
-  const pending = [...texts].filter((text) => !cache.has(cacheKey(targetLang, text)));
-  for (let i = 0; i < pending.length; i += DEEPL_BATCH_SIZE) {
-    const chunk = pending.slice(i, i + DEEPL_BATCH_SIZE);
-    try {
-      const translations = await deeplTranslateBatch(chunk, targetLang, apiKey);
-      chunk.forEach((text, index) => cache.set(cacheKey(targetLang, text), translations[index] ?? text));
-    } catch (error) {
-      console.error(`translate-all-site-content: DeepL batch failed (${targetLang}, ${chunk.length} texts)`, error);
-      chunk.forEach((text) => failed.add(cacheKey(targetLang, text)));
+  const byLang: Record<'ES' | 'EN', string[]> = { ES: [], EN: [] };
+  for (const key of keys) {
+    if (cache.has(key)) continue;
+    const { targetLang, text } = splitCacheKey(key);
+    byLang[targetLang].push(text);
+  }
+
+  for (const targetLang of ['ES', 'EN'] as const) {
+    const pending = byLang[targetLang];
+    for (let i = 0; i < pending.length; i += DEEPL_BATCH_SIZE) {
+      const chunk = pending.slice(i, i + DEEPL_BATCH_SIZE);
+      try {
+        const translations = await deeplTranslateBatch(chunk, targetLang, apiKey);
+        chunk.forEach((text, index) => cache.set(cacheKey(targetLang, text), translations[index] ?? text));
+      } catch (error) {
+        console.error(`translate-all-site-content: DeepL batch failed (${targetLang}, ${chunk.length} texts)`, error);
+        chunk.forEach((text) => failed.add(cacheKey(targetLang, text)));
+      }
     }
   }
 }

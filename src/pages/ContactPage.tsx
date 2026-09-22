@@ -10,17 +10,19 @@ import { Container } from '../components/common/Container';
 import { Button, CardShell, ChoiceCard, Field, FieldError, GlassPanel, Input, SectionHeader, Select, TextArea } from '../components/ui';
 import { CONTACT_EMAIL, DISPLAY_PHONE, GOOGLE_MAPS_URL, WHATSAPP_NUMBER } from '../constants/contact';
 import { departureTimes } from '../data/departureTimes';
-import { useLanguage } from '../i18n/LanguageContext';
+import { getTourText } from '../i18n/content';
+import { useLanguage, type Language } from '../i18n/LanguageContext';
 import { supabase } from '../lib/supabase';
 import { getActiveBoatTours } from '../services/boatTourService';
+import type { BoatTour } from '../types/boatTour';
 
-function uniqueTourOptions(tours: Array<{ tourId?: string; tourTitle?: string }>) {
+function uniqueTourOptions(tours: BoatTour[], language: Language) {
   const seen = new Set<string>();
   const options: Array<{ id: string; title: string }> = [];
   for (const tour of tours) {
-    if (!tour.tourId || !tour.tourTitle || seen.has(tour.tourId)) continue;
+    if (!tour.tourId || seen.has(tour.tourId)) continue;
     seen.add(tour.tourId);
-    options.push({ id: tour.tourId, title: tour.tourTitle });
+    options.push({ id: tour.tourId, title: getTourText(tour, language).title });
   }
   return options;
 }
@@ -115,7 +117,7 @@ export default function ContactPage() {
   const { language } = useLanguage();
   const copy = contactText[language];
   const toursQuery = useQuery({ queryKey: ['boatTours', 'active'], queryFn: getActiveBoatTours });
-  const tourOptions = uniqueTourOptions(toursQuery.data ?? []);
+  const tourOptions = uniqueTourOptions(toursQuery.data ?? [], language);
   const contactSchema = z.object({
     name: z.string().min(2, copy.errors.name),
     email: z.string().email(copy.errors.email),

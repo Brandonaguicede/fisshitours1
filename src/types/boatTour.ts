@@ -20,7 +20,9 @@ export interface BoatTour {
   boatTourId?: string;
   tourId?: string;
   tourTitle?: string;
-  /** English translation of `tourTitle`, filled by "Traducir todo el sitio"; falls back to `tourTitle` when missing. */
+  /** Spanish version of `tourTitle`, filled by "Traducir todo el sitio" — `tourTitle` itself may already be in either language. */
+  tourTitleEs?: string;
+  /** English version of `tourTitle`, filled by "Traducir todo el sitio" — `tourTitle` itself may already be in either language. */
   tourTitleEn?: string;
   /** The parent tour's own `sort_order` — drives display order in grouped catalogs (one entry per tour, independent of package-level ordering). */
   tourSortOrder?: number;
@@ -29,7 +31,7 @@ export interface BoatTour {
     title: string;
     description: string;
     image: string;
-    galleryImages: Array<{ src: string; alt: string }>;
+    galleryImages: Array<{ src: string; alt: string; altEs?: string; altEn?: string }>;
     activities: string[];
   };
   catalogActive?: boolean;
@@ -39,18 +41,26 @@ export interface BoatTour {
   departureTimes?: string[] | null;
   category: TourCategory;
   description: string;
-  /** English translation of `description`, filled by "Traducir todo el sitio"; falls back to `description` when missing. */
+  /** Spanish version of `description`, filled by "Traducir todo el sitio" — `description` itself may already be in either language. */
+  descriptionEs?: string;
+  /** English version of `description`, filled by "Traducir todo el sitio" — `description` itself may already be in either language. */
   descriptionEn?: string;
   shortDescription?: string;
-  /** English translation of `shortDescription`, filled by "Traducir todo el sitio"; falls back to `shortDescription` when missing. */
+  /** Spanish version of `shortDescription`, filled by "Traducir todo el sitio" — `shortDescription` itself may already be in either language. */
+  shortDescriptionEs?: string;
+  /** English version of `shortDescription`, filled by "Traducir todo el sitio" — `shortDescription` itself may already be in either language. */
   shortDescriptionEn?: string;
   activities?: string[];
-  /** English translation of `activities` (same order), filled by "Traducir todo el sitio"; falls back to `activities` when missing/shorter. */
+  /** Spanish version of `activities` (same order), filled by "Traducir todo el sitio" — `activities` itself may already be in either language. */
+  activitiesEs?: string[];
+  /** English version of `activities` (same order), filled by "Traducir todo el sitio" — `activities` itself may already be in either language. */
   activitiesEn?: string[];
   included?: string[];
-  /** English translation of `included` (same order), filled by "Traducir todo el sitio"; falls back to `included` when missing/shorter. */
+  /** Spanish version of `included` (same order), filled by "Traducir todo el sitio" — `included` itself may already be in either language. */
+  includedEs?: string[];
+  /** English version of `included` (same order), filled by "Traducir todo el sitio" — `included` itself may already be in either language. */
   includedEn?: string[];
-  galleryImages?: Array<{ src: string; alt: string }>;
+  galleryImages?: Array<{ src: string; alt: string; altEs?: string; altEn?: string }>;
   duration?: number;
   /** All commercial terms below come from tour_packages — the single source of truth. */
   basePrice: number;

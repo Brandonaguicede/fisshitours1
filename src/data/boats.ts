@@ -19,6 +19,7 @@ export const boats: Boat[] = [
     length: '32 ft Cigarette boat',
     engine: 'Yamaha 250 HP',
     featuredSpec: 'Garmin GPS, VHF radio, premium JBL sound, Bluetooth, restroom, water toys, tuna tube, live bait well, safety equipment, liability insurance.',
+    equipment: [],
     tours: [
       'second-wind-beach-snorkeling-half',
       'second-wind-beach-snorkeling-three-quarter',

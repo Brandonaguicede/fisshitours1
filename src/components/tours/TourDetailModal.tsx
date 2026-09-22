@@ -3,7 +3,7 @@ import type { Boat } from '../../types/boat';
 import type { BoatTour } from '../../types/boatTour';
 import type { TourBoatOption } from '../../utils/tourCatalog';
 import { isBookableCatalogPackage } from '../../utils/tourCatalog';
-import { getPackageLabel, getTourText } from '../../i18n/content';
+import { getPackageLabel, getTourText, pick } from '../../i18n/content';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { getEffectiveMaxGuests } from '../../utils/bookingPricing';
 import { formatCurrency } from '../../utils/formatCurrency';
@@ -34,10 +34,12 @@ export function TourDetailModal({ boat, boatOptions, onClose, onSelect, open, pa
     && item.boatId === selectedOption.boat.id && item.boatTourId === selectedOption.boatTourId
     && item.tourId === tour.tourId && isBookableCatalogPackage(item));
   const display = getTourText(tour, language);
-  const galleryImages = tour.tourDetails?.galleryImages.length ? tour.tourDetails.galleryImages
+  const selectedDisplay = selectedPackage ? getTourText(selectedPackage, language) : null;
+  const rawGalleryImages = tour.tourDetails?.galleryImages.length ? tour.tourDetails.galleryImages
     : tour.galleryImages?.length ? tour.galleryImages : [{ alt: display.title, src: tour.tourDetails?.image ?? tour.image }];
-  const activities = selectedPackage?.activities ?? tour.tourDetails?.activities ?? display.activities;
-  const included = selectedPackage?.included ?? (selectedPackage ? getTourText(selectedPackage, language).included : []);
+  const galleryImages = rawGalleryImages.map((image) => ({ ...image, alt: pick(language, image.altEs, image.alt, image.altEn) }));
+  const activities = selectedDisplay?.activities ?? display.activities;
+  const included = selectedDisplay?.included ?? [];
 
   return (
     <ModalShell className="!max-h-[92dvh] !max-w-2xl overflow-hidden text-white" onClose={onClose} open={open} titleId="tour-detail-title">
@@ -51,7 +53,7 @@ export function TourDetailModal({ boat, boatOptions, onClose, onSelect, open, pa
         </div>
         <div className="p-4 sm:p-5">
           <h3 id="tour-detail-title" className="font-display text-2xl font-semibold leading-none text-white sm:text-3xl">{display.title}</h3>
-          <p className="mt-4 text-sm leading-6 text-ocean-200">{tour.tourDetails?.description ?? tour.shortDescription ?? ''}</p>
+          <p className="mt-4 text-sm leading-6 text-ocean-200">{display.description || display.shortDescription}</p>
 
           {options.length > 1 ? <fieldset className="mt-4">
             <legend className="text-sm font-bold text-ocean-100">{language === 'es' ? 'Elige tu bote' : 'Choose your boat'}</legend>
@@ -85,7 +87,7 @@ export function TourDetailModal({ boat, boatOptions, onClose, onSelect, open, pa
           </fieldset> : null}
 
           {selectedPackage && selectedOption ? <div className="mt-4" aria-live="polite" data-testid="selected-package-details">
-            {selectedPackage.description ? <p className="text-sm leading-6 text-ocean-200">{selectedPackage.description}</p> : null}
+            {selectedDisplay?.description ? <p className="text-sm leading-6 text-ocean-200">{selectedDisplay.description}</p> : null}
             <div className="mt-4 grid gap-2.5 sm:grid-cols-3">
               <GlassPanel className="p-3" variant="subtle">
                 <p className="text-xs font-bold text-ocean-400">{language === 'es' ? 'Duración' : 'Duration'}</p>

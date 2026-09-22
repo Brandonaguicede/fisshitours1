@@ -16,8 +16,9 @@ const emptyForm: FormState = {
   name: '',
   slug: '',
   description: '',
-  // Admin still only edits the Spanish description; description_en is
-  // filled by "Traducir todo el sitio" and never surfaced in this form.
+  // Admin still only edits this single field; description_es/description_en
+  // are filled by "Traducir todo el sitio" and never surfaced in this form.
+  description_es: null,
   description_en: null,
   surcharge_amount: 0,
   currency: 'USD',
@@ -66,7 +67,7 @@ export default function AdminDepartureLocationsPage() {
     setError('');
     const { data, error } = await db
       .from('departure_locations')
-      .select('id, name, slug, description, description_en, surcharge_amount, currency, active, sort_order, is_default')
+      .select('id, name, slug, description, description_es, description_en, surcharge_amount, currency, active, sort_order, is_default')
       .order('sort_order', { ascending: true })
       .order('name', { ascending: true });
     setLoading(false);

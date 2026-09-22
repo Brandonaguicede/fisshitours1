@@ -1,4 +1,4 @@
-import type { Boat } from '../types/boat';
+import type { Boat, BoatEquipmentItem } from '../types/boat';
 import type { BoatTour, TourCategory, TourTimeSlot } from '../types/boatTour';
 import { parseMealOptions } from '../utils/packageSettings';
 import type { Tables } from '../types/supabase';
@@ -8,6 +8,7 @@ type TourRow = Tables<'tours'>;
 type PackageRow = Tables<'tour_packages'>;
 type TourImageRow = Tables<'tour_images'>;
 type TourInclusionRow = Tables<'tour_inclusions'>;
+type BoatEquipmentRow = Tables<'boat_equipment'>;
 
 export type BoatTourCatalogRow = PackageRow & {
   boat_tours: {
@@ -20,7 +21,7 @@ export type BoatTourCatalogRow = PackageRow & {
   };
 };
 
-export function mapBoat(row: BoatRow): Boat {
+export function mapBoat(row: BoatRow, equipment: BoatEquipmentRow[] = []): Boat {
   return {
     id: row.id,
     slug: row.slug,
@@ -28,12 +29,23 @@ export function mapBoat(row: BoatRow): Boat {
     image: row.image_url ?? '/images/placeholder-image.jpg',
     images: Array.isArray(row.images) ? row.images.filter((item): item is string => typeof item === 'string') : undefined,
     badge: row.badge ?? undefined,
+    badgeEs: row.badge_es ?? undefined,
     badgeEn: row.badge_en ?? undefined,
     length: row.length ?? '',
     engine: row.engine ?? '',
     maxGuests: row.max_guests,
     featuredSpec: row.featured_spec ?? '',
+    featuredSpecEs: row.featured_spec_es ?? undefined,
     featuredSpecEn: row.featured_spec_en ?? undefined,
+    equipment: equipment
+      .filter((item) => item.boat_id === row.id && item.active)
+      .sort((a, b) => a.sort_order - b.sort_order)
+      .map((item): BoatEquipmentItem => ({
+        id: item.id,
+        label: item.label,
+        labelEs: item.label_es ?? undefined,
+        labelEn: item.label_en ?? undefined,
+      })),
     tours: [],
   };
 }
@@ -48,18 +60,29 @@ export function mapBoatTour(
   const galleryImages = images
     .filter((image) => image.tour_id === tour.id && image.active)
     .sort((a, b) => a.sort_order - b.sort_order)
-    .map((image) => ({ src: image.image_url, alt: image.alt_text || tour.title }));
+    .map((image) => ({
+      src: image.image_url,
+      alt: image.alt_text || tour.title,
+      altEs: image.alt_text_es || tour.title_es || undefined,
+      altEn: image.alt_text_en || tour.title_en || undefined,
+    }));
   const activeInclusions = inclusions
     .filter((item) => item.tour_id === tour.id && item.active && (item.tour_package_id === null || item.tour_package_id === row.id))
     .sort((a, b) => a.sort_order - b.sort_order)
     .map((item) => item.label);
+  const activeInclusionsEs = inclusions
+    .filter((item) => item.tour_id === tour.id && item.active && (item.tour_package_id === null || item.tour_package_id === row.id))
+    .sort((a, b) => a.sort_order - b.sort_order)
+    .map((item) => item.label_es || item.label);
   const activeInclusionsEn = inclusions
     .filter((item) => item.tour_id === tour.id && item.active && (item.tour_package_id === null || item.tour_package_id === row.id))
     .sort((a, b) => a.sort_order - b.sort_order)
     .map((item) => item.label_en || item.label);
   const legacyIncluded = Array.isArray(tour.included) ? tour.included.filter((item): item is string => typeof item === 'string') : [];
+  const legacyIncludedEs = Array.isArray(tour.included_es) ? tour.included_es.filter((item): item is string => typeof item === 'string') : [];
   const legacyIncludedEn = Array.isArray(tour.included_en) ? tour.included_en.filter((item): item is string => typeof item === 'string') : [];
   const activities = Array.isArray(tour.highlights) ? tour.highlights.filter((item): item is string => typeof item === 'string') : [];
+  const activitiesEs = Array.isArray(tour.highlights_es) ? tour.highlights_es.filter((item): item is string => typeof item === 'string') : [];
   const activitiesEn = Array.isArray(tour.highlights_en) ? tour.highlights_en.filter((item): item is string => typeof item === 'string') : [];
   const primaryImage = galleryImages.find((image) => image.src === tour.image_url) ?? galleryImages[0];
   return {
@@ -69,6 +92,7 @@ export function mapBoatTour(
     boatTourId: row.boat_tours.id,
     tourId: row.boat_tours.tour_id,
     tourTitle: tour.title,
+    tourTitleEs: tour.title_es ?? undefined,
     tourTitleEn: tour.title_en ?? undefined,
     tourSortOrder: tour.sort_order,
     tourDetails: {
@@ -85,12 +109,16 @@ export function mapBoatTour(
     mealOptions: parseMealOptions(row.meal_options),
     category: normalizeCategory(tour.category, row.name),
     description: row.description ?? tour.description ?? '',
+    descriptionEs: row.description_es ?? tour.description_es ?? undefined,
     descriptionEn: row.description_en ?? tour.description_en ?? undefined,
     shortDescription: tour.description ?? row.description ?? '',
+    shortDescriptionEs: tour.description_es ?? row.description_es ?? undefined,
     shortDescriptionEn: tour.description_en ?? row.description_en ?? undefined,
     activities,
+    activitiesEs,
     activitiesEn,
     included: row.package_included ?? (activeInclusions.length > 0 ? activeInclusions : legacyIncluded),
+    includedEs: row.package_included_es ?? (activeInclusionsEs.length > 0 ? activeInclusionsEs : legacyIncludedEs),
     includedEn: row.package_included_en ?? (activeInclusionsEn.length > 0 ? activeInclusionsEn : legacyIncludedEn),
     galleryImages: primaryImage
       ? [primaryImage, ...galleryImages.filter((image) => image.src !== primaryImage.src)]

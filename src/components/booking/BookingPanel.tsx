@@ -2,7 +2,7 @@ import { ArrowLeft, ArrowRight, Check, CreditCard, Info, Mail, MapPin, Minus, Me
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-import { getPackageLabel, getTourText } from '../../i18n/content';
+import { getBoatText, getPackageLabel, getTourText } from '../../i18n/content';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { text, tr } from '../../i18n/translations';
 import { MOCK_TURNSTILE_TOKEN, USE_LOCAL_TURNSTILE_MOCK } from '../../lib/turnstile';
@@ -154,7 +154,10 @@ export function BookingPanel({ selectedBoat, selectedTour: requestedTour, boats,
       id: method.key as BookingPaymentMethod,
       type: method.type,
       title: method.name,
-      description: (language === 'en' ? method.description_en : method.description) || method.description || method.description_en || '',
+      // ES: description_es -> description (legacy) -> description_en · EN: description_en -> description (legacy) -> description_es
+      description: language === 'en'
+        ? method.description_en || method.description || method.description_es || ''
+        : method.description_es || method.description || method.description_en || '',
       icon: method.type === 'paypal' ? CreditCard : method.type === 'whatsapp_link' ? MessageCircle : WalletCards,
       logo: method.logo_url ?? undefined,
       logoAlt: method.name,
@@ -812,6 +815,7 @@ function BoatStep(props: { boats: Boat[]; tours: BoatTour[]; selectedBoat: Boat;
         {props.catalogLoading ? <p className="text-sm font-semibold text-ocean-200 sm:col-span-2">{language === 'es' ? 'Cargando barcos...' : 'Loading boats...'}</p> : null}
         {props.boats.map((boat) => {
           const selected = props.selectedBoat.id === boat.id;
+          const boatText = getBoatText(boat, language);
           return (
             <ChoiceCard
               key={boat.id}
@@ -824,7 +828,7 @@ function BoatStep(props: { boats: Boat[]; tours: BoatTour[]; selectedBoat: Boat;
               <div className="min-w-0 flex-1">
                 <span className="block truncate pr-6 text-sm font-extrabold text-white">{boat.name}</span>
                 <span className="block truncate text-xs font-medium text-ocean-300">{boat.length} · {boat.engine}</span>
-                {boat.featuredSpec ? <span className="block truncate text-[0.7rem] leading-4 text-ocean-400">{boat.featuredSpec}</span> : null}
+                {boatText.featuredSpec ? <span className="block truncate text-[0.7rem] leading-4 text-ocean-400">{boatText.featuredSpec}</span> : null}
                 <div className="mt-0.5 flex items-baseline gap-1.5">
                   <span className="text-[0.62rem] font-bold uppercase tracking-[0.1em] text-ocean-400">{language === 'es' ? 'Desde' : 'From'}</span>
                   <span className="text-sm font-extrabold text-ocean-100">{formatCurrency(getBoatStartingPrice(boat.id, props.tours))}</span>
@@ -1079,7 +1083,10 @@ function DepartureLocationStep(props: {
           {props.locations.map((location) => {
             const isSelected = props.selectedLocationId === location.id;
             const hasSurcharge = Number(location.surcharge_amount) > 0;
-            const locationDescription = (language === 'en' ? location.description_en : location.description) || location.description || location.description_en;
+            // ES: description_es -> description (legacy) -> description_en · EN: description_en -> description (legacy) -> description_es
+            const locationDescription = language === 'en'
+              ? location.description_en || location.description || location.description_es
+              : location.description_es || location.description || location.description_en;
             return (
               <ChoiceCard as="label" key={location.id} className="relative flex min-h-[52px] cursor-pointer flex-col justify-center gap-0.5 px-3 py-2" selected={isSelected} onClick={() => props.onLocationChange(location.id)}>
                 <input className="sr-only" type="radio" name="departureLocation" value={location.id} checked={isSelected} onChange={() => props.onLocationChange(location.id)} />
@@ -1416,8 +1423,8 @@ function PayPalCheckoutBox(props: {
     <div className="mt-4 rounded-lg border border-ocean-400/20 bg-ocean-900/35 px-3 py-3 sm:px-4">
       <div className="mx-auto w-full max-w-md">
         <div className="mb-3">
-          <p className="text-sm font-extrabold text-white">Pago seguro con PayPal</p>
-          <p className="mt-0.5 text-xs font-medium text-ocean-300">Completa tu pago de forma segura.</p>
+          <p className="text-sm font-extrabold text-white">{language === 'es' ? 'Pago seguro con PayPal' : 'Secure payment with PayPal'}</p>
+          <p className="mt-0.5 text-xs font-medium text-ocean-300">{language === 'es' ? 'Completa tu pago de forma segura.' : 'Complete your payment securely.'}</p>
         </div>
         <div id={containerId} className="w-full" />
       </div>
@@ -1546,6 +1553,7 @@ function BookingSuccessModal(props: {
   notice: { title: string; message: string; reference?: string };
   onClose: () => void;
 }) {
+  const { language } = useLanguage();
   return (
     <ModalShell open onClose={props.onClose} titleId="booking-success-title" className="max-w-md p-5 text-white sm:p-6">
       <div className="flex items-start gap-3">
@@ -1557,13 +1565,13 @@ function BookingSuccessModal(props: {
           <p className="mt-2 text-sm leading-6 text-ocean-200">{props.notice.message}</p>
           {props.notice.reference ? (
             <div className="mt-4 rounded-lg border border-ocean-400/20 bg-ocean-900/35 p-3 text-sm">
-              <span className="block text-xs font-extrabold uppercase tracking-[0.12em] text-ocean-400">Referencia</span>
+              <span className="block text-xs font-extrabold uppercase tracking-[0.12em] text-ocean-400">{language === 'es' ? 'Referencia' : 'Reference'}</span>
               <span className="mt-1 block font-extrabold text-white">{props.notice.reference}</span>
             </div>
           ) : null}
         </div>
       </div>
-      <Button className="mt-5" fullWidth type="button" onClick={props.onClose}>Cerrar</Button>
+      <Button className="mt-5" fullWidth type="button" onClick={props.onClose}>{language === 'es' ? 'Cerrar' : 'Close'}</Button>
     </ModalShell>
   );
 }
