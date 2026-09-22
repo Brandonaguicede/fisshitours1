@@ -19,8 +19,8 @@ export function Testimonials() {
 
   const reviews: DisplayReview[] =
     reviewsQuery.data && reviewsQuery.data.length > 0
-      ? reviewsQuery.data.map((review) => ({ id: review.id, name: review.name, country: review.country ?? '', quote: review.quote, rating: review.rating, image_url: review.image_url, featured: review.featured }))
-      : fallbackTestimonials;
+      ? reviewsQuery.data.map((review) => ({ id: review.id, name: review.name, country: review.country ?? '', quote: language === 'es' ? review.quote_es : review.quote_en, rating: review.rating, image_url: review.image_url, featured: review.featured }))
+      : fallbackTestimonials.map((review) => ({ id: review.id, name: review.name, country: review.country, quote: language === 'es' ? review.quote_es : review.quote_en, rating: review.rating }));
 
   return (
     <section

@@ -9,6 +9,7 @@ import { AdminBadge, AdminFilterMenu, AdminListToolbar, AdminModuleSurface, Admi
 import { Modal } from '../../components/common/Modal';
 import { useAdminReorder } from '../../hooks/useAdminReorder';
 import { supabase } from '../../lib/supabase';
+import { backfillReviewTranslations } from '../../services/translationService';
 import { friendlyDeleteError } from '../../utils/adminErrors';
 
 interface AdminReview {
@@ -16,6 +17,9 @@ interface AdminReview {
   name: string;
   country: string | null;
   quote: string;
+  quote_es: string;
+  quote_en: string;
+  translated: boolean;
   rating: number;
   status: string;
   featured: boolean;
@@ -44,11 +48,12 @@ export default function AdminReviewsPage() {
   const [pendingDelete, setPendingDelete] = useState<AdminReview | null>(null);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [translating, setTranslating] = useState(false);
 
   const pagination = useAdminPagedList<AdminReview>('reviews', JSON.stringify({ filter, search }), (page, size) => getAdminTablePage(() => {
-    let query = (supabase as any).from('reviews').select('id, name, country, quote, rating, status, featured, active, sort_order, image_url, image_public_id, created_at', { count: 'exact' }).order('featured', { ascending: false }).order('sort_order', { ascending: true }).order('created_at', { ascending: false }).order('id');
+    let query = (supabase as any).from('reviews').select('id, name, country, quote, quote_es, quote_en, translated, rating, status, featured, active, sort_order, image_url, image_public_id, created_at', { count: 'exact' }).order('featured', { ascending: false }).order('sort_order', { ascending: true }).order('created_at', { ascending: false }).order('id');
     if (filter !== 'all') query = query.eq('status', filter);
-    if (search) query = query.or(adminSearchFilter(['name', 'country', 'quote'], search));
+    if (search) query = query.or(adminSearchFilter(['name', 'country', 'quote', 'quote_es', 'quote_en'], search));
     return query;
   }, page, size));
   const loading = pagination.query.isFetching;
@@ -91,6 +96,29 @@ export default function AdminReviewsPage() {
     await loadReviews();
   }
 
+  async function translatePending() {
+    setNotice('');
+    setError('');
+    setTranslating(true);
+    try {
+      const result = await backfillReviewTranslations();
+      if (result.translated === 0 && result.remaining === 0) {
+        setNotice('No hay comentarios pendientes de traducir.');
+      } else {
+        setNotice(
+          result.remaining > 0
+            ? `Se tradujeron ${result.translated} comentarios. Quedan ${result.remaining} pendientes — vuelve a pulsar el botón para seguir.`
+            : `Se tradujeron ${result.translated} comentarios. Todos los comentarios ya están traducidos.`,
+        );
+      }
+      await loadReviews();
+    } catch (translateError) {
+      setError(translateError instanceof Error ? translateError.message : 'No se pudo traducir los comentarios pendientes.');
+    } finally {
+      setTranslating(false);
+    }
+  }
+
   async function deleteReview(review: AdminReview) {
     setNotice('');
     setError('');
@@ -116,7 +144,7 @@ export default function AdminReviewsPage() {
   async function startReorder() {
     setReorderLoading(true);
     setError('');
-    const { data, error } = await db.from('reviews').select('id, name, country, quote, rating, status, featured, active, sort_order, image_url, image_public_id, created_at').order('featured', { ascending: false }).order('sort_order', { ascending: true }).order('created_at', { ascending: false }).order('id');
+    const { data, error } = await db.from('reviews').select('id, name, country, quote, quote_es, quote_en, translated, rating, status, featured, active, sort_order, image_url, image_public_id, created_at').order('featured', { ascending: false }).order('sort_order', { ascending: true }).order('created_at', { ascending: false }).order('id');
     setReorderLoading(false);
     if (error) { setError(error.message); return; }
     reorder.start((data ?? []) as AdminReview[]);
@@ -154,14 +182,27 @@ export default function AdminReviewsPage() {
             </AdminFilterMenu>
           }
           secondaryActions={
-            <AdminReorderToolbar
-              reordering={reorder.reordering}
-              saving={reorder.saving || reorderLoading}
-              onStart={() => void startReorder()}
-              onCancel={reorder.cancel}
-              onSave={() => void reorder.save(persistOrder)}
-              disabledReason={canReorder ? undefined : 'Limpia la búsqueda y el filtro de estado para reordenar.'}
-            />
+            <>
+              {!reorder.reordering ? (
+                <button
+                  className="admin-btn admin-btn--ghost"
+                  type="button"
+                  disabled={translating}
+                  onClick={() => void translatePending()}
+                  title="Traduce automáticamente los comentarios guardados antes de que existiera la traducción automática."
+                >
+                  {translating ? 'Traduciendo…' : 'Traducir comentarios antiguos'}
+                </button>
+              ) : null}
+              <AdminReorderToolbar
+                reordering={reorder.reordering}
+                saving={reorder.saving || reorderLoading}
+                onStart={() => void startReorder()}
+                onCancel={reorder.cancel}
+                onSave={() => void reorder.save(persistOrder)}
+                disabledReason={canReorder ? undefined : 'Limpia la búsqueda y el filtro de estado para reordenar.'}
+              />
+            </>
           }
         />
 

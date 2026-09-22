@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 
+import { useLanguage } from '../../i18n/LanguageContext';
 import { MOCK_TURNSTILE_TOKEN, TURNSTILE_SITE_KEY, USE_LOCAL_TURNSTILE_MOCK } from '../../lib/turnstile';
 import { cn } from '../../utils/cn';
 import { Button, GlassPanel } from '../ui';
@@ -23,6 +24,8 @@ interface TurnstileBoxProps {
 }
 
 export function TurnstileBox({ token, resetKey, action = 'booking', className, onTokenChange }: TurnstileBoxProps) {
+  const { language } = useLanguage();
+  const t = (es: string, en: string) => (language === 'es' ? es : en);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const widgetIdRef = useRef<string | undefined>();
   const [loadState, setLoadState] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
@@ -87,17 +90,17 @@ export function TurnstileBox({ token, resetKey, action = 'booking', className, o
 
   return (
     <GlassPanel className={cn('rounded-xl p-3 sm:p-4', className)} variant="subtle">
-      <p className="text-xs font-extrabold uppercase tracking-[0.12em] text-ocean-400">Human verification</p>
+      <p className="text-xs font-extrabold uppercase tracking-[0.12em] text-ocean-400">{t('Verificación humana', 'Human verification')}</p>
       {USE_LOCAL_TURNSTILE_MOCK ? (
-        <p className="mt-2 text-sm font-semibold text-ocean-200">Local verification mock is active.</p>
+        <p className="mt-2 text-sm font-semibold text-ocean-200">{t('El simulador de verificación local está activo.', 'Local verification mock is active.')}</p>
       ) : TURNSTILE_SITE_KEY ? (
         <div className="mt-3 max-w-full overflow-hidden">
           <div ref={containerRef} />
         </div>
       ) : (
-        <p className="mt-2 text-sm font-semibold text-red-200">Human verification is not configured.</p>
+        <p className="mt-2 text-sm font-semibold text-red-200">{t('La verificación humana no está configurada.', 'Human verification is not configured.')}</p>
       )}
-      {!USE_LOCAL_TURNSTILE_MOCK && TURNSTILE_SITE_KEY && loadState === 'loading' ? <p className="mt-2 text-xs font-semibold text-ocean-300">Loading verification...</p> : null}
+      {!USE_LOCAL_TURNSTILE_MOCK && TURNSTILE_SITE_KEY && loadState === 'loading' ? <p className="mt-2 text-xs font-semibold text-ocean-300">{t('Cargando verificación...', 'Loading verification...')}</p> : null}
       {!USE_LOCAL_TURNSTILE_MOCK && TURNSTILE_SITE_KEY && loadState === 'error' ? (
         <Button
           className="mt-2 min-h-0 px-0 py-0 text-xs font-extrabold text-red-100 underline"
@@ -109,10 +112,10 @@ export function TurnstileBox({ token, resetKey, action = 'booking', className, o
             setRetryKey((value) => value + 1);
           }}
         >
-          Retry human verification
+          {t('Reintentar verificación humana', 'Retry human verification')}
         </Button>
       ) : null}
-      {!USE_LOCAL_TURNSTILE_MOCK && TURNSTILE_SITE_KEY && !token ? <p className="mt-2 text-xs font-semibold text-ocean-300">Complete verification to continue.</p> : null}
+      {!USE_LOCAL_TURNSTILE_MOCK && TURNSTILE_SITE_KEY && !token ? <p className="mt-2 text-xs font-semibold text-ocean-300">{t('Completa la verificación para continuar.', 'Complete verification to continue.')}</p> : null}
     </GlassPanel>
   );
 }

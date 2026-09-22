@@ -40,10 +40,15 @@ serve(withCors(async (req) => {
   }
 
   const cleanQuote = sanitizeText(parsed.data.quote);
+  const { quoteEs, quoteEn, translated } = await translateReview(cleanQuote);
+
   const { data, error } = await supabase.from('reviews').insert({
     name: sanitizeText(parsed.data.name),
     country: parsed.data.country ? sanitizeText(parsed.data.country) : null,
     quote: cleanQuote,
+    quote_es: quoteEs,
+    quote_en: quoteEn,
+    translated,
     rating: parsed.data.rating,
     tour_id: parsed.data.tourId ?? null,
     boat_id: parsed.data.boatId ?? null,
@@ -60,6 +65,45 @@ function sanitizeText(value: string) {
     .trim()
     .replace(/\s+/g, ' ')
     .replace(/[<>]/g, '');
+}
+
+// Translates a customer's review into both site languages so it always
+// displays correctly regardless of which language the visitor selected —
+// unlike the admin's site-content translator, this never blocks: if DeepL
+// is unreachable or DEEPL_API_KEY is missing, both fields fall back to the
+// original text (today's behavior) and `translated: false` lets the admin
+// backfill tool retry it later.
+async function translateReview(quote: string): Promise<{ quoteEs: string; quoteEn: string; translated: boolean }> {
+  const apiKey = Deno.env.get('DEEPL_API_KEY');
+  if (!apiKey || !quote) return { quoteEs: quote, quoteEn: quote, translated: false };
+
+  try {
+    // DeepL returns the text unchanged when it's already in the target
+    // language, so translating to BOTH targets (source auto-detected)
+    // always yields the correct ES and EN copies without needing to know
+    // which language the customer wrote in.
+    const [quoteEs, quoteEn] = await Promise.all([
+      deeplTranslate(quote, 'ES', apiKey),
+      deeplTranslate(quote, 'EN', apiKey),
+    ]);
+    return { quoteEs, quoteEn, translated: true };
+  } catch (error) {
+    console.error('create-review: translation failed, storing original text in both languages', error);
+    return { quoteEs: quote, quoteEn: quote, translated: false };
+  }
+}
+
+async function deeplTranslate(text: string, targetLang: 'ES' | 'EN', apiKey: string): Promise<string> {
+  const response = await fetch('https://api-free.deepl.com/v2/translate', {
+    method: 'POST',
+    headers: { Authorization: `DeepL-Auth-Key ${apiKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text: [text], target_lang: targetLang }),
+  });
+  if (!response.ok) throw new Error(`DeepL request failed with status ${response.status}`);
+  const body = await response.json();
+  const value = body?.translations?.[0]?.text;
+  if (typeof value !== 'string') throw new Error('DeepL response missing translated text');
+  return value;
 }
 
 function getClientIp(req: Request) {

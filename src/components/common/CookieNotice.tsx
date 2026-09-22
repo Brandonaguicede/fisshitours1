@@ -1,6 +1,8 @@
 ﻿import { Cookie } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
+import { useLanguage } from '../../i18n/LanguageContext';
+
 const COOKIE_KEY = 'papagayo-cookie-consent';
 
 function hasCookieConsent() {
@@ -9,6 +11,7 @@ function hasCookieConsent() {
 }
 
 export function CookieNotice() {
+  const { language } = useLanguage();
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
@@ -17,19 +20,21 @@ export function CookieNotice() {
 
   if (!visible) return null;
 
+  const t = (es: string, en: string) => (language === 'es' ? es : en);
+
   return (
     <aside
       className="fixed inset-x-3 bottom-3 z-[80] mx-auto max-w-4xl overflow-hidden rounded-[1.5rem] border border-ocean-200/70 bg-[#f8fbfc] p-4 text-ocean-950 shadow-[0_22px_60px_-24px_rgba(0,20,40,0.75)] sm:bottom-6 sm:flex sm:items-center sm:gap-5 sm:p-5 [@media(min-width:1024px)_and_(max-height:800px)]:bottom-2 [@media(min-width:1024px)_and_(max-height:800px)]:gap-3 [@media(min-width:1024px)_and_(max-height:800px)]:p-2.5"
       role="dialog"
-      aria-label="Preferencias de cookies"
+      aria-label={t('Preferencias de cookies', 'Cookie preferences')}
     >
       <span className="mb-3 grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-ocean-100 text-ocean-700 sm:mb-0 [@media(min-width:1024px)_and_(max-height:800px)]:h-8 [@media(min-width:1024px)_and_(max-height:800px)]:w-8" aria-hidden="true">
         <Cookie size={19} strokeWidth={1.8} />
       </span>
       <div className="min-w-0 flex-1">
-        <p className="text-sm font-bold tracking-tight text-ocean-950 [@media(min-width:1024px)_and_(max-height:800px)]:leading-4">Preferencias de cookies</p>
+        <p className="text-sm font-bold tracking-tight text-ocean-950 [@media(min-width:1024px)_and_(max-height:800px)]:leading-4">{t('Preferencias de cookies', 'Cookie preferences')}</p>
         <p className="mt-1 text-sm leading-5 text-slate-600 [@media(min-width:1024px)_and_(max-height:800px)]:mt-0 [@media(min-width:1024px)_and_(max-height:800px)]:leading-4">
-          Usamos cookies necesarias para recordar tus preferencias y mantener segura tu sesión.
+          {t('Usamos cookies necesarias para recordar tus preferencias y mantener segura tu sesión.', 'We use necessary cookies to remember your preferences and keep your session secure.')}
         </p>
       </div>
       <button
@@ -41,7 +46,7 @@ export function CookieNotice() {
           setVisible(false);
         }}
       >
-        Aceptar
+        {t('Aceptar', 'Accept')}
       </button>
     </aside>
   );
