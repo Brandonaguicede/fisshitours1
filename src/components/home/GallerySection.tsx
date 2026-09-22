@@ -27,7 +27,7 @@ export function GallerySection() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('gallery_images')
-        .select('id, src, image_url, alt, category')
+        .select('id, src, image_url, alt, alt_en, category')
         .eq('active', true)
         .order('sort_order');
       if (error) throw new Error(error.message);
@@ -35,12 +35,20 @@ export function GallerySection() {
         id: image.id,
         src: image.src ?? image.image_url ?? '/images/placeholder-image.jpg',
         alt: image.alt,
+        altEn: image.alt_en,
         category: image.category as GalleryCategory,
       }));
     },
   });
 
-  const sourceImages = galleryQuery.data ?? [];
+  const rawImages = galleryQuery.data ?? [];
+  const sourceImages = useMemo(
+    () => rawImages.map((image) => ({
+      ...image,
+      alt: (language === 'en' ? image.altEn : image.alt) || image.alt || image.altEn || '',
+    })),
+    [rawImages, language],
+  );
 
   const filteredImages = useMemo(
     () => (activeFilter === 'all' ? sourceImages : sourceImages.filter((image) => image.category === activeFilter)),

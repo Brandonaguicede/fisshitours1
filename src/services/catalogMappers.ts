@@ -28,10 +28,12 @@ export function mapBoat(row: BoatRow): Boat {
     image: row.image_url ?? '/images/placeholder-image.jpg',
     images: Array.isArray(row.images) ? row.images.filter((item): item is string => typeof item === 'string') : undefined,
     badge: row.badge ?? undefined,
+    badgeEn: row.badge_en ?? undefined,
     length: row.length ?? '',
     engine: row.engine ?? '',
     maxGuests: row.max_guests,
     featuredSpec: row.featured_spec ?? '',
+    featuredSpecEn: row.featured_spec_en ?? undefined,
     tours: [],
   };
 }
@@ -51,8 +53,14 @@ export function mapBoatTour(
     .filter((item) => item.tour_id === tour.id && item.active && (item.tour_package_id === null || item.tour_package_id === row.id))
     .sort((a, b) => a.sort_order - b.sort_order)
     .map((item) => item.label);
+  const activeInclusionsEn = inclusions
+    .filter((item) => item.tour_id === tour.id && item.active && (item.tour_package_id === null || item.tour_package_id === row.id))
+    .sort((a, b) => a.sort_order - b.sort_order)
+    .map((item) => item.label_en || item.label);
   const legacyIncluded = Array.isArray(tour.included) ? tour.included.filter((item): item is string => typeof item === 'string') : [];
+  const legacyIncludedEn = Array.isArray(tour.included_en) ? tour.included_en.filter((item): item is string => typeof item === 'string') : [];
   const activities = Array.isArray(tour.highlights) ? tour.highlights.filter((item): item is string => typeof item === 'string') : [];
+  const activitiesEn = Array.isArray(tour.highlights_en) ? tour.highlights_en.filter((item): item is string => typeof item === 'string') : [];
   const primaryImage = galleryImages.find((image) => image.src === tour.image_url) ?? galleryImages[0];
   return {
     id: row.id,
@@ -61,6 +69,7 @@ export function mapBoatTour(
     boatTourId: row.boat_tours.id,
     tourId: row.boat_tours.tour_id,
     tourTitle: tour.title,
+    tourTitleEn: tour.title_en ?? undefined,
     tourSortOrder: tour.sort_order,
     tourDetails: {
       title: tour.title,
@@ -76,9 +85,13 @@ export function mapBoatTour(
     mealOptions: parseMealOptions(row.meal_options),
     category: normalizeCategory(tour.category, row.name),
     description: row.description ?? tour.description ?? '',
+    descriptionEn: row.description_en ?? tour.description_en ?? undefined,
     shortDescription: tour.description ?? row.description ?? '',
+    shortDescriptionEn: tour.description_en ?? row.description_en ?? undefined,
     activities,
+    activitiesEn,
     included: row.package_included ?? (activeInclusions.length > 0 ? activeInclusions : legacyIncluded),
+    includedEn: row.package_included_en ?? (activeInclusionsEn.length > 0 ? activeInclusionsEn : legacyIncludedEn),
     galleryImages: primaryImage
       ? [primaryImage, ...galleryImages.filter((image) => image.src !== primaryImage.src)]
       : undefined,

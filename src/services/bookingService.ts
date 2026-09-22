@@ -33,6 +33,7 @@ export interface DepartureLocation {
   name: string;
   slug: string;
   description: string | null;
+  description_en: string | null;
   surcharge_amount: number;
   currency: string;
   active: boolean;
@@ -152,7 +153,7 @@ export function updateBooking(input: {
 export async function getActiveDepartureLocations() {
   const { data, error } = await (supabase as any)
     .from('departure_locations')
-    .select('id, name, slug, description, surcharge_amount, currency, active, sort_order, is_default')
+    .select('id, name, slug, description, description_en, surcharge_amount, currency, active, sort_order, is_default')
     .eq('active', true)
     .order('sort_order', { ascending: true })
     .order('name', { ascending: true });

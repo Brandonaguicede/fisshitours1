@@ -154,7 +154,7 @@ export function BookingPanel({ selectedBoat, selectedTour: requestedTour, boats,
       id: method.key as BookingPaymentMethod,
       type: method.type,
       title: method.name,
-      description: method.description ?? '',
+      description: (language === 'en' ? method.description_en : method.description) || method.description || method.description_en || '',
       icon: method.type === 'paypal' ? CreditCard : method.type === 'whatsapp_link' ? MessageCircle : WalletCards,
       logo: method.logo_url ?? undefined,
       logoAlt: method.name,
@@ -1079,6 +1079,7 @@ function DepartureLocationStep(props: {
           {props.locations.map((location) => {
             const isSelected = props.selectedLocationId === location.id;
             const hasSurcharge = Number(location.surcharge_amount) > 0;
+            const locationDescription = (language === 'en' ? location.description_en : location.description) || location.description || location.description_en;
             return (
               <ChoiceCard as="label" key={location.id} className="relative flex min-h-[52px] cursor-pointer flex-col justify-center gap-0.5 px-3 py-2" selected={isSelected} onClick={() => props.onLocationChange(location.id)}>
                 <input className="sr-only" type="radio" name="departureLocation" value={location.id} checked={isSelected} onChange={() => props.onLocationChange(location.id)} />
@@ -1089,7 +1090,7 @@ function DepartureLocationStep(props: {
                     {hasSurcharge ? `+ USD ${Number(location.surcharge_amount)}` : (language === 'es' ? 'Sin costo adicional' : 'No additional cost')}
                   </span>
                 </span>
-                {location.description ? <span className="truncate text-xs leading-4 text-ocean-200">{location.description}</span> : null}
+                {locationDescription ? <span className="truncate text-xs leading-4 text-ocean-200">{locationDescription}</span> : null}
               </ChoiceCard>
             );
           })}

@@ -1,4 +1,4 @@
-﻿export type Json =
+export type Json =
   | string
   | number
   | boolean
@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.15"
+    PostgrestVersion: "14.5"
   }
   graphql_public: {
     Tables: {
@@ -237,11 +237,13 @@ export type Database = {
         Row: {
           active: boolean
           badge: string | null
+          badge_en: string | null
           base_price_label: string | null
           created_at: string
           engine: string | null
           extra_guest_price: number
           featured_spec: string | null
+          featured_spec_en: string | null
           id: string
           image_public_id: string | null
           image_url: string | null
@@ -257,11 +259,13 @@ export type Database = {
         Insert: {
           active?: boolean
           badge?: string | null
+          badge_en?: string | null
           base_price_label?: string | null
           created_at?: string
           engine?: string | null
           extra_guest_price?: number
           featured_spec?: string | null
+          featured_spec_en?: string | null
           id: string
           image_public_id?: string | null
           image_url?: string | null
@@ -277,11 +281,13 @@ export type Database = {
         Update: {
           active?: boolean
           badge?: string | null
+          badge_en?: string | null
           base_price_label?: string | null
           created_at?: string
           engine?: string | null
           extra_guest_price?: number
           featured_spec?: string | null
+          featured_spec_en?: string | null
           id?: string
           image_public_id?: string | null
           image_url?: string | null
@@ -615,12 +621,43 @@ export type Database = {
           },
         ]
       }
+      customers: {
+        Row: {
+          country: string | null
+          created_at: string
+          email: string | null
+          full_name: string
+          id: string
+          updated_at: string
+          whatsapp: string
+        }
+        Insert: {
+          country?: string | null
+          created_at?: string
+          email?: string | null
+          full_name: string
+          id?: string
+          updated_at?: string
+          whatsapp: string
+        }
+        Update: {
+          country?: string | null
+          created_at?: string
+          email?: string | null
+          full_name?: string
+          id?: string
+          updated_at?: string
+          whatsapp?: string
+        }
+        Relationships: []
+      }
       departure_locations: {
         Row: {
           active: boolean
           created_at: string
           currency: string
           description: string | null
+          description_en: string | null
           id: string
           is_default: boolean
           name: string
@@ -634,6 +671,7 @@ export type Database = {
           created_at?: string
           currency?: string
           description?: string | null
+          description_en?: string | null
           id?: string
           is_default?: boolean
           name: string
@@ -647,6 +685,7 @@ export type Database = {
           created_at?: string
           currency?: string
           description?: string | null
+          description_en?: string | null
           id?: string
           is_default?: boolean
           name?: string
@@ -654,36 +693,6 @@ export type Database = {
           sort_order?: number
           surcharge_amount?: number
           updated_at?: string
-        }
-        Relationships: []
-      }
-      customers: {
-        Row: {
-          country: string | null
-          created_at: string
-          email: string
-          full_name: string
-          id: string
-          updated_at: string
-          whatsapp: string
-        }
-        Insert: {
-          country?: string | null
-          created_at?: string
-          email: string
-          full_name: string
-          id?: string
-          updated_at?: string
-          whatsapp: string
-        }
-        Update: {
-          country?: string | null
-          created_at?: string
-          email?: string
-          full_name?: string
-          id?: string
-          updated_at?: string
-          whatsapp?: string
         }
         Relationships: []
       }
@@ -808,6 +817,7 @@ export type Database = {
         Row: {
           active: boolean
           alt: string
+          alt_en: string | null
           category: string
           created_at: string
           id: string
@@ -816,11 +826,13 @@ export type Database = {
           sort_order: number
           src: string | null
           title: string | null
+          title_en: string | null
           updated_at: string
         }
         Insert: {
           active?: boolean
           alt: string
+          alt_en?: string | null
           category: string
           created_at?: string
           id: string
@@ -829,11 +841,13 @@ export type Database = {
           sort_order?: number
           src?: string | null
           title?: string | null
+          title_en?: string | null
           updated_at?: string
         }
         Update: {
           active?: boolean
           alt?: string
+          alt_en?: string | null
           category?: string
           created_at?: string
           id?: string
@@ -842,6 +856,7 @@ export type Database = {
           sort_order?: number
           src?: string | null
           title?: string | null
+          title_en?: string | null
           updated_at?: string
         }
         Relationships: []
@@ -989,8 +1004,10 @@ export type Database = {
           active: boolean
           created_at: string
           description: string | null
+          description_en: string | null
           id: string
           instructions: string | null
+          instructions_en: string | null
           key: string
           logo_url: string | null
           name: string
@@ -1002,8 +1019,10 @@ export type Database = {
           active?: boolean
           created_at?: string
           description?: string | null
+          description_en?: string | null
           id?: string
           instructions?: string | null
+          instructions_en?: string | null
           key: string
           logo_url?: string | null
           name: string
@@ -1015,8 +1034,10 @@ export type Database = {
           active?: boolean
           created_at?: string
           description?: string | null
+          description_en?: string | null
           id?: string
           instructions?: string | null
+          instructions_en?: string | null
           key?: string
           logo_url?: string | null
           name?: string
@@ -1178,10 +1199,13 @@ export type Database = {
           image_url: string | null
           name: string
           quote: string
+          quote_en: string
+          quote_es: string
           rating: number
           sort_order: number
           status: string
           tour_id: string | null
+          translated: boolean
           updated_at: string
         }
         Insert: {
@@ -1195,10 +1219,13 @@ export type Database = {
           image_url?: string | null
           name: string
           quote: string
+          quote_en: string
+          quote_es: string
           rating: number
           sort_order?: number
           status?: string
           tour_id?: string | null
+          translated?: boolean
           updated_at?: string
         }
         Update: {
@@ -1212,10 +1239,13 @@ export type Database = {
           image_url?: string | null
           name?: string
           quote?: string
+          quote_en?: string
+          quote_es?: string
           rating?: number
           sort_order?: number
           status?: string
           tour_id?: string | null
+          translated?: boolean
           updated_at?: string
         }
         Relationships: [
@@ -1345,6 +1375,7 @@ export type Database = {
           created_at: string
           id: string
           label: string
+          label_en: string | null
           sort_order: number
           tour_id: string
           tour_package_id: string | null
@@ -1355,6 +1386,7 @@ export type Database = {
           created_at?: string
           id?: string
           label: string
+          label_en?: string | null
           sort_order?: number
           tour_id: string
           tour_package_id?: string | null
@@ -1365,6 +1397,7 @@ export type Database = {
           created_at?: string
           id?: string
           label?: string
+          label_en?: string | null
           sort_order?: number
           tour_id?: string
           tour_package_id?: string | null
@@ -1424,15 +1457,14 @@ export type Database = {
       }
       tour_packages: {
         Row: {
-          departure_times: string[] | null
-          meal_options: Json
-          package_included: string[] | null
           active: boolean
           base_price: number
           boat_tour_id: string
           created_at: string
           custom_quote: boolean
+          departure_times: string[] | null
           description: string | null
+          description_en: string | null
           duration_minutes: number | null
           extra_guest_price: number
           id: string
@@ -1440,21 +1472,24 @@ export type Database = {
           image_url: string | null
           included_guests: number
           max_guests: number
+          meal_options: Json
           name: string
+          name_en: string | null
+          package_included: string[] | null
+          package_included_en: string[] | null
           package_type: string
           sort_order: number
           updated_at: string
         }
         Insert: {
-          departure_times?: string[] | null
-          meal_options?: Json
-          package_included?: string[] | null
           active?: boolean
           base_price?: number
           boat_tour_id: string
           created_at?: string
           custom_quote?: boolean
+          departure_times?: string[] | null
           description?: string | null
+          description_en?: string | null
           duration_minutes?: number | null
           extra_guest_price?: number
           id: string
@@ -1462,21 +1497,24 @@ export type Database = {
           image_url?: string | null
           included_guests?: number
           max_guests: number
+          meal_options?: Json
           name: string
+          name_en?: string | null
+          package_included?: string[] | null
+          package_included_en?: string[] | null
           package_type: string
           sort_order?: number
           updated_at?: string
         }
         Update: {
-          departure_times?: string[] | null
-          meal_options?: Json
-          package_included?: string[] | null
           active?: boolean
           base_price?: number
           boat_tour_id?: string
           created_at?: string
           custom_quote?: boolean
+          departure_times?: string[] | null
           description?: string | null
+          description_en?: string | null
           duration_minutes?: number | null
           extra_guest_price?: number
           id?: string
@@ -1484,7 +1522,11 @@ export type Database = {
           image_url?: string | null
           included_guests?: number
           max_guests?: number
+          meal_options?: Json
           name?: string
+          name_en?: string | null
+          package_included?: string[] | null
+          package_included_en?: string[] | null
           package_type?: string
           sort_order?: number
           updated_at?: string
@@ -1505,21 +1547,27 @@ export type Database = {
           category: string
           created_at: string
           description: string | null
+          description_en: string | null
           featured: boolean
           highlights: Json
+          highlights_en: Json
           id: string
           image_alt: string | null
+          image_alt_en: string | null
           image_public_id: string | null
           image_url: string | null
           included: Json
+          included_en: Json
           location: string | null
           long_description: string | null
+          long_description_en: string | null
           operating_end_time: string | null
           publication_status: string
           rating: number
           slug: string
           sort_order: number
           title: string
+          title_en: string | null
           updated_at: string
         }
         Insert: {
@@ -1527,21 +1575,27 @@ export type Database = {
           category: string
           created_at?: string
           description?: string | null
+          description_en?: string | null
           featured?: boolean
           highlights?: Json
+          highlights_en?: Json
           id: string
           image_alt?: string | null
+          image_alt_en?: string | null
           image_public_id?: string | null
           image_url?: string | null
           included?: Json
+          included_en?: Json
           location?: string | null
           long_description?: string | null
+          long_description_en?: string | null
           operating_end_time?: string | null
           publication_status?: string
           rating?: number
           slug: string
           sort_order?: number
           title: string
+          title_en?: string | null
           updated_at?: string
         }
         Update: {
@@ -1549,21 +1603,27 @@ export type Database = {
           category?: string
           created_at?: string
           description?: string | null
+          description_en?: string | null
           featured?: boolean
           highlights?: Json
+          highlights_en?: Json
           id?: string
           image_alt?: string | null
+          image_alt_en?: string | null
           image_public_id?: string | null
           image_url?: string | null
           included?: Json
+          included_en?: Json
           location?: string | null
           long_description?: string | null
+          long_description_en?: string | null
           operating_end_time?: string | null
           publication_status?: string
           rating?: number
           slug?: string
           sort_order?: number
           title?: string
+          title_en?: string | null
           updated_at?: string
         }
         Relationships: []
@@ -1573,15 +1633,43 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      ack_booking_email: { Args: { p_msg_id: number }; Returns: boolean }
       check_booking_rate_limit: {
         Args: { p_ip_hash: string; p_limit?: number; p_window_minutes?: number }
         Returns: boolean
       }
       create_booking_transaction: { Args: { payload: Json }; Returns: Json }
+      dequeue_booking_email: {
+        Args: { p_visibility_timeout?: number }
+        Returns: {
+          message: Json
+          msg_id: number
+        }[]
+      }
+      enqueue_booking_confirmation_emails: {
+        Args: { p_booking_id: string; p_messages: Json }
+        Returns: Json
+      }
+      ensure_booking_confirmation_email_queue: {
+        Args: { p_booking_id: string }
+        Returns: Json
+      }
       expire_pending_paypal_bookings: { Args: never; Returns: number }
       is_admin: { Args: never; Returns: boolean }
       is_admin_editor_viewer: { Args: never; Returns: boolean }
       is_editor_or_admin: { Args: never; Returns: boolean }
+      list_admin_bookings: {
+        Args: {
+          p_booking_status?: string
+          p_limit?: number
+          p_offset?: number
+          p_payment_status?: string
+          p_search?: string
+          p_tour_date?: string
+        }
+        Returns: Json
+      }
+      list_admin_gallery_categories: { Args: never; Returns: string[] }
       mark_paypal_order_created: {
         Args: {
           p_amount: number
@@ -1626,6 +1714,7 @@ export type Database = {
         Args: { p_ip_hash: string; p_limit?: number }
         Returns: boolean
       }
+      update_booking_details: { Args: { payload: Json }; Returns: Json }
       update_booking_status: {
         Args: {
           p_booking_id: string
@@ -1653,12 +1742,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1682,11 +1771,11 @@ export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1707,11 +1796,11 @@ export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1732,11 +1821,11 @@ export type Enums<
   DefaultSchemaEnumNameOrOptions extends
     | keyof DefaultSchema["Enums"]
     | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1749,11 +1838,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
+    : never) = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }

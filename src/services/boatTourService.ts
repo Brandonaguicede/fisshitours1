@@ -42,7 +42,7 @@ export async function getActivePaymentMethods() {
   // not something this query should hardcode by `key`.
   const { data, error } = await supabase
     .from('payment_methods')
-    .select('key, name, description, type, logo_url, sort_order')
+    .select('key, name, description, description_en, type, logo_url, sort_order')
     .eq('active', true)
     .order('sort_order');
 

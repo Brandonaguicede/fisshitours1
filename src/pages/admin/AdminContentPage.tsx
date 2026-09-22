@@ -1,12 +1,14 @@
-import { ChevronDown, ChevronRight, Eye, FileText, Save } from 'lucide-react';
+import { ChevronDown, ChevronRight, Eye, FileText, Globe2, Loader2, Save } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 
+import AdminConfirmDialog from '../../components/admin/AdminConfirmDialog';
 import AdminImageManager from '../../components/admin/AdminImageManager';
 import AdminVideoManager from '../../components/admin/AdminVideoManager';
 import { AdminPageHeader } from '../../components/admin/AdminPrimitives';
 import { supabase } from '../../lib/supabase';
 import { ABOUT_CAROUSEL_DEFAULTS, buildAboutCarouselImages, DEFAULT_ABOUT_SETTINGS } from '../../services/aboutSettings';
 import type { StorageImage } from '../../services/imageService';
+import { translateAllSiteContent, type TranslateAllSiteContentResult } from '../../services/translationService';
 
 interface SiteSettingRow {
   key: string;
@@ -487,6 +489,81 @@ function ContentSection({ title, description, fields, saveLabel, imageRequireRep
   );
 }
 
+// The site's single "Traducir todo el sitio" button. Covers tours, packages,
+// inclusions, boats, gallery, payment methods, departure locations, Hero/
+// About sections and reviews in one call — see translate-all-site-content.
+// Always visible regardless of the Hero/About tab above, since its scope is
+// the whole site, not just this page's two sections.
+function TranslateAllSiteContentCard() {
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [running, setRunning] = useState(false);
+  const [error, setError] = useState('');
+  const [result, setResult] = useState<TranslateAllSiteContentResult | null>(null);
+
+  async function run() {
+    setRunning(true);
+    setError('');
+    try {
+      const response = await translateAllSiteContent();
+      setResult(response);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo completar la traducción del sitio.');
+      setResult(null);
+    } finally {
+      setRunning(false);
+      setConfirmOpen(false);
+    }
+  }
+
+  return (
+    <section className="admin-card">
+      <h2 className="admin-card__title"><Globe2 size={18} /> Traducción automática</h2>
+      <p className="admin-muted mb-4">
+        Traduce con un clic el contenido del sitio que todavía no tenga versión en español o inglés: tours, paquetes,
+        inclusiones, botes, galería, métodos de pago, ubicaciones de salida, estas secciones y comentarios. Las
+        traducciones ya existentes (manuales o automáticas) nunca se sobrescriben.
+      </p>
+
+      <button className="admin-btn" type="button" disabled={running} onClick={() => setConfirmOpen(true)}>
+        {running ? <Loader2 className="animate-spin" size={16} /> : <Globe2 size={16} />}
+        {running ? 'Traduciendo contenido...' : 'Traducir todo el sitio'}
+      </button>
+
+      {error ? <div className="admin-alert admin-alert--danger mt-4">{error}</div> : null}
+
+      {result ? (
+        <div className="admin-alert admin-alert--success mt-4">
+          <p className="font-extrabold">Traducción completada</p>
+          <ul className="mt-2 space-y-1 text-sm">
+            {result.results.map((entry) => (
+              <li key={entry.table}>
+                {entry.label}: {entry.updated} actualizado{entry.updated === 1 ? '' : 's'}
+                {entry.skipped ? `, ${entry.skipped} sin cambios` : ''}
+                {entry.errors ? `, ${entry.errors} con errores` : ''}
+              </li>
+            ))}
+          </ul>
+          {result.hasMore ? (
+            <p className="mt-2 text-sm">Quedan comentarios pendientes por traducir — pulsa el botón de nuevo para continuar.</p>
+          ) : null}
+        </div>
+      ) : null}
+
+      <AdminConfirmDialog
+        open={confirmOpen}
+        onClose={() => (running ? undefined : setConfirmOpen(false))}
+        onConfirm={run}
+        loading={running}
+        titleId="translate-all-site-title"
+        title="Traducir todo el sitio"
+        tone="primary"
+        confirmLabel="Traducir"
+        message={<p>Se traducirá automáticamente el contenido que todavía no tenga versión en español o inglés. Las traducciones existentes no se sobrescribirán.</p>}
+      />
+    </section>
+  );
+}
+
 type ContentTab = 'hero' | 'about';
 
 export default function AdminContentPage() {
@@ -508,6 +585,8 @@ export default function AdminContentPage() {
           Nosotros / About
         </button>
       </nav>
+
+      <TranslateAllSiteContentCard />
 
       <div style={{ display: activeTab === 'hero' ? undefined : 'none' }}>
       <ContentSection

@@ -411,6 +411,9 @@ verify_jwt = false
 [functions.backfill-review-translations]
 verify_jwt = false
 
+[functions.translate-all-site-content]
+verify_jwt = false
+
 # These functions validate the bearer token and the active admin/editor profile
 # inside the Edge Function. Disabling gateway JWT verification lets the browser
 # preflight (OPTIONS) reach the function's CORS handler.
