@@ -47,25 +47,49 @@ export default function HomePage() {
     window.setTimeout(scrollToTours, 80);
   }
 
-  if (!selectedBoat) return null;
-
   return (
     <>
+      {/* Hero never waits on selectedBoat/the boat+tour catalog — it has its
+          own query and already renders instantly from safe local defaults
+          while that loads (see Hero.tsx's DEFAULT_HERO_SETTINGS). Previously
+          this whole page returned null until the catalog resolved, which on
+          a slow connection left <main> empty for a moment: Navbar (fixed,
+          unaffected) plus Footer — which MainLayout always renders after
+          <Outlet /> — with nothing of substantial height between them, so
+          Footer rendered right under the navbar with a big empty
+          background block below it, then visibly jumped down once Hero and
+          the rest finally mounted. Rendering Hero unconditionally means
+          real, near-full-viewport content always occupies the top of the
+          page from the very first paint, so Footer never gets a chance to
+          render before it. */}
       <Hero />
-      <FleetSection boats={catalogBoats} tours={catalogTours} selectedBoat={selectedBoat} onSelectBoat={selectBoat} onViewTourType={viewTourOnHome} onViewAllTours={viewAllToursOnHome} />
-      <TourCarouselSection boats={catalogBoats} tours={toursWithKnownBoats} selectedTour={selectedTour} onSelectTour={selectTour} />
-      <section className="home-section section-y relative overflow-hidden bg-ocean-950" data-home-section data-nav-href="/#booking" id="booking">
-        <SectionReveal><Container className="relative">
-          <div data-nav-frame>
-            <div className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between" {...reveal(0)}>
-              <SectionHeader align="left" description={tr(text.home.bookingDescription, language)} title={tr(text.home.bookingTitle, language)} />
-            </div>
-            <div className="mx-auto mt-6 sm:mt-7">
-              <BookingTeaser selectedBoat={selectedBoat} selectedTour={selectedTour} tours={catalogTours} />
-            </div>
-          </div>
-        </Container></SectionReveal>
-      </section>
+      {selectedBoat ? (
+        <>
+          <FleetSection boats={catalogBoats} tours={catalogTours} selectedBoat={selectedBoat} onSelectBoat={selectBoat} onViewTourType={viewTourOnHome} onViewAllTours={viewAllToursOnHome} />
+          <TourCarouselSection boats={catalogBoats} tours={toursWithKnownBoats} selectedTour={selectedTour} onSelectTour={selectTour} />
+          <section className="home-section section-y relative overflow-hidden bg-ocean-950" data-home-section data-nav-href="/#booking" id="booking">
+            <SectionReveal><Container className="relative">
+              <div data-nav-frame>
+                <div className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between" {...reveal(0)}>
+                  <SectionHeader align="left" description={tr(text.home.bookingDescription, language)} title={tr(text.home.bookingTitle, language)} />
+                </div>
+                <div className="mx-auto mt-6 sm:mt-7">
+                  <BookingTeaser selectedBoat={selectedBoat} selectedTour={selectedTour} tours={catalogTours} />
+                </div>
+              </div>
+            </Container></SectionReveal>
+          </section>
+        </>
+      ) : (
+        // Reserves roughly the combined height of Fleet + Tours + Booking
+        // while the catalog query is still in flight, so Testimonials/
+        // Gallery/About below don't jump up into that space and then back
+        // down once the catalog arrives. Same background as the real
+        // sections (no color flash); intentionally not a detailed skeleton —
+        // Hero above is what actually keeps Footer off the initial screen,
+        // this just smooths the smaller shift underneath it.
+        <div aria-hidden="true" className="bg-ocean-950" style={{ minHeight: '70vh' }} />
+      )}
       <SectionReveal variant="atmosphere"><Testimonials /></SectionReveal>
       <SectionReveal variant="mask"><GallerySection /></SectionReveal>
       {/* `.section-reveal--visible` leaves `transform: translate3d(0,0,0)`
