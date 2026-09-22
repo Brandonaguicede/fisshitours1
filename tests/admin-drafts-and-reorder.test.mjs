@@ -128,12 +128,17 @@ test('tour: Guardar borrador persists progress and keeps the tour in draft/hidde
   try {
     await page.goto(`${base}/admin/tours`);
     await page.getByRole('button', { name: 'Crear tour' }).click();
+    // Opening the wizard is local only: no row until the draft is actually saved.
+    await expect(page.locator('#tour-title')).toBeVisible();
+    assert.equal(writes.filter((w) => w.table === 'tours' && w.method === 'POST').length, 0);
+    await page.locator('#tour-title').fill('Tour en progreso');
+
+    await page.getByRole('button', { name: 'Guardar borrador' }).click();
     await expect.poll(() => writes.filter((w) => w.table === 'tours' && w.method === 'POST').length).toBeGreaterThan(0);
     const createWrite = writes.find((w) => w.table === 'tours' && w.method === 'POST');
     assert.equal(createWrite.body.active, false);
     assert.equal(createWrite.body.publication_status, 'draft');
-
-    await page.getByRole('button', { name: 'Guardar borrador' }).click();
+    assert.equal(createWrite.body.title, 'Tour en progreso');
     await expect.poll(() => writes.filter((w) => w.table === 'tours' && w.method === 'PATCH' && w.body.publication_status === 'draft').length).toBeGreaterThan(0);
     const draftWrite = writes.find((w) => w.table === 'tours' && w.method === 'PATCH' && w.body.publication_status === 'draft');
     assert.equal(draftWrite.body.active, false);

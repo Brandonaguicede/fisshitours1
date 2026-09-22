@@ -445,6 +445,49 @@ body:has(.admin-shell) {
   background: color-mix(in srgb, var(--admin-success) 14%, transparent);
 }
 
+/* Compact icon + text row action (e.g. "Confirmar", "Reenviar correo"): a
+   labelled control instead of an isolated glyph, secondary to the pencil/edit. */
+.admin-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.45rem;
+  color: var(--admin-ink);
+  background: transparent;
+  border: 1px solid var(--admin-line);
+  border-radius: 0.5rem;
+  font-size: 0.74rem;
+  font-weight: 600;
+  line-height: 1.1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color 160ms ease, background-color 160ms ease, border-color 160ms ease;
+}
+
+.admin-action-btn:hover:not(:disabled) {
+  background: var(--admin-primary-soft);
+}
+
+.admin-action-btn:focus-visible {
+  outline: 2px solid var(--admin-focus);
+  outline-offset: 2px;
+}
+
+.admin-action-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.admin-action-btn--confirm {
+  color: var(--admin-success-ink);
+  background: var(--admin-success-soft);
+  border-color: var(--admin-success-soft-border);
+}
+
+.admin-action-btn--confirm:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--admin-success) 22%, var(--admin-success-soft));
+}
+
 .admin-icon-action--warning {
   color: var(--admin-warning);
 }
@@ -1344,15 +1387,15 @@ tr.admin-sortable-row--dragging {
 .admin-reservation-list { min-width: 0; }
 .admin-reservations-table .admin-table { min-width: 0; }
 .admin-reservations-table th,
-.admin-reservations-table td { padding: 0.6rem 0.4rem; }
+.admin-reservations-table td { padding: 0.6rem 0.3rem; }
 .admin-reservations-table th:nth-child(1),
 .admin-reservations-table td:nth-child(1) { width: 6rem; }
 .admin-reservations-table th:nth-child(2),
-.admin-reservations-table td:nth-child(2) { width: 8.5rem; max-width: 8.5rem; }
+.admin-reservations-table td:nth-child(2) { width: 7.75rem; max-width: 7.75rem; }
 .admin-reservations-table th:nth-child(3),
 .admin-reservations-table td:nth-child(3) { width: 5.5rem; white-space: nowrap; }
 .admin-reservations-table th:nth-child(4),
-.admin-reservations-table td:nth-child(4) { width: 8.5rem; max-width: 8.5rem; }
+.admin-reservations-table td:nth-child(4) { width: 7.75rem; max-width: 7.75rem; }
 .admin-reservations-table th:nth-child(5),
 .admin-reservations-table td:nth-child(5) { width: 3.5rem; text-align: center; }
 .admin-reservations-table th:nth-child(6),
@@ -1360,9 +1403,39 @@ tr.admin-sortable-row--dragging {
 .admin-reservations-table th:nth-child(7),
 .admin-reservations-table td:nth-child(7) { width: 4rem; white-space: nowrap; }
 .admin-reservations-table th:nth-child(8),
-.admin-reservations-table td:nth-child(8) { width: 5.5rem; }
+.admin-reservations-table td:nth-child(8) { width: 9.5rem; }
+
+/* "Pago" cell: method and state badge on one line as a single group. The
+   column width (nth-child(8) above) fits "WhatsApp" + the widest badge, so
+   nothing wraps and the rest of the table isn't widened. */
+.admin-payment-cell {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.admin-payment-cell__method {
+  color: var(--admin-ink);
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.admin-payment-cell .admin-badge {
+  padding: 0.16rem 0.5rem;
+  font-size: 0.68rem;
+}
 .admin-reservations-table th:nth-child(9),
 .admin-reservations-table td:nth-child(9) { width: 8.5rem; }
+/* Acciones: fixed width so "pencil + Confirmar" fits on one line without
+   widening the table; the rarer "pencil + Reenviar correo" wraps to a second
+   line instead of clipping. Left-aligned so pencils line up row to row. */
+.admin-reservations-table th:last-child,
+.admin-reservations-table td:last-child { width: 8.25rem; max-width: 8.25rem; text-align: left; }
+.admin-reservations-table td:last-child .admin-reservation-actions { flex-wrap: wrap; justify-content: flex-start; gap: 0.3rem 0.25rem; }
+.admin-reservations-table td:last-child .admin-icon-action { padding: 0.3rem; }
 /*
  * `table-layout: auto` still measures a truncated div's *unwrapped* text
  * when sizing columns unless the div itself carries a hard `max-width` —
@@ -1370,8 +1443,8 @@ tr.admin-sortable-row--dragging {
  * tables (Tours/Reviews) and is far too wide here, so these three
  * multi-line cells get a tighter cap matching their column budget above.
  */
-.admin-reservations-table td:nth-child(2) .admin-table__truncate { max-width: 8.5rem; }
-.admin-reservations-table td:nth-child(4) .admin-table__truncate { max-width: 8.5rem; }
+.admin-reservations-table td:nth-child(2) .admin-table__truncate { max-width: 7.75rem; }
+.admin-reservations-table td:nth-child(4) .admin-table__truncate { max-width: 7.75rem; }
 .admin-reservations-table td:nth-child(6) .admin-table__truncate { max-width: 6.5rem; }
 .admin-reservation-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
 .admin-reservation-cards { display: none; }
@@ -2280,6 +2353,13 @@ tr.admin-sortable-row--dragging {
   padding: 1.25rem;
 }
 
+/* Small confirmation dialog (AdminConfirmDialog tone="primary"): `.app-modal-panel` caps at 1100px, far too wide for a one-line question. */
+.admin-modal-panel.admin-confirm-dialog--compact {
+  width: min(100%, 28rem);
+  max-width: 28rem;
+  margin-block-start: min(18vh, 8rem);
+}
+
 /*
  * `.app-modal-panel` (index.css, shared with the public site) hardcodes a
  * literal white background for its default/"light" tone, since the public
@@ -2349,7 +2429,7 @@ tr.admin-sortable-row--dragging {
 
 .admin-tour-modal {
   max-width: 1040px;
-  height: min(860px, calc(100dvh - 2rem));
+  height: min(780px, calc(100dvh - 2rem));
 }
 
 .admin-tour-modal__header {
@@ -2368,10 +2448,14 @@ tr.admin-sortable-row--dragging {
 
 .admin-stepper {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(5.25rem, 1fr);
   gap: 0;
   margin: 0;
-  padding: 0.8rem 1rem;
+  padding: 0.6rem 1rem;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
   border-bottom: 1px solid var(--admin-line-soft);
   background: var(--admin-surface);
   list-style: none;
@@ -2383,12 +2467,17 @@ tr.admin-sortable-row--dragging {
 
 .admin-stepper__item:not(:last-child)::after {
   position: absolute;
-  top: 1rem;
+  top: calc(1rem - 1px);
   left: calc(50% + 1.35rem);
   right: calc(-50% + 1.35rem);
-  height: 1px;
+  height: 2px;
+  border-radius: 2px;
   background: var(--admin-line);
   content: '';
+}
+
+.admin-stepper__item--done:not(:last-child)::after {
+  background: var(--admin-primary);
 }
 
 .admin-stepper__item button {
@@ -2430,8 +2519,15 @@ tr.admin-sortable-row--dragging {
   font-size: 0.72rem;
 }
 
-.admin-stepper__item--active button {
+.admin-stepper__item--active button,
+.admin-stepper__item--done button {
   color: var(--admin-ink);
+}
+
+.admin-stepper__item--done button span {
+  border-color: var(--admin-primary);
+  background: var(--admin-primary-soft);
+  color: var(--admin-primary);
 }
 
 .admin-stepper__item--active button span {
@@ -2441,8 +2537,223 @@ tr.admin-sortable-row--dragging {
   box-shadow: 0 6px 16px -9px var(--admin-primary-dark);
 }
 
+/* The body is a grid inside a fixed-height flex modal: without
+   align-content its rows stretch to fill the height, which inflated short
+   sections (Visibilidad, Paquetes...) into huge empty blocks. */
 .admin-tour-step-body {
-  padding-block: 1.1rem;
+  align-content: start;
+  padding-block: 1rem;
+}
+
+/* Wizard footer: compact, icon-only prev/next. */
+.admin-modal-footer.admin-tour-footer {
+  gap: 0.5rem;
+  padding-block: 0.7rem;
+}
+
+.admin-modal-footer.admin-tour-footer .admin-btn {
+  min-width: 0;
+}
+
+.admin-modal-footer.admin-tour-footer .admin-tour-nav-btn {
+  width: 2.6rem;
+  padding-inline: 0;
+}
+
+.admin-tour-nav {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-inline-start: 0.35rem;
+}
+
+/* Step 3 — "input + Agregar" with removable chips below. */
+.admin-tour-list-field {
+  display: grid;
+  min-width: 0;
+  gap: 0.5rem;
+}
+
+.admin-tour-list-field + .admin-tour-list-field {
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--admin-line-soft);
+}
+
+.admin-tour-list-field .admin-field__label {
+  display: block;
+}
+
+.admin-tour-list-field__add {
+  display: flex;
+  align-items: stretch;
+  gap: 0.5rem;
+}
+
+.admin-tour-list-field__add .admin-input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.admin-tour-list-field__add .admin-btn {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.admin-tour-list-field .admin-token-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.admin-token {
+  min-width: 0;
+  max-width: 100%;
+  font-weight: 600;
+}
+
+.admin-token span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  line-height: 1.25;
+}
+
+.admin-token button {
+  flex: 0 0 auto;
+}
+
+/* Step 4 — compact packages summary / empty state. */
+.admin-tour-empty {
+  display: grid;
+  justify-items: center;
+  gap: 0.6rem;
+  padding: 1.25rem 1rem;
+  border: 1px dashed var(--admin-line);
+  border-radius: var(--admin-radius-md);
+  background: var(--admin-surface-subtle);
+  text-align: center;
+}
+
+.admin-tour-empty p {
+  margin: 0;
+  color: var(--admin-muted);
+  font-size: 0.88rem;
+}
+
+.admin-tour-empty__icon {
+  display: grid;
+  width: 2.5rem;
+  height: 2.5rem;
+  place-items: center;
+  border: 1px solid var(--admin-line);
+  border-radius: 999px;
+  background: var(--admin-primary-soft);
+  color: var(--admin-ink);
+}
+
+.admin-tour-boat-list {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.admin-tour-boat-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.6rem 0.8rem;
+  border: 1px solid var(--admin-line-soft);
+  border-radius: var(--admin-radius-md);
+  background: var(--admin-surface-subtle);
+}
+
+.admin-tour-boat-row__info {
+  display: grid;
+  min-width: 0;
+  gap: 0.15rem;
+}
+
+.admin-tour-boat-row__info strong {
+  color: var(--admin-ink);
+  font-size: 0.92rem;
+}
+
+.admin-tour-boat-row__info .admin-muted {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-tour-boat-row .admin-btn {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.admin-tour-packages__footer {
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* Step 5 — compact visibility + delete cards. */
+.admin-tour-config-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 1rem;
+}
+
+.admin-tour-config-row__status {
+  display: grid;
+  justify-items: start;
+  gap: 0.35rem;
+}
+
+.admin-tour-config-row__status p {
+  margin: 0;
+}
+
+/* Small checklist of what still blocks publishing — compact, not a full-width alert. */
+.admin-tour-missing {
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--admin-warning-soft-border, var(--admin-line));
+  border-radius: var(--admin-radius-sm);
+  background: color-mix(in srgb, var(--admin-warning) 10%, var(--admin-surface));
+}
+
+.admin-tour-missing__title {
+  margin: 0 0 0.2rem;
+  color: var(--admin-ink);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.admin-tour-missing ul {
+  margin: 0;
+  padding-left: 1.1rem;
+  color: var(--admin-muted);
+  font-size: 0.8rem;
+}
+
+.admin-tour-danger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--admin-danger-soft-border);
+  border-radius: var(--admin-radius-md);
+  background: color-mix(in srgb, var(--admin-danger) 6%, var(--admin-surface));
+}
+
+.admin-tour-danger strong {
+  color: var(--admin-ink);
+  font-size: 0.92rem;
+}
+
+.admin-tour-danger p {
+  margin: 0.15rem 0 0;
 }
 
 .admin-tour-image-slots {
@@ -3146,5 +3457,43 @@ tr.admin-sortable-row--dragging {
 @media (min-width: 641px) and (max-width: 1023px) {
   .admin-boat-images__main {
     height: 200px;
+  }
+}
+
+@media (max-width: 640px) {
+  .admin-modal-footer.admin-tour-footer {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .admin-modal-footer.admin-tour-footer > .admin-btn {
+    width: auto;
+    flex: 1 1 0;
+  }
+
+  .admin-modal-footer.admin-tour-footer .admin-tour-nav {
+    flex: 1 1 100%;
+    margin-inline-start: 0;
+  }
+
+  .admin-modal-footer.admin-tour-footer .admin-tour-nav .admin-btn {
+    width: auto;
+    flex: 1 1 0;
+  }
+
+  .admin-tour-config-row {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-tour-danger,
+  .admin-tour-boat-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .admin-tour-danger .admin-btn,
+  .admin-tour-boat-row .admin-btn {
+    width: 100%;
   }
 }

@@ -22,6 +22,7 @@ async function fixture(viewport = { width: 1440, height: 1000 }) {
   const writes = [];
   let fail = false;
   let slow = false;
+  let slowConfirm = false;
   const reviewRows = Array.from({ length: 76 }, (_, i) => ({ id: `review-${i}`, name: `Review ${i + 1}`, country: 'Costa Rica', quote: 'Una experiencia excelente', rating: 5, status: i % 2 ? 'approved' : 'pending', active: true, featured: false }));
   const galleryRows = Array.from({ length: 76 }, (_, i) => ({ id: `image-${i}`, alt: `Imagen ${i + 1}`, title: `Foto ${i + 1}`, category: i < 10 ? 'fishing' : 'custom', active: true, sort_order: i }));
   const packages = Array.from({ length: 76 }, (_, i) => ({ id: `package-${i}`, name: `Paquete ${i + 1}`, base_price: 350, included_guests: 2, max_guests: 6, active: true, boat_tours: { boat_id: i % 2 ? 'boat-2' : 'boat-1', boats: { name: i % 2 ? 'Boat Two' : 'Second Wind' }, tours: { title: 'Fishing Tour' } } }));
@@ -42,7 +43,12 @@ async function fixture(viewport = { width: 1440, height: 1000 }) {
         && (!input.p_search || [row.booking_reference, row.customers.full_name, row.customers.email, row.customers.whatsapp, row.boats.name, row.tours.title].join(' ').toLowerCase().includes(input.p_search.toLowerCase())));
       return route.fulfill({ json: { rows: rows.slice(input.p_offset, input.p_offset + input.p_limit), total: rows.length } });
     }
+    if (path.endsWith('/admin-retry-confirmation-email')) {
+      const input = request.postDataJSON(); writes.push({ name: 'retry-email', ...input });
+      return route.fulfill({ json: { customerEmailPresent: true, queued: 1 } });
+    }
     if (path.endsWith('/admin-confirm-booking')) {
+      if (slowConfirm) await new Promise((resolve) => setTimeout(resolve, 600));
       const input = request.postDataJSON(); writes.push({ name: 'confirm', ...input });
       const booking = bookings.find((row) => row.id === input.bookingId); booking.booking_status = 'confirmed'; booking.payment_status = 'paid';
       return route.fulfill({ json: { booking_id: booking.id, booking_status: 'confirmed', payment_status: 'paid', customerEmailPresent: true, emailQueued: true } });
@@ -71,7 +77,7 @@ async function fixture(viewport = { width: 1440, height: 1000 }) {
   await page.getByPlaceholder('Password').fill('test-password');
   await page.getByRole('button', { name: 'Entrar al panel' }).click();
   await expect(page.getByText('Reservas totales')).toBeVisible();
-  return { browser, page, requests, writes, bookings, setFail: (value) => { fail = value; }, setSlow: (value) => { slow = value; } };
+  return { browser, page, requests, writes, bookings, setFail: (value) => { fail = value; }, setSlow: (value) => { slow = value; }, setSlowConfirm: (value) => { slowConfirm = value; } };
 }
 
 test('reservations paginate on the server, preserve filters, export all matches and retain actions', async () => {
@@ -115,11 +121,81 @@ test('reservations paginate on the server, preserve filters, export all matches 
     // The modal has two "Cerrar" controls: the header's icon-only close button
     // (aria-label) and the footer's text button — scope to the footer.
     await page.locator('.admin-modal-footer').getByRole('button', { name: 'Cerrar', exact: true }).click();
-    await page.locator('.admin-reservations-table').getByRole('button', { name: /Confirmar reserva/ }).click();
+    // "Confirmar" abre un diálogo: Cancelar no escribe nada; confirmar sí ejecuta la acción real.
+    const confirmButton = page.locator('.admin-reservations-table').getByRole('button', { name: /Confirmar/ });
+    await expect(confirmButton).toContainText('Confirmar');
+    await confirmButton.click();
+    await expect(page.getByRole('heading', { name: 'Confirmar reserva' })).toBeVisible();
+    await page.locator('.admin-modal-card').getByRole('button', { name: 'Cancelar', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Confirmar reserva' })).toHaveCount(0);
+    assert.equal(f.writes.length, 0);
+    await confirmButton.click();
+    await page.locator('.admin-modal-card').getByRole('button', { name: 'Confirmar', exact: true }).click();
     await expect(nav).toContainText('Mostrando 0–0 de 0 reservas');
     assert.equal(f.writes[0].bookingId, 'booking-1');
+    assert.equal(f.writes.length, 1);
     await page.getByLabel('Buscar reservas').fill('no existen resultados');
     await expect(page.locator('.admin-reservations-table')).toContainText('No hay reservas para este filtro.');
+  } finally { await f.browser.close(); }
+});
+
+test('row actions follow the real booking state: Confirmar only when confirmable, Reenviar correo only on confirmed without email sent', async () => {
+  const f = await fixture(); const { page } = f;
+  try {
+    f.bookings[1].booking_status = 'cancelled'; f.bookings[1].payment_status = 'failed';
+    f.bookings[2].payment_method_key = 'paypal'; // PayPal sin pago verificado: no se puede confirmar
+    await page.goto(`${base}/admin/reservations`);
+    const row = (ref) => page.getByRole('row').filter({ hasText: ref });
+    await expect(row('PFT-005')).toBeVisible();
+    // pendiente (WhatsApp) → Confirmar
+    await expect(row('PFT-005').getByRole('button', { name: /Confirmar/ })).toBeEnabled();
+    await expect(row('PFT-005').getByRole('button', { name: /Confirmar/ })).toContainText('Confirmar');
+    await expect(row('PFT-005').getByRole('button', { name: /Reenviar correo/ })).toHaveCount(0);
+    // confirmada → sin Confirmar, con Reenviar correo (tiene email y no hay envío registrado)
+    await expect(row('PFT-001').getByRole('button', { name: /Confirmar/ })).toHaveCount(0);
+    await expect(row('PFT-001').getByRole('button', { name: /Reenviar correo/ })).toContainText('Reenviar correo');
+    await expect(row('PFT-001').getByRole('button', { name: /Editar reserva/ })).toBeEnabled();
+    // cancelada → solo editar
+    await expect(row('PFT-002').getByRole('button', { name: /Confirmar|Reenviar/ })).toHaveCount(0);
+    await expect(row('PFT-002').getByRole('button', { name: /Editar reserva/ })).toBeEnabled();
+    // PayPal pendiente de pago → no se puede confirmar
+    await expect(row('PFT-003').getByRole('button', { name: /Confirmar/ })).toHaveCount(0);
+    // la columna no se desborda: botones dentro de la celda (Editar + Confirmar en una línea; Reenviar correo puede bajar de línea), sin scroll de la tabla ni de la página
+    const layout = await page.locator('.admin-reservations-table tbody tr').evaluateAll((trs) => trs.map((tr) => {
+      const cell = tr.lastElementChild.getBoundingClientRect(); const buttons = [...tr.lastElementChild.querySelectorAll('button')].map((b) => b.getBoundingClientRect());
+      const centers = buttons.map((b) => b.top + b.height / 2); return { oneLine: tr.lastElementChild.textContent.includes('Reenviar') || Math.max(...centers) - Math.min(...centers) < 2, inside: buttons.every((b) => b.left >= cell.left - 0.5 && b.right <= cell.right + 0.5) };
+    }));
+    assert.ok(layout.every((r) => r.oneLine && r.inside), JSON.stringify(layout));
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+    const wrap = await page.evaluate(() => { const w = document.querySelector('.admin-table-wrap'); return { scroll: w.scrollWidth, client: w.clientWidth, cols: [...document.querySelectorAll('.admin-reservations-table th')].map((t) => t.textContent + ':' + Math.round(t.getBoundingClientRect().width)).join(' ') }; });
+    assert.ok(wrap.scroll <= wrap.client, JSON.stringify(wrap));
+    // Reenviar correo ejecuta la función real de reintento (no confirma ni cambia estados)
+    await row('PFT-001').getByRole('button', { name: /Reenviar correo/ }).click();
+    await expect(page.getByRole('status').filter({ hasText: 'La confirmación quedó encolada para reintento.' })).toBeVisible();
+    assert.deepEqual(f.writes.map((w) => w.name), ['retry-email']);
+    assert.equal(f.writes[0].bookingId, 'booking-0');
+  } finally { await f.browser.close(); }
+});
+
+test('Confirmar shows loading, blocks double clicks and the row turns confirmed', async () => {
+  const f = await fixture(); const { page } = f;
+  try {
+    f.setSlowConfirm(true);
+    await page.goto(`${base}/admin/reservations`);
+    const row = page.getByRole('row').filter({ hasText: 'PFT-005' });
+    await row.getByRole('button', { name: /Confirmar/ }).click();
+    const dialog = page.locator('.admin-modal-card');
+    await expect(dialog).toContainText('¿Confirmar esta reserva');
+    const confirm = dialog.getByRole('button', { name: 'Confirmar', exact: true });
+    await confirm.dblclick();
+    await expect(confirm).toBeDisabled();
+    await expect(dialog.getByRole('button', { name: 'Cancelar', exact: true })).toBeDisabled();
+    await expect(page.getByRole('heading', { name: 'Confirmar reserva' })).toHaveCount(0);
+    assert.equal(f.writes.filter((w) => w.name === 'confirm').length, 1);
+    assert.equal(f.writes[0].bookingId, 'booking-4');
+    await expect(row.locator('.admin-badge').last()).toHaveText('confirmed');
+    await expect(row.getByRole('button', { name: /Confirmar/ })).toHaveCount(0);
+    await expect(page.getByRole('status').filter({ hasText: 'Reserva confirmada' })).toBeVisible();
   } finally { await f.browser.close(); }
 });
 
@@ -200,7 +276,8 @@ test('filter round trips reset the page and confirming the last match returns to
       await expect(nav).toHaveAttribute('aria-busy', 'false');
     }
     await expect(page.locator('.admin-reservations-table tbody tr')).toHaveCount(1);
-    await page.locator('.admin-reservations-table').getByRole('button', { name: /Confirmar reserva/ }).click();
+    await page.locator('.admin-reservations-table').getByRole('button', { name: /Confirmar/ }).click();
+    await page.locator('.admin-modal-card').getByRole('button', { name: 'Confirmar', exact: true }).click();
     await expect(nav).toContainText('Mostrando 1–10 de 10 reservas');
     await expect(nav.getByRole('button', { name: 'Siguiente' })).toBeDisabled();
   } finally { await f.browser.close(); }

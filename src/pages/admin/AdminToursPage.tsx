@@ -1,5 +1,5 @@
-import { Check, ChevronLeft, ChevronRight, Eye, EyeOff, Image as ImageIcon, Info, Loader2, Package, Pencil, Plus, Save, Settings, Trash2, X } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { Check, ChevronLeft, ChevronRight, Eye, EyeOff, Image as ImageIcon, Info, Loader2, Package, Pencil, Plus, Save, Settings, Ship, Trash2, X } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import AdminConfirmDialog from '../../components/admin/AdminConfirmDialog';
@@ -56,6 +56,8 @@ interface EditableInclusion {
 
 interface TourEditor {
   id: string;
+  /** True while a brand-new tour only exists in local state (no DB row yet). */
+  isNew: boolean;
   title: string;
   slug: string;
   description: string;
@@ -97,7 +99,7 @@ function publicationStatus(tour: TourRow): PublicationStatus {
 function createEditor(tour: TourRow, packages: PackageRow[], relations: BoatTourRow[], images: TourImageRow[], inclusions: TourInclusionRow[]): TourEditor {
   const boatByBoatTour = new Map(relations.map((relation) => [relation.id, relation.boat_id]));
   return {
-    id: tour.id, title: tour.title, slug: tour.slug,
+    id: tour.id, isNew: false, title: tour.title, slug: tour.slug,
     description: tour.description ?? '',
     longDescription: tour.long_description ?? '', category: tour.category, publicationStatus: publicationStatus(tour), featured: tour.featured,
     sortOrder: tour.sort_order, activities: stringList(tour.highlights),
@@ -138,6 +140,14 @@ export default function AdminToursPage() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
+  // The one in-flight/finished INSERT of the tour being created. Kept for the whole
+  // wizard session so Siguiente, Guardar borrador and double clicks all share it.
+  const createRowRef = useRef<Promise<TourRow> | null>(null);
+
+  useEffect(() => {
+    document.querySelector('.admin-tour-step-body')?.scrollTo({ top: 0 });
+    document.querySelector('.admin-stepper [aria-current="step"]')?.scrollIntoView?.({ inline: 'nearest', block: 'nearest' });
+  }, [step]);
 
   async function loadTours() {
     setLoading(true);
@@ -158,25 +168,92 @@ export default function AdminToursPage() {
 
   useEffect(() => { void loadTours(); }, []);
 
-  function markEditing(next: TourEditor) { setEditing(next); setDirty(true); }
+  function markEditing(next: TourEditor) {
+    setEditing(next); setDirty(true);
+    if (next.title.trim()) setFieldErrors((current) => (current.title ? { ...current, title: undefined } : current));
+  }
+
+  function focusTitleField() { window.requestAnimationFrame(() => document.getElementById('tour-title')?.focus()); }
 
   function openEditor(tour: TourRow) {
     const tourRelations = relations.filter((item) => item.tour_id === tour.id);
     setEditing(createEditor(tour, packageRows.filter((item) => tourRelations.some((relation) => relation.id === item.boat_tour_id)), tourRelations, imageRows.filter((item) => item.tour_id === tour.id), inclusionRows.filter((item) => item.tour_id === tour.id)));
+    createRowRef.current = null;
     setStep('info'); setFieldErrors({}); setGallerySlot(null); setDirty(false); setError('');
   }
 
-  async function createTour() {
+  // "Crear tour" only opens the wizard with local state: nothing is written until the
+  // name is valid and the user presses Siguiente or Guardar borrador (see createTourRow).
+  function createTour() {
     const id = `tour-${crypto.randomUUID().slice(0, 8)}`;
-    const { data, error: insertError } = await supabase.from('tours').insert({ id, title: 'Nuevo tour', slug: id, category: 'Snorkeling & Beach', publication_status: 'draft', active: false, featured: false, rating: 5, sort_order: tours.length + 1, description: '', long_description: '', highlights: [], included: [] }).select('*').single();
-    if (insertError) { setError(insertError.message); return; }
-    await loadTours(); setEditing(createEditor(data, [], [], [], [])); setStep('info'); setDirty(true);
+    createRowRef.current = null;
+    setEditing({
+      // sortOrder is a placeholder until the row actually exists — insertTourRow assigns
+      // the real value from a fresh max(sort_order)+1 read, not from this count.
+      id, isNew: true, title: '', slug: id, description: '', longDescription: '', category: 'Snorkeling & Beach', publicationStatus: 'draft',
+      featured: false, sortOrder: 0, activities: [], images: [], inclusions: [], packages: [],
+    });
+    setStep('info'); setFieldErrors({}); setGallerySlot(null); setDirty(false); setError('');
   }
 
-  async function toggleTourPublication(tour: TourRow) {
+  // Assigns a fresh max(sort_order)+1 read right before the insert, not `tours.length`:
+  // the old count-based approach collided whenever a row had been deleted (leaving a gap
+  // between the row count and the highest sort_order actually in use) — the real cause of
+  // duplicate "Orden" values in the list. This still has a tiny (unavoidable without a DB
+  // sequence/unique constraint, which is out of scope here) race if two tours are created
+  // at the exact same instant, but it is far narrower than the previous bug, which
+  // collided on every deletion, not just concurrent creates.
+  async function insertTourRow(editor: TourEditor) {
+    const { data: highest, error: maxError } = await supabase.from('tours').select('sort_order').order('sort_order', { ascending: false }).limit(1).maybeSingle();
+    if (maxError) throw new Error(maxError.message);
+    const nextSortOrder = (highest?.sort_order ?? 0) + 1;
+    const { data, error: insertError } = await supabase.from('tours').insert({ id: editor.id, title: editor.title.trim(), slug: editor.id, category: editor.category, publication_status: 'draft', active: false, featured: false, rating: 5, sort_order: nextSortOrder, description: '', long_description: '', highlights: [], included: [] }).select('*').single();
+    if (insertError) throw new Error(insertError.message);
+    return data;
+  }
+
+  // Creates the draft row exactly once per new tour. The id was generated when the wizard
+  // opened, and the promise is shared, so a double click or Siguiente racing Guardar
+  // borrador reuses the same INSERT instead of issuing a second one.
+  async function createTourRow(editor: TourEditor) {
+    if (!editor.isNew) return true;
+    setSaving(true); setError('');
+    try {
+      createRowRef.current ??= insertTourRow(editor);
+      const row = await createRowRef.current;
+      setEditing((current) => (current && current.id === row.id ? { ...current, isNew: false, sortOrder: row.sort_order } : current));
+      return true;
+    } catch (caught) {
+      createRowRef.current = null;
+      setSaving(false);
+      setError(caught instanceof Error ? caught.message : 'No se pudo crear el tour.');
+      return false;
+    }
+  }
+
+  // "Mostrar tour" flips draft/inactive -> published, so it must pass the same
+  // validateTourForPublication check as finishTour — otherwise it was a second, looser
+  // path to publish an incomplete tour (missing name and/or fewer than 3 photos).
+  // "Ocultar tour" (published -> inactive) never required these fields and is unaffected.
+  async function requestToggleTourPublication(tour: TourRow) {
+    if (!editing) return;
+    const nextStatus: PublicationStatus = publicationStatus(tour) === 'published' ? 'inactive' : 'published';
+    if (nextStatus === 'published') {
+      const errors = validateTourForPublication(editing);
+      if (Object.keys(errors).length) {
+        setFieldErrors(errors);
+        setError('Completa los requisitos antes de mostrar el tour.');
+        setStep(errors.title ? 'info' : 'gallery');
+        if (errors.title) focusTitleField();
+        return;
+      }
+    }
+    await toggleTourPublication(tour, nextStatus);
+  }
+
+  async function toggleTourPublication(tour: TourRow, nextStatus: PublicationStatus) {
     setTogglingTourId(tour.id);
     setError(''); setNotice('');
-    const nextStatus: PublicationStatus = publicationStatus(tour) === 'published' ? 'inactive' : 'published';
     const { error: updateError } = await supabase.from('tours').update({ publication_status: nextStatus, updated_at: new Date().toISOString() }).eq('id', tour.id);
     setTogglingTourId(null);
     if (updateError) { setError(updateError.message); return; }
@@ -202,22 +279,45 @@ export default function AdminToursPage() {
 
   function requestClose() {
     if (dirty && !window.confirm('Hay cambios sin guardar. Si cierras ahora, se perderán.')) return;
+    createRowRef.current = null;
     setEditing(null); setFieldErrors({}); setDirty(false); setError('');
   }
 
-  function validateFinal(editor: TourEditor) {
+  // Single source of truth for "can this tour go live": both "Mostrar tour" (the
+  // Configuración toggle) and "Guardar" (finishTour, Paso 5's final save) call this and
+  // block publishing the same way — no separate/looser path exists to publish a tour
+  // that skips these checks. These are the only two functional requirements the app
+  // already enforced for publishing (name + 3–6 photos, per finishTour's original
+  // check); nothing new was added.
+  function validateTourForPublication(editor: TourEditor) {
     const errors: FieldErrors = {};
     if (!editor.title.trim()) errors.title = 'El nombre del tour es obligatorio.';
-    if (editor.images.length < 3 || editor.images.length > 6) errors.images = 'Para finalizar se requieren entre 3 y 6 fotografías.';
+    if (editor.images.length < 3) errors.images = 'Agrega al menos 3 fotos para publicar el tour.';
+    else if (editor.images.length > 6) errors.images = 'Máximo 6 fotografías.';
     return errors;
+  }
+
+  function missingPublicationLabels(editor: TourEditor) {
+    const errors = validateTourForPublication(editor);
+    const labels: string[] = [];
+    if (errors.title) labels.push('Nombre del tour');
+    if (errors.images) labels.push('Al menos 3 fotos');
+    return labels;
   }
 
   // `tours.location` and `tour_locations` are no longer written here — the
   // "Ubicaciones" feature was retired from the Admin (no public consumer
   // ever read either). Existing values are left exactly as they are in the
   // database; this simply stops touching them.
+  // sort_order is intentionally NOT part of this payload. The Info step never lets the
+  // user edit it (it's a read-only line — "Orden de aparición actual"), and writing it
+  // here was a second source of duplicate/corrupted order values: for a brand-new tour,
+  // this could run with a stale `editor.sortOrder` closure from before insertTourRow's
+  // real value came back, silently overwriting the freshly assigned unique value with
+  // the placeholder. sort_order is now only ever written by insertTourRow (creation)
+  // and persistTourOrder (Reordenar → Guardar orden).
   async function persistInfo(editor: TourEditor) {
-    const { error: tourError } = await supabase.from('tours').update({ title: editor.title.trim(), slug: editor.slug, description: editor.description.trim(), long_description: editor.longDescription.trim() || null, category: editor.category, sort_order: editor.sortOrder, updated_at: new Date().toISOString() }).eq('id', editor.id);
+    const { error: tourError } = await supabase.from('tours').update({ title: editor.title.trim(), slug: editor.slug, description: editor.description.trim(), long_description: editor.longDescription.trim() || null, category: editor.category, updated_at: new Date().toISOString() }).eq('id', editor.id);
     if (tourError) throw new Error(tourError.message);
   }
 
@@ -251,10 +351,10 @@ export default function AdminToursPage() {
     if (!editing || saving) return;
     if (!editing.title.trim()) {
       setFieldErrors({ title: 'El nombre del tour es obligatorio.' });
-      setStep('info');
-      setError('Completa el nombre antes de guardar el borrador.');
+      setStep('info'); focusTitleField();
       return;
     }
+    if (editing.isNew && !(await createTourRow(editing))) return;
     setSaving(true); setError('');
     try {
       await persistInfo(editing); await persistExperience(editing);
@@ -269,8 +369,8 @@ export default function AdminToursPage() {
 
   async function finishTour() {
     if (!editing || saving) return;
-    const errors = validateFinal(editing); setFieldErrors(errors);
-    if (Object.keys(errors).length) { setError('El borrador se conserva. Completa los campos marcados antes de finalizar.'); setStep(errors.images ? 'gallery' : 'info'); return; }
+    const errors = validateTourForPublication(editing); setFieldErrors(errors);
+    if (Object.keys(errors).length) { setError('El borrador se conserva. Completa los campos marcados antes de finalizar.'); setStep(errors.images ? 'gallery' : 'info'); if (!errors.images) focusTitleField(); return; }
     setSaving(true); setError('');
     try {
       await persistInfo(editing); await persistExperience(editing);
@@ -316,17 +416,18 @@ export default function AdminToursPage() {
 
   function addActivity() { if (!editing || !activityInput.trim()) return; markEditing({ ...editing, activities: [...editing.activities, activityInput.trim()] }); setActivityInput(''); }
   function addInclusion() { if (!editing || !inclusionInput.trim()) return; markEditing({ ...editing, inclusions: [...editing.inclusions, { id: crypto.randomUUID(), label: inclusionInput.trim(), packageId: null, sortOrder: editing.inclusions.length + 1, active: true, isNew: true }] }); setInclusionInput(''); }
-  async function navigateStep(direction: -1 | 1) {
+  async function navigateStep(direction: -1 | 1, target?: EditorStep) {
     if (!editing || saving) return;
     if (direction === 1) {
       const errors: FieldErrors = {};
       if (step === 'info' && !editing.title.trim()) errors.title = 'El nombre del tour es obligatorio.';
       // Las fotos son requisito para activar el tour, pero no deben bloquear el acceso a Paquetes.
-      setFieldErrors(errors); if (Object.keys(errors).length) return;
+      setFieldErrors(errors); if (errors.title) { focusTitleField(); return; }
+      if (editing.isNew && !(await createTourRow(editing))) return;
       if (!(await persistStep())) return;
     }
     const index = steps.findIndex((item) => item.id === step);
-    setStep(steps[Math.max(0, Math.min(3, index + direction))].id);
+    setStep(target ?? steps[Math.max(0, Math.min(steps.length - 1, index + direction))].id);
   }
 
   const boatNamesByTour = useMemo(() => {
@@ -374,7 +475,7 @@ export default function AdminToursPage() {
               </label>
             </AdminFilterMenu>
           }
-          primaryAction={<button className="admin-btn" type="button" disabled={reorder.reordering} onClick={() => void createTour()}><Plus size={16} /> Crear tour</button>}
+          primaryAction={<button className="admin-btn" type="button" disabled={reorder.reordering} onClick={createTour}><Plus size={16} /> Crear tour</button>}
           secondaryActions={
             <AdminReorderToolbar
               reordering={reorder.reordering}
@@ -396,7 +497,7 @@ export default function AdminToursPage() {
                 className={reorder.reordering ? `admin-sortable-row${reorder.dragId === tour.id ? ' admin-sortable-row--dragging' : ''}` : undefined}
                 {...(reorder.reordering ? reorder.dragHandlers(tour.id) : {})}
               >
-                <td>{tour.title}<div className="admin-muted admin-table__truncate" title={tour.description || tour.slug}>{tour.description || tour.slug}</div></td>
+                <td>{tour.title || <span className="admin-muted">Sin nombre</span>}<div className="admin-muted admin-table__truncate" title={tour.description || tour.slug}>{tour.description || tour.slug}</div></td>
                 <td>{(boatNamesByTour.get(tour.id) ?? []).length ? (boatNamesByTour.get(tour.id) ?? []).join(', ') : <span className="admin-muted">Sin bote asignado</span>}</td>
                 <td><AdminBadge value={publicationStatus(tour) === 'draft' ? 'Borrador' : publicationStatus(tour) === 'published' ? 'Activo' : 'Inactivo'} /></td>
                 <td>
@@ -412,7 +513,7 @@ export default function AdminToursPage() {
                 </td>
                 <td>
                   <div className="admin-row-actions">
-                    <button className="admin-icon-action" type="button" disabled={reorder.reordering} title="Editar tour" aria-label={`Editar tour ${tour.title}`} onClick={() => openEditor(tour)}><Pencil size={17} /></button>
+                    <button className="admin-icon-action" type="button" disabled={reorder.reordering} title="Editar tour" aria-label={`Editar tour ${tour.title || 'sin nombre'}`} onClick={() => openEditor(tour)}><Pencil size={17} /></button>
                   </div>
                 </td>
               </tr>
@@ -423,21 +524,23 @@ export default function AdminToursPage() {
       </AdminModuleSurface>
 
       <Modal open={Boolean(editing)} onClose={requestClose} titleId="tour-edit-title" className="admin-tour-modal">
-        {editing ? <form className="admin-modal-shell" onSubmit={(event) => { event.preventDefault(); void finishTour(); }}>
-          <header className="admin-modal-header"><div><h2 id="tour-edit-title" className="admin-card__title"><Pencil size={18} /> {editing.title}</h2><p className="admin-muted">{steps.findIndex((item) => item.id === step) + 1} de {steps.length} · {steps.find((item) => item.id === step)?.label}</p></div><button className="admin-icon-btn" type="button" aria-label="Cerrar editor" onClick={requestClose}><X size={18} /></button></header>
-          <ol className="admin-stepper" aria-label="Progreso del Tour">{steps.map((item, index) => <li key={item.id} aria-current={step === item.id ? 'step' : undefined} className={step === item.id ? 'admin-stepper__item admin-stepper__item--active' : 'admin-stepper__item'}><button type="button" onClick={() => setStep(item.id)}><span>{index + 1}</span><strong>{item.label}</strong></button></li>)}</ol>
+        {editing ? <form className="admin-modal-shell" onSubmit={(event) => { event.preventDefault(); if (editing.isNew) void navigateStep(1); else void finishTour(); }}>
+          <header className="admin-modal-header"><div><h2 id="tour-edit-title" className="admin-card__title"><Pencil size={18} /> {editing.title.trim() || (editing.isNew ? 'Crear tour' : 'Editar tour')}</h2><p className="admin-muted">{steps.findIndex((item) => item.id === step) + 1} de {steps.length} · {steps.find((item) => item.id === step)?.label}</p></div><button className="admin-icon-btn" type="button" aria-label="Cerrar editor" onClick={requestClose}><X size={18} /></button></header>
+          <ol className="admin-stepper" aria-label="Progreso del Tour">{steps.map((item, index) => <li key={item.id} aria-current={step === item.id ? 'step' : undefined} className={`admin-stepper__item${step === item.id ? ' admin-stepper__item--active' : ''}${index < steps.findIndex((current) => current.id === step) ? ' admin-stepper__item--done' : ''}`}><button type="button" onClick={() => { if (editing.isNew && item.id !== 'info') void navigateStep(1, item.id); else setStep(item.id); }}><span>{index + 1}</span><strong>{item.label}</strong></button></li>)}</ol>
           <div className="admin-modal-body admin-tour-step-body">{error ? <div className="admin-alert admin-alert--danger" role="alert">{error}</div> : null}
             {step === 'info' ? <InfoStep editing={editing} errors={fieldErrors} onChange={markEditing} /> : null}
             {step === 'gallery' ? <GalleryStep editing={editing} errors={fieldErrors} selectedSlot={gallerySlot} setSelectedSlot={setGallerySlot} setDeleteImage={setDeleteImage} saveImage={saveGalleryImage} /> : null}
             {step === 'experience' ? <ExperienceStep editing={editing} activityInput={activityInput} inclusionInput={inclusionInput} setActivityInput={setActivityInput} setInclusionInput={setInclusionInput} addActivity={addActivity} addInclusion={addInclusion} onChange={markEditing} /> : null}
             {step === 'packages' ? <PackagesStep boats={boats} relations={relations.filter((relation) => relation.tour_id === editing.id)} packages={visiblePackages} onManageBoat={(boatId) => navigate(boatId ? `/admin/boats?boatId=${boatId}` : '/admin/boats')} /> : null}
-            {step === 'config' ? <ConfigStep tour={tours.find((item) => item.id === editing.id) ?? null} togglingTourId={togglingTourId} onToggle={toggleTourPublication} onRequestDelete={setPendingTourDelete} /> : null}
+            {step === 'config' ? <ConfigStep tour={tours.find((item) => item.id === editing.id) ?? null} missing={missingPublicationLabels(editing)} togglingTourId={togglingTourId} onToggle={requestToggleTourPublication} onRequestDelete={setPendingTourDelete} /> : null}
           </div>
-          <ModalFooter>
+          <ModalFooter className="admin-tour-footer">
             <button className="admin-btn admin-btn--ghost" type="button" disabled={saving} onClick={requestClose}>Cancelar</button>
             <button className="admin-btn admin-btn--secondary" type="button" disabled={saving} onClick={() => void saveDraftAndClose()}>{saving ? <Loader2 className="animate-spin" size={15} /> : <Save size={15} />} Guardar borrador</button>
-            {step !== 'info' ? <button className="admin-btn admin-btn--ghost" type="button" onClick={() => void navigateStep(-1)}><ChevronLeft size={15} /> Anterior</button> : null}
-            {step !== 'config' ? <button className="admin-btn" type="button" disabled={saving} onClick={() => void navigateStep(1)}>{saving ? <Loader2 className="animate-spin" size={15} /> : null} Siguiente <ChevronRight size={15} /></button> : <button className="admin-btn" type="submit" disabled={saving}>{saving ? <Loader2 className="animate-spin" size={15} /> : <Save size={15} />} Guardar</button>}
+            <div className="admin-tour-nav">
+              <button className="admin-btn admin-btn--ghost admin-tour-nav-btn" type="button" aria-label="Anterior" title="Anterior" disabled={saving || step === 'info'} onClick={() => void navigateStep(-1)}><ChevronLeft size={18} /></button>
+              {step !== 'config' ? <button className="admin-btn admin-tour-nav-btn" type="button" aria-label="Siguiente" title="Siguiente" disabled={saving} onClick={() => void navigateStep(1)}>{saving ? <Loader2 className="animate-spin" size={18} /> : <ChevronRight size={18} />}</button> : <button className="admin-btn" type="submit" disabled={saving}>{saving ? <Loader2 className="animate-spin" size={15} /> : <Save size={15} />} Guardar</button>}
+            </div>
           </ModalFooter>
         </form> : null}
       </Modal>
@@ -465,15 +568,83 @@ export default function AdminToursPage() {
 }
 
 function InfoStep({ editing, errors, onChange }: { editing: TourEditor; errors: FieldErrors; onChange: (value: TourEditor) => void }) {
-  return <FormSection title="Información general" description="Los datos esenciales que describen el Tour." icon={<Info size={16} />}><label className="admin-field"><span className="admin-field__label">Nombre del tour</span><input className="admin-input" aria-invalid={Boolean(errors.title) || undefined} value={editing.title} onChange={(event) => onChange({ ...editing, title: event.target.value, slug: slugify(event.target.value) })} />{errors.title ? <span className="admin-field-error">{errors.title}</span> : null}</label><label className="admin-field"><span className="admin-field__label">Frase</span><textarea className="admin-input" rows={3} value={editing.description} onChange={(event) => onChange({ ...editing, description: event.target.value })} /></label><label className="admin-field"><span className="admin-field__label">Descripción</span><textarea className="admin-input admin-textarea-list" value={editing.longDescription} onChange={(event) => onChange({ ...editing, longDescription: event.target.value })} /></label><p className="admin-field-help">Orden de aparición actual: {editing.sortOrder}. Se reordena desde la lista de tours.</p></FormSection>;
+  return <FormSection title="Información general" description="Los datos esenciales que describen el Tour." icon={<Info size={16} />}><label className="admin-field"><span className="admin-field__label">Nombre del tour</span><input id="tour-title" className="admin-input" placeholder="Ej. Fishing Tour" aria-required="true" aria-invalid={Boolean(errors.title) || undefined} aria-describedby={errors.title ? 'tour-title-error' : undefined} value={editing.title} onChange={(event) => onChange({ ...editing, title: event.target.value, slug: slugify(event.target.value) })} />{errors.title ? <span id="tour-title-error" className="admin-field-error" role="alert">{errors.title}</span> : null}</label><label className="admin-field"><span className="admin-field__label">Frase</span><textarea className="admin-input" rows={3} value={editing.description} onChange={(event) => onChange({ ...editing, description: event.target.value })} /></label><label className="admin-field"><span className="admin-field__label">Descripción</span><textarea className="admin-input admin-textarea-list" value={editing.longDescription} onChange={(event) => onChange({ ...editing, longDescription: event.target.value })} /></label><p className="admin-field-help">{editing.isNew ? 'El orden de aparición se asignará automáticamente al guardar.' : `Orden de aparición actual: ${editing.sortOrder}. Se reordena desde la lista de tours.`}</p></FormSection>;
 }
 
 function GalleryStep({ editing, errors, selectedSlot, setSelectedSlot, setDeleteImage, saveImage }: { editing: TourEditor; errors: FieldErrors; selectedSlot: number | null; setSelectedSlot: (value: number | null) => void; setDeleteImage: (value: TourImageRow | null) => void; saveImage: (image: StorageImage, slot: number) => Promise<void> }) {
-  return <FormSection title="Galería" description="Mínimo 3 imágenes para continuar. Para finalizar: 3 o 6. Máximo 6." icon={<ImageIcon size={16} />}>{errors.images ? <div className="admin-alert admin-alert--danger">{errors.images}</div> : null}<div className="admin-tour-image-slots">{Array.from({ length: 6 }, (_, index) => { const image = editing.images[index]; const selected = selectedSlot === index; return <article className={`admin-tour-image-slot${selected ? ' admin-tour-image-slot--editing' : ''}`} key={image?.id ?? index}><header><strong>Foto {index + 1}</strong>{index === 0 ? <AdminBadge value="Portada" /> : null}</header>{selected ? <AdminImageManager resourceTable="tours" resourceId={editing.id} folder="tours" currentImageUrl={image?.image_url} currentStoragePath={image?.storage_path} label={`${editing.title} foto ${index + 1}`} aspect={3 / 2} maxWidth={1200} maxHeight={800} maxSizeMB={0.35} retainPreviousOnUpload requireReplacementToDelete onImageSaved={(saved) => saveImage(saved, index)} /> : image ? <button className="admin-tour-image-slot__media" type="button" aria-label={`Cambiar foto ${index + 1}`} onClick={() => setSelectedSlot(index)}><img src={image.image_url} alt={image.alt_text || `${editing.title} foto ${index + 1}`} /></button> : <button className="admin-tour-image-slot__empty" type="button" onClick={() => setSelectedSlot(index)}><Plus size={18} /> Seleccionar</button>}<footer>{selected ? <button className="admin-btn admin-btn--ghost" type="button" onClick={() => setSelectedSlot(null)}>Cerrar</button> : <button className="admin-btn admin-btn--ghost" type="button" onClick={() => setSelectedSlot(index)}>{image ? 'Cambiar' : 'Seleccionar'}</button>}{image && !selected ? <button className="admin-icon-btn" type="button" aria-label={`Eliminar foto ${index + 1}`} onClick={() => setDeleteImage(image)}><Trash2 size={15} /></button> : null}</footer></article>; })}</div></FormSection>;
+  return <FormSection title="Galería" description="Mínimo 3 imágenes para continuar. Para finalizar: 3 o 6. Máximo 6." icon={<ImageIcon size={16} />}>{errors.images ? <div className="admin-alert admin-alert--danger admin-gallery-error" role="alert">{errors.images}</div> : null}<div className="admin-tour-image-slots">{Array.from({ length: 6 }, (_, index) => { const image = editing.images[index]; const selected = selectedSlot === index; return <article className={`admin-tour-image-slot${selected ? ' admin-tour-image-slot--editing' : ''}`} key={image?.id ?? index}><header><strong>Foto {index + 1}</strong>{index === 0 ? <AdminBadge value="Portada" /> : null}</header>{selected ? <AdminImageManager resourceTable="tours" resourceId={editing.id} folder="tours" currentImageUrl={image?.image_url} currentStoragePath={image?.storage_path} label={`${editing.title} foto ${index + 1}`} aspect={3 / 2} maxWidth={1200} maxHeight={800} maxSizeMB={0.35} retainPreviousOnUpload requireReplacementToDelete onImageSaved={(saved) => saveImage(saved, index)} /> : image ? <button className="admin-tour-image-slot__media" type="button" aria-label={`Cambiar foto ${index + 1}`} onClick={() => setSelectedSlot(index)}><img src={image.image_url} alt={image.alt_text || `${editing.title} foto ${index + 1}`} /></button> : <button className="admin-tour-image-slot__empty" type="button" onClick={() => setSelectedSlot(index)}><Plus size={18} /> Seleccionar</button>}<footer>{selected ? <button className="admin-btn admin-btn--ghost" type="button" onClick={() => setSelectedSlot(null)}>Cerrar</button> : <button className="admin-btn admin-btn--ghost" type="button" onClick={() => setSelectedSlot(index)}>{image ? 'Cambiar' : 'Seleccionar'}</button>}{image && !selected ? <button className="admin-icon-btn" type="button" aria-label={`Eliminar foto ${index + 1}`} onClick={() => setDeleteImage(image)}><Trash2 size={15} /></button> : null}</footer></article>; })}</div></FormSection>;
+}
+
+interface TagListItem { key: string; label: string; removeLabel: string; onRemove: () => void }
+
+// "input + Agregar" row with the added entries listed below as removable chips.
+// Presentation only: callers keep persisting exactly the same arrays.
+function TagListField({ id, label, placeholder, value, onValueChange, onAdd, addLabel, items }: { id: string; label: string; placeholder: string; value: string; onValueChange: (value: string) => void; onAdd: () => void; addLabel: string; items: TagListItem[] }) {
+  const canAdd = value.trim().length > 0;
+  return (
+    <div className="admin-tour-list-field">
+      <label className="admin-field__label" htmlFor={id}>{label}</label>
+      <div className="admin-tour-list-field__add">
+        <input
+          id={id}
+          className="admin-input"
+          value={value}
+          placeholder={placeholder}
+          onChange={(event) => onValueChange(event.target.value)}
+          // Enter adds the entry; without this it would submit the whole wizard form.
+          onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); if (canAdd) onAdd(); } }}
+        />
+        <button className="admin-btn admin-btn--secondary" type="button" aria-label={addLabel} disabled={!canAdd} onClick={onAdd}><Plus size={14} /> Agregar</button>
+      </div>
+      {items.length ? (
+        <ul className="admin-token-list" aria-label={`Lista de ${label.toLowerCase()}`}>
+          {items.map((item) => (
+            <li className="admin-token" key={item.key}>
+              <span>{item.label}</span>
+              <button type="button" aria-label={item.removeLabel} title="Quitar" onClick={item.onRemove}><X size={14} /></button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  );
 }
 
 function ExperienceStep({ editing, activityInput, inclusionInput, setActivityInput, setInclusionInput, addActivity, addInclusion, onChange }: { editing: TourEditor; activityInput: string; inclusionInput: string; setActivityInput: (value: string) => void; setInclusionInput: (value: string) => void; addActivity: () => void; addInclusion: () => void; onChange: (value: TourEditor) => void }) {
-  return <FormSection title="Actividades e incluye" description="Listas editables sin un máximo artificial." icon={<Check size={16} />}><div className="admin-dynamic-list"><h3>Actividades del Tour</h3>{editing.activities.map((item, index) => <div className="admin-dynamic-list__row" key={index}><input className="admin-input" value={item} onChange={(event) => onChange({ ...editing, activities: editing.activities.map((current, currentIndex) => currentIndex === index ? event.target.value : current) })} /><button className="admin-icon-btn" type="button" aria-label={`Eliminar actividad ${index + 1}`} onClick={() => onChange({ ...editing, activities: editing.activities.filter((_, currentIndex) => currentIndex !== index) })}><Trash2 size={15} /></button></div>)}<div className="admin-list-editor__add"><input className="admin-input" value={activityInput} onChange={(event) => setActivityInput(event.target.value)} /><button className="admin-btn admin-btn--secondary" type="button" onClick={addActivity}><Plus size={14} /> Agregar actividad</button></div></div><div className="admin-dynamic-list"><h3>Incluye</h3>{editing.inclusions.filter((item) => !item.pendingDelete).map((item) => <div className="admin-dynamic-list__row" key={item.id}><input className="admin-input" value={item.label} onChange={(event) => onChange({ ...editing, inclusions: editing.inclusions.map((current) => current.id === item.id ? { ...current, label: event.target.value } : current) })} /><button className="admin-icon-btn" type="button" aria-label={`Eliminar ${item.label}`} onClick={() => onChange({ ...editing, inclusions: editing.inclusions.map((current) => current.id === item.id ? { ...current, pendingDelete: true } : current) })}><Trash2 size={15} /></button></div>)}<div className="admin-list-editor__add"><input className="admin-input" value={inclusionInput} onChange={(event) => setInclusionInput(event.target.value)} /><button className="admin-btn admin-btn--secondary" type="button" onClick={addInclusion}><Plus size={14} /> Agregar</button></div></div></FormSection>;
+  return (
+    <FormSection title="Actividades e incluye" icon={<Check size={16} />}>
+      <TagListField
+        id="tour-activity-input"
+        label="Actividades del tour"
+        placeholder="Ej. Pesca deportiva"
+        value={activityInput}
+        onValueChange={setActivityInput}
+        onAdd={addActivity}
+        addLabel="Agregar actividad"
+        items={editing.activities.map((item, index) => ({
+          key: `${index}-${item}`,
+          label: item,
+          removeLabel: `Eliminar actividad ${item}`,
+          onRemove: () => onChange({ ...editing, activities: editing.activities.filter((_, currentIndex) => currentIndex !== index) }),
+        }))}
+      />
+      <TagListField
+        id="tour-inclusion-input"
+        label="Incluye"
+        placeholder="Ej. Bebidas"
+        value={inclusionInput}
+        onValueChange={setInclusionInput}
+        onAdd={addInclusion}
+        addLabel="Agregar a incluye"
+        items={editing.inclusions.filter((item) => !item.pendingDelete).map((item) => ({
+          key: item.id,
+          label: item.label,
+          removeLabel: `Eliminar ${item.label}`,
+          onRemove: () => onChange({ ...editing, inclusions: editing.inclusions.map((current) => current.id === item.id ? { ...current, pendingDelete: true } : current) }),
+        }))}
+      />
+    </FormSection>
+  );
 }
 
 function PackagesStep({ boats, relations, packages, onManageBoat }: { boats: BoatRow[]; relations: BoatTourRow[]; packages: EditablePackage[]; onManageBoat: (boatId: string | null) => void }) {
@@ -486,39 +657,28 @@ function PackagesStep({ boats, relations, packages, onManageBoat }: { boats: Boa
     groups.set(item.boatId, list);
   }
   return (
-    <FormSection
-      title="Paquetes"
-      description="Los precios y paquetes se administran por bote. Abre Botes › Tours y paquetes para editarlos."
-      icon={<Package size={16} />}
-    >
+    <FormSection title="Paquetes" description="Los paquetes y precios se administran por bote." icon={<Package size={16} />}>
       {packages.length === 0 ? (
-        <p className="admin-muted">Este tour todavía no tiene paquetes en ningún bote.</p>
-      ) : null}
-      {[...groups.entries()].map(([boatId, list]) => (
-        <div className="admin-dynamic-list" key={boatId ?? 'none'}>
-          <h3>{boatName(boatId)}</h3>
-          <div className="admin-package-previews">
-            {list.map((item) => (
-              <article className="admin-package-preview" key={item.id}>
-                <strong>
-                  {item.name || 'Paquete sin nombre'}
-                  {!item.active ? <span className="admin-muted"> · inactivo</span> : null}
-                </strong>
-                <span className="admin-muted">
-                  {item.customQuote ? 'Cotizar' : `$${item.basePrice}`} · {item.includedGuests} incl. / {item.maxGuests} máx.
-                </span>
-              </article>
-            ))}
-          </div>
-          <button className="admin-btn admin-btn--secondary" type="button" onClick={() => onManageBoat(boatId)}>
-            <Pencil size={15} /> Editar paquetes en {boatName(boatId)}
-          </button>
+        <div className="admin-tour-empty">
+          <span className="admin-tour-empty__icon"><Package size={20} /></span>
+          <p>Este tour aún no tiene paquetes asociados.</p>
+          {boats.length ? <button className="admin-btn admin-btn--secondary" type="button" onClick={() => onManageBoat(null)}><Ship size={15} /> Gestionar en Botes</button> : null}
         </div>
-      ))}
-      {boats.length === 0 ? null : (
-        <button className="admin-btn admin-btn--ghost" type="button" onClick={() => onManageBoat(null)}>
-          <Plus size={15} /> Añadir este tour a otro bote
-        </button>
+      ) : (
+        <>
+          <ul className="admin-tour-boat-list">
+            {[...groups.entries()].map(([boatId, list]) => (
+              <li className="admin-tour-boat-row" key={boatId ?? 'none'}>
+                <div className="admin-tour-boat-row__info">
+                  <strong>{boatName(boatId)}</strong>
+                  <span className="admin-muted">{list.length === 0 ? 'Sin paquetes' : `${list.length} ${list.length === 1 ? 'paquete' : 'paquetes'} · ${list.map((item) => item.name || 'Sin nombre').join(', ')}`}</span>
+                </div>
+                <button className="admin-btn admin-btn--ghost" type="button" aria-label={`Editar en Botes: ${boatName(boatId)}`} onClick={() => onManageBoat(boatId)}><Pencil size={14} /> Editar en Botes</button>
+              </li>
+            ))}
+          </ul>
+          {boats.length ? <div className="admin-tour-packages__footer"><button className="admin-btn admin-btn--ghost" type="button" onClick={() => onManageBoat(null)}><Ship size={15} /> Gestionar en Botes</button></div> : null}
+        </>
       )}
     </FormSection>
   );
@@ -527,17 +687,29 @@ function PackagesStep({ boats, relations, packages, onManageBoat }: { boats: Boa
 // Same immediate, standalone actions the table row used to expose
 // directly (toggle takes effect on click, independent of the wizard's own
 // "Finalizar" save) — only their location moved, not when/how they run.
-function ConfigStep({ tour, togglingTourId, onToggle, onRequestDelete }: { tour: TourRow | null; togglingTourId: string | null; onToggle: (tour: TourRow) => void | Promise<void>; onRequestDelete: (tour: TourRow) => void }) {
+function ConfigStep({ tour, missing, togglingTourId, onToggle, onRequestDelete }: { tour: TourRow | null; missing: string[]; togglingTourId: string | null; onToggle: (tour: TourRow) => void | Promise<void>; onRequestDelete: (tour: TourRow) => void }) {
   if (!tour) return null;
   const status = publicationStatus(tour);
   const isPublished = status === 'published';
+  const hint = isPublished
+    ? 'Aparece en el sitio público y se puede reservar.'
+    : status === 'draft'
+      ? 'No aparece en el sitio público ni puede reservarse.'
+      : 'Oculto: no aparece en el sitio público ni se puede reservar.';
   return (
     <>
-      <FormSection title="Visibilidad" description="Controla si este tour se muestra en el sitio público." icon={<Settings size={16} />}>
-        <div className="admin-config-row">
-          <div>
+      <FormSection title="Visibilidad" icon={<Settings size={16} />}>
+        <div className="admin-tour-config-row">
+          <div className="admin-tour-config-row__status">
             <p className="admin-config-row__label">Estado actual</p>
             <AdminBadge value={status === 'draft' ? 'Borrador' : isPublished ? 'Activo' : 'Inactivo'} />
+            <p className="admin-muted">{hint}</p>
+            {!isPublished && missing.length ? (
+              <div className="admin-tour-missing">
+                <p className="admin-tour-missing__title">Falta completar:</p>
+                <ul>{missing.map((label) => <li key={label}>{label}</li>)}</ul>
+              </div>
+            ) : null}
           </div>
           <button
             className={`admin-btn ${isPublished ? 'admin-btn--secondary' : ''}`}
@@ -549,18 +721,16 @@ function ConfigStep({ tour, togglingTourId, onToggle, onRequestDelete }: { tour:
             {isPublished ? 'Ocultar tour' : 'Mostrar tour'}
           </button>
         </div>
-        <p className="admin-muted admin-config-row__hint">
-          {isPublished ? 'Visible: aparece en el sitio público y se puede reservar.' : 'Oculto: no aparece en el sitio público ni se puede reservar.'}
-        </p>
       </FormSection>
-      <FormSection title="Zona de peligro" description="Esta acción no se puede deshacer." icon={<Trash2 size={16} />}>
-        <div className="admin-danger-zone">
-          <p className="admin-muted">Elimina este tour y sus paquetes asociados. Si tiene reservas históricas, la base de datos bloqueará la eliminación.</p>
-          <button className="admin-btn admin-btn--danger" type="button" onClick={() => onRequestDelete(tour)}>
-            <Trash2 size={15} /> Eliminar tour
-          </button>
+      <section className="admin-tour-danger" aria-label="Zona de peligro">
+        <div>
+          <strong>Eliminar tour</strong>
+          <p className="admin-muted">Esta acción no se puede deshacer.</p>
         </div>
-      </FormSection>
+        <button className="admin-btn admin-btn--danger" type="button" onClick={() => onRequestDelete(tour)}>
+          <Trash2 size={15} /> Eliminar tour
+        </button>
+      </section>
     </>
   );
 }

@@ -36,7 +36,11 @@ test('dashboard displays reservations, reports load failures and recovers on ret
     await page.goto(`${base}/admin/reservations`);
     await expect(page.getByRole('cell', { name: 'PFT-3BD31A7A', exact: true })).toBeVisible();
     await expect(page.getByRole('cell', { name: 'PFT-60E8EAA3', exact: true })).toBeVisible();
-    await expect(page.getByRole('row').filter({ hasText: 'PFT-3BD31A7A' }).getByRole('button', { name: /Confirmar reserva/ })).toBeEnabled();
+    const pending = page.getByRole('row').filter({ hasText: 'PFT-3BD31A7A' });
+    await expect(pending.getByRole('button', { name: /Confirmar/ })).toBeEnabled();
+    await expect(pending.getByRole('button', { name: /Editar reserva/ })).toBeEnabled();
+    // Ya confirmada (PayPal pagado): no hay acción de confirmar.
+    await expect(page.getByRole('row').filter({ hasText: 'PFT-60E8EAA3' }).getByRole('button', { name: /Confirmar/ })).toHaveCount(0);
     assert.equal(new URL(page.url()).pathname, '/admin/reservations');
   } finally {
     await browser.close();

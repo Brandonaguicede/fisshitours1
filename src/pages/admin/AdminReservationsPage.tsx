@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { AdminBadge, AdminFilterMenu, AdminListToolbar, AdminModuleSurface, AdminStatCard, AdminTable } from '../../components/admin/AdminPrimitives';
+import AdminConfirmDialog from '../../components/admin/AdminConfirmDialog';
 import { Modal } from '../../components/common/Modal';
 import { supabase } from '../../lib/supabase';
 import { readWithAdminSession } from '../../services/adminAuthService';
@@ -66,6 +67,25 @@ const paymentStatusOptions = [
   { value: 'refunded', label: 'Reembolsado' },
 ];
 
+// Display-only formatters for the "Pago" column and the mobile card. They
+// never touch the stored payment_method_key / payment_status, the export, or
+// anything sent to PayPal — they only turn the values into short labels.
+const paymentStatusLabels: Record<string, string> = Object.fromEntries(
+  paymentStatusOptions.filter((option) => option.value !== 'all').map((option) => [option.value, option.label]),
+);
+
+function formatPaymentStatusLabel(status: string) {
+  return paymentStatusLabels[status] ?? status.split('_').join(' ');
+}
+
+function formatPaymentMethodLabel(key: string, name: string) {
+  const source = `${key} ${name}`.toLowerCase();
+  if (source.includes('paypal')) return 'PayPal';
+  if (source.includes('whatsapp')) return 'WhatsApp';
+  if (/pay[\s_-]*on[\s_-]*(the[\s_-]*)?day|pago[\s_-]*(el[\s_-]*)?d[ií]a/.test(source)) return 'Día del tour';
+  return name;
+}
+
 function needsEditorNotice(message: string) {
   return /permission denied|denied for table|must be logged in|jwt|admin or editor/i.test(message);
 }
@@ -117,6 +137,7 @@ export default function AdminReservationsPage() {
   const [editingReservation, setEditingReservation] = useState<AdminReservation | null>(null);
   const [editForm, setEditForm] = useState<EditBookingForm | null>(null);
   const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
+  const [confirmTarget, setConfirmTarget] = useState<AdminReservation | null>(null);
   const [manualSaving, setManualSaving] = useState(false);
   const [manualForm, setManualForm] = useState<ManualBookingForm>(emptyManualBooking);
   const [error, setError] = useState('');
@@ -217,6 +238,10 @@ export default function AdminReservationsPage() {
 
   function paymentMethodLabel(key: string) {
     return paymentMethodNames[key] ?? key;
+  }
+
+  function methodLabel(reservation: AdminReservation) {
+    return formatPaymentMethodLabel(reservation.payment_method_key, paymentMethodLabel(reservation.payment_method_key));
   }
 
   async function updateReservationStatus(reservation: AdminReservation, nextBookingStatus: 'confirmed' | 'cancelled') {
@@ -447,30 +472,41 @@ export default function AdminReservationsPage() {
     }
   }
 
+  // Same conditions the old green check used to enable itself (its `disabled`
+  // rule, inverted): not already confirmed/cancelled, and PayPal bookings only
+  // once the payment is verified as paid. Now it is simply hidden otherwise.
+  function canConfirmReservation(reservation: AdminReservation) {
+    if (reservation.booking_status === 'confirmed' || reservation.booking_status === 'cancelled') return false;
+    return !(reservation.payment_method_key === 'paypal' && reservation.payment_status !== 'paid');
+  }
+
   function renderReservationActions(reservation: AdminReservation) {
+    const busy = loading || busyId === reservation.id;
     return (
       <div className="admin-row-actions admin-reservation-actions">
-        <button className="admin-icon-action" type="button" title="Editar reserva" aria-label={`Editar reserva ${reservation.booking_reference}`} disabled={loading || busyId === reservation.id} onClick={() => openEdit(reservation)}><Pencil size={17} /></button>
-        <button
-          className="admin-icon-action admin-icon-action--success"
-          type="button"
-          title="Confirmar reserva"
-          aria-label={`Confirmar reserva ${reservation.booking_reference}`}
-          disabled={loading || busyId === reservation.id || reservation.booking_status === 'confirmed' || reservation.booking_status === 'cancelled' || (reservation.payment_method_key === 'paypal' && reservation.payment_status !== 'paid')}
-          onClick={() => void updateReservationStatus(reservation, 'confirmed')}
-        >
-          <Check size={17} />
-        </button>
+        <button className="admin-icon-action" type="button" title="Editar reserva" aria-label={`Editar reserva ${reservation.booking_reference}`} disabled={busy} onClick={() => openEdit(reservation)}><Pencil size={17} /></button>
+        {canConfirmReservation(reservation) ? (
+          <button
+            className="admin-action-btn admin-action-btn--confirm"
+            type="button"
+            title="Confirmar reserva"
+            aria-label={`Confirmar reserva ${reservation.booking_reference}`}
+            disabled={busy}
+            onClick={() => setConfirmTarget(reservation)}
+          >
+            {busyId === reservation.id ? <Loader2 className="animate-spin" size={14} /> : <Check size={14} />} Confirmar
+          </button>
+        ) : null}
         {reservation.booking_status === 'confirmed' && reservation.customers?.email && !confirmationSentByBooking[reservation.id] ? (
           <button
-            className="admin-icon-action"
+            className="admin-action-btn"
             type="button"
-            title="Reintentar envío de email"
-            aria-label={`Reintentar envío de email de confirmación para ${reservation.booking_reference}`}
-            disabled={loading || busyId === reservation.id}
+            title="Reenviar correo"
+            aria-label={`Reenviar correo de confirmación de ${reservation.booking_reference}`}
+            disabled={busy}
             onClick={() => void retryReservationConfirmation(reservation)}
           >
-            <RefreshCw size={17} />
+            {busyId === reservation.id ? <Loader2 className="animate-spin" size={14} /> : <RefreshCw size={14} />} Reenviar correo
           </button>
         ) : null}
       </div>
@@ -552,8 +588,10 @@ export default function AdminReservationsPage() {
               </td>
               <td>{money(Number(reservation.total_snapshot))}</td>
               <td>
-                {paymentMethodLabel(reservation.payment_method_key)}
-                <div><AdminBadge value={reservation.payment_status} /></div>
+                <div className="admin-payment-cell">
+                  <span className="admin-payment-cell__method">{methodLabel(reservation)}</span>
+                  <AdminBadge value={reservation.payment_status} label={formatPaymentStatusLabel(reservation.payment_status)} />
+                </div>
               </td>
               <td><AdminBadge value={reservation.booking_status} /></td>
               <td>
@@ -581,8 +619,8 @@ export default function AdminReservationsPage() {
               <div><dt>Personas</dt><dd>{reservation.guests}</dd></div>
               <div><dt>Lugar de salida</dt><dd>{reservation.departure_location_name_snapshot ?? '-'}<div className="admin-muted">{Number(reservation.departure_surcharge_snapshot ?? 0) > 0 ? money(Number(reservation.departure_surcharge_snapshot)) : 'Sin costo'}</div></dd></div>
               <div><dt>Total</dt><dd>{money(Number(reservation.total_snapshot))}</dd></div>
-              <div><dt>Método de pago</dt><dd>{paymentMethodLabel(reservation.payment_method_key)}</dd></div>
-              <div><dt>Estado de pago</dt><dd><AdminBadge value={reservation.payment_status} /></dd></div>
+              <div><dt>Método de pago</dt><dd>{methodLabel(reservation)}</dd></div>
+              <div><dt>Estado de pago</dt><dd><AdminBadge value={reservation.payment_status} label={formatPaymentStatusLabel(reservation.payment_status)} /></dd></div>
               <div><dt>Estado de reserva</dt><dd><AdminBadge value={reservation.booking_status} /></dd></div>
             </dl>
             {renderReservationActions(reservation)}
@@ -715,6 +753,27 @@ export default function AdminReservationsPage() {
           <footer className="admin-modal-footer"><button className="admin-btn" type="submit" disabled={editSaving || !editForm}>{editSaving ? <Loader2 className="animate-spin" size={15} /> : <Check size={15} />} Guardar cambios</button><button className="admin-btn admin-btn--secondary" type="button" onClick={() => setEditOpen(false)}>Cerrar</button></footer>
         </form>
       </Modal>
+
+      <AdminConfirmDialog
+        open={Boolean(confirmTarget)}
+        onClose={() => setConfirmTarget(null)}
+        titleId="confirm-booking-title"
+        title="Confirmar reserva"
+        tone="primary"
+        confirmLabel="Confirmar"
+        loading={Boolean(confirmTarget) && busyId === confirmTarget?.id}
+        message={
+          <>
+            <p>¿Confirmar esta reserva{confirmTarget ? <> <strong>{confirmTarget.booking_reference}</strong></> : null}?</p>
+            <p className="mt-2">Se marcará como pagada, se bloqueará el bote y se enviará el correo de confirmación si el cliente tiene email.</p>
+          </>
+        }
+        onConfirm={async () => {
+          if (!confirmTarget) return;
+          await updateReservationStatus(confirmTarget, 'confirmed');
+          setConfirmTarget(null);
+        }}
+      />
 
       <Modal open={cancelConfirmOpen} onClose={() => setCancelConfirmOpen(false)} titleId="cancel-booking-title" className="max-w-md">
         <div className="admin-modal-card">

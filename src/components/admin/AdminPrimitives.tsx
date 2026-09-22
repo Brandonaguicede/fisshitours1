@@ -27,8 +27,13 @@ export function AdminStatCard(props: { label: string; value: string; icon: Lucid
   );
 }
 
-export function AdminBadge({ value }: { value: string | boolean }) {
-  const text = typeof value === 'boolean' ? (value ? 'Activo' : 'Inactivo') : value.split('_').join(' ');
+/**
+ * `value` decides the tone; `label` (optional, display only) replaces the
+ * visible text — lets a screen show a friendly Spanish label without
+ * changing the underlying value the color is derived from.
+ */
+export function AdminBadge({ value, label }: { value: string | boolean; label?: string }) {
+  const text = label ?? (typeof value === 'boolean' ? (value ? 'Activo' : 'Inactivo') : value.split('_').join(' '));
   const normalized = String(value).toLowerCase();
   const tone =
     normalized.includes('paid') || normalized.includes('confirmed') || normalized === 'true' || normalized.includes('approved')
