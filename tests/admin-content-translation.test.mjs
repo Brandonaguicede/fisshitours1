@@ -230,7 +230,7 @@ const heroRows = [
 test('hero: only the English texts are editable; changing one translates just it and writes its .es key', async () => {
   const f = await fixture({ site_settings: heroRows }); const { page, writes, translation, store } = f;
   try {
-    await page.goto(`${base}/admin/content`);
+    await page.goto(`${base}/admin/portada`);
     await page.getByRole('button', { name: 'Textos', exact: true }).click();
     await expect(page.getByLabel('Titulo principal', { exact: true })).toHaveValue('Experience the Ocean');
     // No Spanish field, no ES/EN language filter.
@@ -240,8 +240,8 @@ test('hero: only the English texts are editable; changing one translates just it
     await page.getByLabel('Titulo principal', { exact: true }).fill('Experience the Pacific');
     await page.waitForTimeout(300);
     assert.equal(translation.calls.length, 0, 'not while typing');
-    await page.getByRole('button', { name: 'Guardar hero' }).click();
-    await expect(page.getByText(/Hero Section actualizado/)).toBeVisible();
+    await page.getByRole('button', { name: 'Guardar portada' }).click();
+    await expect(page.getByText(/Portada actualizada/)).toBeVisible();
     assert.deepEqual(translation.calls, [{ texts: ['Experience the Pacific'], targetLang: 'ES', sourceLang: 'EN' }]);
     const settings = Object.fromEntries(store.site_settings.map((row) => [row.key, row.value]));
     assert.equal(settings['home.hero.title.en'], 'Experience the Pacific');
@@ -255,18 +255,18 @@ test('hero: only the English texts are editable; changing one translates just it
 test('hero: saving without changes does not call DeepL and does not touch any .es key; a failure persists nothing', async () => {
   const f = await fixture({ site_settings: heroRows }); const { page, writes, translation } = f;
   try {
-    await page.goto(`${base}/admin/content`);
+    await page.goto(`${base}/admin/portada`);
     await page.getByRole('button', { name: 'Textos', exact: true }).click();
     await expect(page.getByLabel('Titulo principal', { exact: true })).toHaveValue('Experience the Ocean');
-    await page.getByRole('button', { name: 'Guardar hero' }).click();
-    await expect(page.getByText(/Hero Section actualizado/)).toBeVisible();
+    await page.getByRole('button', { name: 'Guardar portada' }).click();
+    await expect(page.getByText(/Portada actualizada/)).toBeVisible();
     assert.equal(translation.calls.length, 0);
     assert.equal(writesTo(writes, 'site_settings', 'POST').some((w) => String(w.body.key).endsWith('.es')), false);
 
     translation.fails = true;
     await page.getByLabel('Titulo principal', { exact: true }).fill('Experience the Pacific');
     const before = writes.length;
-    await page.getByRole('button', { name: 'Guardar hero' }).click();
+    await page.getByRole('button', { name: 'Guardar portada' }).click();
     await expect(page.getByRole('alert').filter({ hasText: SPANISH_ERROR }).or(page.getByText(SPANISH_ERROR)).first()).toBeVisible();
     assert.equal(writes.length, before, 'nothing (not even the English) is saved when the translation fails');
     await expect(page.getByLabel('Titulo principal', { exact: true })).toHaveValue('Experience the Pacific');
@@ -276,13 +276,12 @@ test('hero: saving without changes does not call DeepL and does not touch any .e
 test('about: a long multi-paragraph English text is translated as one text and its .es key is written', async () => {
   const f = await fixture({ site_settings: heroRows }); const { page, translation, store } = f;
   try {
-    await page.goto(`${base}/admin/content`);
-    await page.getByRole('button', { name: 'Nosotros / About' }).click();
+    await page.goto(`${base}/admin/sobre-nosotros`);
     const story = page.getByLabel(/^Historia \(pagina Nosotros\)/);
     await expect(story).toHaveValue('Our story in English.\n\nSecond paragraph.');
     await story.fill('Our new story.\n\nWith two paragraphs.');
-    await page.getByRole('button', { name: 'Guardar Nosotros' }).click();
-    await expect(page.getByText(/Nosotros \/ About actualizado/)).toBeVisible();
+    await page.getByRole('button', { name: 'Guardar Sobre Nosotros' }).click();
+    await expect(page.getByText(/Sobre Nosotros actualizado/)).toBeVisible();
     assert.deepEqual(translation.calls.map((call) => call.texts), [['Our new story.\n\nWith two paragraphs.']]);
     const settings = Object.fromEntries(store.site_settings.map((row) => [row.key, row.value]));
     assert.equal(settings['about.story.en'], 'Our new story.\n\nWith two paragraphs.');
@@ -302,15 +301,15 @@ test('repair button: clearly a backfill tool, asks for confirmation, shows the p
       repairCalls.push(route.request().method());
       return route.fulfill({ json: { results: [{ table: 'tours', label: 'Tours', updated: 2, skipped: 6, errors: 0 }, { table: 'gallery_images', label: 'Galería', updated: 0, skipped: 8, errors: 1 }], totalErrors: 1, hasMore: false } });
     });
-    await page.goto(`${base}/admin/content`);
+    await page.goto(`${base}/admin/portada`);
     await expect(page.getByRole('heading', { name: 'Reparar traducciones antiguas' })).toBeVisible();
     await expect(page.getByText('no necesitas este botón para tus ediciones normales')).toBeVisible();
     await expect(page.getByText('Traducir todo el sitio')).toHaveCount(0);
     // A normal save translates through translate-texts and never triggers the repair function.
     await page.getByRole('button', { name: 'Textos', exact: true }).click();
     await page.getByLabel('Titulo principal', { exact: true }).fill('Experience the Pacific');
-    await page.getByRole('button', { name: 'Guardar hero' }).click();
-    await expect(page.getByText(/Hero Section actualizado/)).toBeVisible();
+    await page.getByRole('button', { name: 'Guardar portada' }).click();
+    await expect(page.getByText(/Portada actualizada/)).toBeVisible();
     assert.equal(translation.calls.length, 1);
     assert.equal(repairCalls.length, 0);
     // The repair button asks first; nothing runs until confirmed.
@@ -329,7 +328,7 @@ test('repair button: a server error is reported clearly and nothing is shown as 
   const f = await fixture({ site_settings: heroRows }); const { page } = f;
   try {
     await page.route('https://admin-test.supabase.co/functions/v1/translate-all-site-content', (route) => route.fulfill({ status: 503, json: { message: 'La traducción automática todavía no está configurada (falta el secret DEEPL_API_KEY en Supabase).' } }));
-    await page.goto(`${base}/admin/content`);
+    await page.goto(`${base}/admin/portada`);
     await page.getByRole('button', { name: 'Traducir contenido antiguo' }).click();
     await page.getByRole('button', { name: 'Traducir', exact: true }).click();
     await expect(page.getByText('todavía no está configurada')).toBeVisible();

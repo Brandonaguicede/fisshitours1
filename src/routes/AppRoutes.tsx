@@ -1,5 +1,5 @@
 import { lazy } from 'react';
-import { Navigate, Route, Routes } from 'react-router-dom';
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 
 import { MainLayout } from '../components/layout/MainLayout';
 
@@ -17,9 +17,21 @@ const AdminBoatsPage = lazy(() => import('../pages/admin/AdminBoatsPage'));
 const AdminBoatToursPage = lazy(() => import('../pages/admin/AdminBoatToursPage'));
 const AdminReviewsPage = lazy(() => import('../pages/admin/AdminReviewsPage'));
 const AdminGalleryPage = lazy(() => import('../pages/admin/AdminGalleryPage'));
-const AdminContentPage = lazy(() => import('../pages/admin/AdminContentPage'));
+const AdminPortadaPage = lazy(() => import('../pages/admin/AdminPortadaPage'));
+const AdminAboutPage = lazy(() => import('../pages/admin/AdminAboutPage'));
 const AdminPaymentMethodsPage = lazy(() => import('../pages/admin/AdminPaymentMethodsPage'));
 const AdminDepartureLocationsPage = lazy(() => import('../pages/admin/AdminDepartureLocationsPage'));
+
+// /admin/content used to hold Hero and About as two tabs. Old bookmarks land on Portada, except when they
+// explicitly asked for the About tab (?tab=about), which now lives on its own screen.
+function LegacyContentRedirect() {
+  const { search, hash } = useLocation();
+  const params = new URLSearchParams(search);
+  const wantsAbout = ['about', 'nosotros', 'sobre-nosotros'].includes((params.get('tab') ?? '').toLowerCase());
+  params.delete('tab');
+  const rest = params.toString();
+  return <Navigate to={`${wantsAbout ? '/admin/sobre-nosotros' : '/admin/portada'}${rest ? `?${rest}` : ''}${hash}`} replace />;
+}
 
 export function AppRoutes() {
   return (
@@ -35,9 +47,12 @@ export function AppRoutes() {
         <Route path="gallery" element={<AdminGalleryPage />} />
         {/* Destinos was removed as a product feature — kept as a redirect so any old bookmark/link doesn't 404. */}
         <Route path="destinations" element={<Navigate to="/admin" replace />} />
-        <Route path="content" element={<AdminContentPage />} />
-        {/* Videos lived here before Hero Section grouped Media (photos + video) under one screen; kept as a redirect so old links/bookmarks keep working. */}
-        <Route path="videos" element={<Navigate to="/admin/content" replace />} />
+        <Route path="portada" element={<AdminPortadaPage />} />
+        <Route path="sobre-nosotros" element={<AdminAboutPage />} />
+        {/* Hero and About used to share /admin/content as two tabs; kept as a redirect so old links/bookmarks keep working. */}
+        <Route path="content" element={<LegacyContentRedirect />} />
+        {/* Videos lived under content before the Portada screen grouped Media (photos + video); same reason. */}
+        <Route path="videos" element={<Navigate to="/admin/portada" replace />} />
         <Route path="payment-methods" element={<AdminPaymentMethodsPage />} />
         <Route path="departure-locations" element={<AdminDepartureLocationsPage />} />
       </Route>

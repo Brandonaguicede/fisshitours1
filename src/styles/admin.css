@@ -4614,3 +4614,103 @@ html[data-theme='dark'] body:has(.admin-shell) {
   .admin-pagination__button { min-width: 28px; padding-inline: 0.15rem; }
   .admin-pagination__ellipsis { min-width: 0.9rem; }
 }
+
+/*
+ * Portada / Sobre Nosotros content screens (AdminContentSection). Scoped to .admin-content-section so
+ * nothing else that uses .admin-tabs / .admin-segmented changes. Inside a card the inner tabs, the
+ * Imágenes/Video switch and the preview stay flat (no drop shadow, no white outline, no gradient) so
+ * dark mode reads as one coherent surface; every colour comes from the --admin-* tokens.
+ */
+.admin-card.admin-content-section > p {
+  margin-bottom: 1rem;
+}
+
+.admin-content-section > .admin-alert {
+  margin-bottom: 1rem;
+}
+
+.admin-content-section .admin-tabs {
+  width: fit-content;
+  max-width: 100%;
+  border: 1px solid var(--admin-line);
+  background: var(--admin-surface-subtle);
+  box-shadow: none;
+}
+
+.admin-content-section .admin-tab:hover {
+  background: var(--admin-selected);
+}
+
+.admin-content-section .admin-tab--active,
+.admin-content-section .admin-tab--active:hover {
+  background: var(--admin-primary-hover);
+  color: var(--admin-on-primary);
+}
+
+.admin-content-section .admin-segmented button.admin-segmented__option--active {
+  background: var(--admin-primary-hover);
+  color: var(--admin-on-primary);
+}
+
+.admin-content-section .admin-segmented button:disabled {
+  cursor: progress;
+  opacity: 0.7;
+}
+
+.admin-content-preview {
+  padding: 1rem;
+  border: 1px solid var(--admin-line);
+  border-radius: 1rem;
+  background: #0b2533;
+  color: #ffffff;
+  box-shadow: none;
+}
+
+/* The preview sits inside .admin-card, whose "p" rule (muted colour / 0.88rem) would otherwise win over any utility class. */
+.admin-card .admin-content-preview p {
+  margin: 0;
+  color: rgb(255 255 255 / 0.85);
+  font-size: 1rem;
+}
+
+.admin-card .admin-content-preview .admin-content-preview__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0 0.75rem;
+  color: #9cc6da;
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.admin-card .admin-content-preview .admin-content-preview__eyebrow {
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.admin-card .admin-content-preview .admin-content-preview__lead {
+  max-width: 36rem;
+  margin: 0.5rem auto 0;
+  font-size: 0.95rem;
+  font-weight: 500;
+}
+
+.admin-card .admin-content-preview .admin-content-preview__text {
+  margin: 0.75rem 0 0;
+  font-size: 0.875rem;
+  line-height: 1.5rem;
+}
+
+@media (max-width: 640px) {
+  .admin-content-section .admin-tabs {
+    width: 100%;
+  }
+
+  .admin-content-section .admin-tabs .admin-tab {
+    flex: 1 1 0;
+  }
+}

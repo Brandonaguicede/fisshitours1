@@ -180,7 +180,7 @@ test('Hero and About: the admin edits English only; saving generates the Spanish
       return route.fulfill({ json: [], headers: { 'access-control-expose-headers': 'content-range', 'content-range': '0-0/0' } });
     });
 
-    await page.goto(`${base}/admin/content`);
+    await page.goto(`${base}/admin/portada`);
     await page.getByRole('button', { name: 'Textos' }).click();
 
     // Only the English text is editable: no Spanish field and no language selector.
@@ -191,7 +191,7 @@ test('Hero and About: the admin edits English only; saving generates the Spanish
     await page.getByLabel('Titulo principal', { exact: true }).fill('New title in English');
     await page.waitForTimeout(300);
     assert.equal(translation.calls.length, 0, 'nothing is translated while typing');
-    await page.getByRole('button', { name: 'Guardar hero' }).click();
+    await page.getByRole('button', { name: 'Guardar portada' }).click();
 
     await expect.poll(() => ['home.hero.title.es', 'home.hero.title.en'].every((key) => settingsWrites.some((row) => row.key === key))).toBe(true);
     assert.equal(settingsWrites.find((row) => row.key === 'home.hero.title.en').value, 'New title in English');
@@ -202,9 +202,9 @@ test('Hero and About: the admin edits English only; saving generates the Spanish
 
     // About: same rule.
     settingsWrites.length = 0;
-    await page.getByRole('button', { name: 'Nosotros / About' }).click();
+    await page.getByRole('link', { name: 'Sobre Nosotros' }).click();
     await page.getByLabel('Titulo', { exact: true }).fill('About Title EN');
-    await page.getByRole('button', { name: 'Guardar Nosotros' }).click();
+    await page.getByRole('button', { name: 'Guardar Sobre Nosotros' }).click();
     await expect.poll(() => ['about.title.es', 'about.title.en'].every((key) => settingsWrites.some((row) => row.key === key))).toBe(true);
     assert.equal(settingsWrites.find((row) => row.key === 'about.title.en').value, 'About Title EN');
     assert.equal(settingsWrites.find((row) => row.key === 'about.title.es').value, 'About Title EN [ES]');

@@ -234,7 +234,7 @@ export default function AdminVideoManager({
       <div className="admin-video-manager__r2">
         <label className="admin-muted" htmlFor={`${resourceId}-r2-url`}>O usa un video ya subido a R2</label>
         <div className="admin-video-manager__r2-row">
-          <input id={`${resourceId}-r2-url`} className="admin-input" type="url" placeholder="https://pub-...r2.dev/videos/hero.mp4" value={manualUrl} onChange={(event) => setManualUrl(event.target.value)} disabled={disabled || uploading} />
+          <input id={`${resourceId}-r2-url`} className="admin-input" type="url" placeholder="https://pub-...r2.dev/videos/portada.mp4" value={manualUrl} onChange={(event) => setManualUrl(event.target.value)} disabled={disabled || uploading} />
           <button className="admin-btn admin-btn--secondary" type="button" onClick={() => void saveR2Url()} disabled={disabled || !manualUrl.trim()}>Usar URL</button>
         </div>
         <p className="admin-muted">Sube primero el archivo en R2 y pega aquí su URL pública. Esto evita pasar archivos grandes por la función.</p>

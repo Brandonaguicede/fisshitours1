@@ -1,4 +1,4 @@
-import { CalendarDays, ChevronLeft, ChevronRight, CreditCard, FileText, Gauge, Globe2, Image, LayoutDashboard, LifeBuoy, LogOut, MapPin, Menu, MessageSquare, Package, Ship, Star, Users } from 'lucide-react';
+import { CalendarDays, ChevronLeft, ChevronRight, CreditCard, FileText, Gauge, Globe2, Image, LayoutDashboard, LifeBuoy, LogOut, MapPin, Menu, MessageSquare, Package, Info, Ship, Star, Users } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, NavLink, Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom';
 
@@ -27,7 +27,8 @@ const navGroups = [
   {
     caption: 'Contenido',
     items: [
-      { label: 'Hero Section', to: '/admin/content', icon: FileText },
+      { label: 'Portada', to: '/admin/portada', icon: FileText },
+      { label: 'Sobre Nosotros', to: '/admin/sobre-nosotros', icon: Info },
       { label: 'Galeria', to: '/admin/gallery', icon: Image },
       { label: 'Comentarios', to: '/admin/reviews', icon: MessageSquare },
     ],
@@ -42,7 +43,8 @@ const titles: Record<string, string> = {
   '/admin/boat-tours': 'Resumen de paquetes',
   '/admin/reviews': 'Comentarios',
   '/admin/gallery': 'Galeria',
-  '/admin/content': 'Hero Section',
+  '/admin/portada': 'Portada',
+  '/admin/sobre-nosotros': 'Sobre Nosotros',
   '/admin/payment-methods': 'Metodos de pago',
   '/admin/departure-locations': 'Lugares de salida',
 };

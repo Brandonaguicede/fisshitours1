@@ -1,14 +1,12 @@
 import { ChevronDown, ChevronRight, Eye, FileText, Globe2, Loader2, Save } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-import AdminConfirmDialog from '../../components/admin/AdminConfirmDialog';
-import AdminImageManager from '../../components/admin/AdminImageManager';
-import AdminVideoManager from '../../components/admin/AdminVideoManager';
-import { AdminPageHeader } from '../../components/admin/AdminPrimitives';
 import { supabase } from '../../lib/supabase';
-import { ABOUT_CAROUSEL_DEFAULTS, buildAboutCarouselImages, DEFAULT_ABOUT_SETTINGS } from '../../services/aboutSettings';
 import type { StorageImage } from '../../services/imageService';
 import { translateAllSiteContent, translateTextsToSpanish, type TranslateAllSiteContentResult } from '../../services/translationService';
+import AdminConfirmDialog from './AdminConfirmDialog';
+import AdminImageManager from './AdminImageManager';
+import AdminVideoManager from './AdminVideoManager';
 
 interface SiteSettingRow {
   key: string;
@@ -17,7 +15,7 @@ interface SiteSettingRow {
   active: boolean;
 }
 
-interface ContentField {
+export interface ContentField {
   key: string;
   label: string;
   type: 'text' | 'textarea' | 'url' | 'boolean' | 'image' | 'video' | 'media_mode';
@@ -27,70 +25,7 @@ interface ContentField {
   maxHeight?: number;
 }
 
-type Draft = Record<string, string>;
-
-const FALLBACK_HERO_IMAGE = '/images/placeholder-image.jpg';
-
-const HERO_IMAGE_FIELDS: ContentField[] = [
-  { key: 'home.hero.image', label: 'Slide 1 - compu', type: 'image', fallback: FALLBACK_HERO_IMAGE, aspect: 16 / 9, maxWidth: 1920, maxHeight: 1080 },
-  { key: 'home.hero.mobile_image', label: 'Slide 1 - celular', type: 'image', fallback: '', aspect: 4 / 5, maxWidth: 1200, maxHeight: 1500 },
-  { key: 'home.hero.slide_2.image', label: 'Slide 2 - compu', type: 'image', fallback: '', aspect: 16 / 9, maxWidth: 1920, maxHeight: 1080 },
-  { key: 'home.hero.slide_2.mobile_image', label: 'Slide 2 - celular', type: 'image', fallback: '', aspect: 4 / 5, maxWidth: 1200, maxHeight: 1500 },
-  { key: 'home.hero.slide_3.image', label: 'Slide 3 - compu', type: 'image', fallback: '', aspect: 16 / 9, maxWidth: 1920, maxHeight: 1080 },
-  { key: 'home.hero.slide_3.mobile_image', label: 'Slide 3 - celular', type: 'image', fallback: '', aspect: 4 / 5, maxWidth: 1200, maxHeight: 1500 },
-  { key: 'home.hero.slide_4.image', label: 'Slide 4 - compu', type: 'image', fallback: '', aspect: 16 / 9, maxWidth: 1920, maxHeight: 1080 },
-  { key: 'home.hero.slide_4.mobile_image', label: 'Slide 4 - celular', type: 'image', fallback: '', aspect: 4 / 5, maxWidth: 1200, maxHeight: 1500 },
-];
-
-// The primary/secondary CTA buttons (label, link, enabled toggle) are
-// deliberately NOT in this list — see the CIERRE DE SEGURIDAD pass. They
-// control site structure/navigation (where a button goes, whether it shows
-// at all), not editorial content, and a wrong value here breaks the booking
-// entry point. `Hero.tsx` still reads `home.hero.primary_label.*` /
-// `primary_href` / `primary_enabled` (and the secondary equivalents) exactly
-// as before — those DB rows and the public rendering are untouched, only the
-// Admin's ability to edit them is gone.
-const HERO_FIELDS: ContentField[] = [
-  { key: 'home.hero.media_mode', label: 'Modo del hero', type: 'media_mode', fallback: 'image' },
-  { key: 'home.hero.title.es', label: 'Titulo principal ES', type: 'text', fallback: 'Experimenta el oceano' },
-  { key: 'home.hero.title.en', label: 'Titulo principal EN', type: 'text', fallback: 'Experience the Ocean' },
-  { key: 'home.hero.eyebrow.es', label: 'Etiqueta ES', type: 'text', fallback: 'Charters privados - Costa Rica' },
-  { key: 'home.hero.eyebrow.en', label: 'Etiqueta EN', type: 'text', fallback: 'Private charters - Costa Rica' },
-  { key: 'home.hero.subtitle.es', label: 'Subtitulo ES', type: 'textarea', fallback: 'Pesca de clase mundial, vistas impresionantes y recuerdos inolvidables.' },
-  { key: 'home.hero.subtitle.en', label: 'Subtitulo EN', type: 'textarea', fallback: 'World-class fishing, stunning views, and unforgettable memories.' },
-  { key: 'home.hero.image_alt.es', label: 'Texto alternativo imagen ES', type: 'text', fallback: 'Bote privado navegando en el Pacifico de Costa Rica' },
-  { key: 'home.hero.image_alt.en', label: 'Texto alternativo imagen EN', type: 'text', fallback: 'Private boat sailing Costa Rica Pacific waters' },
-  { key: 'home.hero.video', label: 'Video de fondo', type: 'video', fallback: '' },
-  { key: 'home.hero.mobile_video', label: 'Video de fondo - celular', type: 'video', fallback: '' },
-  { key: 'home.hero.video_poster', label: 'Imagen mientras carga el video', type: 'image', fallback: '', aspect: 16 / 9, maxWidth: 1920, maxHeight: 1080 },
-  ...HERO_IMAGE_FIELDS,
-];
-
-// Etiqueta (eyebrow) and both button labels are deliberately NOT in this
-// list — see the CIERRE DE SEGURIDAD pass. They're structural CTA copy, not
-// editorial content, and stay controlled by code.
-const ABOUT_FIELDS: ContentField[] = [
-  ...Object.entries(ABOUT_CAROUSEL_DEFAULTS).map(([key, fallback], index): ContentField => ({
-    key, fallback, label: `Carrusel About - foto ${index + 1}`, type: 'image', aspect: 16 / 9, maxWidth: 1920, maxHeight: 1080,
-  })),
-  // Fallbacks come from DEFAULT_ABOUT_SETTINGS — the exact copy the public
-  // page renders while no row exists — so opening this form shows what
-  // visitors actually see, and a Guardar without edits can't silently swap
-  // the public text for different placeholder copy.
-  ...(([
-    ['about.title', 'Titulo', 'text'],
-    ['about.description', 'Descripcion', 'textarea'],
-    ['about.preview_text', 'Texto de inicio (home) - parrafos separados por linea vacia', 'textarea'],
-    ['about.story', 'Historia (pagina Nosotros) - parrafos separados por linea vacia', 'textarea'],
-    ['about.cta_title', 'Titulo final', 'text'],
-    ['about.cta_text', 'Texto final', 'textarea'],
-    ['about.image_alt', 'Texto alternativo imagen', 'text'],
-  ] as const).flatMap(([base, label, type]): ContentField[] => (['es', 'en'] as const).map((lang) => {
-    const key = `${base}.${lang}` as keyof typeof DEFAULT_ABOUT_SETTINGS;
-    return { key, label: `${label} ${lang.toUpperCase()}`, type, fallback: DEFAULT_ABOUT_SETTINGS[key] };
-  }))),
-  { key: 'about.image', label: 'Carrusel About - foto 5 (opcional)', type: 'image', fallback: '', aspect: 16 / 9, maxWidth: 1920, maxHeight: 1080 },
-];
+export type Draft = Record<string, string>;
 
 function storagePathFromPublicUrl(value?: string | null) {
   if (!value) return null;
@@ -103,7 +38,7 @@ function storagePathFromPublicUrl(value?: string | null) {
   }
 }
 
-// Hero / About texts are stored as `<base>.en` and `<base>.es` in site_settings. The admin writes ONLY the
+// Portada (Hero) / About texts are stored as `<base>.en` and `<base>.es` in site_settings. The admin writes ONLY the
 // English one; the Spanish `.es` key is generated by DeepL when the section is saved (and only for the English
 // texts that changed) — it is not shown in the form.
 const isDerivedSpanish = (field: ContentField) => field.key.endsWith('.es') && (field.type === 'text' || field.type === 'textarea');
@@ -121,13 +56,15 @@ interface ContentSectionProps {
   description: string;
   fields: ContentField[];
   saveLabel: string;
+  /** Success notice shown after saving the texts (defaults to "<title> actualizado."). */
+  savedMessage?: string;
   imageRequireReplacement?: boolean;
   preview?: (draft: Draft) => React.ReactNode;
   /** Splits this section into "Media" / "Textos" inner tabs so it isn't one long scroll. Save stays unified (one section = one payload). */
   mediaTextTabs?: boolean;
 }
 
-function ContentSection({ title, description, fields, saveLabel, imageRequireReplacement = false, preview, mediaTextTabs = false }: ContentSectionProps) {
+export function ContentSection({ title, description, fields, saveLabel, savedMessage, imageRequireReplacement = false, preview, mediaTextTabs = false }: ContentSectionProps) {
   const keys = useMemo(() => fields.map((field) => field.key), [fields]);
   const [draft, setDraft] = useState<Draft>(() => defaultsFrom(fields));
   const [loading, setLoading] = useState(true);
@@ -218,7 +155,7 @@ function ContentSection({ title, description, fields, saveLabel, imageRequireRep
         if (write.changed) await upsertKey(write.spanishKey, spanish.get(write.value) ?? '', write.type);
         else if (write.cleared) await upsertKey(write.spanishKey, fields.find((field) => field.key === write.spanishKey)?.fallback ?? '', write.type);
       }
-      setNotice(`${title} actualizado. La pagina publica usara estos valores sin redesplegar.`);
+      setNotice(`${savedMessage ?? `${title} actualizado.`} La pagina publica usara estos valores sin redesplegar.`);
       await loadSettings();
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : 'No se pudo guardar el contenido.');
@@ -285,18 +222,18 @@ function ContentSection({ title, description, fields, saveLabel, imageRequireRep
       await upsertKey('home.hero.media_mode', mode, 'media_mode');
       setDraft((current) => ({ ...current, 'home.hero.media_mode': mode }));
       setHeroMediaMode(mode);
-      setNotice(`Modo del Hero cambiado a ${mode === 'video' ? 'video' : 'imagenes'}. Los videos guardados se conservaron.`);
+      setNotice(`Modo de la Portada cambiado a ${mode === 'video' ? 'video' : 'imagenes'}. Los videos guardados se conservaron.`);
     } catch (switchError) {
-      setError(switchError instanceof Error ? switchError.message : 'No se pudo cambiar el modo del Hero.');
+      setError(switchError instanceof Error ? switchError.message : 'No se pudo cambiar el modo de la Portada.');
     } finally {
       setSwitchingMediaMode(false);
     }
   }
 
   return (
-    <section className="admin-card">
+    <section className="admin-card admin-content-section">
       <h2 className="admin-card__title"><FileText size={18} /> {title}</h2>
-      <p className="admin-muted mb-4">{description}</p>
+      <p className="admin-muted">{description}</p>
       {error ? <div className="admin-alert admin-alert--danger">{error}</div> : null}
       {notice ? <div className="admin-alert admin-alert--success">{notice}</div> : null}
       {loading ? (
@@ -305,18 +242,19 @@ function ContentSection({ title, description, fields, saveLabel, imageRequireRep
         <div className="grid gap-5">
           {mediaTextTabs ? (
             <nav className="admin-tabs" aria-label={`Secciones de ${title}`}>
-              <button type="button" className={`admin-tab${innerTab === 'media' ? ' admin-tab--active' : ''}`} onClick={() => setInnerTab('media')}>Media</button>
-              <button type="button" className={`admin-tab${innerTab === 'texts' ? ' admin-tab--active' : ''}`} onClick={() => setInnerTab('texts')}>Textos</button>
+              <button type="button" aria-pressed={innerTab === 'media'} className={`admin-tab${innerTab === 'media' ? ' admin-tab--active' : ''}`} onClick={() => setInnerTab('media')}>Media</button>
+              <button type="button" aria-pressed={innerTab === 'texts'} className={`admin-tab${innerTab === 'texts' ? ' admin-tab--active' : ''}`} onClick={() => setInnerTab('texts')}>Textos</button>
             </nav>
           ) : null}
 
           <div style={mediaTextTabs && innerTab !== 'media' ? { display: 'none' } : undefined} className="grid gap-5">
           {videoFields.length > 0 ? (
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="admin-muted font-extrabold">Fondo del Hero</p>
-              <div className="admin-segmented" role="group" aria-label="Tipo de fondo del Hero">
+              <p className="admin-muted font-extrabold">Fondo de la Portada</p>
+              <div className="admin-segmented" role="group" aria-label="Tipo de fondo de la Portada">
                 <button
                   type="button"
+                  aria-pressed={heroMediaMode === 'image'}
                   className={heroMediaMode === 'image' ? 'admin-segmented__option--active' : ''}
                   disabled={switchingMediaMode}
                   onClick={() => void switchHeroMediaMode('image')}
@@ -325,6 +263,7 @@ function ContentSection({ title, description, fields, saveLabel, imageRequireRep
                 </button>
                 <button
                   type="button"
+                  aria-pressed={heroMediaMode === 'video'}
                   className={heroMediaMode === 'video' ? 'admin-segmented__option--active' : ''}
                   disabled={switchingMediaMode}
                   onClick={() => void switchHeroMediaMode('video')}
@@ -473,8 +412,8 @@ function ContentSection({ title, description, fields, saveLabel, imageRequireRep
           </div>
 
           {preview ? (
-            <div className="rounded-2xl border border-white/70 bg-ocean-950 p-4 text-white shadow-soft">
-              <p className="mb-3 inline-flex items-center gap-2 text-xs font-extrabold uppercase tracking-[0.12em] text-ocean-300"><Eye size={14} /> Vista previa</p>
+            <div className="admin-content-preview">
+              <p className="admin-content-preview__label"><Eye size={14} aria-hidden="true" /> Vista previa</p>
               {preview(draft)}
             </div>
           ) : null}
@@ -495,9 +434,8 @@ function ContentSection({ title, description, fields, saveLabel, imageRequireRep
 // The BACKFILL / repair tool (formerly "Traducir todo el sitio", now BACKFILL only): normal edits are translated on save. Covers tours, packages,
 // inclusions, boats, gallery, payment methods, departure locations, Hero/
 // About sections and reviews in one call — see translate-all-site-content.
-// Always visible regardless of the Hero/About tab above, since its scope is
-// the whole site, not just this page's two sections.
-function TranslateAllSiteContentCard() {
+// Site-wide scope, so both content screens (Portada and Sobre Nosotros) render it.
+export function TranslateAllSiteContentCard() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState('');
@@ -565,93 +503,5 @@ function TranslateAllSiteContentCard() {
         message={<p>Se completará el contenido antiguo que todavía no tenga versión en español o inglés. Las traducciones existentes no se sobrescribirán.</p>}
       />
     </section>
-  );
-}
-
-type ContentTab = 'hero' | 'about';
-
-export default function AdminContentPage() {
-  const [activeTab, setActiveTab] = useState<ContentTab>('hero');
-
-  return (
-    <div className="admin-page">
-      <AdminPageHeader
-        title="Hero Section"
-        description="Administra el hero del inicio y la pagina Nosotros sin cambiar codigo."
-        actions={<span />}
-      />
-
-      <nav className="admin-tabs" aria-label="Secciones de contenido editable">
-        <button type="button" className={`admin-tab${activeTab === 'hero' ? ' admin-tab--active' : ''}`} onClick={() => setActiveTab('hero')}>
-          Hero Section
-        </button>
-        <button type="button" className={`admin-tab${activeTab === 'about' ? ' admin-tab--active' : ''}`} onClick={() => setActiveTab('about')}>
-          Nosotros / About
-        </button>
-      </nav>
-
-      <TranslateAllSiteContentCard />
-
-      <div style={{ display: activeTab === 'hero' ? undefined : 'none' }}>
-      <ContentSection
-        title="Hero Section"
-        description="La imagen administrada es el fondo principal del hero. El archivo de video queda conservado, pero no bloquea el contenido editable."
-        fields={HERO_FIELDS}
-        saveLabel="Guardar hero"
-        imageRequireReplacement
-        mediaTextTabs
-        preview={(draft) => (
-          <div className="relative overflow-hidden rounded-xl">
-            {draft['home.hero.mobile_image'] ? (
-              <img className="aspect-[4/5] w-full object-cover sm:hidden" src={draft['home.hero.mobile_image']} alt={draft['home.hero.image_alt.en']} />
-            ) : (
-              <div className="grid aspect-[4/5] w-full place-items-center border border-dashed border-white/25 text-xs text-white/60 sm:hidden">
-                Sin imagen de celular
-              </div>
-            )}
-            {draft['home.hero.image'] ? (
-              <img className="hidden aspect-video w-full object-cover sm:block" src={draft['home.hero.image']} alt={draft['home.hero.image_alt.en']} />
-            ) : (
-              <div className="hidden aspect-video w-full place-items-center border border-dashed border-white/25 text-xs text-white/60 sm:grid">
-                Sin imagen de compu
-              </div>
-            )}
-            <div className="absolute inset-0 bg-ocean-950/45" />
-            <div className="absolute inset-0 grid place-items-center p-5 text-center">
-              <div>
-                <p className="text-xs font-extrabold uppercase tracking-[0.16em] text-white/75">{draft['home.hero.eyebrow.en']}</p>
-                <h3 className="mt-2 font-display text-3xl font-extrabold leading-tight sm:text-5xl">{draft['home.hero.title.en']}</h3>
-                <p className="mx-auto mt-2 max-w-xl text-sm font-medium text-white/80 sm:text-base">{draft['home.hero.subtitle.en']}</p>
-              </div>
-            </div>
-          </div>
-        )}
-      />
-      </div>
-
-      <div style={{ display: activeTab === 'about' ? undefined : 'none' }}>
-      <ContentSection
-        title="Nosotros / About"
-        description="Cambia cada foto del carrusel de Sobre nosotros. Se muestran en orden del 1 al 5 y cambian automáticamente. La quinta foto es opcional."
-        fields={ABOUT_FIELDS}
-        saveLabel="Guardar Nosotros"
-        preview={(draft) => (
-          <div className="grid items-center gap-4 sm:grid-cols-[minmax(0,1fr)_220px]">
-            <div>
-              <h3 className="font-display text-2xl font-extrabold leading-tight sm:text-3xl">{draft['about.title.en']}</h3>
-              <p className="mt-3 text-sm leading-6 text-white/80">{draft['about.preview_text.en'].split('\n')[0]}</p>
-            </div>
-            {buildAboutCarouselImages(draft).length ? (
-              <div className="grid grid-cols-2 gap-2">{buildAboutCarouselImages(draft).map((src, index) => <img key={src} className="aspect-video w-full rounded-xl object-cover" src={src} alt={`Foto ${index + 1}`} />)}</div>
-            ) : (
-              <div className="grid aspect-[4/3] w-full place-items-center rounded-xl border border-dashed border-white/25 text-xs text-white/60">
-                Sin imagen gestionada (usa fotos por defecto)
-              </div>
-            )}
-          </div>
-        )}
-      />
-      </div>
-    </div>
   );
 }
