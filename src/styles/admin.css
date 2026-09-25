@@ -1451,8 +1451,34 @@ tr.admin-sortable-row--dragging {
   gap: 0.65rem;
 }
 
+.admin-pagination__summary { margin: 0; }
 .admin-pagination__size .admin-select { width: auto; }
-.admin-pagination__controls .admin-btn { min-height: 44px; }
+.admin-pagination__controls { gap: 0.35rem; }
+.admin-pagination__button {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0.35rem 0.5rem;
+  font-variant-numeric: tabular-nums;
+}
+.admin-pagination__page.is-current,
+.admin-pagination__page.is-current:hover {
+  --btn-bg: var(--admin-primary);
+  --btn-fg: var(--admin-on-primary);
+  --btn-border: var(--admin-primary);
+  --btn-bg-hover: var(--admin-primary);
+  --btn-fg-hover: var(--admin-on-primary);
+  --btn-border-hover: var(--admin-primary);
+  cursor: default;
+}
+.admin-pagination__ellipsis {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.5rem;
+  min-height: 44px;
+  color: var(--admin-muted);
+  user-select: none;
+}
 /*
  * Fits at 1366px without horizontal scroll: 9 data columns get an explicit
  * budget (auto table-layout still lets content nudge them, but truncation —
@@ -1604,8 +1630,6 @@ tr.admin-sortable-row--dragging {
   .admin-reservation-card dd { margin: 0.2rem 0 0; color: var(--admin-ink); overflow-wrap: anywhere; }
   .admin-reservation-actions .admin-btn { min-height: 44px; }
   .admin-pagination { align-items: stretch; }
-  .admin-pagination__controls { width: 100%; justify-content: space-between; }
-  .admin-pagination__controls .admin-btn { flex: 1; }
 }
 
 .admin-muted {
@@ -4541,4 +4565,19 @@ html[data-theme='dark'] body:has(.admin-shell) {
     grid-template-columns: 5.5rem minmax(0, 1fr);
     gap: 0.7rem;
   }
+}
+
+/* Compact pagination on narrow screens: same controls, tighter hit boxes, wrapping instead of overflowing. */
+@media (max-width: 520px) {
+  .admin-pagination { align-items: stretch; }
+  .admin-pagination__controls { width: 100%; justify-content: center; gap: 0.25rem; }
+  .admin-pagination__button { min-width: 36px; min-height: 40px; padding-inline: 0.3rem; }
+  .admin-pagination__ellipsis { min-width: 1rem; min-height: 40px; }
+}
+
+/* 320px phones: keep « ‹ 1 2 3 … 8 › » on a single row (targets stay above the 24px WCAG 2.2 minimum). */
+@media (max-width: 360px) {
+  .admin-pagination__controls { gap: 0.125rem; }
+  .admin-pagination__button { min-width: 28px; padding-inline: 0.15rem; }
+  .admin-pagination__ellipsis { min-width: 0.9rem; }
 }

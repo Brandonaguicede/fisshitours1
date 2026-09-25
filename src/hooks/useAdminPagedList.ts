@@ -34,7 +34,14 @@ export function useAdminPagedList<T>(name: string, filters: string, fetchPage: (
     total,
     page,
     pageSize,
-    onPageChange: (next: number) => setState({ filters, page: next, size: pageSize }),
-    onPageSizeChange: (size: number) => setState({ filters, page: 1, size }),
+    onPageChange: (next: number) => {
+      if (!Number.isFinite(next)) return;
+      const lastPage = Math.max(1, Math.ceil(total / pageSize));
+      setState({ filters, page: Math.min(Math.max(1, Math.trunc(next)), lastPage), size: pageSize });
+    },
+    onPageSizeChange: (size: number) => {
+      if (!Number.isFinite(size) || size <= 0) return;
+      setState({ filters, page: 1, size });
+    },
   };
 }
