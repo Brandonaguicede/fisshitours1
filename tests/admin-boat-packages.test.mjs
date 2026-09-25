@@ -471,6 +471,43 @@ test('Resumen de paquetes is a consult screen: clean table (no technical ids), "
   } finally { await f.browser.close(); }
 });
 
+test('"Ver detalles" is a lightweight inline action: Eye icon + text, no border/card/box, accessible, hover and focus-visible', async () => {
+  const f = await fixture(); const { page, writes } = f;
+  try {
+    await page.goto(`${base}/admin/boat-tours`);
+    const row = page.getByRole('row').filter({ hasText: 'Half Day' });
+    const action = row.getByRole('button', { name: 'Ver detalles del paquete Half Day' });
+    await expect(action).toBeVisible();
+    await expect(action).toHaveText('Ver detalles');
+    await expect(action).toHaveAttribute('title', /detalle de este paquete/);
+    await expect(action.locator('svg')).toHaveCount(1); // the Eye icon, hidden from assistive tech
+    await expect(action.locator('svg')).toHaveAttribute('aria-hidden', 'true');
+    const style = (locator) => locator.evaluate((el) => { const s = getComputedStyle(el); return { border: s.borderTopWidth, borderStyle: s.borderTopStyle, bg: s.backgroundColor, shadow: s.boxShadow, underline: s.textDecorationLine, color: s.color, outline: s.outlineStyle }; });
+    const rest = await style(action);
+    assert.equal(rest.border, '0px', 'no border');
+    assert.equal(rest.bg, 'rgba(0, 0, 0, 0)', 'no background box');
+    assert.equal(rest.shadow, 'none', 'no card shadow');
+    assert.equal(rest.underline, 'none');
+    // Hover: text gets underlined (still no box).
+    await action.hover();
+    const hovered = await style(action);
+    assert.equal(hovered.underline, 'underline', 'hover underline');
+    assert.equal(hovered.border, '0px');
+    assert.equal(hovered.bg, 'rgba(0, 0, 0, 0)');
+    // Keyboard focus shows the shared focus ring.
+    await page.mouse.move(0, 0);
+    await page.keyboard.press('Shift'); // last input was the keyboard, so :focus-visible applies
+    await action.focus();
+    await expect(action).toBeFocused();
+    const focused = await style(action);
+    assert.notEqual(focused.outline, 'none', 'visible focus ring');
+    // Same behaviour as before: keyboard activation opens the read-only detail modal, nothing is written.
+    await page.keyboard.press('Enter');
+    await expect(page.locator('.admin-package-detail-modal')).toBeVisible();
+    assert.equal(writes.length, 0);
+  } finally { await f.browser.close(); }
+});
+
 test('"Ver detalles" opens a compact read-only summary: no technical wording, one action (Editar en Botes) besides the X', async () => {
   const f = await fixture(); const { page, writes } = f;
   try {

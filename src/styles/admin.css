@@ -486,6 +486,7 @@ body:has(.admin-shell) {
 .admin-account__signout:focus-visible,
 .admin-icon-action:focus-visible,
 .admin-action-btn:focus-visible,
+.admin-inline-action:focus-visible,
 .admin-btn:focus-visible,
 .admin-tab:focus-visible,
 .admin-segmented button:focus-visible,
@@ -552,6 +553,37 @@ body:has(.admin-shell) {
 }
 
 .admin-action-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* Lightweight inline row action (Eye + "Ver detalles"): plain text with an icon,
+   no border, card or box; the affordance comes from colour, underline on hover
+   and the shared focus ring. */
+.admin-inline-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.15rem 0.2rem;
+  color: var(--admin-primary);
+  background: transparent;
+  border: 0;
+  border-radius: 0.35rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color 160ms ease, text-decoration-color 160ms ease;
+}
+
+.admin-inline-action:hover:not(:disabled) {
+  color: var(--admin-ink);
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.admin-inline-action:disabled {
   opacity: 0.55;
   cursor: not-allowed;
 }

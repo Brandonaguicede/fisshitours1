@@ -169,7 +169,7 @@ export default function AdminBoatToursPage() {
                 <td><AdminBadge value={item.active} /></td>
                 <td>
                   <div className="admin-row-actions">
-                    <button className="admin-action-btn" type="button" disabled={loading} title="Ver el detalle de este paquete (solo lectura)" aria-label={`Ver detalles del paquete ${packageDisplayName(item)}`} onClick={() => setSelected(item)}><Eye size={14} /> Ver detalles</button>
+                    <button className="admin-inline-action" type="button" disabled={loading} title="Ver el detalle de este paquete (solo lectura)" aria-label={`Ver detalles del paquete ${packageDisplayName(item)}`} onClick={() => setSelected(item)}><Eye size={15} aria-hidden="true" /> Ver detalles</button>
                   </div>
                 </td>
               </tr>
