@@ -104,6 +104,8 @@ export function mapBoatTour(
     },
     catalogActive: row.active && row.boat_tours.active && row.boat_tours.boats.active && tour.active,
     name: row.name,
+    nameEs: row.name_es ?? undefined,
+    nameEn: row.name_en ?? undefined,
     packageType: row.package_type,
     departureTimes: row.departure_times,
     mealOptions: parseMealOptions(row.meal_options),
@@ -118,8 +120,12 @@ export function mapBoatTour(
     activitiesEs,
     activitiesEn,
     included: row.package_included ?? (activeInclusions.length > 0 ? activeInclusions : legacyIncluded),
-    includedEs: row.package_included_es ?? (activeInclusionsEs.length > 0 ? activeInclusionsEs : legacyIncludedEs),
-    includedEn: row.package_included_en ?? (activeInclusionsEn.length > 0 ? activeInclusionsEn : legacyIncludedEn),
+    // A package with its own list (package_included not null, even []) shows ITS Spanish/English copies; while
+    // a copy is still missing (older or not-yet-translated records) it is left undefined so the language
+    // picker falls back to `included` — never to the tour's list, and never to a stale copy of another list.
+    // A package that inherits (package_included null) uses the tour's lists and ignores its own _es/_en.
+    includedEs: row.package_included != null ? row.package_included_es ?? undefined : activeInclusionsEs.length > 0 ? activeInclusionsEs : legacyIncludedEs,
+    includedEn: row.package_included != null ? row.package_included_en ?? undefined : activeInclusionsEn.length > 0 ? activeInclusionsEn : legacyIncludedEn,
     galleryImages: primaryImage
       ? [primaryImage, ...galleryImages.filter((image) => image.src !== primaryImage.src)]
       : undefined,

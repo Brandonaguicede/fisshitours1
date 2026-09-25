@@ -1,11 +1,13 @@
-import { Pencil } from 'lucide-react';
+import { Download, Eye, Loader2 } from 'lucide-react';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 
 import { AdminBadge, AdminFilterMenu, AdminListToolbar, AdminModuleSurface, AdminPageHeader, AdminTable } from '../../components/admin/AdminPrimitives';
+import PackageDetailModal, { formatDuration, packageDisplayName, packageEditPath, type PackageDetail } from '../../components/admin/PackageDetailModal';
 import { supabase } from '../../lib/supabase';
 import { money } from '../../utils/format';
+import { createPackagesPdf, loadLogoDataUrl, packagesPdfFileName, type PackagePdfRow } from '../../utils/packagesPdf';
 import AdminPagination from '../../components/admin/AdminPagination';
 import { useAdminPagedList } from '../../hooks/useAdminPagedList';
 import { getAdminTablePage } from '../../services/adminListService';
@@ -14,30 +16,25 @@ import { readWithAdminSession } from '../../services/adminAuthService';
 interface BoatOption { id: string; name: string }
 interface TourOption { id: string; title: string }
 
-interface PackageRow {
-  id: string;
-  name: string;
-  base_price: number;
-  included_guests: number;
-  max_guests: number;
-  custom_quote: boolean;
-  active: boolean;
-  sort_order: number;
-  boat_tours?: { boat_id: string; tour_id: string; boats?: { name: string } | null; tours?: { title: string } | null } | null;
-}
-
 type StatusFilter = 'all' | 'active' | 'inactive';
 
-// Read-only overview across every tour + boat combination. tour_packages is the single
-// source of truth for commercial terms; editing happens exclusively from the
-// "Tours y paquetes" tab inside each boat (Botes > editar bote > Tours y paquetes) so a
-// package can never be reassigned to another boat.
+// Everything the table, the detail modal and the PDF need, in one query (no per-row requests).
+const PACKAGE_COLUMNS = 'id, name, name_en, name_es, description, description_en, description_es, duration_minutes, base_price, included_guests, max_guests, extra_guest_price, custom_quote, active, sort_order, departure_times, meal_options, package_included, package_included_en, package_included_es';
+const PDF_ROW_LIMIT = 2000;
+
+// "Resumen de paquetes": a READ-ONLY overview across every tour + boat combination. This page never writes.
+// tour_packages is the single source of truth for commercial terms; creating and editing happens exclusively in
+// Botes > editar bote > Tours y paquetes. "Ver detalles" opens a read-only modal whose only action besides closing
+// is a link to the exact package in that editor.
 export default function AdminBoatToursPage() {
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
   const [boatFilter, setBoatFilter] = useState('all');
   const [tourFilter, setTourFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [selected, setSelected] = useState<PackageDetail | null>(null);
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState('');
   const boatsQuery = useQuery({
     queryKey: ['admin', 'packageBoats'],
     queryFn: () => readWithAdminSession(() => supabase.from('boats').select('id, name').order('sort_order')),
@@ -50,26 +47,30 @@ export default function AdminBoatToursPage() {
   const tours = (toursQuery.data ?? []) as TourOption[];
   const activeFilterCount = Number(boatFilter !== 'all') + Number(tourFilter !== 'all') + Number(statusFilter !== 'all');
   const filterKey = `${boatFilter}|${tourFilter}|${statusFilter}|${search}`;
-  const pagination = useAdminPagedList<PackageRow>('packages', filterKey, (page, size) => getAdminTablePage(() => {
+
+  // The same filtered query feeds the table (paged) and the PDF (all matching rows).
+  function buildQuery(withCount: boolean) {
     const needsInnerJoin = boatFilter !== 'all' || tourFilter !== 'all';
     const relation = needsInnerJoin ? 'boat_tours!inner' : 'boat_tours';
     let query = (supabase as any).from('tour_packages')
-      .select(`id, name, base_price, included_guests, max_guests, custom_quote, active, sort_order, ${relation}(boat_id, tour_id, boats(name), tours(title))`, { count: 'exact' })
+      .select(`${PACKAGE_COLUMNS}, ${relation}(boat_id, tour_id, boats(name), tours(title, title_en, included, included_en))`, withCount ? { count: 'exact' } : undefined)
       .order('sort_order').order('id');
     if (boatFilter !== 'all') query = query.eq('boat_tours.boat_id', boatFilter);
     if (tourFilter !== 'all') query = query.eq('boat_tours.tour_id', tourFilter);
     if (statusFilter !== 'all') query = query.eq('active', statusFilter === 'active');
     if (search.trim()) query = query.ilike('name', `%${search.trim()}%`);
     return query;
-  }, page, size));
+  }
+
+  const pagination = useAdminPagedList<PackageDetail>('packages', filterKey, (page, size) => getAdminTablePage(() => buildQuery(true), page, size));
   const visiblePackages = pagination.rows;
   const loading = pagination.query.isFetching;
   const error = (pagination.query.error ?? boatsQuery.error ?? toursQuery.error) instanceof Error ? (pagination.query.error ?? boatsQuery.error ?? toursQuery.error)?.message : '';
 
-  function editInTour(item: PackageRow) {
-    const boatId = item.boat_tours?.boat_id;
-    if (!boatId) return;
-    navigate(`/admin/boats?boatId=${boatId}`);
+  function editInBoats(item: PackageDetail) {
+    if (!item.boat_tours?.boat_id) return;
+    setSelected(null);
+    navigate(packageEditPath(item));
   }
 
   function resetFilters() {
@@ -78,9 +79,42 @@ export default function AdminBoatToursPage() {
     setStatusFilter('all');
   }
 
+  function activeFilterLabels() {
+    const labels: string[] = [];
+    if (boatFilter !== 'all') labels.push(`Bote: ${boats.find((boat) => boat.id === boatFilter)?.name ?? boatFilter}`);
+    if (tourFilter !== 'all') labels.push(`Tour: ${tours.find((tour) => tour.id === tourFilter)?.title ?? tourFilter}`);
+    if (statusFilter !== 'all') labels.push(`Estado: ${statusFilter === 'active' ? 'Activos' : 'Inactivos'}`);
+    if (search.trim()) labels.push(`Búsqueda: "${search.trim()}"`);
+    return labels;
+  }
+
+  // Exports exactly what the admin is consulting: current search + filters, all pages (not just the visible one).
+  async function exportPdf() {
+    setExporting(true);
+    setExportError('');
+    try {
+      const rows = (await readWithAdminSession(() => buildQuery(false).limit(PDF_ROW_LIMIT))) as PackageDetail[] | null;
+      const pdfRows: PackagePdfRow[] = (rows ?? []).map((item) => ({
+        name: packageDisplayName(item),
+        boat: item.boat_tours?.boats?.name ?? '-',
+        tour: item.boat_tours?.tours?.title ?? '-',
+        price: item.custom_quote ? 'Cotizar' : money(Number(item.base_price)),
+        capacity: `${item.included_guests} / ${item.max_guests}`,
+        duration: formatDuration(item.duration_minutes),
+        status: item.active ? 'Activo' : 'Inactivo',
+      }));
+      const doc = await createPackagesPdf({ rows: pdfRows, filters: activeFilterLabels(), logoDataUrl: await loadLogoDataUrl() });
+      doc.save(packagesPdfFileName());
+    } catch (caught) {
+      setExportError(caught instanceof Error ? `No se pudo generar el PDF: ${caught.message}` : 'No se pudo generar el PDF.');
+    } finally {
+      setExporting(false);
+    }
+  }
+
   return (
     <div className="admin-page">
-      <AdminPageHeader title="Paquetes (todos los tours)" description="Vista de solo lectura de todos los paquetes reservables. Para crear o editar, entra al bote correspondiente y usa su pestana Tours y paquetes." />
+      <AdminPageHeader title="Resumen de paquetes" description="Consulta general de los paquetes configurados por bote y tour. Para crear o modificar paquetes, entra al bote correspondiente." />
       <AdminModuleSurface>
         <AdminListToolbar
           embedded
@@ -113,15 +147,21 @@ export default function AdminBoatToursPage() {
               </label>
             </AdminFilterMenu>
           }
+          secondaryActions={
+            <button className="admin-btn admin-btn--secondary" type="button" disabled={exporting || loading || Boolean(error)} onClick={() => void exportPdf()} title="Descarga en PDF los paquetes que ves con la búsqueda y los filtros actuales">
+              {exporting ? <Loader2 className="animate-spin" size={16} /> : <Download size={16} />} {exporting ? 'Generando PDF...' : 'Descargar PDF'}
+            </button>
+          }
         />
         {error ? <div className="admin-alert admin-alert--danger">{error}</div> : null}
+        {exportError ? <div className="admin-alert admin-alert--danger" role="alert">{exportError}</div> : null}
 
         {loading ? <p className="admin-muted" role="status">Cargando paquetes...</p> : null}
         <div aria-busy={loading}>
           <AdminTable embedded headers={['Paquete', 'Bote', 'Tour', 'Precio base', 'Capacidad', 'Estado', 'Acciones']}>
             {visiblePackages.map((item) => (
               <tr key={item.id}>
-                <td>{item.name}<div className="admin-muted">{item.id}</div></td>
+                <td><strong>{packageDisplayName(item)}</strong></td>
                 <td>{item.boat_tours?.boats?.name ?? item.boat_tours?.boat_id ?? '-'}</td>
                 <td>{item.boat_tours?.tours?.title ?? item.boat_tours?.tour_id ?? '-'}</td>
                 <td>{item.custom_quote ? 'Cotizar' : money(Number(item.base_price))}</td>
@@ -129,7 +169,7 @@ export default function AdminBoatToursPage() {
                 <td><AdminBadge value={item.active} /></td>
                 <td>
                   <div className="admin-row-actions">
-                    <button className="admin-icon-action" type="button" disabled={loading} title={`Editar en el bote — ${item.name}`} aria-label={`Editar paquete ${item.name} en el bote`} onClick={() => editInTour(item)}><Pencil size={17} /></button>
+                    <button className="admin-action-btn" type="button" disabled={loading} title="Ver el detalle de este paquete (solo lectura)" aria-label={`Ver detalles del paquete ${packageDisplayName(item)}`} onClick={() => setSelected(item)}><Eye size={14} /> Ver detalles</button>
                   </div>
                 </td>
               </tr>
@@ -139,6 +179,8 @@ export default function AdminBoatToursPage() {
         </div>
         <AdminPagination {...pagination} noun="paquetes" loading={loading} />
       </AdminModuleSurface>
+
+      <PackageDetailModal item={selected} onClose={() => setSelected(null)} onEdit={editInBoats} />
     </div>
   );
 }

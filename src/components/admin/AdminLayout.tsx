@@ -19,7 +19,7 @@ const navGroups = [
     items: [
       { label: 'Tours', to: '/admin/tours', icon: Star },
       { label: 'Botes', to: '/admin/boats', icon: Ship },
-      { label: 'Paquetes (todos)', to: '/admin/boat-tours', icon: Package },
+      { label: 'Resumen de paquetes', to: '/admin/boat-tours', icon: Package },
       { label: 'Lugares de salida', to: '/admin/departure-locations', icon: MapPin },
       { label: 'Metodos de pago', to: '/admin/payment-methods', icon: CreditCard },
     ],
@@ -39,7 +39,7 @@ const titles: Record<string, string> = {
   '/admin/reservations': 'Reservas',
   '/admin/tours': 'Tours',
   '/admin/boats': 'Botes',
-  '/admin/boat-tours': 'Paquetes (todos los tours)',
+  '/admin/boat-tours': 'Resumen de paquetes',
   '/admin/reviews': 'Comentarios',
   '/admin/gallery': 'Galeria',
   '/admin/content': 'Hero Section',

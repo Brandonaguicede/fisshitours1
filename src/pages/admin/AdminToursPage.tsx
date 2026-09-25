@@ -1,48 +1,28 @@
-import { Check, ChevronLeft, ChevronRight, Eye, EyeOff, Image as ImageIcon, Info, Loader2, Package, Pencil, Plus, Save, Settings, Ship, Trash2, X } from 'lucide-react';
+import { Check, ChevronLeft, ChevronRight, Eye, EyeOff, Image as ImageIcon, Info, Loader2, Pencil, Plus, Save, Settings, Trash2, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 
 import AdminConfirmDialog from '../../components/admin/AdminConfirmDialog';
 import AdminImageManager from '../../components/admin/AdminImageManager';
+import AdminStepper from '../../components/admin/AdminStepper';
 import { AdminBadge, AdminFilterMenu, AdminListToolbar, AdminModuleSurface, AdminReorderHandle, AdminReorderToolbar, AdminTable } from '../../components/admin/AdminPrimitives';
 import FormSection from '../../components/admin/FormSection';
 import ModalFooter from '../../components/admin/ModalFooter';
 import { Modal } from '../../components/common/Modal';
 import { useAdminReorder } from '../../hooks/useAdminReorder';
 import { supabase } from '../../lib/supabase';
-import { deleteStorageImage, type StorageImage } from '../../services/imageService';
+import { cleanupReplacedImage, deleteStorageImage, type StorageImage } from '../../services/imageService';
+import { translateTextsToSpanish } from '../../services/translationService';
 import { friendlyDeleteError } from '../../utils/adminErrors';
+import { cleanList, editableList, editableText, listColumns, listTextsToTranslate, textColumns, textsToTranslate, type BilingualColumns } from '../../utils/bilingualContent';
 import type { Tables } from '../../types/supabase';
 
 type TourRow = Tables<'tours'>;
 type BoatRow = Pick<Tables<'boats'>, 'id' | 'name' | 'max_guests' | 'active' | 'sort_order'>;
 type BoatTourRow = Tables<'boat_tours'>;
-type PackageRow = Tables<'tour_packages'>;
 type TourImageRow = Tables<'tour_images'>;
 type TourInclusionRow = Tables<'tour_inclusions'>;
 type PublicationStatus = 'draft' | 'published' | 'inactive';
-type EditorStep = 'info' | 'gallery' | 'experience' | 'packages' | 'config';
-
-interface EditablePackage {
-  id: string;
-  boatTourId: string | null;
-  boatId: string | null;
-  name: string;
-  packageType: string;
-  durationHours: string;
-  basePrice: string;
-  includedGuests: number;
-  maxGuests: number;
-  extraGuestPrice: number;
-  description: string;
-  imageUrl: string | null;
-  imagePublicId: string | null;
-  sortOrder: number;
-  active: boolean;
-  customQuote: boolean;
-  isNew: boolean;
-  pendingDelete?: boolean;
-}
+type EditorStep = 'info' | 'gallery' | 'experience' | 'config';
 
 interface EditableInclusion {
   id: string;
@@ -69,7 +49,6 @@ interface TourEditor {
   activities: string[];
   images: TourImageRow[];
   inclusions: EditableInclusion[];
-  packages: EditablePackage[];
 }
 
 type FieldErrors = Partial<Record<string, string>>;
@@ -78,9 +57,41 @@ const steps: Array<{ id: EditorStep; label: string }> = [
   { id: 'info', label: 'Información' },
   { id: 'gallery', label: 'Galería' },
   { id: 'experience', label: 'Experiencia' },
-  { id: 'packages', label: 'Paquetes' },
   { id: 'config', label: 'Configuración' },
 ];
+
+// Every public text of a tour is written in ENGLISH by the admin; DeepL generates the Spanish copy on save
+// (see utils/bilingualContent.ts). legacy = the original single column, _en = English, _es = Spanish.
+const TITLE: BilingualColumns = { legacy: 'title', en: 'title_en', es: 'title_es' };
+const DESCRIPTION: BilingualColumns = { legacy: 'description', en: 'description_en', es: 'description_es' };
+const LONG_DESCRIPTION: BilingualColumns = { legacy: 'long_description', en: 'long_description_en', es: 'long_description_es' };
+const HIGHLIGHTS: BilingualColumns = { legacy: 'highlights', en: 'highlights_en', es: 'highlights_es' };
+const INCLUDED: BilingualColumns = { legacy: 'included', en: 'included_en', es: 'included_es' };
+const INCLUSION_LABEL: BilingualColumns = { legacy: 'label', en: 'label_en', es: 'label_es' };
+
+/** The English content as last loaded/saved: only what differs from it is translated on the next save. */
+interface TourBefore {
+  title: string;
+  description: string;
+  longDescription: string;
+  activities: string[];
+  included: string[];
+  inclusionLabels: Record<string, string>;
+}
+
+const emptyBefore = (): TourBefore => ({ title: '', description: '', longDescription: '', activities: [], included: [], inclusionLabels: {} });
+
+function beforeFromRows(tour: TourRow, inclusions: TourInclusionRow[]): TourBefore {
+  const row = tour as unknown as Record<string, unknown>;
+  return {
+    title: editableText(row, TITLE),
+    description: editableText(row, DESCRIPTION),
+    longDescription: editableText(row, LONG_DESCRIPTION),
+    activities: editableList(row, HIGHLIGHTS),
+    included: editableList(row, INCLUDED),
+    inclusionLabels: Object.fromEntries(inclusions.map((item) => [item.id, editableText(item as unknown as Record<string, unknown>, INCLUSION_LABEL)])),
+  };
+}
 
 function slugify(value: string) {
   return value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || `tour-${Date.now()}`;
@@ -96,31 +107,21 @@ function publicationStatus(tour: TourRow): PublicationStatus {
     : tour.active ? 'published' : 'inactive';
 }
 
-function createEditor(tour: TourRow, packages: PackageRow[], relations: BoatTourRow[], images: TourImageRow[], inclusions: TourInclusionRow[]): TourEditor {
-  const boatByBoatTour = new Map(relations.map((relation) => [relation.id, relation.boat_id]));
+function createEditor(tour: TourRow, images: TourImageRow[], inclusions: TourInclusionRow[]): TourEditor {
   return {
-    id: tour.id, isNew: false, title: tour.title, slug: tour.slug,
-    description: tour.description ?? '',
-    longDescription: tour.long_description ?? '', category: tour.category, publicationStatus: publicationStatus(tour), featured: tour.featured,
-    sortOrder: tour.sort_order, activities: stringList(tour.highlights),
+    id: tour.id, isNew: false, title: editableText(tour as unknown as Record<string, unknown>, TITLE), slug: tour.slug,
+    description: editableText(tour as unknown as Record<string, unknown>, DESCRIPTION),
+    longDescription: editableText(tour as unknown as Record<string, unknown>, LONG_DESCRIPTION), category: tour.category, publicationStatus: publicationStatus(tour), featured: tour.featured,
+    sortOrder: tour.sort_order, activities: editableList(tour as unknown as Record<string, unknown>, HIGHLIGHTS),
     images: [...images].sort((a, b) => a.sort_order - b.sort_order),
-    packages: packages.map((item) => ({
-      id: item.id, boatTourId: item.boat_tour_id, boatId: boatByBoatTour.get(item.boat_tour_id) ?? null, name: item.name, packageType: item.package_type,
-      durationHours: item.duration_minutes == null ? '' : String(item.duration_minutes / 60), basePrice: String(item.base_price),
-      includedGuests: item.included_guests, maxGuests: item.max_guests, extraGuestPrice: Number(item.extra_guest_price),
-      description: item.description ?? '', imageUrl: item.image_url, imagePublicId: item.image_public_id,
-      sortOrder: item.sort_order, active: item.active, customQuote: item.custom_quote, isNew: false,
-    })).sort((a, b) => a.sortOrder - b.sortOrder),
-    inclusions: inclusions.map((item) => ({ id: item.id, label: item.label, packageId: item.tour_package_id, sortOrder: item.sort_order, active: item.active, isNew: false })).sort((a, b) => a.sortOrder - b.sortOrder),
+    inclusions: inclusions.map((item) => ({ id: item.id, label: editableText(item as unknown as Record<string, unknown>, INCLUSION_LABEL), packageId: item.tour_package_id, sortOrder: item.sort_order, active: item.active, isNew: false })).sort((a, b) => a.sortOrder - b.sortOrder),
   };
 }
 
 export default function AdminToursPage() {
-  const navigate = useNavigate();
   const [tours, setTours] = useState<TourRow[]>([]);
   const [boats, setBoats] = useState<BoatRow[]>([]);
   const [relations, setRelations] = useState<BoatTourRow[]>([]);
-  const [packageRows, setPackageRows] = useState<PackageRow[]>([]);
   const [imageRows, setImageRows] = useState<TourImageRow[]>([]);
   const [inclusionRows, setInclusionRows] = useState<TourInclusionRow[]>([]);
   const [editing, setEditing] = useState<TourEditor | null>(null);
@@ -143,27 +144,26 @@ export default function AdminToursPage() {
   // The one in-flight/finished INSERT of the tour being created. Kept for the whole
   // wizard session so Siguiente, Guardar borrador and double clicks all share it.
   const createRowRef = useRef<Promise<TourRow> | null>(null);
+  const beforeRef = useRef<TourBefore>(emptyBefore());
 
   useEffect(() => {
     document.querySelector('.admin-tour-step-body')?.scrollTo({ top: 0 });
-    document.querySelector('.admin-stepper [aria-current="step"]')?.scrollIntoView?.({ inline: 'nearest', block: 'nearest' });
   }, [step]);
 
   async function loadTours() {
     setLoading(true);
-    const [tourResult, boatResult, relationResult, packageResult, imageResult, inclusionResult] = await Promise.all([
+    const [tourResult, boatResult, relationResult, imageResult, inclusionResult] = await Promise.all([
       supabase.from('tours').select('*').order('sort_order'),
       supabase.from('boats').select('id, name, max_guests, active, sort_order').order('sort_order'),
       supabase.from('boat_tours').select('*').order('sort_order'),
-      supabase.from('tour_packages').select('*').order('sort_order'),
       supabase.from('tour_images').select('*').eq('active', true).order('sort_order'),
       supabase.from('tour_inclusions').select('*').order('sort_order'),
     ]);
     setLoading(false);
-    const loadError = tourResult.error ?? boatResult.error ?? relationResult.error ?? packageResult.error ?? imageResult.error ?? inclusionResult.error;
+    const loadError = tourResult.error ?? boatResult.error ?? relationResult.error ?? imageResult.error ?? inclusionResult.error;
     if (loadError) { setError(loadError.message); return; }
     setTours(tourResult.data ?? []); setBoats(boatResult.data ?? []);
-    setRelations(relationResult.data ?? []); setPackageRows(packageResult.data ?? []); setImageRows(imageResult.data ?? []); setInclusionRows(inclusionResult.data ?? []);
+    setRelations(relationResult.data ?? []); setImageRows(imageResult.data ?? []); setInclusionRows(inclusionResult.data ?? []);
   }
 
   useEffect(() => { void loadTours(); }, []);
@@ -176,8 +176,9 @@ export default function AdminToursPage() {
   function focusTitleField() { window.requestAnimationFrame(() => document.getElementById('tour-title')?.focus()); }
 
   function openEditor(tour: TourRow) {
-    const tourRelations = relations.filter((item) => item.tour_id === tour.id);
-    setEditing(createEditor(tour, packageRows.filter((item) => tourRelations.some((relation) => relation.id === item.boat_tour_id)), tourRelations, imageRows.filter((item) => item.tour_id === tour.id), inclusionRows.filter((item) => item.tour_id === tour.id)));
+    const tourInclusions = inclusionRows.filter((item) => item.tour_id === tour.id);
+    setEditing(createEditor(tour, imageRows.filter((item) => item.tour_id === tour.id), tourInclusions));
+    beforeRef.current = beforeFromRows(tour, tourInclusions);
     createRowRef.current = null;
     setStep('info'); setFieldErrors({}); setGallerySlot(null); setDirty(false); setError('');
   }
@@ -187,11 +188,12 @@ export default function AdminToursPage() {
   function createTour() {
     const id = `tour-${crypto.randomUUID().slice(0, 8)}`;
     createRowRef.current = null;
+    beforeRef.current = emptyBefore();
     setEditing({
       // sortOrder is a placeholder until the row actually exists — insertTourRow assigns
       // the real value from a fresh max(sort_order)+1 read, not from this count.
       id, isNew: true, title: '', slug: id, description: '', longDescription: '', category: 'Snorkeling & Beach', publicationStatus: 'draft',
-      featured: false, sortOrder: 0, activities: [], images: [], inclusions: [], packages: [],
+      featured: false, sortOrder: 0, activities: [], images: [], inclusions: [],
     });
     setStep('info'); setFieldErrors({}); setGallerySlot(null); setDirty(false); setError('');
   }
@@ -207,8 +209,15 @@ export default function AdminToursPage() {
     const { data: highest, error: maxError } = await supabase.from('tours').select('sort_order').order('sort_order', { ascending: false }).limit(1).maybeSingle();
     if (maxError) throw new Error(maxError.message);
     const nextSortOrder = (highest?.sort_order ?? 0) + 1;
-    const { data, error: insertError } = await supabase.from('tours').insert({ id: editor.id, title: editor.title.trim(), slug: editor.id, category: editor.category, publication_status: 'draft', active: false, featured: false, rating: 5, sort_order: nextSortOrder, description: '', long_description: '', highlights: [], included: [] }).select('*').single();
+    // English -> Spanish first (one request for everything typed so far); the row is created already
+    // bilingual, never EN now and ES later.
+    const title = editor.title.trim();
+    const description = editor.description.trim();
+    const longDescription = editor.longDescription.trim();
+    const spanish = await translateTextsToSpanish([...textsToTranslate(title, ''), ...textsToTranslate(description, ''), ...textsToTranslate(longDescription, '')]);
+    const { data, error: insertError } = await supabase.from('tours').insert({ id: editor.id, title, ...textColumns(title, '', TITLE, spanish), slug: editor.id, category: editor.category, publication_status: 'draft', active: false, featured: false, rating: 5, sort_order: nextSortOrder, description, ...textColumns(description, '', DESCRIPTION, spanish), long_description: longDescription || null, ...textColumns(longDescription, '', LONG_DESCRIPTION, spanish), highlights: [], included: [] }).select('*').single();
     if (insertError) throw new Error(insertError.message);
+    beforeRef.current = { ...beforeRef.current, title, description, longDescription };
     return data;
   }
 
@@ -273,7 +282,17 @@ export default function AdminToursPage() {
     }
     setPendingTourDelete(null);
     if (editing?.id === tour.id) setEditing(null);
-    setNotice('Tour eliminado.');
+    // Deleting leaves a hole in sort_order (e.g. 1..7, 9). Close it right away so the
+    // numbering stays 1..N on its own; only rows whose number actually changes are written.
+    const remaining = tours.filter((item) => item.id !== tour.id).sort((a, b) => a.sort_order - b.sort_order);
+    let renumberError = '';
+    for (const [index, item] of remaining.entries()) {
+      if (item.sort_order === index + 1) continue;
+      const { error: orderError } = await supabase.from('tours').update({ sort_order: index + 1 }).eq('id', item.id);
+      if (orderError) { renumberError = orderError.message; break; }
+    }
+    if (renumberError) setError(`Tour eliminado, pero no se pudo renumerar el orden: ${renumberError}. Usa Reordenar > Guardar orden.`);
+    else setNotice('Tour eliminado.');
     await loadTours();
   }
 
@@ -316,20 +335,57 @@ export default function AdminToursPage() {
   // real value came back, silently overwriting the freshly assigned unique value with
   // the placeholder. sort_order is now only ever written by insertTourRow (creation)
   // and persistTourOrder (Reordenar → Guardar orden).
-  async function persistInfo(editor: TourEditor) {
-    const { error: tourError } = await supabase.from('tours').update({ title: editor.title.trim(), slug: editor.slug, description: editor.description.trim(), long_description: editor.longDescription.trim() || null, category: editor.category, updated_at: new Date().toISOString() }).eq('id', editor.id);
-    if (tourError) throw new Error(tourError.message);
+  // Each persist* receives the Spanish translations prepared by the caller (translateTourContent), so a save
+  // that touches several fields translates them all first and writes only if every translation succeeded.
+  const includedLabels = (editor: TourEditor) => cleanList(editor.inclusions.filter((item) => !item.pendingDelete && item.active && item.packageId === null).map((item) => item.label));
+
+  async function translateTourContent(editor: TourEditor, parts: { info?: boolean; experience?: boolean }) {
+    const before = beforeRef.current;
+    const texts: string[] = [];
+    if (parts.info) texts.push(...textsToTranslate(editor.title, before.title), ...textsToTranslate(editor.description, before.description), ...textsToTranslate(editor.longDescription, before.longDescription));
+    if (parts.experience) {
+      texts.push(...listTextsToTranslate(cleanList(editor.activities), before.activities), ...listTextsToTranslate(includedLabels(editor), before.included));
+      for (const item of editor.inclusions) if (!item.pendingDelete) texts.push(...textsToTranslate(item.label, before.inclusionLabels[item.id] ?? ''));
+    }
+    return translateTextsToSpanish(texts);
   }
 
-  async function persistExperience(editor: TourEditor) {
-    const included = editor.inclusions.filter((item) => !item.pendingDelete && item.active && item.packageId === null).map((item) => item.label.trim()).filter(Boolean);
-    const { error: tourError } = await supabase.from('tours').update({ highlights: editor.activities.map((item) => item.trim()).filter(Boolean), included, updated_at: new Date().toISOString() }).eq('id', editor.id);
+  async function persistInfo(editor: TourEditor, spanish: Map<string, string>) {
+    const before = beforeRef.current;
+    const title = editor.title.trim();
+    const description = editor.description.trim();
+    const longDescription = editor.longDescription.trim();
+    const { error: tourError } = await supabase.from('tours').update({
+      title, slug: editor.slug, description, long_description: longDescription || null, category: editor.category, updated_at: new Date().toISOString(),
+      ...textColumns(title, before.title, TITLE, spanish),
+      ...textColumns(description, before.description, DESCRIPTION, spanish),
+      ...textColumns(longDescription, before.longDescription, LONG_DESCRIPTION, spanish),
+    }).eq('id', editor.id);
     if (tourError) throw new Error(tourError.message);
+    beforeRef.current = { ...beforeRef.current, title, description, longDescription };
+  }
+
+  async function persistExperience(editor: TourEditor, spanish: Map<string, string>) {
+    const before = beforeRef.current;
+    const included = includedLabels(editor);
+    const activities = cleanList(editor.activities);
+    const { error: tourError } = await supabase.from('tours').update({
+      highlights: activities, included, updated_at: new Date().toISOString(),
+      ...listColumns(activities, before.activities, HIGHLIGHTS, spanish),
+      ...listColumns(included, before.included, INCLUDED, spanish),
+    }).eq('id', editor.id);
+    if (tourError) throw new Error(tourError.message);
+    beforeRef.current = { ...beforeRef.current, activities, included };
     for (const item of editor.inclusions) {
       if (item.pendingDelete) { if (!item.isNew) await supabase.from('tour_inclusions').delete().eq('id', item.id); continue; }
-      if (!item.label.trim()) continue;
-      const { error: inclusionError } = await supabase.from('tour_inclusions').upsert({ id: item.id, tour_id: editor.id, tour_package_id: item.packageId, label: item.label.trim(), sort_order: item.sortOrder, active: true, updated_at: new Date().toISOString() });
+      const label = item.label.trim();
+      if (!label) continue;
+      const { error: inclusionError } = await supabase.from('tour_inclusions').upsert({
+        id: item.id, tour_id: editor.id, tour_package_id: item.packageId, label, sort_order: item.sortOrder, active: true, updated_at: new Date().toISOString(),
+        ...textColumns(label, before.inclusionLabels[item.id] ?? '', INCLUSION_LABEL, spanish),
+      });
       if (inclusionError) throw new Error(inclusionError.message);
+      beforeRef.current = { ...beforeRef.current, inclusionLabels: { ...beforeRef.current.inclusionLabels, [item.id]: label } };
     }
   }
 
@@ -337,8 +393,10 @@ export default function AdminToursPage() {
     if (!editing) return false;
     setSaving(true); setError('');
     try {
-      if (step === 'info') await persistInfo(editing);
-      if (step === 'experience') await persistExperience(editing);
+      // Translate first (English -> Spanish); nothing is written if DeepL fails.
+      const spanish = await translateTourContent(editing, { info: step === 'info', experience: step === 'experience' });
+      if (step === 'info') await persistInfo(editing, spanish);
+      if (step === 'experience') await persistExperience(editing, spanish);
       setSaving(false); setDirty(false); await loadTours(); return true;
     } catch (caught) { setSaving(false); setError(caught instanceof Error ? caught.message : 'No se pudo guardar este paso.'); return false; }
   }
@@ -357,7 +415,8 @@ export default function AdminToursPage() {
     if (editing.isNew && !(await createTourRow(editing))) return;
     setSaving(true); setError('');
     try {
-      await persistInfo(editing); await persistExperience(editing);
+      const spanish = await translateTourContent(editing, { info: true, experience: true });
+      await persistInfo(editing, spanish); await persistExperience(editing, spanish);
       const { error } = await supabase.from('tours').update({ publication_status: 'draft', active: false, updated_at: new Date().toISOString() }).eq('id', editing.id);
       if (error) throw new Error(error.message);
       setSaving(false); setDirty(false); setEditing(null); setNotice('Borrador guardado.'); await loadTours();
@@ -373,7 +432,8 @@ export default function AdminToursPage() {
     if (Object.keys(errors).length) { setError('El borrador se conserva. Completa los campos marcados antes de finalizar.'); setStep(errors.images ? 'gallery' : 'info'); if (!errors.images) focusTitleField(); return; }
     setSaving(true); setError('');
     try {
-      await persistInfo(editing); await persistExperience(editing);
+      const spanish = await translateTourContent(editing, { info: true, experience: true });
+      await persistInfo(editing, spanish); await persistExperience(editing, spanish);
       const firstImage = editing.images[0];
       const { error: tourError } = await supabase.from('tours').update({ publication_status: 'published', active: true, featured: editing.featured, image_url: firstImage?.image_url ?? null, image_public_id: firstImage?.storage_path ?? null, image_alt: firstImage?.alt_text || editing.title, updated_at: new Date().toISOString() }).eq('id', editing.id);
       if (tourError) throw new Error(tourError.message);
@@ -384,7 +444,7 @@ export default function AdminToursPage() {
   async function saveGalleryImage(image: StorageImage, slot: number) {
     if (!editing) return;
     const current = editing.images[slot];
-    const payload = { tour_id: editing.id, image_url: image.public_url, storage_path: image.storage_path, alt_text: `${editing.title} foto ${slot + 1}`, is_primary: slot === 0, sort_order: slot + 1, active: true };
+    const payload = { tour_id: editing.id, image_url: image.public_url, storage_path: image.storage_path, alt_text: `${editing.title} photo ${slot + 1}`, alt_text_en: null, alt_text_es: null, is_primary: slot === 0, sort_order: slot + 1, active: true };
     const result = current
       ? await supabase.from('tour_images').update(payload).eq('id', current.id).select('*').single()
       : await supabase.from('tour_images').insert(payload).select('*').single();
@@ -399,9 +459,13 @@ export default function AdminToursPage() {
       }).eq('id', editing.id);
       if (coverError) throw new Error(coverError.message);
     }
+    // The row (and, for the cover, tours.image_public_id) already points at the new file, so the
+    // previous one can go now. A failed delete keeps the old file and never undoes the change.
+    const cleanup = current ? await cleanupReplacedImage(current.storage_path, image.storage_path, 'tour_images', current.id) : 'none';
     const images = [...editing.images]; images[slot] = result.data;
     markEditing({ ...editing, images: images.filter(Boolean).map((item, index) => ({ ...item, sort_order: index + 1, is_primary: index === 0 })) });
     setGallerySlot(null); await loadTours();
+    if (cleanup === 'pending') setError('Foto cambiada. La foto anterior no se pudo borrar del almacenamiento y quedó pendiente de limpieza.');
   }
 
   async function removeGalleryImage(image: TourImageRow) {
@@ -441,7 +505,6 @@ export default function AdminToursPage() {
   const visibleTours = tours
     .filter((tour) => statusFilter === 'all' || publicationStatus(tour) === statusFilter)
     .filter((tour) => `${tour.title} ${(boatNamesByTour.get(tour.id) ?? []).join(' ')}`.toLowerCase().includes(search.toLowerCase()));
-  const visiblePackages = useMemo(() => editing?.packages.slice().sort((a, b) => a.sortOrder - b.sortOrder) ?? [], [editing]);
   const reorder = useAdminReorder<TourRow>(tours);
   const canReorder = search.trim() === '' && statusFilter === 'all';
 
@@ -526,20 +589,20 @@ export default function AdminToursPage() {
       <Modal open={Boolean(editing)} onClose={requestClose} titleId="tour-edit-title" className="admin-tour-modal">
         {editing ? <form className="admin-modal-shell" onSubmit={(event) => { event.preventDefault(); if (editing.isNew) void navigateStep(1); else void finishTour(); }}>
           <header className="admin-modal-header"><div><h2 id="tour-edit-title" className="admin-card__title"><Pencil size={18} /> {editing.title.trim() || (editing.isNew ? 'Crear tour' : 'Editar tour')}</h2><p className="admin-muted">{steps.findIndex((item) => item.id === step) + 1} de {steps.length} · {steps.find((item) => item.id === step)?.label}</p></div><button className="admin-icon-btn" type="button" aria-label="Cerrar editor" onClick={requestClose}><X size={18} /></button></header>
-          <ol className="admin-stepper" aria-label="Progreso del Tour">{steps.map((item, index) => <li key={item.id} aria-current={step === item.id ? 'step' : undefined} className={`admin-stepper__item${step === item.id ? ' admin-stepper__item--active' : ''}${index < steps.findIndex((current) => current.id === step) ? ' admin-stepper__item--done' : ''}`}><button type="button" onClick={() => { if (editing.isNew && item.id !== 'info') void navigateStep(1, item.id); else setStep(item.id); }}><span>{index + 1}</span><strong>{item.label}</strong></button></li>)}</ol>
+          <AdminStepper label="Progreso del Tour" steps={steps} current={step} onSelect={(next) => { if (editing.isNew && next !== 'info') void navigateStep(1, next); else setStep(next); }} />
           <div className="admin-modal-body admin-tour-step-body">{error ? <div className="admin-alert admin-alert--danger" role="alert">{error}</div> : null}
             {step === 'info' ? <InfoStep editing={editing} errors={fieldErrors} onChange={markEditing} /> : null}
             {step === 'gallery' ? <GalleryStep editing={editing} errors={fieldErrors} selectedSlot={gallerySlot} setSelectedSlot={setGallerySlot} setDeleteImage={setDeleteImage} saveImage={saveGalleryImage} /> : null}
             {step === 'experience' ? <ExperienceStep editing={editing} activityInput={activityInput} inclusionInput={inclusionInput} setActivityInput={setActivityInput} setInclusionInput={setInclusionInput} addActivity={addActivity} addInclusion={addInclusion} onChange={markEditing} /> : null}
-            {step === 'packages' ? <PackagesStep boats={boats} relations={relations.filter((relation) => relation.tour_id === editing.id)} packages={visiblePackages} onManageBoat={(boatId) => navigate(boatId ? `/admin/boats?boatId=${boatId}` : '/admin/boats')} /> : null}
             {step === 'config' ? <ConfigStep tour={tours.find((item) => item.id === editing.id) ?? null} missing={missingPublicationLabels(editing)} togglingTourId={togglingTourId} onToggle={requestToggleTourPublication} onRequestDelete={setPendingTourDelete} /> : null}
           </div>
-          <ModalFooter className="admin-tour-footer">
-            <button className="admin-btn admin-btn--ghost" type="button" disabled={saving} onClick={requestClose}>Cancelar</button>
-            <button className="admin-btn admin-btn--secondary" type="button" disabled={saving} onClick={() => void saveDraftAndClose()}>{saving ? <Loader2 className="animate-spin" size={15} /> : <Save size={15} />} Guardar borrador</button>
-            <div className="admin-tour-nav">
-              <button className="admin-btn admin-btn--ghost admin-tour-nav-btn" type="button" aria-label="Anterior" title="Anterior" disabled={saving || step === 'info'} onClick={() => void navigateStep(-1)}><ChevronLeft size={18} /></button>
-              {step !== 'config' ? <button className="admin-btn admin-tour-nav-btn" type="button" aria-label="Siguiente" title="Siguiente" disabled={saving} onClick={() => void navigateStep(1)}>{saving ? <Loader2 className="animate-spin" size={18} /> : <ChevronRight size={18} />}</button> : <button className="admin-btn" type="submit" disabled={saving}>{saving ? <Loader2 className="animate-spin" size={15} /> : <Save size={15} />} Guardar</button>}
+          <ModalFooter className="admin-wizard-footer">
+            <div className="admin-wizard-footer__nav">
+              {step !== 'info' ? <button className="admin-btn admin-btn--ghost admin-wizard-footer__icon-btn" type="button" aria-label="Anterior" title="Anterior" disabled={saving} onClick={() => void navigateStep(-1)}><ChevronLeft size={18} /></button> : null}
+            </div>
+            <div className="admin-wizard-footer__actions">
+              <button className="admin-btn admin-btn--secondary" type="button" disabled={saving} onClick={() => void saveDraftAndClose()}>{saving ? <Loader2 className="animate-spin" size={15} /> : <Save size={15} />} Guardar borrador</button>
+              {step !== 'config' ? <button key="next" className="admin-btn admin-wizard-footer__icon-btn" type="button" aria-label="Siguiente" title="Siguiente" disabled={saving} onClick={() => void navigateStep(1)}>{saving ? <Loader2 className="animate-spin" size={18} /> : <ChevronRight size={18} />}</button> : <button key="save" className="admin-btn" type="submit" disabled={saving}>{saving ? <Loader2 className="animate-spin" size={15} /> : <Save size={15} />} Guardar</button>}
             </div>
           </ModalFooter>
         </form> : null}
@@ -561,18 +624,18 @@ export default function AdminToursPage() {
         titleId="tour-delete-title"
         title="Eliminar tour"
         loading={deletingTour}
-        message={pendingTourDelete ? `Esta acción elimina "${pendingTourDelete.title}" y sus paquetes asociados. Si tiene reservas históricas, la base de datos bloqueará la eliminación.` : ''}
+        message={pendingTourDelete ? `Esta acción elimina "${pendingTourDelete.title || 'este tour'}" y su información asociada, incluidos sus paquetes. No se puede deshacer. Si el tour tiene reservas, no se podrá eliminar.` : ''}
       />
     </div>
   );
 }
 
 function InfoStep({ editing, errors, onChange }: { editing: TourEditor; errors: FieldErrors; onChange: (value: TourEditor) => void }) {
-  return <FormSection title="Información general" description="Los datos esenciales que describen el Tour." icon={<Info size={16} />}><label className="admin-field"><span className="admin-field__label">Nombre del tour</span><input id="tour-title" className="admin-input" placeholder="Ej. Fishing Tour" aria-required="true" aria-invalid={Boolean(errors.title) || undefined} aria-describedby={errors.title ? 'tour-title-error' : undefined} value={editing.title} onChange={(event) => onChange({ ...editing, title: event.target.value, slug: slugify(event.target.value) })} />{errors.title ? <span id="tour-title-error" className="admin-field-error" role="alert">{errors.title}</span> : null}</label><label className="admin-field"><span className="admin-field__label">Frase</span><textarea className="admin-input" rows={3} value={editing.description} onChange={(event) => onChange({ ...editing, description: event.target.value })} /></label><label className="admin-field"><span className="admin-field__label">Descripción</span><textarea className="admin-input admin-textarea-list" value={editing.longDescription} onChange={(event) => onChange({ ...editing, longDescription: event.target.value })} /></label><p className="admin-field-help">{editing.isNew ? 'El orden de aparición se asignará automáticamente al guardar.' : `Orden de aparición actual: ${editing.sortOrder}. Se reordena desde la lista de tours.`}</p></FormSection>;
+  return <FormSection title="Información general" description="Los datos esenciales que describen el Tour." icon={<Info size={16} />}><label className="admin-field"><span className="admin-field__label">Nombre del tour</span><input id="tour-title" className="admin-input" placeholder="Ej. Fishing Tour" aria-required="true" aria-invalid={Boolean(errors.title) || undefined} aria-describedby={errors.title ? 'tour-title-error' : undefined} value={editing.title} onChange={(event) => onChange({ ...editing, title: event.target.value, slug: slugify(event.target.value) })} />{errors.title ? <span id="tour-title-error" className="admin-field-error" role="alert">{errors.title}</span> : null}</label><label className="admin-field"><span className="admin-field__label">Frase</span><textarea className="admin-input" rows={3} value={editing.description} onChange={(event) => onChange({ ...editing, description: event.target.value })} /></label><label className="admin-field"><span className="admin-field__label">Descripción</span><textarea className="admin-input admin-textarea-list" value={editing.longDescription} onChange={(event) => onChange({ ...editing, longDescription: event.target.value })} /></label><p className="admin-field-help">Escribe los textos en inglés: el español se genera al guardar.</p><p className="admin-field-help">{editing.isNew ? 'El orden de aparición se asignará automáticamente al guardar.' : `Orden de aparición actual: ${editing.sortOrder}. Se reordena desde la lista de tours.`}</p></FormSection>;
 }
 
 function GalleryStep({ editing, errors, selectedSlot, setSelectedSlot, setDeleteImage, saveImage }: { editing: TourEditor; errors: FieldErrors; selectedSlot: number | null; setSelectedSlot: (value: number | null) => void; setDeleteImage: (value: TourImageRow | null) => void; saveImage: (image: StorageImage, slot: number) => Promise<void> }) {
-  return <FormSection title="Galería" description="Mínimo 3 imágenes para continuar. Para finalizar: 3 o 6. Máximo 6." icon={<ImageIcon size={16} />}>{errors.images ? <div className="admin-alert admin-alert--danger admin-gallery-error" role="alert">{errors.images}</div> : null}<div className="admin-tour-image-slots">{Array.from({ length: 6 }, (_, index) => { const image = editing.images[index]; const selected = selectedSlot === index; return <article className={`admin-tour-image-slot${selected ? ' admin-tour-image-slot--editing' : ''}`} key={image?.id ?? index}><header><strong>Foto {index + 1}</strong>{index === 0 ? <AdminBadge value="Portada" /> : null}</header>{selected ? <AdminImageManager resourceTable="tours" resourceId={editing.id} folder="tours" currentImageUrl={image?.image_url} currentStoragePath={image?.storage_path} label={`${editing.title} foto ${index + 1}`} aspect={3 / 2} maxWidth={1200} maxHeight={800} maxSizeMB={0.35} retainPreviousOnUpload requireReplacementToDelete onImageSaved={(saved) => saveImage(saved, index)} /> : image ? <button className="admin-tour-image-slot__media" type="button" aria-label={`Cambiar foto ${index + 1}`} onClick={() => setSelectedSlot(index)}><img src={image.image_url} alt={image.alt_text || `${editing.title} foto ${index + 1}`} /></button> : <button className="admin-tour-image-slot__empty" type="button" onClick={() => setSelectedSlot(index)}><Plus size={18} /> Seleccionar</button>}<footer>{selected ? <button className="admin-btn admin-btn--ghost" type="button" onClick={() => setSelectedSlot(null)}>Cerrar</button> : <button className="admin-btn admin-btn--ghost" type="button" onClick={() => setSelectedSlot(index)}>{image ? 'Cambiar' : 'Seleccionar'}</button>}{image && !selected ? <button className="admin-icon-btn" type="button" aria-label={`Eliminar foto ${index + 1}`} onClick={() => setDeleteImage(image)}><Trash2 size={15} /></button> : null}</footer></article>; })}</div></FormSection>;
+  return <FormSection title="Galería" description="Mínimo 3 imágenes para continuar." icon={<ImageIcon size={16} />}>{errors.images ? <div className="admin-alert admin-alert--danger admin-gallery-error" role="alert">{errors.images}</div> : null}<div className="admin-tour-image-slots">{Array.from({ length: 6 }, (_, index) => { const image = editing.images[index]; const selected = selectedSlot === index; return <article className={`admin-tour-image-slot${selected ? ' admin-tour-image-slot--editing' : ''}`} key={image?.id ?? index}><header><strong>Foto {index + 1}</strong>{index === 0 ? <AdminBadge value="Portada" /> : null}</header>{selected ? <AdminImageManager resourceTable="tours" resourceId={editing.id} folder="tours" currentImageUrl={image?.image_url} currentStoragePath={image?.storage_path} label={`${editing.title} foto ${index + 1}`} aspect={3 / 2} maxWidth={1200} maxHeight={800} maxSizeMB={0.35} retainPreviousOnUpload requireReplacementToDelete onImageSaved={(saved) => saveImage(saved, index)} /> : image ? <button className="admin-tour-image-slot__media" type="button" aria-label={`Cambiar foto ${index + 1}`} onClick={() => setSelectedSlot(index)}><img src={image.image_url} alt={image.alt_text || `${editing.title} foto ${index + 1}`} /></button> : <button className="admin-tour-image-slot__empty" type="button" onClick={() => setSelectedSlot(index)}><Plus size={18} /> Seleccionar</button>}<footer>{selected ? <button className="admin-btn admin-btn--ghost" type="button" onClick={() => setSelectedSlot(null)}>Cerrar</button> : <button className="admin-btn admin-btn--ghost" type="button" onClick={() => setSelectedSlot(index)}>{image ? 'Cambiar' : 'Seleccionar'}</button>}{image && !selected ? <button className="admin-icon-btn" type="button" aria-label={`Eliminar foto ${index + 1}`} onClick={() => setDeleteImage(image)}><Trash2 size={15} /></button> : null}</footer></article>; })}</div></FormSection>;
 }
 
 interface TagListItem { key: string; label: string; removeLabel: string; onRemove: () => void }
@@ -612,11 +675,11 @@ function TagListField({ id, label, placeholder, value, onValueChange, onAdd, add
 
 function ExperienceStep({ editing, activityInput, inclusionInput, setActivityInput, setInclusionInput, addActivity, addInclusion, onChange }: { editing: TourEditor; activityInput: string; inclusionInput: string; setActivityInput: (value: string) => void; setInclusionInput: (value: string) => void; addActivity: () => void; addInclusion: () => void; onChange: (value: TourEditor) => void }) {
   return (
-    <FormSection title="Actividades e incluye" icon={<Check size={16} />}>
+    <FormSection title="Actividades e incluye" description="Escríbelo en inglés: el español se genera al guardar." icon={<Check size={16} />}>
       <TagListField
         id="tour-activity-input"
         label="Actividades del tour"
-        placeholder="Ej. Pesca deportiva"
+        placeholder="e.g. Sport fishing"
         value={activityInput}
         onValueChange={setActivityInput}
         onAdd={addActivity}
@@ -631,7 +694,7 @@ function ExperienceStep({ editing, activityInput, inclusionInput, setActivityInp
       <TagListField
         id="tour-inclusion-input"
         label="Incluye"
-        placeholder="Ej. Bebidas"
+        placeholder="e.g. Drinks"
         value={inclusionInput}
         onValueChange={setInclusionInput}
         onAdd={addInclusion}
@@ -647,43 +710,6 @@ function ExperienceStep({ editing, activityInput, inclusionInput, setActivityInp
   );
 }
 
-function PackagesStep({ boats, relations, packages, onManageBoat }: { boats: BoatRow[]; relations: BoatTourRow[]; packages: EditablePackage[]; onManageBoat: (boatId: string | null) => void }) {
-  const boatName = (boatId: string | null) => boats.find((item) => item.id === boatId)?.name ?? boatId ?? 'Sin bote asignado';
-  const groups = new Map<string | null, EditablePackage[]>();
-  for (const relation of relations) groups.set(relation.boat_id, []);
-  for (const item of packages) {
-    const list = groups.get(item.boatId) ?? [];
-    list.push(item);
-    groups.set(item.boatId, list);
-  }
-  return (
-    <FormSection title="Paquetes" description="Los paquetes y precios se administran por bote." icon={<Package size={16} />}>
-      {packages.length === 0 ? (
-        <div className="admin-tour-empty">
-          <span className="admin-tour-empty__icon"><Package size={20} /></span>
-          <p>Este tour aún no tiene paquetes asociados.</p>
-          {boats.length ? <button className="admin-btn admin-btn--secondary" type="button" onClick={() => onManageBoat(null)}><Ship size={15} /> Gestionar en Botes</button> : null}
-        </div>
-      ) : (
-        <>
-          <ul className="admin-tour-boat-list">
-            {[...groups.entries()].map(([boatId, list]) => (
-              <li className="admin-tour-boat-row" key={boatId ?? 'none'}>
-                <div className="admin-tour-boat-row__info">
-                  <strong>{boatName(boatId)}</strong>
-                  <span className="admin-muted">{list.length === 0 ? 'Sin paquetes' : `${list.length} ${list.length === 1 ? 'paquete' : 'paquetes'} · ${list.map((item) => item.name || 'Sin nombre').join(', ')}`}</span>
-                </div>
-                <button className="admin-btn admin-btn--ghost" type="button" aria-label={`Editar en Botes: ${boatName(boatId)}`} onClick={() => onManageBoat(boatId)}><Pencil size={14} /> Editar en Botes</button>
-              </li>
-            ))}
-          </ul>
-          {boats.length ? <div className="admin-tour-packages__footer"><button className="admin-btn admin-btn--ghost" type="button" onClick={() => onManageBoat(null)}><Ship size={15} /> Gestionar en Botes</button></div> : null}
-        </>
-      )}
-    </FormSection>
-  );
-}
-
 // Same immediate, standalone actions the table row used to expose
 // directly (toggle takes effect on click, independent of the wizard's own
 // "Finalizar" save) — only their location moved, not when/how they run.
@@ -692,25 +718,30 @@ function ConfigStep({ tour, missing, togglingTourId, onToggle, onRequestDelete }
   const status = publicationStatus(tour);
   const isPublished = status === 'published';
   const hint = isPublished
-    ? 'Aparece en el sitio público y se puede reservar.'
+    ? 'Visible en el sitio público y disponible para reservas.'
     : status === 'draft'
       ? 'No aparece en el sitio público ni puede reservarse.'
       : 'Oculto: no aparece en el sitio público ni se puede reservar.';
   return (
     <>
-      <FormSection title="Visibilidad" icon={<Settings size={16} />}>
-        <div className="admin-tour-config-row">
+      <FormSection title="Estado y visibilidad" description="Controla si este tour aparece en el sitio público." icon={<Settings size={16} />}>
+        <div className="admin-tour-config-row admin-tour-config-row--tour">
           <div className="admin-tour-config-row__status">
             <p className="admin-config-row__label">Estado actual</p>
-            <AdminBadge value={status === 'draft' ? 'Borrador' : isPublished ? 'Activo' : 'Inactivo'} />
+            {isPublished ? <AdminBadge value={true} label="Activo" /> : <AdminBadge value={status === 'draft' ? 'Borrador' : 'Inactivo'} />}
             <p className="admin-muted">{hint}</p>
-            {!isPublished && missing.length ? (
-              <div className="admin-tour-missing">
-                <p className="admin-tour-missing__title">Falta completar:</p>
-                <ul>{missing.map((label) => <li key={label}>{label}</li>)}</ul>
-              </div>
+            {!isPublished ? (
+              missing.length ? (
+                <div className="admin-tour-missing">
+                  <p className="admin-tour-missing__title">Requisitos pendientes</p>
+                  <ul>{missing.map((label) => <li key={label}>{label}</li>)}</ul>
+                </div>
+              ) : (
+                <p className="admin-tour-ready"><Check size={14} aria-hidden="true" /> Listo para publicar.</p>
+              )
             ) : null}
           </div>
+          {/* The icon is the action that will happen: Mostrar -> Eye, Ocultar -> EyeOff. */}
           <button
             className={`admin-btn ${isPublished ? 'admin-btn--secondary' : ''}`}
             type="button"
@@ -721,16 +752,17 @@ function ConfigStep({ tour, missing, togglingTourId, onToggle, onRequestDelete }
             {isPublished ? 'Ocultar tour' : 'Mostrar tour'}
           </button>
         </div>
-      </FormSection>
-      <section className="admin-tour-danger" aria-label="Zona de peligro">
-        <div>
-          <strong>Eliminar tour</strong>
-          <p className="admin-muted">Esta acción no se puede deshacer.</p>
+        <div className="admin-tour-config-divider" role="separator" />
+        <div className="admin-tour-danger-row">
+          <div>
+            <strong>Eliminar tour</strong>
+            <p className="admin-muted">Esta acción elimina el tour y su información asociada. No se puede deshacer.</p>
+          </div>
+          <button className="admin-btn admin-btn--danger" type="button" onClick={() => onRequestDelete(tour)}>
+            <Trash2 size={15} /> Eliminar tour
+          </button>
         </div>
-        <button className="admin-btn admin-btn--danger" type="button" onClick={() => onRequestDelete(tour)}>
-          <Trash2 size={15} /> Eliminar tour
-        </button>
-      </section>
+      </FormSection>
     </>
   );
 }

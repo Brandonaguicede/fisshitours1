@@ -1,9 +1,10 @@
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Copy, Image as ImageIcon, ImagePlus, Info, Loader2, Pencil, Plus, Save, Settings2, Star, Trash2, Users, X } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { ArrowDown, ArrowUp, Check, ChevronLeft, ChevronRight, Eye, EyeOff, Image as ImageIcon, Info, Loader2, Pencil, Plus, Save, Settings2, Star, Trash2, Users, X } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 
 import AdminConfirmDialog from '../../components/admin/AdminConfirmDialog';
 import AdminImageManager from '../../components/admin/AdminImageManager';
+import AdminStepper, { type AdminStepperStep } from '../../components/admin/AdminStepper';
 import { AdminBadge, AdminFilterMenu, AdminListToolbar, AdminModuleSurface, AdminPageHeader, AdminReorderHandle, AdminReorderToolbar, AdminTable } from '../../components/admin/AdminPrimitives';
 import BoatToursPackagesEditor from '../../components/admin/BoatToursPackagesEditor';
 import FormSection from '../../components/admin/FormSection';
@@ -11,7 +12,9 @@ import ModalFooter from '../../components/admin/ModalFooter';
 import { Modal } from '../../components/common/Modal';
 import { useAdminReorder } from '../../hooks/useAdminReorder';
 import { supabase } from '../../lib/supabase';
-import { deleteStorageImage } from '../../services/imageService';
+import { cleanupReplacedImage, deleteStorageImage } from '../../services/imageService';
+import { translateTextsToSpanish } from '../../services/translationService';
+import { editableText, textColumns, textsToTranslate, type BilingualColumns } from '../../utils/bilingualContent';
 import type { StorageImage } from '../../services/imageService';
 import { friendlyDeleteError } from '../../utils/adminErrors';
 import { money } from '../../utils/format';
@@ -43,18 +46,18 @@ interface BoatImageRow {
 // item, exactly like tour_inclusions' pattern, so the same id can be used
 // directly in the upsert on save.
 //
-// labelEs/labelEn are directly editable here (not just filled by "Traducir
-// todo el sitio") — DeepL can mistranslate a technical term (e.g. "tuna
-// tube" once came back as "Remember the tube"), and the admin needs a real
-// way to fix that without it being silently overwritten by the next
-// translation run. `label` (legacy) is kept in sync automatically on save
-// — es || en || label — purely for whatever, if anything, still reads it
-// internally; it has no input of its own anymore.
+// The admin edits ONE text per item, in ENGLISH (`labelEn`, the source). The Spanish (`labelEs`) is stored,
+// not edited: DeepL generates it (EN -> ES) when Siguiente / Guardar borrador / Guardar saves an item that is
+// new or whose English changed, and it is kept as loaded otherwise. `savedEn` is the English as loaded (to
+// know what changed) and `loadedEn` the raw label_en column (so an untouched legacy row is written back
+// exactly as it was). `label` (legacy) follows the English text on save.
 interface BoatEquipmentEditItem {
   id: string;
   label: string;
-  labelEs: string;
   labelEn: string;
+  labelEs: string;
+  savedEn?: string;
+  loadedEn?: string;
   sortOrder: number;
   isNew?: boolean;
   pendingDelete?: boolean;
@@ -65,7 +68,10 @@ interface BoatRow {
   slug: string;
   name: string;
   images: string[];
+  /** English badge text shown in the form (badge_en, else the legacy badge). */
   badge: string | null;
+  /** That same text as loaded/saved, to translate the badge only when it changes. */
+  badgeSaved?: string;
   length: string | null;
   engine: string | null;
   featured_spec: string | null;
@@ -76,6 +82,45 @@ interface BoatRow {
   sort_order: number;
   boat_images?: BoatImageRow[];
   equipment: BoatEquipmentEditItem[];
+}
+
+type BoatStep = 'info' | 'gallery' | 'tours' | 'config';
+
+const boatSteps: Array<AdminStepperStep<BoatStep>> = [
+  { id: 'info', label: 'Información' },
+  { id: 'gallery', label: 'Galería' },
+  { id: 'tours', label: 'Tours y paquetes' },
+  { id: 'config', label: 'Configuración' },
+];
+
+const isValidActiveImageCount = (count: number) => count >= 3 && count <= 6;
+
+function toEquipmentEditItem(item: { id: string; label: string; label_es: string | null; label_en: string | null; sort_order: number }): BoatEquipmentEditItem {
+  const english = item.label_en || item.label;
+  return { id: item.id, label: item.label, labelEn: english, labelEs: item.label_es ?? '', savedEn: english, loadedEn: item.label_en ?? '', sortOrder: item.sort_order };
+}
+
+// What "unsaved changes" means for the Información step (photos, tours and packages persist on
+// their own, immediately): a comparable string of everything the form edits.
+const boatFormSnapshot = (boat: BoatRow) => JSON.stringify([
+  boat.name, boat.badge ?? '', boat.length ?? '', boat.engine ?? '', boat.max_guests,
+  boat.equipment.map((item) => [item.id, item.labelEn, item.labelEs, item.sortOrder, Boolean(item.pendingDelete)]),
+]);
+
+type BoatFieldErrors = { name?: string; maxGuests?: string; images?: string };
+
+// The existing boat rules, in one place: a name and a valid capacity are always required; publishing
+// additionally needs 3-6 photos (and Second Wind keeps its 10-passenger ceiling).
+function validateBoat(boat: BoatRow, mode: 'draft' | 'publish' | 'advance'): BoatFieldErrors {
+  const errors: BoatFieldErrors = {};
+  if (!boat.name.trim()) errors.name = 'El nombre del bote es obligatorio.';
+  if (!Number.isFinite(boat.max_guests) || boat.max_guests < 1) errors.maxGuests = 'La capacidad debe ser al menos 1.';
+  else if (mode === 'publish' && boat.id === 'segundo-viento' && boat.max_guests > 10) errors.maxGuests = 'Second Wind no puede superar 10 pasajeros.';
+  if (mode === 'publish') {
+    const activeImageCount = (boat.boat_images?.length ? boat.boat_images : fallbackBoatImages(boat)).filter((image) => image.active).length;
+    if (!isValidActiveImageCount(activeImageCount)) errors.images = 'Para publicar el bote necesitas entre 3 y 6 imagenes.';
+  }
+  return errors;
 }
 
 function needsEditorNotice(message: string) {
@@ -137,6 +182,27 @@ function uniqueBoatId(name: string, existingIds: ReadonlySet<string>) {
   return `${base}-${suffix}`;
 }
 
+const BADGE_COLUMNS: BilingualColumns = { legacy: 'badge', en: 'badge_en', es: 'badge_es' };
+
+// The badge is shown to the admin in English (badge_en, else the legacy badge).
+function withEditableBadge<T extends BoatRow>(boat: T): T {
+  const badge = editableText(boat as unknown as Record<string, unknown>, BADGE_COLUMNS);
+  return { ...boat, badge: badge || null, badgeSaved: badge };
+}
+
+// An item needs a (new) Spanish copy when it is new or its English text differs from what was loaded.
+const equipmentNeedsSpanish = (item: BoatEquipmentEditItem) => Boolean(item.labelEn.trim()) && (Boolean(item.isNew) || item.labelEn.trim() !== (item.savedEn ?? ''));
+
+// Everything Información persists that has a Spanish copy — the badge and the new/changed equipment items — is
+// translated in ONE request before anything is written. A DeepL failure throws (TranslationError), so nothing
+// is saved, no blank or invented Spanish is stored and the previous Spanish is left untouched.
+async function translateBoatContent(boat: BoatRow): Promise<Map<string, string>> {
+  return translateTextsToSpanish([
+    ...textsToTranslate(boat.badge ?? '', boat.badgeSaved ?? ''),
+    ...boat.equipment.filter((item) => !item.pendingDelete && equipmentNeedsSpanish(item)).map((item) => item.labelEn.trim()),
+  ]);
+}
+
 export default function AdminBoatsPage() {
   const db = supabase as any;
   const [searchParams, setSearchParams] = useSearchParams();
@@ -145,25 +211,35 @@ export default function AdminBoatsPage() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [editing, setEditing] = useState<BoatRow | null>(null);
-  const [selectedImageId, setSelectedImageId] = useState<string | null>(null);
+  const [gallerySlot, setGallerySlot] = useState<number | null>(null);
   const [pendingDelete, setPendingDelete] = useState<BoatImageRow | null>(null);
   const [pendingBoatDelete, setPendingBoatDelete] = useState<BoatRow | null>(null);
-  const [boatTab, setBoatTab] = useState<'general' | 'tours'>('general');
+  const [boatStep, setBoatStep] = useState<BoatStep>('info');
+  const [focusTourId, setFocusTourId] = useState<string | undefined>(undefined);
+  const [focusPackageId, setFocusPackageId] = useState<string | undefined>(undefined);
   const [saving, setSaving] = useState(false);
+  // Synchronous twin of `saving`: a double click can land before React re-renders the disabled
+  // buttons, and the first save of a new boat must insert exactly once.
+  const savingRef = useRef(false);
+  // Form contents as last loaded/saved, to know whether closing with the X would lose anything.
+  const baselineRef = useRef<string | null>(null);
+  // Set when the admin hides the boat from Configuración: a later "Guardar" then saves the changes
+  // without silently making the boat visible again.
+  const keepHiddenRef = useRef(false);
+  const [togglingVisibility, setTogglingVisibility] = useState(false);
   const [startingPrices, setStartingPrices] = useState<Record<string, number>>({});
-  const [fieldErrors, setFieldErrors] = useState<{ name?: string; maxGuests?: string; images?: string }>({});
+  const [fieldErrors, setFieldErrors] = useState<BoatFieldErrors>({});
+  const focusBoatName = () => window.requestAnimationFrame(() => document.getElementById('boat-name')?.focus());
   const [search, setSearch] = useState('');
   const [boatStatusFilter, setBoatStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
   const [equipmentInput, setEquipmentInput] = useState('');
-
-  const isValidActiveImageCount = (count: number) => count >= 3 && count <= 6;
 
   async function loadBoats() {
     setLoading(true);
     setError('');
     const { data, error } = await supabase
       .from('boats')
-      .select('id, slug, name, images, badge, length, engine, featured_spec, max_guests, image_url, image_public_id, active, sort_order')
+      .select('id, slug, name, images, badge, badge_en, badge_es, length, engine, featured_spec, max_guests, image_url, image_public_id, active, sort_order')
       .order('sort_order', { ascending: true });
 
     if (error) {
@@ -173,7 +249,7 @@ export default function AdminBoatsPage() {
       return;
     }
 
-    const rows = ((data ?? []) as BoatRow[]).map((boat) => ({ ...boat, images: Array.isArray(boat.images) ? boat.images : [] }));
+    const rows = ((data ?? []) as unknown as BoatRow[]).map((boat) => withEditableBadge({ ...boat, images: Array.isArray(boat.images) ? boat.images : [] }));
     const boatIds = rows.map((boat) => boat.id);
     const imagesResult = boatIds.length
       ? await db
@@ -204,7 +280,7 @@ export default function AdminBoatsPage() {
     if (!equipmentResult.error) {
       for (const item of equipmentResult.data ?? []) {
         const current = equipmentByBoat.get(item.boat_id) ?? [];
-        current.push({ id: item.id, label: item.label, labelEs: item.label_es ?? '', labelEn: item.label_en ?? '', sortOrder: item.sort_order });
+        current.push(toEquipmentEditItem(item));
         equipmentByBoat.set(item.boat_id, current);
       }
     }
@@ -241,36 +317,54 @@ export default function AdminBoatsPage() {
     void loadBoats();
   }, []);
 
-  // Deep link from Tours / Paquetes: /admin/boats?boatId=<id> opens the boat on its
-  // "Tours y paquetes" tab.
+  // Deep link from Resumen de paquetes: /admin/boats?boatId=<id>[&tourId=<id>] opens the boat
+  // on its "Tours y paquetes" step and, with tourId, scrolls to and highlights that tour.
   useEffect(() => {
     const requestedId = searchParams.get('boatId');
     if (!requestedId || !boats || editing) return;
     const target = boats.find((boat) => boat.id === requestedId);
     if (!target) return;
+    const requestedTourId = searchParams.get('tourId') ?? undefined;
     openEditor(target);
-    setBoatTab('tours');
+    setBoatStep('tours');
+    setFocusTourId(requestedTourId);
+    setFocusPackageId(searchParams.get('packageId') ?? undefined);
     setSearchParams((current) => {
       current.delete('boatId');
+      current.delete('tourId');
+      current.delete('packageId');
       return current;
     }, { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [boats, searchParams]);
 
+  // Fresh baseline whenever a different boat (or a just-created row) becomes the one being edited.
+  useEffect(() => {
+    baselineRef.current = editing ? boatFormSnapshot(editing) : null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editing?.id]);
+
   function openEditor(boat: BoatRow) {
+    keepHiddenRef.current = false;
     setEditing(boat);
-    setBoatTab('general');
+    setBoatStep('info');
+    setFocusTourId(undefined);
+    setFocusPackageId(undefined);
+    setGallerySlot(null);
     setFieldErrors({});
     setEquipmentInput('');
-    const images = boat.boat_images?.length ? boat.boat_images : fallbackBoatImages(boat);
-    setSelectedImageId((images.find((image) => image.is_primary) ?? images[0])?.id ?? null);
   }
 
   async function createBoat() {
     setNotice('');
     setError('');
     setFieldErrors({});
-    setBoatTab('general');
+    setBoatStep('info');
+    setFocusTourId(undefined);
+    setFocusPackageId(undefined);
+    keepHiddenRef.current = false;
+    // Local state only: the row is created once, when the name is valid and the user moves on
+    // (Siguiente) or saves a draft — never just by opening the form.
     const id = `nuevo-bote-${Date.now()}`;
     setEditing({
       id,
@@ -278,6 +372,7 @@ export default function AdminBoatsPage() {
       name: '',
       images: [],
       badge: '',
+      badgeSaved: '',
       length: '',
       engine: '',
       featured_spec: '',
@@ -285,17 +380,20 @@ export default function AdminBoatsPage() {
       image_url: null,
       image_public_id: null,
       active: false,
-      sort_order: (boats?.length ?? 0) + 1,
+      // Placeholder: the real value is max(sort_order)+1, read fresh right before the insert.
+      sort_order: 0,
       boat_images: [],
       equipment: [],
     });
-    setSelectedImageId(null);
     setEquipmentInput('');
   }
 
   async function closeEditor() {
+    if (editing && baselineRef.current !== null && boatFormSnapshot(editing) !== baselineRef.current && !window.confirm('Hay cambios sin guardar. Si cierras ahora, se perderán.')) return;
     setEditing(null);
-    setSelectedImageId(null);
+    setFocusTourId(undefined);
+    setFocusPackageId(undefined);
+    setGallerySlot(null);
     setPendingDelete(null);
     setPendingBoatDelete(null);
   }
@@ -320,7 +418,7 @@ export default function AdminBoatsPage() {
     if (!boatId) return;
     const { data } = await supabase
       .from('boats')
-      .select('id, slug, name, images, badge, length, engine, featured_spec, max_guests, image_url, image_public_id, active, sort_order')
+      .select('id, slug, name, images, badge, badge_en, badge_es, length, engine, featured_spec, max_guests, image_url, image_public_id, active, sort_order')
       .eq('id', boatId)
       .single();
     if (!data) return;
@@ -338,137 +436,199 @@ export default function AdminBoatsPage() {
       .order('sort_order', { ascending: true });
     const rawBoat = data as unknown as BoatRow;
     const boat = {
-      ...rawBoat,
+      ...withEditableBadge(rawBoat),
       images: Array.isArray(rawBoat.images) ? rawBoat.images.filter((item): item is string => typeof item === 'string') : [],
       boat_images: (imagesResult.data ?? []) as BoatImageRow[],
       equipment: ((equipmentResult.data ?? []) as Array<{ id: string; label: string; label_es: string | null; label_en: string | null; sort_order: number }>)
-        .map((item) => ({ id: item.id, label: item.label, labelEs: item.label_es ?? '', labelEn: item.label_en ?? '', sortOrder: item.sort_order })),
+        .map(toEquipmentEditItem),
     };
     setEditing(boat);
     setEquipmentInput('');
-    const images = boat.boat_images?.length ? boat.boat_images : fallbackBoatImages(boat);
-    setSelectedImageId((current) => current ?? (images.find((image) => image.is_primary) ?? images[0])?.id ?? null);
   }
 
-  // "Guardar" publishes (requires everything a public boat needs); "Guardar
-  // borrador" only needs the bare minimum to create/keep the row and can
-  // always be used to leave mid-edit without losing progress or without
-  // forcing an incomplete boat live.
-  async function saveEditor(mode: 'draft' | 'publish') {
-    if (!editing || saving) return;
-    const nextFieldErrors: typeof fieldErrors = {};
+  // Visibility rules:
+  //  - "Guardar" (last step) is the final save: it requires everything a public boat needs and
+  //    makes the boat visible — unless the admin hid it from Configuración in this session, in
+  //    which case it only saves the changes and the boat stays hidden.
+  //  - "Guardar borrador" (any step) needs just the name and capacity, saves progress and NEVER
+  //    changes visibility: a new boat is created hidden; a boat that is already visible stays so.
+  //  - "advance" (Siguiente from Información) saves the info fields — creating the row the first
+  //    time, exactly once — without touching visibility either.
+  //  - "Mostrar/Ocultar bote" (Configuración) is the explicit switch: toggleBoatVisibility.
+  async function saveEditor(requestedMode: 'draft' | 'publish' | 'advance'): Promise<boolean> {
+    if (!editing || saving || savingRef.current) return false;
+    const mode = requestedMode === 'publish' && keepHiddenRef.current ? 'draft' : requestedMode;
     const isExisting = Boolean(boats?.some((boat) => boat.id === editing.id));
     const name = editing.name.trim();
-    if (!name) {
-      nextFieldErrors.name = 'El nombre es obligatorio.';
-    }
-    if (mode === 'publish') {
-      if (!Number.isFinite(editing.max_guests) || editing.max_guests < 1) {
-        nextFieldErrors.maxGuests = 'La capacidad debe ser al menos 1.';
-      } else if (editing.id === 'segundo-viento' && editing.max_guests > 10) {
-        nextFieldErrors.maxGuests = 'Second Wind no puede superar 10 pasajeros.';
-      }
-      const activeImageCount = (editing.boat_images?.length ? editing.boat_images : fallbackBoatImages(editing)).filter((image) => image.active).length;
-      if (!isValidActiveImageCount(activeImageCount)) {
-        nextFieldErrors.images = 'Para publicar el bote necesitas entre 3 y 6 imagenes.';
-      }
-    }
+    const nextFieldErrors = validateBoat(editing, mode);
     setFieldErrors(nextFieldErrors);
     if (Object.keys(nextFieldErrors).length > 0) {
-      setError(mode === 'publish' ? 'Revisa los campos marcados antes de publicar.' : 'Revisa los campos marcados antes de guardar el borrador.');
-      return;
+      // Name and capacity live in Información; photo problems belong to Galería.
+      setBoatStep(nextFieldErrors.name || nextFieldErrors.maxGuests ? 'info' : 'gallery');
+      if (nextFieldErrors.name) focusBoatName();
+      if (mode === 'publish') setError('Revisa los campos marcados antes de publicar.');
+      else if (mode === 'draft') setError('Revisa los campos marcados antes de guardar el borrador.');
+      return false;
     }
     setSaving(true);
+    savingRef.current = true;
     setError('');
     setNotice('');
-    // Generated once here, on creation, and never re-derived from the name
-    // afterwards — an existing row's own id/slug are reused as-is on every
-    // later save, so they can never silently drift or collide once live.
-    const id = isExisting ? editing.id : uniqueBoatId(name, new Set((boats ?? []).map((boat) => boat.id)));
-    const slug = isExisting ? editing.slug : slugify(name);
-    const payload = {
-      slug,
-      name,
-      badge: editing.badge?.trim() || null,
-      length: editing.length?.trim() || null,
-      engine: editing.engine?.trim() || null,
-      // featured_spec is no longer written here — "Equipamiento" now lives
-      // in boat_equipment, one row per item, edited below.
-      max_guests: editing.max_guests,
-      active: mode === 'publish',
-      sort_order: editing.sort_order,
-      images: editing.images ?? [],
-      image_url: editing.image_url,
-      image_public_id: editing.image_public_id,
-      updated_at: new Date().toISOString(),
-    };
-    const { error } = isExisting
-      ? await supabase.from('boats').update(payload).eq('id', editing.id)
-      : await supabase.from('boats').insert({ ...payload, id });
-    if (error) {
-      setSaving(false);
-      setError(error.message);
-      return;
-    }
-
-    for (const item of editing.equipment) {
-      if (item.pendingDelete) {
-        if (!item.isNew) await supabase.from('boat_equipment').delete().eq('id', item.id);
-        continue;
-      }
-      const labelEs = item.labelEs.trim();
-      const labelEn = item.labelEn.trim();
-      // `label` (legacy) is kept in sync automatically — es first, then en,
-      // then whatever was already there — never a separate input of its
-      // own. A row needs at least one of the three to be worth saving.
-      const label = labelEs || labelEn || item.label.trim();
-      if (!label) continue;
-      const { error: equipmentError } = await supabase.from('boat_equipment').upsert({
-        id: item.id,
-        boat_id: id,
-        label,
-        label_es: labelEs || null,
-        label_en: labelEn || null,
-        sort_order: item.sortOrder,
-        active: true,
+    try {
+      // Spanish for the new/changed badge and equipment (English is the source), before ANY write: if DeepL fails
+      // nothing is saved and the form keeps the text for a retry.
+      const spanishByText = await translateBoatContent(editing);
+      // Generated once here, on creation, and never re-derived from the name
+      // afterwards — an existing row's own id/slug are reused as-is on every
+      // later save, so they can never silently drift or collide once live.
+      const id = isExisting ? editing.id : uniqueBoatId(name, new Set((boats ?? []).map((boat) => boat.id)));
+      const slug = isExisting ? editing.slug : slugify(name);
+      const common = {
+        slug,
+        name,
+        badge: editing.badge?.trim() || null,
+        ...textColumns(editing.badge ?? '', editing.badgeSaved ?? '', BADGE_COLUMNS, spanishByText),
+        length: editing.length?.trim() || null,
+        engine: editing.engine?.trim() || null,
+        // featured_spec is no longer written here — "Equipamiento" now lives
+        // in boat_equipment, one row per item, edited below.
+        max_guests: editing.max_guests,
+        images: editing.images ?? [],
+        image_url: editing.image_url,
+        image_public_id: editing.image_public_id,
         updated_at: new Date().toISOString(),
-      });
-      if (equipmentError) {
-        setSaving(false);
-        setError(equipmentError.message);
+      };
+      // sort_order is only written on creation (fresh max+1, never boats.length, which collides
+      // once a row has been deleted) and by Reordenar/deleteBoat renumbering — an edit must not
+      // overwrite it with whatever value the editor happened to load.
+      let nextSortOrder = 0;
+      if (!isExisting) {
+        const { data: highest, error: maxError } = await supabase.from('boats').select('sort_order').order('sort_order', { ascending: false }).limit(1).maybeSingle();
+        if (maxError) throw new Error(maxError.message);
+        nextSortOrder = (highest?.sort_order ?? 0) + 1;
+      }
+      const { error: boatError } = isExisting
+        ? await supabase.from('boats').update(mode === 'publish' ? { ...common, active: true } : common).eq('id', editing.id)
+        : await supabase.from('boats').insert({ ...common, id, active: mode === 'publish', sort_order: nextSortOrder });
+      if (boatError) throw new Error(boatError.message);
+
+      for (const item of editing.equipment) {
+        if (item.pendingDelete) {
+          if (!item.isNew) await supabase.from('boat_equipment').delete().eq('id', item.id);
+          continue;
+        }
+        const text = item.labelEn.trim();
+        // `label` (legacy) follows the English text; a row needs some text to be worth saving.
+        const label = text || item.label.trim();
+        if (!label) continue;
+        const changed = equipmentNeedsSpanish(item);
+        const { error: equipmentError } = await supabase.from('boat_equipment').upsert({
+          id: item.id,
+          boat_id: id,
+          label,
+          label_en: changed ? text : item.loadedEn || null,
+          label_es: (changed ? spanishByText.get(text) : item.labelEs.trim()) || null,
+          sort_order: item.sortOrder,
+          active: true,
+          updated_at: new Date().toISOString(),
+        });
+        if (equipmentError) throw new Error(equipmentError.message);
+      }
+
+      if (mode === 'advance') {
+        // Stay in the wizard with what we just saved: the real id/slug/sort_order of a boat that
+        // was just created, and equipment rows that are now persisted (so removing one later
+        // really deletes it). The list reload is what makes the new boat "existing".
+        const saved: BoatRow = {
+          ...editing,
+          id,
+          slug,
+          sort_order: isExisting ? editing.sort_order : nextSortOrder,
+          equipment: editing.equipment.filter((item) => !item.pendingDelete).map((item) => {
+            if (!equipmentNeedsSpanish(item)) return { ...item, isNew: false };
+            const text = item.labelEn.trim();
+            return { ...item, isNew: false, savedEn: text, loadedEn: text, labelEs: spanishByText.get(text) ?? item.labelEs };
+          }),
+          badgeSaved: (editing.badge ?? '').trim(),
+        };
+        baselineRef.current = boatFormSnapshot(saved);
+        setEditing((current) => (current ? { ...current, id, slug, sort_order: saved.sort_order, equipment: saved.equipment, badgeSaved: saved.badgeSaved } : current));
+        await loadBoats();
+      } else {
+        setNotice(
+          mode === 'publish'
+            ? (editing.active ? 'Bote guardado.' : 'Bote publicado.')
+            : editing.active ? 'Cambios guardados. El bote sigue visible.'
+            : keepHiddenRef.current ? 'Cambios guardados. El bote sigue oculto.'
+            : 'Borrador guardado.',
+        );
+        setEditing(null);
+        setFocusTourId(undefined);
+    setFocusPackageId(undefined);
+        await loadBoats();
+      }
+      return true;
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'No se pudo guardar el bote.');
+      return false;
+    } finally {
+      setSaving(false);
+      savingRef.current = false;
+    }
+  }
+
+  // Configuración > Mostrar / Ocultar bote: an explicit, standalone switch (takes effect on click,
+  // like the same control in Tours). Showing re-runs the publication rules; hiding never needs them.
+  async function toggleBoatVisibility() {
+    if (!editing || saving || savingRef.current || togglingVisibility) return;
+    const nextActive = !editing.active;
+    if (nextActive) {
+      const errors = validateBoat(editing, 'publish');
+      setFieldErrors(errors);
+      if (Object.keys(errors).length > 0) {
+        setError('Completa los requisitos antes de mostrar el bote.');
         return;
       }
     }
-
-    setSaving(false);
-    setNotice(mode === 'publish' ? 'Bote publicado.' : 'Borrador guardado.');
-    await refreshEditing(id);
+    setTogglingVisibility(true);
+    setError('');
+    setNotice('');
+    const { error: toggleError } = await supabase.from('boats').update({ active: nextActive, updated_at: new Date().toISOString() }).eq('id', editing.id);
+    setTogglingVisibility(false);
+    if (toggleError) {
+      setError(toggleError.message);
+      return;
+    }
+    keepHiddenRef.current = !nextActive;
+    setEditing((current) => (current ? { ...current, active: nextActive } : current));
+    setNotice(nextActive ? 'Bote activado.' : 'Bote oculto.');
+    await loadBoats();
   }
 
-  // Quick-add: typed once, goes straight into the Español field (same
-  // "admin writes Spanish" convention as the rest of this admin) so it's
-  // immediately visible instead of landing in two blank inputs — English is
-  // left empty, which is exactly the signal "Traducir todo el sitio" (or
-  // the admin, directly in the English field below) needs to fill it in.
-  // If what was typed is actually already English, DeepL just returns it
-  // unchanged when asked to translate it "to English" — self-correcting,
-  // no harm either way.
+  // Wizard navigation. Leaving Información forward saves it first — for a new boat that is
+  // what creates the row (exactly once), which the Tours y paquetes step needs to exist.
+  async function goBoatStep(direction: -1 | 1, target?: BoatStep) {
+    if (!editing || saving || savingRef.current) return;
+    const currentIndex = boatSteps.findIndex((item) => item.id === boatStep);
+    const targetIndex = target ? boatSteps.findIndex((item) => item.id === target) : currentIndex + direction;
+    if (targetIndex < 0 || targetIndex >= boatSteps.length || targetIndex === currentIndex) return;
+    if (targetIndex > currentIndex && boatStep === 'info' && !(await saveEditor('advance'))) return;
+    setBoatStep(boatSteps[targetIndex].id);
+  }
+
+  // Quick-add: typed once, goes straight into the Español field (same "admin writes Spanish"
+  // convention as the rest of this admin); the English field is filled in by hand below it.
   function addEquipmentItem() {
     if (!editing || !equipmentInput.trim()) return;
     const text = equipmentInput.trim();
     setEditing({
       ...editing,
-      equipment: [...editing.equipment, { id: crypto.randomUUID(), label: text, labelEs: text, labelEn: '', sortOrder: editing.equipment.length + 1, isNew: true }],
+      equipment: [...editing.equipment, { id: crypto.randomUUID(), label: text, labelEn: text, labelEs: '', sortOrder: editing.equipment.length + 1, isNew: true }],
     });
     setEquipmentInput('');
   }
 
-  function updateEquipmentLabelEs(itemId: string, labelEs: string) {
-    if (!editing) return;
-    setEditing({ ...editing, equipment: editing.equipment.map((item) => (item.id === itemId ? { ...item, labelEs } : item)) });
-  }
-
-  function updateEquipmentLabelEn(itemId: string, labelEn: string) {
+  function updateEquipmentLabel(itemId: string, labelEn: string) {
     if (!editing) return;
     setEditing({ ...editing, equipment: editing.equipment.map((item) => (item.id === itemId ? { ...item, labelEn } : item)) });
   }
@@ -511,6 +671,15 @@ export default function AdminBoatsPage() {
       setError(friendlyDeleteError(error, 'este bote'));
       return;
     }
+    // Close the hole the deleted boat leaves in sort_order so numbering stays 1..N on its own
+    // (only rows whose number actually changes are written).
+    const remaining = (boats ?? []).filter((item) => item.id !== boat.id).sort((a, b) => a.sort_order - b.sort_order);
+    let renumberError = '';
+    for (const [index, item] of remaining.entries()) {
+      if (item.sort_order === index + 1) continue;
+      const { error: orderError } = await supabase.from('boats').update({ sort_order: index + 1 }).eq('id', item.id);
+      if (orderError) { renumberError = orderError.message; break; }
+    }
     for (const image of images) {
       if (!image.storage_path) continue;
       try {
@@ -522,7 +691,8 @@ export default function AdminBoatsPage() {
     setSaving(false);
     setPendingBoatDelete(null);
     setEditing(null);
-    setNotice('Bote eliminado.');
+    if (renumberError) setError(`Bote eliminado, pero no se pudo renumerar el orden: ${renumberError}. Usa Reordenar > Guardar orden.`);
+    else setNotice('Bote eliminado.');
     await loadBoats();
   }
 
@@ -562,8 +732,27 @@ export default function AdminBoatsPage() {
     if (deactivatedForImageCount) {
       setNotice(`Imagen agregada. El bote se inactivo temporalmente porque ahora tiene ${nextImages.length} imagenes; necesitas entre 3 y 6 para activarlo.`);
     }
-    setSelectedImageId((data as BoatImageRow).id);
     await refreshEditing(editing.id);
+  }
+
+  // "Cambiar" on a slot: the new upload takes the place of that photo (same row, same position and
+  // cover flag), exactly like changing a photo in the Tours gallery.
+  // Order matters: the new file is already uploaded (AdminImageManager); the row and every copy of
+  // its reference (boats.image_url / images) are updated FIRST, and only then is the previous file
+  // deleted. If the upload or either update fails, the old photo is untouched (and the manager
+  // discards the new upload); if only the delete fails, the old file is kept and reported.
+  async function replaceBoatImage(image: StorageImage, current: BoatImageRow) {
+    if (!editing) return;
+    const { error } = await db
+      .from('boat_images')
+      .update({ image_url: image.public_url, storage_path: image.storage_path, alt_text: `${editing.name} image` })
+      .eq('id', current.id);
+    if (error) throw new Error(error.message);
+    await syncBoatImageFields(editing.id, (editing.boat_images ?? []).map((item) => (item.id === current.id ? { ...item, image_url: image.public_url, storage_path: image.storage_path } : item)));
+    const cleanup = await cleanupReplacedImage(current.storage_path, image.storage_path, 'boat_images', current.id);
+    await refreshEditing(editing.id);
+    // After the refresh: loading the list clears `error`, which would wipe this warning.
+    if (cleanup === 'pending') setError('Foto cambiada. La foto anterior no se pudo borrar del almacenamiento y quedó pendiente de limpieza.');
   }
 
   async function setPrimaryImage(image: BoatImageRow) {
@@ -577,7 +766,6 @@ export default function AdminBoatsPage() {
       return;
     }
     await syncBoatImageFields(editing.id, currentImages.map((item) => ({ ...item, is_primary: item.id === image.id })));
-    setSelectedImageId(image.id);
     await refreshEditing(editing.id);
   }
 
@@ -631,25 +819,22 @@ export default function AdminBoatsPage() {
 
     await syncBoatImageFields(editing.id, remaining);
     setPendingDelete(null);
-    setSelectedImageId((remaining.find((item) => item.is_primary) ?? remaining[0])?.id ?? null);
     setNotice('Imagen eliminada del bote.');
     await refreshEditing(editing.id);
-  }
-
-  async function copyUrl(url: string) {
-    await navigator.clipboard?.writeText(url);
-    setNotice('URL copiada.');
   }
 
   // editing.boat_images is always real (or []) — see loadBoats()/refreshEditing(). The
   // synthetic legacy preview is applied ONLY here, for display, and every row it produces
   // carries `synthetic: true` so the actions below know not to wire real writes to it.
   const editorImages = useMemo(() => (editing?.boat_images?.length ? editing.boat_images : editing ? fallbackBoatImages(editing) : []), [editing]);
-  const selectedImage = editorImages.find((image) => image.id === selectedImageId) ?? editorImages.find((image) => image.is_primary) ?? editorImages[0] ?? null;
   const isExistingBoat = Boolean(editing && boats?.some((boat) => boat.id === editing.id));
   // True while we're showing the boat's legacy boats.images/image_url as a read-only
   // preview because it has no boat_images rows yet.
   const isLegacyPreview = Boolean(editing && !editing.boat_images?.length && editorImages.length > 0);
+  const visibleEquipment = editing ? editing.equipment.filter((item) => !item.pendingDelete).sort((a, b) => a.sortOrder - b.sortOrder) : [];
+  // What still blocks publishing, from the same rules saveEditor('publish') enforces.
+  const publishErrors = editing ? validateBoat(editing, 'publish') : {};
+  const publishMissing = [publishErrors.name && 'Nombre del bote', publishErrors.maxGuests && 'Capacidad máxima', publishErrors.images && 'Al menos 3 fotos'].filter(Boolean) as string[];
   const visibleBoats = (boats ?? [])
     .filter((boat) => boatStatusFilter === 'all' || (boatStatusFilter === 'active') === boat.active)
     .filter((boat) => boat.name.toLowerCase().includes(search.toLowerCase()));
@@ -756,15 +941,21 @@ export default function AdminBoatsPage() {
             className="admin-modal-shell"
             onSubmit={(event) => {
               event.preventDefault();
-              void saveEditor('publish');
+              // Enter moves forward; only the last step publishes.
+              if (boatStep === 'config') void saveEditor('publish');
+              else void goBoatStep(1);
             }}
           >
             <header className="admin-modal-header">
-              <h2 id="boat-edit-title" className="admin-card__title"><Pencil size={18} /> {boats?.some((boat) => boat.id === editing.id) ? 'Editar bote' : 'Crear bote'}</h2>
+              <div>
+                <h2 id="boat-edit-title" className="admin-card__title"><Pencil size={18} /> {isExistingBoat ? 'Editar bote' : 'Crear bote'}</h2>
+                <p className="admin-muted">{boatSteps.findIndex((item) => item.id === boatStep) + 1} de {boatSteps.length} · {boatSteps.find((item) => item.id === boatStep)?.label}</p>
+              </div>
               <button className="admin-icon-btn" type="button" aria-label="Cerrar" disabled={saving} onClick={() => void closeEditor()}><X size={18} /></button>
             </header>
+            <AdminStepper label="Progreso del bote" steps={boatSteps} current={boatStep} onSelect={(next) => void goBoatStep(1, next)} />
 
-            <div className="admin-modal-body">
+            <div className="admin-modal-body admin-boat-step-body">
               {error ? (
                 <div className="admin-alert admin-alert--danger" role="alert">
                   {needsEditorNotice(error)
@@ -773,234 +964,226 @@ export default function AdminBoatsPage() {
                 </div>
               ) : null}
 
-              {isExistingBoat ? (
-                <div className="admin-actions" role="tablist" aria-label="Secciones del bote">
-                  <button type="button" className={boatTab === 'general' ? 'admin-btn' : 'admin-btn admin-btn--ghost'} onClick={() => setBoatTab('general')}>General</button>
-                  <button type="button" className={boatTab === 'tours' ? 'admin-btn' : 'admin-btn admin-btn--ghost'} onClick={() => setBoatTab('tours')}>Tours y paquetes</button>
-                </div>
-              ) : null}
+              {boatStep === 'info' ? (
+                <>
+                  <div className="admin-form-columns admin-boat-info-grid">
+                    <FormSection title="Información general" description="Cómo se identifica el bote." icon={<Info size={16} />}>
+                      <label className="admin-field">
+                        <span className="admin-field__label">Nombre</span>
+                        <input id="boat-name" name="name" className="admin-input" aria-required="true" aria-invalid={fieldErrors.name ? true : undefined} aria-describedby={fieldErrors.name ? 'boat-name-error' : undefined} placeholder="Ej. Second Wind" value={editing.name} onChange={(event) => setEditing({ ...editing, name: event.target.value })} />
+                        <span className="admin-field-help">Nombre propio: no se traduce.</span>
+                        {fieldErrors.name ? <span id="boat-name-error" className="admin-field-error" role="alert">{fieldErrors.name}</span> : null}
+                      </label>
+                      <label className="admin-field">
+                        <span className="admin-field__label">Etiqueta</span>
+                        <input id="boat-badge" name="badge" className="admin-input" value={editing.badge ?? ''} onChange={(event) => setEditing({ ...editing, badge: event.target.value || null })} placeholder="e.g. Luxury meets nature" />
+                        <span className="admin-field-help">En inglés: el español se genera al guardar.</span>
+                      </label>
+                    </FormSection>
 
-              {isExistingBoat && boatTab === 'tours' ? (
-                <BoatToursPackagesEditor boatId={editing.id} boatName={editing.name} boatMaxGuests={editing.max_guests} />
-              ) : (
-              <>
-              <FormSection
-                title="Imagen del bote"
-                description={isExistingBoat ? 'Sube nuevas fotos, ordena la galeria y elige la imagen principal.' : 'Guarda la informacion del bote para habilitar la carga de imagenes.'}
-                icon={<ImageIcon size={16} />}
-              >
-                <section className="admin-boat-images">
-                  {isExistingBoat ? (
-                    <>
-                      <div className="admin-boat-images__main">
-                        {selectedImage ? (
-                          <img src={selectedImage.image_url} alt={selectedImage.alt_text || editing.name} loading="eager" decoding="async" />
-                        ) : (
-                          <div className="admin-boat-images__empty"><ImagePlus size={28} /> Sin imagenes del bote</div>
-                        )}
-                        <span className="admin-boat-images__badge">Imagen principal</span>
-                        {selectedImage && !selectedImage.is_primary && !selectedImage.synthetic ? (
-                          <button className="admin-boat-images__primary admin-btn" type="button" onClick={() => void setPrimaryImage(selectedImage)}>
-                            <Star size={14} /> Marcar principal
-                          </button>
-                        ) : null}
-                        {editorImages.length > 1 ? (
-                          <>
-                            <button className="admin-boat-images__arrow admin-boat-images__arrow--prev" type="button" aria-label="Imagen anterior" onClick={() => setSelectedImageId(editorImages[(Math.max(editorImages.findIndex((image) => image.id === selectedImage?.id), 0) - 1 + editorImages.length) % editorImages.length].id)}><ArrowLeft size={18} /></button>
-                            <button className="admin-boat-images__arrow admin-boat-images__arrow--next" type="button" aria-label="Imagen siguiente" onClick={() => setSelectedImageId(editorImages[(Math.max(editorImages.findIndex((image) => image.id === selectedImage?.id), 0) + 1) % editorImages.length].id)}><ArrowRight size={18} /></button>
-                          </>
-                        ) : null}
+                    <FormSection title="Capacidad y especificaciones" description="Datos físicos del bote." icon={<Users size={16} />}>
+                      <label className="admin-field">
+                        <span className="admin-field__label">Capacidad máxima</span>
+                        <input
+                          id="boat-max-guests"
+                          name="max_guests"
+                          className="admin-input"
+                          type="number"
+                          min={1}
+                          max={editing.id === 'segundo-viento' ? 10 : undefined}
+                          aria-invalid={fieldErrors.maxGuests ? true : undefined}
+                          value={editing.max_guests}
+                          onChange={(event) => setEditing({ ...editing, max_guests: Number(event.target.value) })}
+                        />
+                        <span className="admin-field-help">Ningún paquete puede superar este número de huéspedes.</span>
+                        {fieldErrors.maxGuests ? <span className="admin-field-error">{fieldErrors.maxGuests}</span> : null}
+                      </label>
+                      <div className="admin-field-pair">
+                        <label className="admin-field">
+                          <span className="admin-field__label">Eslora</span>
+                          <input id="boat-length" name="length" className="admin-input" value={editing.length ?? ''} onChange={(event) => setEditing({ ...editing, length: event.target.value || null })} placeholder="Ej. 32 pies" />
+                        </label>
+                        <label className="admin-field">
+                          <span className="admin-field__label">Motor</span>
+                          <input id="boat-engine" name="engine" className="admin-input" value={editing.engine ?? ''} onChange={(event) => setEditing({ ...editing, engine: event.target.value || null })} placeholder="Ej. 2x Yamaha 250HP" />
+                        </label>
                       </div>
+                    </FormSection>
+                  </div>
 
-                      <div className="admin-boat-images__thumbs" role="list" aria-label="Imagenes del bote">
-                        {editorImages.map((image, index) => (
-                          <div className={`admin-boat-thumb${image.id === selectedImage?.id ? ' admin-boat-thumb--selected' : ''}`} key={image.id} role="listitem">
-                            <button type="button" aria-label={`Ver imagen ${index + 1}`} onClick={() => setSelectedImageId(image.id)}>
-                              <img src={image.image_url} alt="" loading="lazy" decoding="async" />
-                            </button>
-                            <div className="admin-boat-thumb__actions">
-                              {image.synthetic ? null : (
-                                <>
-                                  <button type="button" aria-label="Marcar como principal" onClick={() => void setPrimaryImage(image)}><Star size={14} /></button>
-                                  <button type="button" aria-label="Mover a la izquierda" onClick={() => void moveImage(image, -1)}><ArrowUp size={14} /></button>
-                                  <button type="button" aria-label="Mover a la derecha" onClick={() => void moveImage(image, 1)}><ArrowDown size={14} /></button>
-                                </>
-                              )}
-                              <button type="button" aria-label="Copiar URL" title={image.image_url} onClick={() => void copyUrl(image.image_url)}><Copy size={14} /></button>
-                              {image.synthetic ? null : (
-                                <button type="button" aria-label="Eliminar imagen" onClick={() => setPendingDelete(image)}><Trash2 size={14} /></button>
-                              )}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-
-                      {isLegacyPreview ? (
-                        <p className="admin-field-help" role="status">
-                          Estas fotos pertenecen al formato anterior y se muestran solo como referencia. Las nuevas imagenes del bote se administran desde la galeria actual.
-                        </p>
-                      ) : null}
-
-                      <AdminImageManager
-                        resourceTable="boats"
-                        resourceId={editing.id}
-                        folder="boats"
-                        label={`${editing.name || 'Bote'} galeria`}
-                        aspect={16 / 9}
-                        maxWidth={1600}
-                        maxHeight={900}
-                        maxSizeMB={0.6}
-                      disabled={(editing.boat_images?.length ?? 0) >= 6}
-                        retainPreviousOnUpload
-                        onImageSaved={onGalleryImageSaved}
+                  <FormSection title="Equipamiento" description="Lo que ofrece el bote. Escríbelo en inglés: el español se genera al guardar." icon={<Settings2 size={16} />}>
+                    <div className="admin-tour-list-field__add">
+                      <input
+                        id="boat-equipment-input"
+                        className="admin-input"
+                        aria-label="Nuevo equipamiento"
+                        value={equipmentInput}
+                        placeholder="Ej. Garmin GPS"
+                        onChange={(event) => setEquipmentInput(event.target.value)}
+                        onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); addEquipmentItem(); } }}
                       />
-                      <p className="admin-field-help" aria-live="polite">
-                        {editorImages.length} / 6 imagenes. Para publicar el bote necesitas entre 3 y 6 imagenes.
-                      </p>
-                      {fieldErrors.images ? <span className="admin-field-error">{fieldErrors.images}</span> : null}
-                    </>
-                  ) : (
-                    <div className="admin-empty">
-                      Completa los datos y guarda el bote (borrador o publicado). Despues podras subir sus fotos.
-                      {fieldErrors.images ? <span className="admin-field-error">{fieldErrors.images}</span> : null}
+                      <button className="admin-btn admin-btn--secondary" type="button" aria-label="Agregar equipamiento" disabled={!equipmentInput.trim()} onClick={addEquipmentItem}><Plus size={14} /> Agregar</button>
                     </div>
-                  )}
-                </section>
-              </FormSection>
-
-              <div className="admin-form-columns">
-                <FormSection title="Informacion general" description="Datos que identifican al bote." icon={<Info size={16} />}>
-                  <label className="admin-field">
-                    <span className="admin-field__label">Nombre</span>
-                    <input id="boat-name" name="name" className="admin-input" aria-invalid={fieldErrors.name ? true : undefined} value={editing.name} onChange={(event) => setEditing({ ...editing, name: event.target.value })} />
-                    {fieldErrors.name ? <span className="admin-field-error">{fieldErrors.name}</span> : null}
-                  </label>
-                  <label className="admin-field">
-                    <span className="admin-field__label">Etiqueta</span>
-                    <input id="boat-badge" name="badge" className="admin-input" value={editing.badge ?? ''} onChange={(event) => setEditing({ ...editing, badge: event.target.value || null })} placeholder="Ej. Luxury meets nature" />
-                  </label>
-                  <label className="admin-field">
-                    <span className="admin-field__label">Eslora</span>
-                    <input id="boat-length" name="length" className="admin-input" value={editing.length ?? ''} onChange={(event) => setEditing({ ...editing, length: event.target.value || null })} placeholder="Ej. 32 pies" />
-                  </label>
-                  <label className="admin-field">
-                    <span className="admin-field__label">Motor</span>
-                    <input id="boat-engine" name="engine" className="admin-input" value={editing.engine ?? ''} onChange={(event) => setEditing({ ...editing, engine: event.target.value || null })} placeholder="Ej. 2x Yamaha 250HP" />
-                  </label>
-                </FormSection>
-
-                <FormSection title="Capacidad" description="Capacidad fisica del bote. El precio, las personas incluidas y el precio por persona adicional se configuran por paquete en cada tour (Tours &gt; Paquetes)." icon={<Users size={16} />}>
-                  <label className="admin-field">
-                    <span className="admin-field__label">Capacidad maxima</span>
-                    <input
-                      id="boat-max-guests"
-                      name="max_guests"
-                      className="admin-input"
-                      type="number"
-                      min={1}
-                      max={editing.id === 'segundo-viento' ? 10 : undefined}
-                      aria-invalid={fieldErrors.maxGuests ? true : undefined}
-                      value={editing.max_guests}
-                      onChange={(event) => setEditing({ ...editing, max_guests: Number(event.target.value) })}
-                    />
-                    <span className="admin-field-help">Techo fisico del bote. Ningun paquete deberia superar este numero de huespedes.</span>
-                    {fieldErrors.maxGuests ? <span className="admin-field-error">{fieldErrors.maxGuests}</span> : null}
-                  </label>
-                </FormSection>
-              </div>
-
-              <FormSection title="Equipamiento" description="Un item por bote. Español/English se traducen automaticamente con 'Traducir todo el sitio' en Admin > Contenido cuando falten, pero siempre puedes corregirlos aqui a mano — una correccion manual nunca se sobrescribe." icon={<Settings2 size={16} />}>
-                <div className="admin-field">
-                  <span className="admin-field__label">Equipamiento a bordo</span>
-                  {(() => {
-                    const visibleEquipment = editing.equipment.filter((item) => !item.pendingDelete).sort((a, b) => a.sortOrder - b.sortOrder);
-                    return visibleEquipment.length ? (
-                      <ul className="admin-token-list grid gap-2" aria-label="Lista de equipamiento">
+                    {visibleEquipment.length ? (
+                      <>
+                      <ul className="admin-equipment-list" aria-label="Lista de equipamiento">
                         {visibleEquipment.map((item, index) => (
-                          <li className="grid gap-2 rounded-lg border border-white/10 p-2.5 sm:grid-cols-[1fr_1fr_auto] sm:items-end" key={item.id}>
-                            <label className="grid gap-1">
-                              <span className="text-xs font-bold uppercase tracking-wide text-white/60">Español</span>
-                              <input
-                                className="admin-input"
-                                value={item.labelEs}
-                                placeholder={item.label || 'Ej. GPS Garmin'}
-                                onChange={(event) => updateEquipmentLabelEs(item.id, event.target.value)}
-                                aria-label={`Español: ${item.labelEs || item.label}`}
-                              />
+                          <li className="admin-equipment-row" key={item.id}>
+                            <label className="admin-field">
+                              <span className="admin-visually-hidden">Equipamiento {index + 1}</span>
+                              <input className="admin-input" value={item.labelEn} placeholder="e.g. Garmin GPS" onChange={(event) => updateEquipmentLabel(item.id, event.target.value)} aria-label={`Equipamiento ${index + 1}`} />
                             </label>
-                            <label className="grid gap-1">
-                              <span className="text-xs font-bold uppercase tracking-wide text-white/60">English</span>
-                              <input
-                                className="admin-input"
-                                value={item.labelEn}
-                                placeholder={item.label || 'e.g. Garmin GPS'}
-                                onChange={(event) => updateEquipmentLabelEn(item.id, event.target.value)}
-                                aria-label={`English: ${item.labelEn || item.label}`}
-                              />
-                            </label>
-                            <div className="flex items-center gap-1.5">
-                              <button type="button" className="admin-icon-action" aria-label={`Subir ${item.label}`} title="Subir" disabled={index === 0} onClick={() => moveEquipmentItem(item.id, -1)}><ArrowUp size={14} /></button>
-                              <button type="button" className="admin-icon-action" aria-label={`Bajar ${item.label}`} title="Bajar" disabled={index === visibleEquipment.length - 1} onClick={() => moveEquipmentItem(item.id, 1)}><ArrowDown size={14} /></button>
-                              <button type="button" className="admin-icon-action admin-icon-action--danger" aria-label={`Eliminar ${item.label}`} title="Quitar" onClick={() => removeEquipmentItem(item.id)}><Trash2 size={14} /></button>
+                            <div className="admin-equipment-row__actions">
+                              <button type="button" className="admin-icon-action" aria-label={`Subir ${item.labelEn || item.label}`} title="Subir" disabled={index === 0} onClick={() => moveEquipmentItem(item.id, -1)}><ArrowUp size={15} /></button>
+                              <button type="button" className="admin-icon-action" aria-label={`Bajar ${item.labelEn || item.label}`} title="Bajar" disabled={index === visibleEquipment.length - 1} onClick={() => moveEquipmentItem(item.id, 1)}><ArrowDown size={15} /></button>
+                              <button type="button" className="admin-icon-action admin-icon-action--danger" aria-label={`Eliminar ${item.labelEn || item.label}`} title="Quitar" onClick={() => removeEquipmentItem(item.id)}><Trash2 size={15} /></button>
                             </div>
                           </li>
                         ))}
                       </ul>
-                    ) : null;
-                  })()}
-                  <div className="admin-tour-list-field__add">
-                    <input
-                      id="boat-equipment-input"
-                      className="admin-input"
-                      value={equipmentInput}
-                      placeholder="Ej. Garmin GPS"
-                      onChange={(event) => setEquipmentInput(event.target.value)}
-                      onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); addEquipmentItem(); } }}
-                    />
-                    <button className="admin-btn admin-btn--secondary" type="button" aria-label="Agregar equipamiento" disabled={!equipmentInput.trim()} onClick={addEquipmentItem}><Plus size={14} /> Agregar</button>
-                  </div>
-                  <span className="admin-field-help">Lo que escribas arriba se agrega en Español; English queda pendiente hasta que lo traduzcas o lo escribas tu. Se mostraran como chips de equipamiento en la pagina.</span>
-                </div>
-              </FormSection>
+                      </>
+                    ) : null}
+                  </FormSection>
+                </>
+              ) : null}
 
-              <FormSection title="Estado y configuracion" description="Controla visibilidad y orden en el sitio publico." icon={<Settings2 size={16} />}>
-                <div className="admin-config-row">
-                  <div>
-                    <p className="admin-config-row__label">Estado actual</p>
-                    <AdminBadge value={editing.active} />
+              {boatStep === 'gallery' ? (
+                <FormSection title="Galería" description="Mínimo 3 imágenes para publicar el bote." icon={<ImageIcon size={16} />}>
+                  {fieldErrors.images ? <div className="admin-alert admin-alert--danger admin-gallery-error" role="alert">{fieldErrors.images}</div> : null}
+                  {isLegacyPreview ? (
+                    <p className="admin-field-help" role="status">
+                      Estas fotos pertenecen al formato anterior y se muestran solo como referencia. Las nuevas imágenes del bote se administran desde esta galería.
+                    </p>
+                  ) : null}
+                  <div className="admin-tour-image-slots">
+                    {Array.from({ length: 6 }, (_, index) => {
+                      const image = editorImages[index];
+                      const selected = gallerySlot === index;
+                      // New photos are appended, so only the first empty slot can be filled.
+                      const canFill = index === editorImages.length;
+                      return (
+                        <article className={`admin-tour-image-slot${selected ? ' admin-tour-image-slot--editing' : ''}`} key={image?.id ?? index}>
+                          <header><strong>Foto {index + 1}</strong>{image?.is_primary ? <AdminBadge value="Portada" /> : null}</header>
+                          {selected ? (
+                            <AdminImageManager
+                              resourceTable="boats"
+                              resourceId={editing.id}
+                              folder="boats"
+                              label={`${editing.name || 'Bote'} foto ${index + 1}`}
+                              aspect={16 / 9}
+                              maxWidth={1600}
+                              maxHeight={900}
+                              maxSizeMB={0.6}
+                              retainPreviousOnUpload
+                              {...(image && !image.synthetic ? { currentImageUrl: image.image_url, currentStoragePath: image.storage_path, requireReplacementToDelete: true } : {})}
+                              onImageSaved={async (saved) => {
+                                if (image && !image.synthetic) await replaceBoatImage(saved, image);
+                                else await onGalleryImageSaved(saved);
+                                setGallerySlot(null);
+                              }}
+                            />
+                          ) : image ? (
+                            <button className="admin-tour-image-slot__media" type="button" aria-label={`Cambiar foto ${index + 1}`} disabled={image.synthetic} onClick={() => setGallerySlot(index)}>
+                              <img src={image.image_url} alt={image.alt_text || `${editing.name} foto ${index + 1}`} loading="lazy" decoding="async" />
+                            </button>
+                          ) : (
+                            <button className="admin-tour-image-slot__empty" type="button" disabled={!canFill} onClick={() => setGallerySlot(index)}><Plus size={18} /> Seleccionar</button>
+                          )}
+                          <footer>
+                            {selected ? (
+                              <button className="admin-btn admin-btn--ghost" type="button" onClick={() => setGallerySlot(null)}>Cerrar</button>
+                            ) : image ? (
+                              image.synthetic ? null : (
+                                <>
+                                  <button className="admin-btn admin-btn--ghost" type="button" onClick={() => setGallerySlot(index)}>Cambiar</button>
+                                  <div className="admin-boat-slot-tools">
+                                    {!image.is_primary ? <button className="admin-icon-btn" type="button" aria-label={`Marcar foto ${index + 1} como portada`} title="Marcar como portada" onClick={() => void setPrimaryImage(image)}><Star size={15} /></button> : null}
+                                    <button className="admin-icon-btn" type="button" aria-label={`Mover foto ${index + 1} a la izquierda`} title="Mover a la izquierda" disabled={index === 0} onClick={() => void moveImage(image, -1)}><ChevronLeft size={15} /></button>
+                                    <button className="admin-icon-btn" type="button" aria-label={`Mover foto ${index + 1} a la derecha`} title="Mover a la derecha" disabled={index === editorImages.length - 1} onClick={() => void moveImage(image, 1)}><ChevronRight size={15} /></button>
+                                    <button className="admin-icon-btn" type="button" aria-label={`Eliminar foto ${index + 1}`} title="Eliminar" onClick={() => setPendingDelete(image)}><Trash2 size={15} /></button>
+                                  </div>
+                                </>
+                              )
+                            ) : (
+                              <button className="admin-btn admin-btn--ghost" type="button" disabled={!canFill} onClick={() => setGallerySlot(index)}>Seleccionar</button>
+                            )}
+                          </footer>
+                        </article>
+                      );
+                    })}
                   </div>
-                  <p className="admin-muted">
-                    {isExistingBoat
-                      ? 'Lo decide el botón que uses abajo: "Guardar" publica, "Guardar borrador" lo retira del sitio.'
-                      : '"Guardar" lo publica de inmediato; "Guardar borrador" lo deja listo para terminarlo después.'}
-                  </p>
-                </div>
-                <p className="admin-field-help">Orden de despliegue actual: {editing.sort_order}. Se reordena desde la lista de botes.</p>
-              </FormSection>
-              <FormSection title="Zona de peligro" description="Esta acción no se puede deshacer." icon={<Trash2 size={16} />}>
-                <div className="admin-danger-zone">
-                  <p className="admin-muted">Elimina este bote y su información asociada. Si tiene reservas o paquetes con historial, la base de datos bloqueará la eliminación.</p>
-                  <button className="admin-btn admin-btn--danger" type="button" onClick={() => setPendingBoatDelete(editing)}>
-                    <Trash2 size={15} /> Eliminar bote
-                  </button>
-                </div>
-              </FormSection>
-              </>
-              )}
+                  <p className="admin-field-help" aria-live="polite">{editorImages.length} de 6 imágenes.</p>
+                </FormSection>
+              ) : null}
+
+              {boatStep === 'tours' && isExistingBoat ? (
+                <BoatToursPackagesEditor boatId={editing.id} boatName={editing.name} boatMaxGuests={editing.max_guests} focusTourId={focusTourId} focusPackageId={focusPackageId} />
+              ) : null}
+
+              {boatStep === 'config' ? (
+                <FormSection title="Estado y visibilidad" description="Controla si este bote aparece en el sitio público." icon={<Settings2 size={16} />}>
+                  <div className="admin-tour-config-row admin-tour-config-row--tour">
+                    <div className="admin-tour-config-row__status">
+                      <p className="admin-config-row__label">Estado actual</p>
+                      {editing.active ? <AdminBadge value={true} label="Activo" /> : <AdminBadge value="Inactivo" />}
+                      <p className="admin-muted">
+                        {editing.active ? 'Visible en el sitio público y disponible para reservas.' : 'No aparece en el sitio público ni puede reservarse.'}
+                      </p>
+                      {!editing.active ? (
+                        publishMissing.length ? (
+                          <div className="admin-tour-missing">
+                            <p className="admin-tour-missing__title">Requisitos pendientes</p>
+                            <ul>{publishMissing.map((label) => <li key={label}>{label}</li>)}</ul>
+                          </div>
+                        ) : (
+                          <p className="admin-tour-ready"><Check size={14} aria-hidden="true" /> Listo para publicar.</p>
+                        )
+                      ) : null}
+                      <p className="admin-muted admin-config-position">Posición actual: {editing.sort_order}. Puedes cambiarla usando Reordenar en la lista de Botes.</p>
+                    </div>
+                    {/* The icon is the action that will happen: Mostrar -> Eye, Ocultar -> EyeOff. */}
+                    <button
+                      className={`admin-btn ${editing.active ? 'admin-btn--secondary' : ''}`}
+                      type="button"
+                      disabled={togglingVisibility}
+                      onClick={() => void toggleBoatVisibility()}
+                    >
+                      {togglingVisibility ? <Loader2 className="animate-spin" size={15} /> : editing.active ? <EyeOff size={15} /> : <Eye size={15} />}
+                      {editing.active ? 'Ocultar bote' : 'Mostrar bote'}
+                    </button>
+                  </div>
+                  <div className="admin-tour-config-divider" role="separator" />
+                  <div className="admin-tour-danger-row">
+                    <div>
+                      <strong>Eliminar bote</strong>
+                      <p className="admin-muted">Esta acción elimina el bote y su información asociada. No se puede deshacer.</p>
+                    </div>
+                    <button className="admin-btn admin-btn--danger" type="button" onClick={() => setPendingBoatDelete(editing)}>
+                      <Trash2 size={15} /> Eliminar bote
+                    </button>
+                  </div>
+                </FormSection>
+              ) : null}
             </div>
 
-            <ModalFooter>
-              <button className="admin-btn admin-btn--secondary" type="button" disabled={saving} onClick={() => void saveEditor('draft')}>
-                {saving ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />} Guardar borrador
-              </button>
-              <button className="admin-btn" type="submit" disabled={saving} aria-busy={saving}>
-                {saving ? (
-                  <><Loader2 size={15} className="animate-spin" /> Guardando...</>
+            <ModalFooter className="admin-wizard-footer">
+              <div className="admin-wizard-footer__nav">
+                {boatStep !== 'info' ? <button className="admin-btn admin-btn--ghost admin-wizard-footer__icon-btn" type="button" aria-label="Anterior" title="Anterior" disabled={saving} onClick={() => void goBoatStep(-1)}><ChevronLeft size={18} /></button> : null}
+              </div>
+              <div className="admin-wizard-footer__actions">
+                <button className="admin-btn admin-btn--secondary" type="button" disabled={saving} onClick={() => void saveEditor('draft')}>
+                  {saving ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />} Guardar borrador
+                </button>
+                {boatStep !== 'config' ? (
+                  <button key="next" className="admin-btn admin-wizard-footer__icon-btn" type="button" aria-label="Siguiente" title="Siguiente" disabled={saving} onClick={() => void goBoatStep(1)}>
+                    {saving ? <Loader2 size={18} className="animate-spin" /> : <ChevronRight size={18} />}
+                  </button>
                 ) : (
-                  <><Save size={15} /> Guardar</>
+                  <button key="save" className="admin-btn" type="submit" disabled={saving} aria-busy={saving}>
+                    {saving ? <><Loader2 size={15} className="animate-spin" /> Guardando...</> : <><Save size={15} /> Guardar</>}
+                  </button>
                 )}
-              </button>
-              <button className="admin-btn admin-btn--ghost" type="button" disabled={saving} onClick={() => void closeEditor()}>Cancelar</button>
+              </div>
             </ModalFooter>
           </form>
         ) : null}
@@ -1025,7 +1208,7 @@ export default function AdminBoatsPage() {
         confirmLabel={saving ? 'Eliminando...' : 'Eliminar bote'}
         message={
           <>
-            <p>Esta accion elimina el bote y sus asociaciones. Si tiene reservas historicas, la base de datos puede bloquear la eliminacion.</p>
+            <p>Esta acción elimina el bote y su información asociada, incluidos sus tours y paquetes. No se puede deshacer. Si el bote tiene reservas, no se podrá eliminar.</p>
             {pendingBoatDelete ? <p className="mt-3 font-semibold">{pendingBoatDelete.name}</p> : null}
           </>
         }

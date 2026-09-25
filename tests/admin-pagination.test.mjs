@@ -299,8 +299,9 @@ test('reviews, gallery and package lists use backend ranges and reset filters', 
       if (route === 'gallery') { await expect(page.locator('.admin-filter-panel select option[value="custom"]')).toHaveCount(1); await page.locator('.admin-filter-panel select').selectOption('custom'); }
       if (route === 'boat-tours') await page.locator('.admin-filter-panel select').first().selectOption('boat-2');
       await expect(nav).toContainText('Mostrando 1–10');
+      // The filter request is recorded by the mock a moment after the UI text updates.
+      await expect.poll(() => f.requests.filter((r) => r.table === table).at(-1)?.start).toBe(0);
       const request = f.requests.filter((r) => r.table === table).at(-1);
-      assert.equal(request.start, 0);
       if (route === 'boat-tours') assert.match(request.select, /boat_tours!inner/);
       await page.setViewportSize({ width: 375, height: 900 });
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);

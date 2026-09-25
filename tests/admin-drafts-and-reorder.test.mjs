@@ -7,6 +7,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { chromium, expect } from '@playwright/test';
+import { mockTranslation } from './support/translation-mock.mjs';
 
 const base = process.env.ADMIN_TEST_BASE_URL ?? 'http://localhost:5174';
 const user = { id: '00000000-0000-4000-8000-000000000001', aud: 'authenticated', role: 'authenticated', email: 'admin@example.com', app_metadata: {}, user_metadata: {}, created_at: new Date().toISOString() };
@@ -40,7 +41,18 @@ async function fixture({ boats = [], tours = [], departureLocations = [] } = {})
         state.boats = state.boats.map((boat) => (boat.id === id ? { ...boat, ...body } : boat));
         return route.fulfill({ json: [] });
       }
-      return route.fulfill({ json: state.boats });
+      if (method === 'DELETE') {
+        const id = url.searchParams.get('id')?.replace('eq.', '');
+        writes.push({ table: 'boats', method, id });
+        state.boats = state.boats.filter((boat) => boat.id !== id);
+        return route.fulfill({ json: [] });
+      }
+      // insert path's fresh `.select('sort_order').order(desc).limit(1).maybeSingle()` — a single object, like PostgREST.
+      if (url.searchParams.get('select') === 'sort_order') {
+        const highest = [...state.boats].sort((a, b) => (b.sort_order ?? 0) - (a.sort_order ?? 0))[0];
+        return route.fulfill({ json: highest ? { sort_order: highest.sort_order } : null });
+      }
+      return route.fulfill({ json: [...state.boats].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0)) });
     }
     if (path.endsWith('/boat_images')) return route.fulfill({ json: [] });
 
@@ -82,12 +94,14 @@ async function fixture({ boats = [], tours = [], departureLocations = [] } = {})
     return route.fulfill({ json: [], headers: { 'access-control-expose-headers': 'content-range', 'content-range': '0-0/0' } });
   });
 
+  // Registered after the catch-all route above so it takes precedence for translate-texts.
+  const translation = await mockTranslation(page);
   await page.goto(`${base}/admin/login`);
   await page.getByPlaceholder('admin@example.com').fill(user.email);
   await page.getByPlaceholder('Password').fill('test-password');
   await page.getByRole('button', { name: 'Entrar al panel' }).click();
   await expect(page.getByText('Reservas totales')).toBeVisible();
-  return { browser, page, writes, state };
+  return { browser, page, writes, state, translation };
 }
 
 test('boat: Guardar borrador persists with only the name, stays inactive, and can be reopened', async () => {
@@ -107,16 +121,23 @@ test('boat: Guardar borrador persists with only the name, stays inactive, and ca
   }
 });
 
-test('boat: Guardar (final) blocks publishing without the required photo count', async () => {
+test('boat: Guardar (final, last step) blocks publishing without the required photo count', async () => {
   const f = await fixture();
   const { page, writes } = f;
   try {
     await page.goto(`${base}/admin/boats`);
     await page.getByRole('button', { name: 'Crear bote' }).click();
     await page.locator('#boat-name').fill('Bote sin fotos');
+    // Siguiente creates the draft row once; Guardar only exists on the last step.
+    for (const label of ['Galería', 'Tours y paquetes', 'Configuración']) {
+      await page.getByRole('button', { name: 'Siguiente', exact: true }).click();
+      await expect(page.locator('.admin-stepper [aria-current="step"]')).toContainText(label);
+    }
     await page.getByRole('button', { name: 'Guardar', exact: true }).click();
-    await expect(page.getByText(/Para publicar el bote necesitas entre 3 y 6 imagenes/i)).toBeVisible();
-    assert.equal(writes.filter((w) => w.table === 'boats').length, 0);
+    await expect(page.locator('.admin-gallery-error')).toHaveText('Para publicar el bote necesitas entre 3 y 6 imagenes.');
+    // Only the draft (inactive) row exists; nothing was ever written as published.
+    assert.equal(writes.filter((w) => w.table === 'boats' && w.method === 'POST').length, 1);
+    assert.equal(writes.filter((w) => w.table === 'boats').every((w) => w.body.active === false), true);
   } finally {
     await f.browser.close();
   }
@@ -156,6 +177,8 @@ test('boat reorder: dragging via the Up control and Guardar orden persists seque
   const { page, writes } = f;
   try {
     await page.goto(`${base}/admin/boats`);
+    // Reordenar starts from the loaded list: wait for the rows before entering reorder mode.
+    await expect(page.locator('.admin-table tbody tr')).toHaveCount(2);
     await page.getByRole('button', { name: 'Reordenar' }).click();
 
     // Cancel first: moving a row and cancelling must not write anything.
@@ -207,6 +230,7 @@ test('reorder: dragging via the Up control and Guardar orden persists sequential
   const { page, writes } = f;
   try {
     await page.goto(`${base}/admin/departure-locations`);
+    await expect(page.locator('.admin-table tbody tr')).toHaveCount(2);
     await page.getByRole('button', { name: 'Reordenar' }).click();
 
     // Cancel first: moving a row and cancelling must not write anything.
@@ -225,6 +249,51 @@ test('reorder: dragging via the Up control and Guardar orden persists sequential
     const cocoWrite = writes.find((w) => w.table === 'departure_locations' && w.id === 'loc-1');
     assert.equal(tamarindoWrite.body.sort_order, 1);
     assert.equal(cocoWrite.body.sort_order, 2);
+  } finally {
+    await f.browser.close();
+  }
+});
+
+const boatRow = (id, order) => ({ id, name: 'Bote ' + id, max_guests: 8, active: true, sort_order: order, engine: 'Yamaha', length: '30ft', boat_images: [] });
+
+test('boat: a new boat gets max(sort_order)+1 (not boats.length+1) and an edit never rewrites sort_order', async () => {
+  // Hole at 3 (a deleted boat): count+1 would be 4 and collide; max+1 is 5.
+  const f = await fixture({ boats: [boatRow('b1', 1), boatRow('b2', 2), boatRow('b4', 4)] });
+  const { page, writes } = f;
+  try {
+    await page.goto(`${base}/admin/boats`);
+    await page.getByRole('button', { name: 'Crear bote' }).click();
+    await page.locator('#boat-name').fill('Bote nuevo');
+    await page.getByRole('button', { name: 'Guardar borrador' }).click();
+    await expect.poll(() => writes.filter((w) => w.table === 'boats' && w.method === 'POST').length).toBe(1);
+    assert.equal(writes.find((w) => w.method === 'POST').body.sort_order, 5);
+
+    // Editing an existing boat must not send sort_order at all.
+    await page.goto(`${base}/admin/boats`);
+    await expect(page.getByRole('button', { name: 'Editar bote Bote b1' })).toBeVisible();
+    await page.getByRole('button', { name: 'Editar bote Bote b1' }).click();
+    await page.getByRole('button', { name: 'Guardar borrador' }).click();
+    await expect.poll(() => writes.filter((w) => w.table === 'boats' && w.method === 'PATCH').length).toBeGreaterThan(0);
+    assert.ok(writes.filter((w) => w.method === 'PATCH').every((w) => !('sort_order' in w.body)));
+  } finally {
+    await f.browser.close();
+  }
+});
+
+test('boat: deleting a boat renumbers the remaining ones 1..N automatically', async () => {
+  const f = await fixture({ boats: [boatRow('b1', 1), boatRow('b2', 2), boatRow('b3', 3), boatRow('b9', 9)] });
+  const { page, writes } = f;
+  try {
+    await page.goto(`${base}/admin/boats`);
+    await page.getByRole('button', { name: 'Editar bote Bote b2' }).click();
+    await page.locator('.admin-stepper').getByRole('button', { name: 'Configuración' }).click();
+    await page.getByRole('button', { name: 'Eliminar bote' }).click();
+    await page.locator('.admin-modal-card').getByRole('button', { name: 'Eliminar bote' }).click();
+    await expect.poll(() => writes.filter((w) => w.table === 'boats' && w.method === 'DELETE').length).toBe(1);
+    // (Leaving Información also saved the boat's info — that PATCH carries no sort_order.)
+    const orderPatches = () => writes.filter((w) => w.table === 'boats' && w.method === 'PATCH' && 'sort_order' in w.body);
+    await expect.poll(() => orderPatches().length).toBe(2);
+    assert.deepEqual(orderPatches().map((w) => [w.id, w.body.sort_order]), [['b3', 2], ['b9', 3]]);
   } finally {
     await f.browser.close();
   }

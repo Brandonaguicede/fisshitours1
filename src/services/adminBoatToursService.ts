@@ -32,6 +32,15 @@ export interface PackageInput {
   departureTimes: string[] | null;
   mealOptions: Array<{ es: string; en: string }>;
   packageIncluded: string[] | null;
+  /**
+   * English/Spanish copies of packageIncluded that the public site reads (package_included_es / _en).
+   * `undefined` = leave the stored columns untouched (the list did not change); `null` = clear them
+   * (the package goes back to inheriting the tour's list); an array = write it.
+   */
+  packageIncludedEs?: string[] | null;
+  packageIncludedEn?: string[] | null;
+  /** name_en/name_es, description_en/description_es: only the columns whose English changed (see bilingualContent). */
+  bilingual?: Record<string, unknown>;
   customQuote: boolean;
   active: boolean;
   sortOrder: number;
@@ -109,6 +118,9 @@ export async function savePackageForBoatTour(
     departure_times: input.departureTimes,
     meal_options: input.mealOptions,
     package_included: input.packageIncluded,
+    // Only when the list changed: a matching, freshly translated pair (see BoatToursPackagesEditor).
+    ...(input.packageIncludedEs !== undefined ? { package_included_es: input.packageIncludedEs, package_included_en: input.packageIncludedEn ?? null } : {}),
+    ...(input.bilingual ?? {}),
     duration_minutes: input.durationMinutes,
     base_price: input.basePrice,
     included_guests: input.includedGuests,

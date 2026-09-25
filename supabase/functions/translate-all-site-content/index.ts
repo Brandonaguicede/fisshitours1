@@ -1,8 +1,19 @@
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { corsHeaders as getCorsHeaders, withCors } from '../_shared/cors.ts';
+import { deeplTranslateBatch } from '../_shared/deepl.ts';
 
-// The site's "Traducir todo el sitio" button. Fills in whichever language
+// BACKFILL / REPAIR tool (the Admin's "Reparar traducciones antiguas" button). The normal flow no longer
+// depends on it: every Admin save translates the English the admin wrote into Spanish (translate-texts). This
+// only completes legacy records that never went through that flow. It never overwrites existing text.
+//
+// DIRECTION NOTE: the Admin's daily rule is English -> Spanish (translate-texts). The reverse direction below
+// (Spanish present, English missing) and the "neither side set, translate the legacy field into both" cases
+// exist ONLY to repair legacy records written before that rule; they only fill gaps and never overwrite text.
+// Records whose legacy language is ambiguous are left to a manual review by the admin (see README of the
+// translation runbook: docs/translation-runbook.md).
+//
+// (Original description:) fills in whichever language
 // side is missing — for tours/packages/inclusions/boats/gallery/payment
 // methods/departure locations that means es AND en, since the legacy
 // single field's language varies per row (this fleet's real content turned
@@ -452,20 +463,6 @@ async function translateUnique(
       }
     }
   }
-}
-
-async function deeplTranslateBatch(texts: string[], targetLang: 'ES' | 'EN', apiKey: string): Promise<string[]> {
-  if (texts.length === 0) return [];
-  const response = await fetch('https://api-free.deepl.com/v2/translate', {
-    method: 'POST',
-    headers: { Authorization: `DeepL-Auth-Key ${apiKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ text: texts, target_lang: targetLang }),
-  });
-  if (!response.ok) throw new Error(`DeepL request failed with status ${response.status}`);
-  const body = await response.json();
-  const translations = body?.translations;
-  if (!Array.isArray(translations) || translations.length !== texts.length) throw new Error('DeepL response shape mismatch');
-  return translations.map((entry: { text?: unknown }) => (typeof entry?.text === 'string' ? entry.text : ''));
 }
 
 function normalizeText(value: unknown): string {

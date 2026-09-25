@@ -158,7 +158,7 @@ export default function AdminReviewsPage() {
           }
           secondaryActions={
             // Old comments needing translation are covered by the single
-            // "Traducir todo el sitio" button in Admin → Contenido, not a
+            // "Reparar traducciones antiguas" button in Admin → Contenido, not a
             // separate one here.
             <AdminReorderToolbar
               reordering={reorder.reordering}

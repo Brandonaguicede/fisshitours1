@@ -414,6 +414,11 @@ verify_jwt = false
 [functions.translate-all-site-content]
 verify_jwt = false
 
+# Translates the Spanish text an admin just typed (package meals, boat equipment); checks the
+# caller's editor/admin role itself, like translate-all-site-content.
+[functions.translate-texts]
+verify_jwt = false
+
 # These functions validate the bearer token and the active admin/editor profile
 # inside the Edge Function. Disabling gateway JWT verification lets the browser
 # preflight (OPTIONS) reach the function's CORS handler.

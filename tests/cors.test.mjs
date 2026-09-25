@@ -133,3 +133,91 @@ test('send-contact-message: unexpected provider failure returns 500 with CORS', 
     delete env.RESEND_API_KEY;
   }
 });
+
+// ---- translate-texts: the Admin's EN -> ES translator (CORS, auth, payload validation, DeepL request/response) ----
+// DeepL is mocked (fetch); nothing here calls the real API.
+test('translate-texts: CORS, auth (401/403), payload validation, DeepL EN->ES request and error handling', async () => {
+  evaluate('supabase/functions/_shared/deepl.ts');
+  context.getCorsHeaders = context.corsHeaders;
+  let handler;
+  context.serve = (value) => { handler = value; };
+  let profile = { id: 'u1', role: 'admin', active: true };
+  context.createClient = () => ({
+    auth: { getUser: async (token) => (token === 'good' ? { data: { user: { id: 'u1' } }, error: null } : { data: { user: null }, error: { message: 'bad' } }) },
+    from: () => ({ select: () => ({ eq: () => ({ single: async () => ({ data: profile }) }) }) }),
+  });
+  const deepl = [];
+  let deeplResponse = (body) => ({ ok: true, status: 200, json: async () => ({ translations: body.text.map((text) => ({ text: `ES:${text}` })) }) });
+  context.fetch = async (url, init) => { const body = JSON.parse(init.body); deepl.push({ url, headers: init.headers, body }); return deeplResponse(body); };
+  const source = fs.readFileSync('supabase/functions/translate-texts/index.ts', 'utf8').replace(/^import .*;\r?\n/gm, '');
+  vm.runInContext(`{ ${ts.transpile(source, { target: ts.ScriptTarget.ES2022 })} }`, context);
+
+  env.SUPABASE_URL = 'https://supabase.example';
+  env.SUPABASE_SERVICE_ROLE_KEY = 'test-only';
+  const origin = origins[0];
+  const call = (method, { body, token = 'good', origin: requestOrigin = origin } = {}) => handler(new Request('https://edge.example', {
+    method,
+    headers: { origin: requestOrigin, 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) },
+    ...(body === undefined ? {} : { body: typeof body === 'string' ? body : JSON.stringify(body) }),
+  }));
+  const good = { texts: ['Fishing equipment included'], targetLang: 'ES', sourceLang: 'EN' };
+
+  // CORS: allowed origin and preflight; an external origin never gets Allow-Origin.
+  const preflight = await call('OPTIONS');
+  assert.equal(preflight.status, 204);
+  check(preflight, origin);
+  assert.equal((await call('OPTIONS', { origin: 'https://evil.example' })).headers.get('Access-Control-Allow-Origin'), null);
+  assert.equal((await call('GET')).status, 405);
+
+  // Auth: no token / invalid token -> 401 (with CORS); a signed-in user without an editor/admin role -> 403.
+  const anonymous = await call('POST', { body: good, token: null });
+  assert.equal(anonymous.status, 401);
+  check(anonymous, origin);
+  assert.equal((await call('POST', { body: good, token: 'nope' })).status, 401);
+  profile = { id: 'u1', role: 'customer', active: true };
+  assert.equal((await call('POST', { body: good })).status, 403);
+  profile = { id: 'u1', role: 'admin', active: false };
+  assert.equal((await call('POST', { body: good })).status, 403);
+  profile = { id: 'u1', role: 'editor', active: true };
+
+  // Payload validation happens before DeepL is ever called.
+  env.DEEPL_API_KEY = 'test-key-not-real';
+  const invalid = [
+    {}, 'not json', { texts: [], targetLang: 'ES' }, { texts: ['x'], targetLang: 'FR' }, { texts: [42], targetLang: 'ES' }, { texts: ['  '], targetLang: 'ES' },
+    { texts: Array.from({ length: 51 }, (_, n) => `t${n}`), targetLang: 'ES', sourceLang: 'EN' },
+    { texts: ['x'.repeat(10001)], targetLang: 'ES', sourceLang: 'EN' },
+    { texts: Array.from({ length: 6 }, () => 'x'.repeat(9000)), targetLang: 'ES', sourceLang: 'EN' },
+    { texts: ['x'], targetLang: 'ES', sourceLang: 'ES' },
+  ];
+  for (const body of invalid) {
+    const response = await call('POST', { body });
+    assert.equal(response.status, 400, JSON.stringify(body).slice(0, 60));
+    check(response, origin);
+  }
+  assert.equal(deepl.length, 0, 'an invalid request must never reach DeepL');
+
+  // Happy path: EN -> ES, trimmed, one batch, order preserved; the key goes in the DeepL header, never in the response.
+  const ok = await call('POST', { body: { texts: ['  Drinks  ', 'Snacks'], targetLang: 'ES', sourceLang: 'EN' } });
+  assert.equal(ok.status, 200);
+  check(ok, origin);
+  assert.deepEqual(await ok.json(), { translations: ['ES:Drinks', 'ES:Snacks'] });
+  assert.equal(deepl.length, 1);
+  assert.equal(deepl[0].url, 'https://api-free.deepl.com/v2/translate');
+  assert.deepEqual(deepl[0].body, { text: ['Drinks', 'Snacks'], target_lang: 'ES', source_lang: 'EN' });
+  assert.match(deepl[0].headers.Authorization, /^DeepL-Auth-Key /);
+  // Without sourceLang DeepL auto-detects (no source_lang sent) — used only by other callers, never by the Admin.
+  await call('POST', { body: { texts: ['Hola'], targetLang: 'EN' } });
+  assert.equal('source_lang' in deepl[1].body, false);
+
+  // DeepL failures are 502 (never a fake translation); a missing secret is 503.
+  deeplResponse = () => ({ ok: false, status: 456, json: async () => ({}) });
+  assert.equal((await call('POST', { body: good })).status, 502);
+  deeplResponse = (body) => ({ ok: true, status: 200, json: async () => ({ translations: body.text.map(() => ({ text: '  ' })) }) });
+  assert.equal((await call('POST', { body: good })).status, 502);
+  deeplResponse = () => ({ ok: true, status: 200, json: async () => ({ translations: [] }) });
+  assert.equal((await call('POST', { body: good })).status, 502);
+  delete env.DEEPL_API_KEY;
+  assert.equal((await call('POST', { body: good })).status, 503);
+  delete env.SUPABASE_URL;
+  delete env.SUPABASE_SERVICE_ROLE_KEY;
+});

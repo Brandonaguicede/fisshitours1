@@ -7,6 +7,13 @@ async function mockCatalog(page: import('@playwright/test').Page) {
   const base = { boat_tour_id: link.id, base_price: 950, included_guests: 5, max_guests: 10, extra_guest_price: 65, custom_quote: false, active: true, departure_times: ['08:00', '13:00'], package_included: null, description: '', duration_minutes: 480, image_url: '/images/papagayo-logo.png' };
   const packages = [{ ...base, id: 'full', name: 'Fishing Tour - Full Day', package_type: 'full_day', sort_order: 1, meal_options: [{ es: 'Wrap de pollo', en: 'Chicken wrap' }] }, { ...base, id: 'half', name: 'Fishing Tour - Half Day', package_type: 'half_day', sort_order: 2, meal_options: [], base_price: 650, duration_minutes: 240 }];
   await page.addInitScript(() => localStorage.setItem('language', 'es'));
+  // The admin editor calls the (mocked) translate-texts function with the session token, so give the
+  // page a fake signed-in session. Nothing here reaches a real Supabase project: every request is routed below.
+  await page.addInitScript(() => {
+    const session = { access_token: 'test-token', refresh_token: 'test-refresh', token_type: 'bearer', expires_in: 3600, expires_at: Math.floor(Date.now() / 1000) + 3600, user: { id: '00000000-0000-4000-8000-000000000001', aud: 'authenticated', role: 'authenticated', email: 'admin@example.com' } };
+    const original = Storage.prototype.getItem;
+    Storage.prototype.getItem = function (key: string) { return /^sb-.+-auth-token$/.test(key) ? JSON.stringify(session) : original.call(this, key); };
+  });
   await page.route(/\/rest\/v1\//, async route => {
     const request = route.request();
     const url = new URL(request.url());
@@ -30,7 +37,9 @@ async function mockCatalog(page: import('@playwright/test').Page) {
     await route.fulfill({ json: data });
   });
   await page.route(/\/functions\/v1\//, async route => {
-    if (route.request().url().endsWith('get-booking-availability')) await route.fulfill({ json: { slots: slots.map(slot => ({ id: slot.id, label: slot.label, time: slot.starts_at.slice(0,5), available: slot.id !== 'morning' })) } });
+    // DeepL is mocked: the admin writes English and the form stores the Spanish that comes back (EN -> ES).
+    if (route.request().url().endsWith('translate-texts')) await route.fulfill({ json: { translations: route.request().postDataJSON().texts.map((text: string) => text === 'Fish with rice' ? 'Pescado con arroz' : text === 'Vegan salad' ? 'Ensalada vegana' : text) } });
+    else if (route.request().url().endsWith('get-booking-availability')) await route.fulfill({ json: { slots: slots.map(slot => ({ id: slot.id, label: slot.label, time: slot.starts_at.slice(0,5), available: slot.id !== 'morning' })) } });
     else await route.fulfill({ json: { base_price: 950, included_guests: 5, max_guests: 10, extra_guest_price: 65, total: 950, currency: 'USD', extras: [] } });
   });
   return { packages, slots };
@@ -47,18 +56,16 @@ test('package hours and meals persist and automatically reach the customer', asy
   await page.getByRole('button', { name: 'Agregar hora', exact: true }).click();
   await page.getByRole('checkbox', { name: 'Personalizar lo incluido' }).check();
   await page.getByLabel('Elementos incluidos, uno por línea').fill('Almuerzo incluido\nBebidas y frutas');
-  await page.getByLabel('Comida 1 · Español').fill('Pescado con arroz');
-  await page.getByLabel('Comida 1 · Inglés').fill('Fish with rice');
+  await page.getByLabel('Comida 1', { exact: true }).fill('Fish with rice');
   await page.getByRole('button', { name: 'Agregar comida', exact: true }).click();
-  await page.getByLabel('Comida 2 · Español').fill('Ensalada vegana');
-  await page.getByLabel('Comida 2 · Inglés').fill('Vegan salad');
+  await page.getByLabel('Comida 2', { exact: true }).fill('Vegan salad');
   await page.screenshot({ path: `tmp/package-settings-test/editor-${info.project.name}.png`, fullPage: true });
   await page.getByRole('button', { name: 'Guardar paquete', exact: true }).click();
   await expect(page.getByText('Paquete guardado.', { exact: true })).toBeVisible();
   expect(packages[0].departure_times).toEqual(['08:00', '09:30']);
   expect(packages[1].departure_times).toEqual(['08:00', '13:00']);
   await page.getByRole('button', { name: 'Editar Fishing Tour - Full Day', exact: true }).click();
-  await expect(page.getByLabel('Comida 1 · Español')).toHaveValue('Pescado con arroz');
+  await expect(page.getByLabel('Comida 1', { exact: true })).toHaveValue('Fish with rice');
   await expect(page.getByRole('checkbox', { name: '9:30 AM', exact: true })).toBeChecked();
   await page.getByRole('button', { name: 'Abrir reserva', exact: true }).click();
   await page.getByRole('button', { name: 'Continuar', exact: true }).click();

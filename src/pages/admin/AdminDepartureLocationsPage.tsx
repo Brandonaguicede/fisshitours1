@@ -7,7 +7,14 @@ import { Modal } from '../../components/common/Modal';
 import { useAdminReorder } from '../../hooks/useAdminReorder';
 import { supabase } from '../../lib/supabase';
 import type { DepartureLocation } from '../../services/bookingService';
+import { translateTextsToSpanish } from '../../services/translationService';
+import { editableText, textColumns, textsToTranslate, type BilingualColumns } from '../../utils/bilingualContent';
 import { money } from '../../utils/format';
+
+// The description is public (departure location card in the booking flow). The admin writes it in ENGLISH
+// (description_en, else the legacy description) and DeepL generates description_es on save. The name is a place
+// name (proper name): it is never translated.
+const DESCRIPTION: BilingualColumns = { legacy: 'description', en: 'description_en', es: 'description_es' };
 
 type FormState = Omit<DepartureLocation, 'id'> & { id?: string };
 type StatusFilter = 'all' | 'active' | 'inactive';
@@ -16,8 +23,6 @@ const emptyForm: FormState = {
   name: '',
   slug: '',
   description: '',
-  // Admin still only edits this single field; description_es/description_en
-  // are filled by "Traducir todo el sitio" and never surfaced in this form.
   description_es: null,
   description_en: null,
   surcharge_amount: 0,
@@ -85,7 +90,7 @@ export default function AdminDepartureLocationsPage() {
 
   function editLocation(location: DepartureLocation) {
     setEditingId(location.id);
-    setForm({ ...location, description: location.description ?? '' });
+    setForm({ ...location, description: editableText(location as unknown as Record<string, unknown>, DESCRIPTION) });
     setNotice('');
     setError('');
     setModalOpen(true);
@@ -120,10 +125,22 @@ export default function AdminDepartureLocationsPage() {
     // edits, so it can't silently drift or collide once a URL/reference
     // depends on it.
     const slug = editingId ? form.slug : slugify(form.name);
+    // English -> Spanish BEFORE writing (create and edit): if DeepL fails nothing is saved and the form stays open.
+    const description = form.description?.trim() ?? '';
+    const before = editingId ? editableText(locations.find((item) => item.id === editingId) as unknown as Record<string, unknown>, DESCRIPTION) : '';
+    let descriptionColumns: Record<string, unknown>;
+    try {
+      descriptionColumns = textColumns(description, before, DESCRIPTION, await translateTextsToSpanish(textsToTranslate(description, before)));
+    } catch (caught) {
+      setSaving(false);
+      setError(caught instanceof Error ? caught.message : 'No se pudo generar la traducción al español. Intenta nuevamente.');
+      return;
+    }
     const payload = {
       name: form.name.trim(),
       slug,
-      description: form.description?.trim() || null,
+      description: description || null,
+      ...descriptionColumns,
       surcharge_amount: Number(form.surcharge_amount),
       currency: form.currency || 'USD',
       active: form.active,
@@ -246,7 +263,7 @@ export default function AdminDepartureLocationsPage() {
                 <input className="admin-input" min={0} step="0.01" type="number" value={form.surcharge_amount} onChange={(event) => setForm((value) => ({ ...value, surcharge_amount: Number(event.target.value) }))} />
               </label>
               <label className="admin-field admin-field--wide">
-                <span className="admin-field__label">Descripcion</span>
+                <span className="admin-field__label">Descripcion (en inglés: el español se genera al guardar)</span>
                 <textarea className="admin-input" rows={3} value={form.description ?? ''} onChange={(event) => setForm((value) => ({ ...value, description: event.target.value }))} />
               </label>
               <label className="admin-check"><input type="checkbox" checked={form.active} onChange={(event) => setForm((value) => ({ ...value, active: event.target.checked }))} /> Activo</label>

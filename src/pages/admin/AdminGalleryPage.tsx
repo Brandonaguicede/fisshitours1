@@ -4,7 +4,7 @@ import { adminSearchFilter, getAdminTablePage } from '../../services/adminListSe
 import { useQuery } from '@tanstack/react-query';
 import { readWithAdminSession } from '../../services/adminAuthService';
 import { Eye, EyeOff, Plus, Pencil, Settings, Trash2, X } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 
 import AdminConfirmDialog from '../../components/admin/AdminConfirmDialog';
 import AdminImageManager from '../../components/admin/AdminImageManager';
@@ -16,7 +16,9 @@ import { useAdminReorder } from '../../hooks/useAdminReorder';
 import { supabase } from '../../lib/supabase';
 import { deleteStorageImage } from '../../services/imageService';
 import type { StorageImage } from '../../services/imageService';
+import { translateTextsToSpanish } from '../../services/translationService';
 import { friendlyDeleteError } from '../../utils/adminErrors';
+import { editableText, textColumns, textsToTranslate, type BilingualColumns } from '../../utils/bilingualContent';
 
 interface GalleryRow {
   id: string;
@@ -24,11 +26,18 @@ interface GalleryRow {
   image_url: string | null;
   image_public_id: string | null;
   alt: string;
+  alt_en?: string | null;
+  alt_es?: string | null;
   category: string;
   title: string | null;
   active: boolean;
   sort_order: number;
 }
+
+// The alt text is public (image description, shown in the visitor's language). The admin writes it in ENGLISH
+// (alt_en, else the legacy alt) and DeepL generates alt_es when it is saved. `title` is not shown on the
+// landing page (GallerySection only reads alt/alt_es/alt_en), so it stays a plain admin label.
+const ALT: BilingualColumns = { legacy: 'alt', en: 'alt_en', es: 'alt_es' };
 
 const CATEGORY_OPTIONS = ['fishing', 'experiences', 'boats', 'wildlife', 'beach'];
 
@@ -44,9 +53,16 @@ export default function AdminGalleryPage() {
   const [editing, setEditing] = useState<GalleryRow | null>(null);
   const [pendingDelete, setPendingDelete] = useState<GalleryRow | null>(null);
   const [saving, setSaving] = useState(false);
+  // The English alt as loaded: only a changed alt is translated on save.
+  const altBeforeRef = useRef('');
+  const openEditor = (row: GalleryRow) => {
+    const alt = editableText(row as unknown as Record<string, unknown>, ALT);
+    altBeforeRef.current = alt;
+    setEditing({ ...row, alt });
+  };
 
   const pagination = useAdminPagedList<GalleryRow>('gallery', JSON.stringify({ filter, search }), (page, size) => getAdminTablePage(() => {
-    let query = (supabase as any).from('gallery_images').select('id, src, image_url, image_public_id, alt, category, title, active, sort_order', { count: 'exact' }).order('sort_order', { ascending: true }).order('id');
+    let query = (supabase as any).from('gallery_images').select('id, src, image_url, image_public_id, alt, alt_en, alt_es, category, title, active, sort_order', { count: 'exact' }).order('sort_order', { ascending: true }).order('id');
     if (filter !== 'all') query = query.eq('category', filter);
     if (search) query = query.or(adminSearchFilter(['alt', 'title'], search));
     return query;
@@ -65,7 +81,7 @@ export default function AdminGalleryPage() {
   async function startReorder() {
     setReorderLoading(true);
     setError('');
-    const { data, error } = await supabase.from('gallery_images').select('id, src, image_url, image_public_id, alt, category, title, active, sort_order').order('sort_order', { ascending: true }).order('id');
+    const { data, error } = await supabase.from('gallery_images').select('id, src, image_url, image_public_id, alt, alt_en, alt_es, category, title, active, sort_order').order('sort_order', { ascending: true }).order('id');
     setReorderLoading(false);
     if (error) { setError(error.message); return; }
     reorder.start((data ?? []) as GalleryRow[]);
@@ -88,14 +104,14 @@ export default function AdminGalleryPage() {
     if (countError) { setError(countError.message); return; }
     const { data, error } = await supabase
       .from('gallery_images')
-      .insert({ id: `gal-${crypto.randomUUID()}`, alt: 'Nueva imagen', category: initialCategory, active: true, sort_order: (count ?? 0) + 1 })
-      .select('id, src, image_url, image_public_id, alt, category, title, active, sort_order')
+      .insert({ id: `gal-${crypto.randomUUID()}`, alt: 'New image', alt_en: 'New image', alt_es: 'Nueva imagen', category: initialCategory, active: true, sort_order: (count ?? 0) + 1 })
+      .select('id, src, image_url, image_public_id, alt, alt_en, alt_es, category, title, active, sort_order')
       .single();
     if (error) {
       setError(error.message);
       return;
     }
-    setEditing(data as GalleryRow);
+    openEditor(data as GalleryRow);
     await loadImages();
   }
 
@@ -106,9 +122,18 @@ export default function AdminGalleryPage() {
       } else {
         // Persist any pending title/alt/category/order edits so closing the
         // modal never silently discards them (upload only saves the image).
+        // Alt: English -> Spanish first; if DeepL fails the modal stays open with what was typed and nothing is saved.
+        let altColumns: Record<string, unknown>;
+        try {
+          const alt = editing.alt.trim();
+          altColumns = textColumns(alt, altBeforeRef.current, ALT, await translateTextsToSpanish(textsToTranslate(alt, altBeforeRef.current)));
+        } catch (caught) {
+          setError(caught instanceof Error ? caught.message : 'No se pudo generar la traducción al español. Intenta nuevamente.');
+          return;
+        }
         await supabase
           .from('gallery_images')
-          .update({ alt: editing.alt, category: editing.category, title: editing.title, active: editing.active, sort_order: editing.sort_order })
+          .update({ alt: editing.alt.trim(), ...altColumns, category: editing.category, title: editing.title, active: editing.active, sort_order: editing.sort_order })
           .eq('id', editing.id);
       }
       await loadImages();
@@ -121,15 +146,25 @@ export default function AdminGalleryPage() {
     setSaving(true);
     setError('');
     setNotice('');
+    let altColumns: Record<string, unknown>;
+    try {
+      const alt = editing.alt.trim();
+      altColumns = textColumns(alt, altBeforeRef.current, ALT, await translateTextsToSpanish(textsToTranslate(alt, altBeforeRef.current)));
+    } catch (caught) {
+      setSaving(false);
+      setError(caught instanceof Error ? caught.message : 'No se pudo generar la traducción al español. Intenta nuevamente.');
+      return;
+    }
     const { error } = await supabase
       .from('gallery_images')
-      .update({ alt: editing.alt, category: editing.category, title: editing.title, active: editing.active, sort_order: editing.sort_order })
+      .update({ alt: editing.alt.trim(), ...altColumns, category: editing.category, title: editing.title, active: editing.active, sort_order: editing.sort_order })
       .eq('id', editing.id);
     setSaving(false);
     if (error) {
       setError(error.message);
       return;
     }
+    altBeforeRef.current = editing.alt.trim();
     setNotice('Cambios de galería guardados.');
     await loadImages();
   }
@@ -252,7 +287,7 @@ export default function AdminGalleryPage() {
                         {image.active ? <Eye size={15} /> : <EyeOff size={15} />}
                       </span>
                       <div className="admin-row-actions">
-                        <button className="admin-icon-action" type="button" disabled={loading} title="Editar imagen" aria-label={`Editar imagen ${image.alt || image.category}`} onClick={() => setEditing(image)}><Pencil size={17} /></button>
+                        <button className="admin-icon-action" type="button" disabled={loading} title="Editar imagen" aria-label={`Editar imagen ${image.alt || image.category}`} onClick={() => openEditor(image)}><Pencil size={17} /></button>
                       </div>
                     </>
                   )}
@@ -294,7 +329,7 @@ export default function AdminGalleryPage() {
                   <input className="admin-input" value={editing.title ?? ''} onChange={(event) => setEditing({ ...editing, title: event.target.value || null })} />
                 </label>
                 <label className="grid gap-1">
-                  <span className="admin-muted">Alt</span>
+                  <span className="admin-muted">Alt (en inglés: el español se genera al guardar)</span>
                   <input className="admin-input" value={editing.alt} onChange={(event) => setEditing({ ...editing, alt: event.target.value })} />
                 </label>
                 <label className="grid gap-1">

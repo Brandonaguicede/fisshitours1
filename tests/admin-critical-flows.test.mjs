@@ -97,6 +97,8 @@ test('deleting a boat requires explicit confirmation and calls delete only after
   try {
     await page.goto(`${base}/admin/boats`);
     await page.getByRole('button', { name: /Editar bote/ }).click();
+    // Delete lives in the last wizard step (Configuración).
+    await page.locator('.admin-stepper').getByRole('button', { name: 'Configuración' }).click();
     await page.getByRole('button', { name: 'Eliminar bote' }).click();
     // Confirmation modal must appear — deleting must not have happened yet.
     await expect(page.getByRole('heading', { name: 'Eliminar bote' })).toBeVisible();

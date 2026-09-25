@@ -153,3 +153,28 @@ function parseUploadResult(result: { status: number; responseText: string }): St
   }
   throw new Error(message);
 }
+
+export type ReplacedImageCleanup = 'none' | 'deleted' | 'pending';
+
+/**
+ * Second half of "replace a photo": call it ONLY after the new file is uploaded AND the row that
+ * used to point at the old file has been updated (and every copy of the reference synced). It then
+ * removes the previous file. It never throws: if the delete fails, the old file is simply kept
+ * (storage-delete-image records it as pending cleanup) and the replacement stays valid. The edge
+ * function also refuses (409) to delete a file that is still referenced anywhere, so a shared or
+ * not-yet-synced reference can never lose its image.
+ */
+export async function cleanupReplacedImage(
+  previousStoragePath: string | null | undefined,
+  newStoragePath: string,
+  resourceTable: string,
+  resourceId: string,
+): Promise<ReplacedImageCleanup> {
+  if (!previousStoragePath || previousStoragePath === newStoragePath) return 'none';
+  try {
+    await deleteStorageImage({ storagePath: previousStoragePath, resourceTable, resourceId });
+    return 'deleted';
+  } catch {
+    return 'pending';
+  }
+}

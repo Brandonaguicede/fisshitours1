@@ -5,6 +5,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { chromium, expect } from '@playwright/test';
+import { mockTranslation } from './support/translation-mock.mjs';
 
 const base = process.env.ADMIN_TEST_BASE_URL ?? 'http://localhost:5174';
 const user = { id: '00000000-0000-4000-8000-000000000001', aud: 'authenticated', role: 'authenticated', email: 'admin@example.com', app_metadata: {}, user_metadata: {}, created_at: new Date().toISOString() };
@@ -163,13 +164,12 @@ test('About content edited in the Admin reaches the public homepage', async () =
   }
 });
 
-test('Hero and About save both ES and EN manually, with no call to any translation service', async () => {
+test('Hero and About: the admin edits English only; saving generates the Spanish (EN -> ES) with DeepL, and only for what changed', async () => {
   const f = await loggedInFixture();
   const { page } = f;
   const settingsWrites = [];
-  const translationRequests = [];
   try {
-    page.on('request', (request) => { if (/\/functions\/v1\/|translation\.googleapis|deepl/i.test(request.url())) translationRequests.push(request.url()); });
+    const translation = await mockTranslation(page);
     await page.route('https://admin-test.supabase.co/rest/v1/site_settings*', async (route) => {
       const request = route.request();
       if (request.method() === 'POST') {
@@ -183,29 +183,32 @@ test('Hero and About save both ES and EN manually, with no call to any translati
     await page.goto(`${base}/admin/content`);
     await page.getByRole('button', { name: 'Textos' }).click();
 
-    // Both languages are directly editable, with the original language selector.
-    await expect(page.getByText('Titulo principal EN')).toBeVisible();
-    await expect(page.getByRole('button', { name: 'English' })).toBeVisible();
+    // Only the English text is editable: no Spanish field and no language selector.
+    await expect(page.getByLabel('Titulo principal', { exact: true })).toBeVisible();
+    await expect(page.getByLabel('Titulo principal ES')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'English' })).toHaveCount(0);
 
-    await page.locator('label', { hasText: 'Titulo principal ES' }).locator('input').fill('Nuevo titulo en español');
-    await page.locator('label', { hasText: 'Titulo principal EN' }).locator('input').fill('New title in English');
+    await page.getByLabel('Titulo principal', { exact: true }).fill('New title in English');
+    await page.waitForTimeout(300);
+    assert.equal(translation.calls.length, 0, 'nothing is translated while typing');
     await page.getByRole('button', { name: 'Guardar hero' }).click();
 
     await expect.poll(() => ['home.hero.title.es', 'home.hero.title.en'].every((key) => settingsWrites.some((row) => row.key === key))).toBe(true);
-    assert.equal(settingsWrites.find((row) => row.key === 'home.hero.title.es').value, 'Nuevo titulo en español');
     assert.equal(settingsWrites.find((row) => row.key === 'home.hero.title.en').value, 'New title in English');
+    assert.equal(settingsWrites.find((row) => row.key === 'home.hero.title.es').value, 'New title in English [ES]');
+    assert.deepEqual(translation.calls.map((call) => call.texts), [['New title in English']]);
+    // Untouched texts (subtitle, eyebrow...) keep their Spanish: no other .es key is written.
+    assert.deepEqual(settingsWrites.filter((row) => row.key.endsWith('.es')).map((row) => row.key), ['home.hero.title.es']);
 
-    // About: same manual pattern.
+    // About: same rule.
     settingsWrites.length = 0;
     await page.getByRole('button', { name: 'Nosotros / About' }).click();
-    await page.locator('label', { hasText: 'Titulo ES' }).locator('input').fill('Titulo About ES');
-    await page.locator('label', { hasText: 'Titulo EN' }).locator('input').fill('About Title EN');
+    await page.getByLabel('Titulo', { exact: true }).fill('About Title EN');
     await page.getByRole('button', { name: 'Guardar Nosotros' }).click();
     await expect.poll(() => ['about.title.es', 'about.title.en'].every((key) => settingsWrites.some((row) => row.key === key))).toBe(true);
-    assert.equal(settingsWrites.find((row) => row.key === 'about.title.es').value, 'Titulo About ES');
     assert.equal(settingsWrites.find((row) => row.key === 'about.title.en').value, 'About Title EN');
-
-    assert.deepEqual(translationRequests, [], 'saving content must never call a translation service');
+    assert.equal(settingsWrites.find((row) => row.key === 'about.title.es').value, 'About Title EN [ES]');
+    assert.deepEqual(translation.calls.map((call) => call.texts), [['New title in English'], ['About Title EN']]);
   } finally {
     await f.browser.close();
   }
