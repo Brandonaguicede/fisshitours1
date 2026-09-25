@@ -267,3 +267,35 @@ test('no admin screen uses a positive tabindex', async () => {
     }
   } finally { await f.browser.close(); }
 });
+
+test('phone toolbar: the funnel sits beside the search (not on a row of its own), in light and dark, without overflow', async () => {
+  const f = await fixture(seed); const { page } = f;
+  try {
+    await page.setViewportSize({ width: 390, height: 844 });
+    for (const theme of ['light', 'dark']) {
+      for (const { path } of LIST_PAGES) {
+        await page.goto(`${base}${path}`);
+        await page.evaluate((value) => { window.localStorage.setItem('pft-admin-theme', value); document.documentElement.setAttribute('data-theme', value); }, theme);
+        const search = page.locator('.admin-toolbar .admin-search-field input');
+        const trigger = page.locator('.admin-toolbar .admin-filter-trigger');
+        await expect(trigger, `${theme} ${path}`).toBeVisible();
+        const [s, t] = await Promise.all([search.boundingBox(), trigger.boundingBox()]);
+        assert.ok(Math.abs(s.y + s.height / 2 - (t.y + t.height / 2)) <= 6, `${theme} ${path}: funnel shares the search row (${JSON.stringify([s, t])})`);
+        assert.ok(t.x > s.x + 100 && t.x + t.width <= 390, `${theme} ${path}: funnel is to the right of the search and inside the viewport`);
+        assert.ok(t.width >= 40 && t.height >= 40, `${theme} ${path}: hit target`);
+        assert.ok(s.width >= 150, `${theme} ${path}: the search stays usable (${s.width}px)`);
+        const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+        assert.ok(overflow <= 0, `${theme} ${path}: overflow ${overflow}px`);
+      }
+    }
+    // Icon-only actions (Reordenar on Comentarios) share that row; the filter panel still opens and closes.
+    await page.goto(`${base}/admin/reviews`);
+    const reorder = page.getByRole('button', { name: 'Reordenar', exact: true });
+    const [r, s2] = await Promise.all([reorder.boundingBox(), page.locator('.admin-toolbar .admin-search-field input').boundingBox()]);
+    assert.ok(Math.abs(r.y + r.height / 2 - (s2.y + s2.height / 2)) <= 6, 'Reordenar stays on the search row');
+    await page.locator('.admin-toolbar .admin-filter-trigger').click();
+    await expect(page.locator('.admin-filter-panel')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.locator('.admin-filter-panel')).toHaveCount(0);
+  } finally { await f.browser.close(); }
+});

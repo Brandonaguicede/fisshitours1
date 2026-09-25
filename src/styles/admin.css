@@ -3241,13 +3241,19 @@ tr.admin-sortable-row--dragging {
     align-items: stretch;
   }
 
+  /* The search takes the row and the icon-only funnel sits beside it instead of alone on the next row. */
   .admin-search-field {
     min-width: 0;
-    flex-basis: 100%;
+    flex: 1 1 0;
   }
 
   .admin-toolbar__actions {
     width: 100%;
+  }
+
+  /* Actions that are only icons (e.g. Reordenar on Comentarios) stay on the search row. */
+  .admin-toolbar__actions:not(:has(.admin-btn)) {
+    width: auto;
   }
 
   .admin-toolbar__actions .admin-btn {
