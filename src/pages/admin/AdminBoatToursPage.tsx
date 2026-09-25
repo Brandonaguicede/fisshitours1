@@ -7,7 +7,8 @@ import { AdminBadge, AdminFilterMenu, AdminListToolbar, AdminModuleSurface, Admi
 import PackageDetailModal, { formatDuration, packageDisplayName, packageEditPath, type PackageDetail } from '../../components/admin/PackageDetailModal';
 import { supabase } from '../../lib/supabase';
 import { money } from '../../utils/format';
-import { createPackagesPdf, loadLogoDataUrl, packagesPdfFileName, type PackagePdfRow } from '../../utils/packagesPdf';
+import { formatUsd, loadLogoDataUrl } from '../../utils/exportBrand';
+import { createPackagesPdf, packagesPdfFileName, type PackagePdfRow } from '../../utils/packagesPdf';
 import AdminPagination from '../../components/admin/AdminPagination';
 import { useAdminPagedList } from '../../hooks/useAdminPagedList';
 import { getAdminTablePage } from '../../services/adminListService';
@@ -98,7 +99,7 @@ export default function AdminBoatToursPage() {
         name: packageDisplayName(item),
         boat: item.boat_tours?.boats?.name ?? '-',
         tour: item.boat_tours?.tours?.title ?? '-',
-        price: item.custom_quote ? 'Cotizar' : money(Number(item.base_price)),
+        price: item.custom_quote ? 'Cotizar' : formatUsd(Number(item.base_price)),
         capacity: `${item.included_guests} / ${item.max_guests}`,
         duration: formatDuration(item.duration_minutes),
         status: item.active ? 'Activo' : 'Inactivo',

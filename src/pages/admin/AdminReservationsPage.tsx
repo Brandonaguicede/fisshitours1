@@ -14,7 +14,7 @@ import { getAdminReservationsPage } from '../../services/adminListService';
 import { getActiveBoatTours, getActiveTimeSlots } from '../../services/boatTourService';
 import { adminCreateBooking, confirmBooking, getActiveDepartureLocations, retryConfirmationEmail, updateBooking, type DepartureLocation } from '../../services/bookingService';
 import type { BoatTour, TourTimeSlot } from '../../types/boatTour';
-import { loadLogoDataUrl } from '../../utils/packagesPdf';
+import { loadLogoDataUrl } from '../../utils/exportBrand';
 import {
   PAYMENT_STATUS_LABELS,
   activeReservationFilterLabels,
@@ -355,7 +355,8 @@ export default function AdminReservationsPage() {
     setExporting('xlsx');
     setError('');
     try {
-      const workbook = await createReservationsXlsx({ rows: await collectExportRows(), filters: activeReservationFilterLabels(filters) });
+      const [rows, logoDataUrl] = await Promise.all([collectExportRows(), loadLogoDataUrl()]);
+      const workbook = await createReservationsXlsx({ rows, filters: activeReservationFilterLabels(filters), logoDataUrl });
       downloadBlob(workbook, reservationsFileName('xlsx'));
     } catch (exportError) {
       setError(exportError instanceof Error ? `No se pudo generar el Excel: ${exportError.message}` : 'No se pudo generar el Excel.');

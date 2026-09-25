@@ -1,6 +1,10 @@
 // Reservas: shared model for the list, the exports (.xlsx / PDF) and the KPI cards. Display-only — nothing here
 // touches booking, payment, availability or pricing logic; it only turns the rows the admin already loads into
-// readable labels, an Excel workbook and counts. exceljs is loaded on demand (only when the admin exports).
+// readable labels, an Excel workbook and counts. exceljs is loaded on demand (only when the admin exports). The workbook
+// takes its brand (name, palette, logo, generation stamp) from exportBrand.ts, like the PDFs. NOTE: brand values are only
+// touched inside functions — tests load this file alone in a vm context where imports are stripped.
+
+import { AMBER, argb, BRAND, GREEN, INK, LINE, LOGO_ASPECT, formatGeneratedStamp, PRIMARY, RED, SOFT } from './exportBrand';
 
 export interface AdminReservation {
   id: string;
@@ -237,9 +241,8 @@ export function downloadBlob(blob: Blob, fileName: string) {
 
 export const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
-const BRAND = 'Papagayo Fishing Tour';
-// Same palette as the admin / the packages PDF (hex without alpha, as Excel wants ARGB).
-const ARGB = { ink: 'FF0B2842', primary: 'FF2B5F82', soft: 'FFF2FAFD', line: 'FFD0E2EC', green: 'FF16804C', amber: 'FF9A6700', red: 'FFB42318' };
+// Same palette as the admin and both PDFs, as Excel wants it (ARGB). A function, not a constant: see the note above.
+const brandArgb = () => ({ ink: argb(INK), primary: argb(PRIMARY), soft: argb(SOFT), line: argb(LINE), green: argb(GREEN), amber: argb(AMBER), red: argb(RED) });
 
 type ColumnKind = 'text' | 'date' | 'datetime' | 'integer' | 'money';
 interface ExportColumn {
@@ -282,7 +285,7 @@ function excelDateTime(value: string) {
   return new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate(), date.getHours(), date.getMinutes(), date.getSeconds()));
 }
 
-function statusColor(text: string) {
+function statusColor(text: string, ARGB: ReturnType<typeof brandArgb>) {
   const value = text.toLowerCase();
   if (/(pagad|confirmad|completad)/.test(value)) return ARGB.green;
   if (/(cancelad|fallid|reembols)/.test(value)) return ARGB.red;
@@ -295,6 +298,8 @@ export interface ReservationsXlsxInput {
   /** Human-readable active filters. Empty = no filters. */
   filters: string[];
   generatedAt?: Date;
+  /** PNG data URL of the (white) brand logo (see loadLogoDataUrl); the summary sheet just omits it when missing. */
+  logoDataUrl?: string | null;
 }
 
 /** Builds a real OOXML workbook (a zip of XML parts — never CSV text with an .xlsx name). */
@@ -302,6 +307,7 @@ export async function createReservationsXlsx(input: ReservationsXlsxInput): Prom
   const module = (await import('exceljs')) as unknown as { default?: typeof import('exceljs') } & typeof import('exceljs');
   const ExcelJS = module.default ?? module;
   const generatedAt = input.generatedAt ?? new Date();
+  const ARGB = brandArgb();
   const workbook = new ExcelJS.Workbook();
   workbook.creator = BRAND;
   workbook.lastModifiedBy = BRAND;
@@ -338,7 +344,7 @@ export async function createReservationsXlsx(input: ReservationsXlsxInput): Prom
     excelRow.height = 20;
     excelRow.eachCell({ includeEmpty: true }, (cell, columnNumber) => {
       const column = RESERVATION_EXPORT_COLUMNS[columnNumber - 1];
-      cell.font = { name: 'Calibri', size: 11, color: { argb: column.key === 'paymentStatus' || column.key === 'bookingStatus' ? statusColor(String(row[column.key])) : ARGB.ink }, bold: column.key === 'reference' || column.key === 'paymentStatus' || column.key === 'bookingStatus' };
+      cell.font = { name: 'Calibri', size: 11, color: { argb: column.key === 'paymentStatus' || column.key === 'bookingStatus' ? statusColor(String(row[column.key]), ARGB) : ARGB.ink }, bold: column.key === 'reference' || column.key === 'paymentStatus' || column.key === 'bookingStatus' };
       cell.alignment = { vertical: 'middle', horizontal: column.kind === 'money' || column.kind === 'integer' ? 'right' : 'left', wrapText: column.key === 'notes' };
       cell.border = { bottom: { style: 'thin', color: { argb: ARGB.line } } };
       if (index % 2 === 1) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: ARGB.soft } };
@@ -359,10 +365,17 @@ export async function createReservationsXlsx(input: ReservationsXlsxInput): Prom
   title.font = { name: 'Calibri', size: 18, bold: true, color: { argb: 'FFFFFFFF' } };
   title.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: ARGB.ink } };
   title.alignment = { vertical: 'middle', indent: 1 };
-  summary.getRow(1).height = 34;
+  summary.getRow(1).height = 62;
+  if (input.logoDataUrl) {
+    // The same white logo as the PDFs, right-aligned on the dark title band (column B is ~495 px wide).
+    const logoHeight = 60;
+    const logoWidth = Math.round(logoHeight * LOGO_ASPECT);
+    const imageId = workbook.addImage({ base64: input.logoDataUrl, extension: 'png' });
+    summary.addImage(imageId, { tl: { col: 1 + (495 - logoWidth - 12) / 495, row: 0.02 }, ext: { width: logoWidth, height: logoHeight } });
+  }
   const facts: Array<[string, string]> = [
     ['Empresa', BRAND],
-    ['Generado el', new Intl.DateTimeFormat('es-CR', { dateStyle: 'long', timeStyle: 'short' }).format(generatedAt)],
+    ['Generado el', formatGeneratedStamp(generatedAt)],
     ['Reservas incluidas', String(input.rows.length)],
     ['Moneda', 'USD (dólares estadounidenses)'],
     ['Filtros aplicados', input.filters.length ? input.filters.join('  ·  ') : 'Sin filtros: se incluyen todas las reservas.'],
