@@ -1,21 +1,12 @@
 // Dashboard KPI semantics (src/utils/dashboardMetrics.ts) and the data flow behind them
 // (src/services/adminDashboardService.ts -> PostgREST requests -> KPI values). No browser needed.
+// The analytics / recent-reservations side of the same overview lives in admin-dashboard-analytics.test.mjs.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import test from 'node:test';
-import ts from 'typescript';
 import { createClient } from '@supabase/supabase-js';
-
-function load(file, context) {
-  const source = fs.readFileSync(file, 'utf8').replace(/^import .*;\r?\n/gm, '').replace(/^export (const|let) /gm, 'var ').replace(/^export /gm, '');
-  vm.runInContext(ts.transpile(source, { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None }), context);
-  return context;
-}
-
-function metrics() {
-  return load('src/utils/dashboardMetrics.ts', vm.createContext({ Number, Math, Set, Array }));
-}
+import { loadTs as load, loadDashboardMetrics as metrics, plain } from './support/load-ts.mjs';
 
 let seq = 0;
 const booking = (overrides = {}) => ({
@@ -119,9 +110,9 @@ function service(respond) {
   });
   const m = metrics();
   const context = vm.createContext({
-    supabase: client, Error, Number, Math, Set, Array,
+    supabase: client, Error,
     readWithAdminSession: async (query) => { const response = await query(); if (response.error) throw new Error(response.error.message); return response.data; },
-    computeDashboardKpis: m.computeDashboardKpis, loadAllPages: m.loadAllPages,
+    buildDashboardOverview: m.buildDashboardOverview, loadAllPages: m.loadAllPages,
   });
   load('src/services/adminDashboardService.ts', context);
   return { context, requests };
@@ -129,7 +120,7 @@ function service(respond) {
 
 const json = (body, headers = {}) => new Response(JSON.stringify(body), { headers: { 'content-type': 'application/json', ...headers } });
 
-test('KPI scan asks for statuses + paid payments in one embedded query, pages through 1000-row batches and computes every KPI', async () => {
+test('overview scan asks for statuses + paid payments in one embedded query, pages through 1000-row batches and computes every KPI', async () => {
   const page1 = Array.from({ length: 1000 }, (_, i) => booking({ id: `p1-${i}`, payment_status: i < 10 ? 'paid' : 'pending', total_snapshot: 10 }));
   const page2 = [
     booking({ id: 'p2-0', payment_status: 'paid', payment_method_key: 'paypal', booking_status: 'confirmed', total_snapshot: 999, payments: [{ amount: 500, status: 'paid' }] }),
@@ -138,12 +129,12 @@ test('KPI scan asks for statuses + paid payments in one embedded query, pages th
   const { context, requests } = service((request) => {
     return json(request.url.searchParams.get('offset') === '0' ? page1 : page2);
   });
-  const kpis = await context.fetchDashboardKpis();
+  const { kpis } = await context.fetchDashboardOverview(new Date('2026-09-23T15:00:00Z'));
 
   assert.equal(requests.length, 2, 'one request per 1000-row page, no per-booking requests');
   for (const request of requests) {
     assert.equal(request.url.pathname, '/rest/v1/bookings');
-    assert.equal(request.url.searchParams.get('select'), 'id,payment_status,booking_status,payment_method_key,total_snapshot,payments(amount,status)');
+    assert.equal(request.url.searchParams.get('select'), 'id,created_at,tour_date,boat_id,tour_id,payment_status,booking_status,payment_method_key,total_snapshot,customers(full_name),boats(name),tours(title),payment_methods(name),payments(amount,status)');
     assert.equal(request.url.searchParams.get('payments.status'), 'eq.paid');
     assert.equal(request.url.searchParams.get('order'), 'id.asc');
   }
@@ -157,18 +148,18 @@ test('KPI scan asks for statuses + paid payments in one embedded query, pages th
   assert.equal(kpis.reservationsToConfirm, 1000);
 });
 
-test('KPI scan surfaces a failed query instead of returning zeros', async () => {
+test('overview scan surfaces a failed query instead of returning zeros', async () => {
   const { context } = service(() => new Response(JSON.stringify({ message: 'boom', code: 'TEST' }), { status: 500, headers: { 'content-type': 'application/json' } }));
-  await assert.rejects(() => context.fetchDashboardKpis(), /boom/);
+  await assert.rejects(() => context.fetchDashboardOverview(), /boom/);
 });
 
-test('recent reservations fetch only the 8 newest rows, not the whole table', async () => {
-  const { context, requests } = service(() => json([{ id: 'r1' }]));
-  const rows = await context.fetchRecentReservations(8);
-  assert.equal(rows.length, 1);
-  assert.equal(requests.length, 1);
-  assert.equal(requests[0].url.searchParams.get('limit'), '8');
-  assert.equal(requests[0].url.searchParams.get('order'), 'created_at.desc');
+test('recent reservations come from the same scan: the 5 newest, with no separate request', async () => {
+  const rows = Array.from({ length: 8 }, (_, i) => booking({ id: `r${i}`, created_at: `2026-09-2${i}T12:00:00Z`, tour_date: '2026-10-01', customers: { full_name: `Cliente ${i}` } }));
+  const { context, requests } = service(() => json(rows));
+  const { recentReservations } = await context.fetchDashboardOverview(new Date('2026-09-29T15:00:00Z'));
+  assert.equal(requests.length, 1, 'the overview is a single request, recents included');
+  assert.equal(recentReservations.length, 5);
+  assert.deepEqual(plain(recentReservations.map((row) => row.id)), ['r7', 'r6', 'r5', 'r4', 'r3']);
 });
 
 test('pending reviews use an exact head count of status = pending', async () => {
@@ -196,10 +187,10 @@ test('the Dashboard page no longer hardcodes revenue or derives KPIs from the re
 
 test('every Dashboard query takes part in the error alert, Reintentar and the 30s refresh', () => {
   const page = fs.readFileSync('src/pages/admin/AdminDashboardPage.tsx', 'utf8');
-  for (const query of ['pendingReviewsQuery', 'kpisQuery', 'reservationsQuery']) {
+  for (const query of ['pendingReviewsQuery', 'overviewQuery']) {
     assert.match(page, new RegExp(`${query}\.isError`), `${query} must feed the alert`);
     assert.match(page, new RegExp(`void ${query}\.refetch\(\)`), `${query} must be retried by Reintentar`);
   }
-  assert.equal((page.match(/refetchInterval: 30_000/g) ?? []).length, 3);
+  assert.equal((page.match(/refetchInterval: 30_000/g) ?? []).length, 2);
   assert.doesNotMatch(page, /No se pudieron cargar las reservas/);
 });

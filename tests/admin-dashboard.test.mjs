@@ -17,7 +17,7 @@ test('dashboard displays reservations, reports load failures and recovers on ret
       if (url.pathname.endsWith('/user')) return route.fulfill({ json: user });
       if (url.pathname.endsWith('/bookings') || url.pathname.endsWith('/rpc/list_admin_bookings')) {
         if (fail) return route.fulfill({ status: 500, json: { message: 'Simulated booking query failure', code: 'TEST' } });
-        const rows = ['PFT-3BD31A7A', 'PFT-60E8EAA3'].map((reference, i) => ({ id: String(i), booking_reference: reference, tour_date: '2026-09-19', payment_status: i ? 'paid' : 'pending', payment_method_key: i ? 'paypal' : 'whatsapp-link', booking_status: i ? 'confirmed' : 'pending_payment', total_snapshot: 100, customers: { full_name: 'Test Customer', whatsapp: '0000000' }, tours: { title: 'Test Tour' } }));
+        const rows = ['PFT-3BD31A7A', 'PFT-60E8EAA3'].map((reference, i) => ({ id: String(i), created_at: new Date(Date.now() - i * 60_000).toISOString(), booking_reference: reference, tour_date: '2026-09-19', boat_id: 'boat-1', tour_id: 'tour-1', payment_status: i ? 'paid' : 'pending', payment_method_key: i ? 'paypal' : 'whatsapp-link', booking_status: i ? 'confirmed' : 'pending_payment', total_snapshot: 100, customers: { full_name: i ? 'Second Customer' : 'First Customer', whatsapp: '0000000' }, boats: { name: 'Test Boat' }, tours: { title: 'Test Tour' }, payment_methods: { name: i ? 'PayPal' : 'WhatsApp' } }));
         return route.fulfill({ json: url.pathname.endsWith('/rpc/list_admin_bookings') ? { rows, total: rows.length } : rows });
       }
       // Pending reviews: exact HEAD count (content-range must be exposed for the browser to read it).
@@ -34,8 +34,8 @@ test('dashboard displays reservations, reports load failures and recovers on ret
     for (const label of ['Reservas totales', 'Pagos pendientes', 'Ingresos', 'Pagos confirmados', 'Reservas por confirmar']) await expect(card(label)).toHaveText('—');
     fail = false;
     await page.getByRole('button', { name: 'Reintentar' }).click();
-    await expect(page.getByRole('cell', { name: 'PFT-3BD31A7A', exact: true })).toBeVisible();
-    await expect(page.getByRole('cell', { name: 'PFT-60E8EAA3', exact: true })).toBeVisible();
+    await expect(page.getByRole('cell', { name: 'First Customer', exact: true })).toBeVisible();
+    await expect(page.getByRole('cell', { name: 'Second Customer', exact: true })).toBeVisible();
     await expect(page.getByRole('alert')).toHaveCount(0);
     // Fixture: one unpaid WhatsApp booking (pending_payment, $100) and one paid+confirmed PayPal booking ($100, no payments row -> total_snapshot).
     await expect(card('Reservas totales')).toHaveText('2');
@@ -78,7 +78,7 @@ test('a failed pending-reviews count shows a dash, raises the alert and recovers
         return route.fulfill({ json: [], headers: { 'content-range': '*/4', 'access-control-expose-headers': 'content-range' } });
       }
       if (url.pathname.endsWith('/bookings')) {
-        const rows = [{ id: '0', booking_reference: 'PFT-3BD31A7A', tour_date: '2026-09-19', payment_status: 'paid', payment_method_key: 'whatsapp-link', booking_status: 'confirmed', total_snapshot: 250, customers: { full_name: 'Test Customer', whatsapp: '0000000' }, tours: { title: 'Test Tour' } }];
+        const rows = [{ id: '0', created_at: new Date().toISOString(), booking_reference: 'PFT-3BD31A7A', tour_date: '2026-09-19', boat_id: 'boat-1', tour_id: 'tour-1', payment_status: 'paid', payment_method_key: 'whatsapp-link', booking_status: 'confirmed', total_snapshot: 250, customers: { full_name: 'Test Customer', whatsapp: '0000000' }, boats: { name: 'Test Boat' }, tours: { title: 'Test Tour' }, payment_methods: { name: 'WhatsApp' } }];
         return route.fulfill({ json: rows });
       }
       return route.fulfill({ json: [], headers: { 'content-range': '0-0/0' } });
@@ -93,7 +93,7 @@ test('a failed pending-reviews count shows a dash, raises the alert and recovers
     await expect(page.getByRole('alert')).toContainText('No se pudieron cargar los datos del Dashboard');
     await expect(card('Ingresos')).toHaveText('$250');
     await expect(card('Reservas totales')).toHaveText('1');
-    await expect(page.getByRole('cell', { name: 'PFT-3BD31A7A', exact: true })).toBeVisible();
+    await expect(page.getByRole('cell', { name: 'Test Customer', exact: true })).toBeVisible();
     assert.equal(reviewRequests, 1, 'retry:false - no silent retries');
 
     failReviews = false;

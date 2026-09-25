@@ -4,10 +4,12 @@ import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 
 import { AdminBadge, AdminModuleSurface, AdminStatCard, AdminTable } from '../../components/admin/AdminPrimitives';
+import { DashboardAnalyticsPanel, formatIsoDay, type AnalyticsStatus } from '../../components/admin/DashboardCharts';
 import { supabase } from '../../lib/supabase';
-import { fetchDashboardKpis, fetchPendingReviewsCount, fetchRecentReservations } from '../../services/adminDashboardService';
+import { fetchDashboardOverview, fetchPendingReviewsCount } from '../../services/adminDashboardService';
 import type { DashboardKpis } from '../../utils/dashboardMetrics';
 import { money } from '../../utils/format';
+import { formatPaymentStatusLabel } from '../../utils/reservationsExport';
 
 export default function AdminDashboardPage() {
   const queryClient = useQueryClient();
@@ -17,33 +19,29 @@ export default function AdminDashboardPage() {
     refetchInterval: 30_000,
     retry: false,
   });
-  const kpisQuery = useQuery({
-    queryKey: ['admin', 'dashboardKpis'],
-    queryFn: fetchDashboardKpis,
+  // One query feeds the KPI cards, the four analytics and "Reservas recientes": a single scan of bookings.
+  const overviewQuery = useQuery({
+    queryKey: ['admin', 'dashboardOverview'],
+    queryFn: () => fetchDashboardOverview(),
     refetchInterval: 30_000,
     retry: false,
   });
-  const reservationsQuery = useQuery({
-    queryKey: ['admin', 'dashboardReservations'],
-    queryFn: () => fetchRecentReservations(8),
-    refetchInterval: 30_000,
-    retry: false,
-  });
-  const reservations = reservationsQuery.data ?? [];
-  const kpis = kpisQuery.data;
+  const overview = overviewQuery.data;
+  const kpis = overview?.kpis;
+  const recentReservations = overview?.recentReservations ?? [];
   // A card that is loading shows "…" and one that failed shows "—": never a made-up 0.
-  const kpiValue = (pick: (value: DashboardKpis) => string) => (kpisQuery.isLoading ? '…' : kpis ? pick(kpis) : '—');
+  const kpiValue = (pick: (value: DashboardKpis) => string) => (overviewQuery.isLoading ? '…' : kpis ? pick(kpis) : '—');
   const pendingReviewsValue = pendingReviewsQuery.isLoading ? '…' : pendingReviewsQuery.data === undefined ? '—' : String(pendingReviewsQuery.data);
-  const hasLoadError = kpisQuery.isError || reservationsQuery.isError || pendingReviewsQuery.isError;
-  const isRefetching = kpisQuery.isFetching || reservationsQuery.isFetching || pendingReviewsQuery.isFetching;
-  const loadError = kpisQuery.error ?? reservationsQuery.error ?? pendingReviewsQuery.error;
+  const hasLoadError = overviewQuery.isError || pendingReviewsQuery.isError;
+  const isRefetching = overviewQuery.isFetching || pendingReviewsQuery.isFetching;
+  const loadError = overviewQuery.error ?? pendingReviewsQuery.error;
+  const overviewStatus: AnalyticsStatus = overview ? 'ready' : overviewQuery.isError ? 'error' : 'loading';
 
   useEffect(() => {
     const channel = supabase
       .channel('admin-dashboard-bookings')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings' }, () => {
-        void queryClient.invalidateQueries({ queryKey: ['admin', 'dashboardReservations'] });
-        void queryClient.invalidateQueries({ queryKey: ['admin', 'dashboardKpis'] });
+        void queryClient.invalidateQueries({ queryKey: ['admin', 'dashboardOverview'] });
       })
       .subscribe();
     return () => { void supabase.removeChannel(channel); };
@@ -54,11 +52,11 @@ export default function AdminDashboardPage() {
       {hasLoadError ? (
         <div className="admin-alert admin-alert--danger" role="alert">
           <p>No se pudieron cargar los datos del Dashboard. {loadError instanceof Error ? loadError.message : 'Intenta nuevamente.'}</p>
-          <button className="admin-btn admin-btn--secondary" type="button" disabled={isRefetching} onClick={() => { void kpisQuery.refetch(); void reservationsQuery.refetch(); void pendingReviewsQuery.refetch(); }}>Reintentar</button>
+          <button className="admin-btn admin-btn--secondary" type="button" disabled={isRefetching} onClick={() => { void overviewQuery.refetch(); void pendingReviewsQuery.refetch(); }}>Reintentar</button>
           <Link className="admin-btn admin-btn--secondary" to="/admin/login">Iniciar sesion</Link>
         </div>
       ) : null}
-      <section className="admin-stat-grid">
+      <section className="admin-stat-grid" aria-label="Indicadores principales">
         <AdminStatCard label="Reservas totales" value={kpiValue((value) => String(value.totalReservations))} icon={CalendarDays} />
         <AdminStatCard label="Pagos pendientes" value={kpiValue((value) => String(value.pendingPayments))} icon={CreditCard} tone="warning" />
         <AdminStatCard label="Ingresos" value={kpiValue((value) => money(value.revenue))} icon={DollarSign} tone="success" />
@@ -67,23 +65,23 @@ export default function AdminDashboardPage() {
         <AdminStatCard label="Comentarios por revisar" value={pendingReviewsValue} icon={MessageSquare} />
       </section>
       <AdminModuleSurface className="admin-dashboard-reservations">
-        <div className="admin-module-surface__header">
-          <div><h2>Reservas recientes</h2><p>Ultimas solicitudes listas para validar disponibilidad y pago.</p></div>
+        <div className="admin-module-surface__header admin-dash-recent__header">
+          <h2 id="admin-dash-recent-title">Reservas recientes</h2>
+          <Link className="admin-btn admin-btn--secondary" to="/admin/reservations">Ver todas<span className="admin-visually-hidden"> las reservas</span></Link>
         </div>
-        <AdminTable embedded headers={['Referencia', 'Cliente', 'Fecha', 'Tour', 'Pago', 'Reserva']}>
-            {reservations.map((reservation) => (
-              <tr key={reservation.id}>
-                <td>{reservation.booking_reference}</td>
-                <td>{reservation.customers?.full_name ?? '-'}<div className="admin-muted">{reservation.customers?.whatsapp ?? '-'}</div></td>
-                <td>{reservation.tour_date}</td>
-                <td>{reservation.tours?.title ?? '-'}</td>
-                <td><AdminBadge value={reservation.payment_status} /></td>
-                <td><AdminBadge value={reservation.booking_status} /></td>
-              </tr>
-            ))}
-            {!reservationsQuery.isLoading && !reservationsQuery.isError && reservations.length === 0 ? <tr><td colSpan={6} className="admin-muted">No hay reservas registradas todavía.</td></tr> : null}
+        <AdminTable embedded headers={['Cliente', 'Fecha del tour', 'Pago']}>
+          {recentReservations.map((reservation) => (
+            <tr key={reservation.id}>
+              <td>{reservation.customerName ?? '-'}</td>
+              <td>{formatIsoDay(reservation.tourDate, true)}</td>
+              <td><AdminBadge value={reservation.paymentStatus} label={formatPaymentStatusLabel(reservation.paymentStatus)} /></td>
+            </tr>
+          ))}
+          {overviewStatus === 'ready' && recentReservations.length === 0 ? <tr><td colSpan={3} className="admin-muted">No hay reservas registradas todavía.</td></tr> : null}
+          {overviewStatus === 'loading' ? <tr><td colSpan={3} className="admin-muted" role="status">Cargando…</td></tr> : null}
         </AdminTable>
       </AdminModuleSurface>
+      <DashboardAnalyticsPanel analytics={overview?.analytics} status={overviewStatus} />
     </div>
   );
 }

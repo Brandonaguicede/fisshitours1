@@ -4209,3 +4209,336 @@ tr.admin-sortable-row--dragging {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+/* ------------------------------------------------------------------------------------------------------------------
+ * Dashboard: compact "Reservas recientes" + analytics (bars / weekly columns / donut). Dependency-free; every mark has
+ * its number/label as real text, the drawing is aria-hidden. Colours are tokens so light and dark both read.
+ * ---------------------------------------------------------------------------------------------------------------- */
+body:has(.admin-shell) {
+  --admin-chart-0: #2b5f82;
+  --admin-chart-1: #0f9f6e;
+  --admin-chart-2: #d97706;
+  --admin-chart-3: #7c5cc4;
+  --admin-chart-4: #c2418a;
+  --admin-chart-5: #0891b2;
+  --admin-chart-6: #64748b;
+  --admin-chart-7: #a16207;
+  --admin-chart-track: var(--admin-surface-subtle);
+}
+
+html[data-theme='dark'] body:has(.admin-shell) {
+  --admin-chart-0: #4fb6d6;
+  --admin-chart-1: #34d399;
+  --admin-chart-2: #fbbf24;
+  --admin-chart-3: #a78bfa;
+  --admin-chart-4: #f472b6;
+  --admin-chart-5: #22d3ee;
+  --admin-chart-6: #94a3b8;
+  --admin-chart-7: #fb923c;
+}
+
+.admin-dash-recent__header {
+  align-items: center;
+  padding-bottom: 0.5rem;
+}
+
+.admin-dash-recent__header h2 {
+  min-width: 0;
+}
+
+/* Three short columns: the 50rem table minimum would force a sideways scroll on a phone. */
+.admin-dashboard-reservations .admin-table {
+  min-width: 0;
+}
+
+.admin-dashboard-reservations .admin-table th,
+.admin-dashboard-reservations .admin-table td {
+  padding: 0.45rem 0.6rem;
+}
+
+.admin-dashboard-reservations .admin-table th:last-child,
+.admin-dashboard-reservations .admin-table td:last-child {
+  text-align: right;
+}
+
+.admin-dash-analytics__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.admin-dash-chart {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  min-width: 0;
+  padding: 0.85rem;
+  border: 1px solid var(--admin-line-soft);
+  border-radius: var(--admin-radius-md);
+  background: var(--admin-surface);
+}
+
+.admin-dash-chart h3 {
+  margin: 0;
+  color: var(--admin-ink);
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.admin-dash-chart__note {
+  margin: -0.35rem 0 0;
+  color: var(--admin-muted);
+  font-size: 0.76rem;
+}
+
+.admin-dash-empty {
+  margin: 0;
+  padding: 1.25rem 0.5rem;
+  border: 1px dashed var(--admin-line);
+  border-radius: var(--admin-radius-sm);
+  color: var(--admin-muted);
+  font-size: 0.85rem;
+  text-align: center;
+}
+
+/* Horizontal bars: label + number on one line, bar underneath. */
+.admin-dash-bars,
+.admin-dash-weeks,
+.admin-dash-legend {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.admin-dash-bars {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.admin-dash-bars li {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.admin-dash-bars__row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.82rem;
+}
+
+.admin-dash-bars__label {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--admin-ink);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-dash-bars__value {
+  flex: 0 0 auto;
+  color: var(--admin-ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.admin-dash-bars__track {
+  display: block;
+  height: 0.5rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--admin-chart-track);
+}
+
+.admin-dash-bars__fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--admin-chart-0);
+}
+
+/* Weekly columns: 12 equal columns, count above, week start below. */
+.admin-dash-weeks {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 0.2rem;
+  align-items: end;
+}
+
+.admin-dash-weeks__item {
+  position: relative;
+  display: grid;
+  grid-template-rows: 1rem 7rem auto;
+  gap: 0.2rem;
+  min-width: 0;
+  text-align: center;
+}
+
+.admin-dash-weeks__count {
+  color: var(--admin-ink);
+  font-size: 0.72rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.admin-dash-weeks__track {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  border-bottom: 1px solid var(--admin-line);
+}
+
+.admin-dash-weeks__bar {
+  display: block;
+  width: 70%;
+  max-width: 1.5rem;
+  border-radius: 3px 3px 0 0;
+  background: var(--admin-chart-0);
+}
+
+.admin-dash-weeks__item--current .admin-dash-weeks__bar {
+  background: repeating-linear-gradient(135deg, var(--admin-chart-0) 0 4px, color-mix(in srgb, var(--admin-chart-0) 55%, var(--admin-surface)) 4px 8px);
+}
+
+.admin-dash-weeks__label {
+  overflow: hidden;
+  color: var(--admin-muted);
+  font-size: 0.62rem;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+.admin-dash-weeks__item--current .admin-dash-weeks__label {
+  color: var(--admin-ink);
+  font-weight: 700;
+}
+
+/* Donut + legend */
+.admin-dash-highlight {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.15rem 0.5rem;
+  margin: 0;
+  padding: 0.45rem 0.6rem;
+  border-radius: var(--admin-radius-sm);
+  background: var(--admin-surface-subtle);
+  color: var(--admin-muted);
+  font-size: 0.8rem;
+}
+
+.admin-dash-highlight strong {
+  color: var(--admin-ink);
+  font-size: 0.95rem;
+}
+
+.admin-dash-donut {
+  display: grid;
+  grid-template-columns: 6.5rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0.9rem;
+}
+
+.admin-dash-donut__svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  transform: none;
+}
+
+.admin-dash-donut__ring,
+.admin-dash-donut__seg {
+  stroke-width: 6;
+}
+
+.admin-dash-donut__ring {
+  stroke: var(--admin-chart-track);
+}
+
+.admin-dash-donut__seg {
+  stroke: var(--admin-chart-0);
+}
+
+.admin-dash-donut__total {
+  fill: var(--admin-ink);
+  font-size: 7px;
+  font-weight: 700;
+}
+
+.admin-dash-legend {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.admin-dash-legend li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.82rem;
+}
+
+.admin-dash-legend__swatch {
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 3px;
+  background: var(--admin-chart-0);
+}
+
+.admin-dash-legend__label {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--admin-ink);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-dash-legend__value {
+  color: var(--admin-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.admin-dash-legend__value strong {
+  color: var(--admin-ink);
+}
+
+/* One class colours both the donut segment (stroke) and its legend swatch (background); the other property is inert on each. */
+.admin-dash-color-0 { stroke: var(--admin-chart-0); background: var(--admin-chart-0); }
+.admin-dash-color-1 { stroke: var(--admin-chart-1); background: var(--admin-chart-1); }
+.admin-dash-color-2 { stroke: var(--admin-chart-2); background: var(--admin-chart-2); }
+.admin-dash-color-3 { stroke: var(--admin-chart-3); background: var(--admin-chart-3); }
+.admin-dash-color-4 { stroke: var(--admin-chart-4); background: var(--admin-chart-4); }
+.admin-dash-color-5 { stroke: var(--admin-chart-5); background: var(--admin-chart-5); }
+.admin-dash-color-6 { stroke: var(--admin-chart-6); background: var(--admin-chart-6); }
+.admin-dash-color-7 { stroke: var(--admin-chart-7); background: var(--admin-chart-7); }
+
+@media (max-width: 900px) {
+  .admin-dash-analytics__grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Phone: 12 week labels do not fit at 375px, so only every second one is drawn (the current week always is);
+   each column keeps its full text for screen readers and the hover title. */
+@media (max-width: 640px) {
+  .admin-dash-weeks__item:nth-child(odd) .admin-dash-weeks__label {
+    visibility: hidden;
+  }
+
+  /* The visible labels have their hidden neighbours' room, so let them spill over instead of being clipped. */
+  .admin-dash-weeks__label {
+    overflow: visible;
+    width: calc(100% + 1rem);
+    margin-inline: -0.5rem;
+  }
+
+  .admin-dash-weeks__item {
+    grid-template-rows: 1rem 6rem auto;
+  }
+
+  .admin-dash-donut {
+    grid-template-columns: 5.5rem minmax(0, 1fr);
+    gap: 0.7rem;
+  }
+}

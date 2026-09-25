@@ -1,44 +1,29 @@
 import { supabase } from '../lib/supabase';
-import { computeDashboardKpis, loadAllPages, type DashboardBookingRow, type DashboardKpis } from '../utils/dashboardMetrics';
+import { buildDashboardOverview, loadAllPages, type DashboardOverview, type DashboardOverviewRow } from '../utils/dashboardMetrics';
 import { readWithAdminSession } from './adminAuthService';
-
-export type DashboardReservation = {
-  id: string;
-  booking_reference: string;
-  tour_date: string;
-  payment_status: string;
-  payment_method_key: string;
-  booking_status: string;
-  total_snapshot: number;
-  customers: { full_name: string; whatsapp: string } | null;
-  tours: { title: string } | null;
-};
 
 const db = supabase as any;
 
 /**
- * One scan of `bookings` feeds five of the six KPIs (total, pending payments, revenue, confirmed payments, to-confirm),
- * so the cards never disagree with each other. `payments` is embedded (one join, no per-booking request) and filtered
- * to `paid` rows only; bookings without one still come back (left join) and fall back to `total_snapshot`.
+ * The Dashboard's one scan of `bookings`. KPI cards, the four analytics and "Reservas recientes" are all derived from
+ * these rows (see buildDashboardOverview), so the page never disagrees with itself and never fetches twice.
+ *
+ * - One relational query per 1000-row page (PostgREST `max_rows`): `customers`, `boats`, `tours`, `payment_methods`
+ *   and `payments` are embedded joins, so there is no per-booking request (no N+1).
+ * - `payments` is filtered to `paid` rows only; bookings without one still come back (left join) and fall back to
+ *   `total_snapshot` for revenue.
+ * - Ordered by `id` (primary key) so offset pages are stable; the "latest five" are sorted by `created_at` in memory.
  */
-export async function fetchDashboardKpis(): Promise<DashboardKpis> {
-  const rows = await loadAllPages<DashboardBookingRow>(async (from, to) => (await readWithAdminSession(() => db
+export const DASHBOARD_OVERVIEW_SELECT = 'id, created_at, tour_date, boat_id, tour_id, payment_status, booking_status, payment_method_key, total_snapshot, customers(full_name), boats(name), tours(title), payment_methods(name), payments(amount, status)';
+
+export async function fetchDashboardOverview(now: Date = new Date()): Promise<DashboardOverview> {
+  const rows = await loadAllPages<DashboardOverviewRow>(async (from, to) => (await readWithAdminSession(() => db
     .from('bookings')
-    .select('id, payment_status, booking_status, payment_method_key, total_snapshot, payments(amount, status)')
+    .select(DASHBOARD_OVERVIEW_SELECT)
     .eq('payments.status', 'paid')
     .order('id')
-    .range(from, to))) as DashboardBookingRow[] | null);
-  return computeDashboardKpis(rows);
-}
-
-/** Only the rows the "Reservas recientes" table shows - not the whole bookings table. */
-export async function fetchRecentReservations(limit = 8): Promise<DashboardReservation[]> {
-  const data = await readWithAdminSession(() => db
-    .from('bookings')
-    .select('id, booking_reference, tour_date, payment_status, payment_method_key, booking_status, total_snapshot, customers(full_name, whatsapp), tours(title)')
-    .order('created_at', { ascending: false })
-    .limit(limit));
-  return (data ?? []) as DashboardReservation[];
+    .range(from, to))) as DashboardOverviewRow[] | null);
+  return buildDashboardOverview(rows, now);
 }
 
 /** Comentarios por revisar: `reviews.status = 'pending'`, the same filter the Comentarios page offers. Exact count, no rows transferred. */
