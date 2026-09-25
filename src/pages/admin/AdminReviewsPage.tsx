@@ -1,7 +1,7 @@
 import AdminPagination from '../../components/admin/AdminPagination';
 import { useAdminPagedList } from '../../hooks/useAdminPagedList';
 import { adminSearchFilter, getAdminTablePage } from '../../services/adminListService';
-import { Check, EyeOff, Star, Trash2, X } from 'lucide-react';
+import { Check, Eye, EyeOff, Star, Trash2, X } from 'lucide-react';
 import { useState } from 'react';
 
 import AdminConfirmDialog from '../../components/admin/AdminConfirmDialog';
@@ -231,7 +231,8 @@ export default function AdminReviewsPage() {
                       <X size={17} />
                     </button>
                     <button className="admin-icon-action" type="button" disabled={loading} title={review.active ? 'Ocultar comentario' : 'Mostrar comentario'} aria-label={review.active ? `Ocultar comentario de ${review.name}` : `Mostrar comentario de ${review.name}`} onClick={() => void setActive(review.id, !review.active)}>
-                      <EyeOff size={17} />
+                      {/* The icon is the action that will happen: Mostrar -> Eye, Ocultar -> EyeOff. */}
+                      {review.active ? <EyeOff size={17} /> : <Eye size={17} />}
                     </button>
                     <button className="admin-icon-action admin-icon-action--warning" type="button" disabled={loading} title={review.featured ? 'Quitar de destacados' : 'Destacar comentario'} aria-label={review.featured ? `Quitar de destacados el comentario de ${review.name}` : `Destacar comentario de ${review.name}`} onClick={() => void setFeatured(review.id, !review.featured)}>
                       <Star size={17} />

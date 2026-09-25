@@ -1,4 +1,4 @@
-import { ArrowUpDown, Check, ChevronDown, ChevronUp, Filter, GripVertical, Search, X } from 'lucide-react';
+import { ArrowUpDown, ChevronDown, ChevronUp, Filter, GripVertical, Search, X } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { ButtonHTMLAttributes, ReactNode } from 'react';
 import { useEffect, useId, useRef, useState } from 'react';
@@ -98,6 +98,8 @@ export function AdminToolbar(props: { children: ReactNode; embedded?: boolean })
 }
 
 /**
+ * The trigger is always a funnel icon (no visible button border, `--admin-hit-target` sized); its name lives
+ * in aria-label/title and the active-filter count is appended to the accessible name and shown as a badge.
  * Reuses the exact filter-menu markup/behavior already built for Reservas
  * (`admin-filter-menu`/`admin-filter-trigger`/`admin-filter-backdrop`/
  * `admin-filter-panel`) so every screen with real, existing filters gets the
@@ -105,8 +107,6 @@ export function AdminToolbar(props: { children: ReactNode; embedded?: boolean })
  */
 export function AdminFilterMenu(props: {
   label?: string;
-  /** Renders the trigger as a square icon-only button (label stays as aria-label/title). */
-  iconOnly?: boolean;
   panelLabel: string;
   panelTitle?: string;
   panelDescription?: string;
@@ -144,16 +144,16 @@ export function AdminFilterMenu(props: {
     <div className="admin-filter-menu">
       <button
         ref={triggerRef}
-        className={`admin-btn admin-btn--secondary admin-filter-trigger${props.iconOnly ? ' admin-btn--icon-only admin-filter-trigger--icon-only' : ''}`}
+        className="admin-icon-btn admin-filter-trigger"
         type="button"
         aria-expanded={open}
         aria-controls={panelId}
-        aria-label={props.iconOnly ? (props.activeCount ? `${props.label ?? 'Filtros'} (${props.activeCount} activos)` : (props.label ?? 'Filtros')) : undefined}
-        title={props.iconOnly ? (props.label ?? 'Filtros') : undefined}
+        aria-haspopup="dialog"
+        aria-label={props.activeCount ? `${props.label ?? 'Filtros'} (${props.activeCount} activos)` : (props.label ?? 'Filtros')}
+        title={props.label ?? 'Filtros'}
         onClick={() => setOpen((value) => !value)}
       >
-        <Filter size={16} aria-hidden="true" />
-        {props.iconOnly ? null : <span>{props.label ?? 'Filtros'}</span>}
+        <Filter size={18} aria-hidden="true" />
         {props.activeCount ? <AdminBadge value={String(props.activeCount)} /> : null}
       </button>
       {open ? (
@@ -228,9 +228,10 @@ export function AdminModuleSurface(props: { children: ReactNode; className?: str
 
 /**
  * Toolbar control for `useAdminReorder` (see src/hooks/useAdminReorder.ts).
- * Normal mode shows a single "Reordenar" button; reorder mode swaps it for
- * Cancelar/Guardar orden. `disabledReason` (e.g. "Limpia la búsqueda para
- * reordenar") both disables and explains why reordering isn't available —
+ * Normal mode shows a single icon-only "Reordenar" button (aria-label + title, same hit target and focus
+ * ring as every icon control); reorder mode swaps it for the primary "Guardar orden" followed by the
+ * secondary "Cancelar" (primary first, in the DOM and visually). `disabledReason` (e.g. "Limpia la búsqueda
+ * para reordenar") both disables and explains why reordering isn't available —
  * reordering while a search/filter hides rows would silently misnumber
  * whatever isn't currently visible.
  */
@@ -241,34 +242,25 @@ export function AdminReorderToolbar(props: {
   onCancel: () => void;
   onSave: () => void;
   disabledReason?: string;
-  /** Icon-only controls (Reordenar / Cancelar / Guardar orden keep aria-label + title). */
-  iconOnly?: boolean;
 }) {
-  const iconClass = props.iconOnly ? ' admin-btn--icon-only' : '';
   if (!props.reordering) {
     return (
-      <button
-        className={`admin-btn admin-btn--secondary${iconClass}`}
-        type="button"
+      <AdminIconButton
+        icon={ArrowUpDown}
+        iconSize={18}
+        label="Reordenar"
+        title={props.disabledReason ?? 'Reordenar'}
         onClick={props.onStart}
         disabled={Boolean(props.disabledReason)}
-        aria-label={props.iconOnly ? 'Reordenar' : undefined}
-        title={props.disabledReason ?? (props.iconOnly ? 'Reordenar' : undefined)}
-      >
-        <ArrowUpDown size={16} aria-hidden="true" />
-        {props.iconOnly ? null : ' Reordenar'}
-      </button>
+      />
     );
   }
-  const saveLabel = props.saving ? 'Guardando...' : 'Guardar orden';
   return (
     <div className="admin-toolbar__actions">
-      <button className={`admin-btn admin-btn--secondary${iconClass}`} type="button" onClick={props.onCancel} disabled={props.saving} aria-label={props.iconOnly ? 'Cancelar' : undefined} title={props.iconOnly ? 'Cancelar' : undefined}>
-        {props.iconOnly ? <X size={16} aria-hidden="true" /> : 'Cancelar'}
+      <button className="admin-btn" type="button" onClick={props.onSave} disabled={props.saving}>
+        {props.saving ? 'Guardando...' : 'Guardar orden'}
       </button>
-      <button className={`admin-btn${iconClass}`} type="button" onClick={props.onSave} disabled={props.saving} aria-label={props.iconOnly ? saveLabel : undefined} title={props.iconOnly ? saveLabel : undefined}>
-        {props.iconOnly ? <Check size={16} aria-hidden="true" /> : saveLabel}
-      </button>
+      <button className="admin-btn admin-btn--secondary" type="button" onClick={props.onCancel} disabled={props.saving}>Cancelar</button>
     </div>
   );
 }

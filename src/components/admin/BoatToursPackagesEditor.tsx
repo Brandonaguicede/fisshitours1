@@ -423,10 +423,10 @@ function PackageDraftEditor({ draft, boatName, tourTitle, fieldErrors, busy, boa
           </button>
         ) : <span />}
         <div className="admin-package-editor__actions">
-          <button className="admin-btn admin-btn--secondary" type="button" onClick={onCancel}>Cancelar</button>
           <button className="admin-btn" type="button" disabled={busy} onClick={onSave}>
             {busy ? <Loader2 className="animate-spin" size={15} /> : <Check size={15} />} Guardar paquete
           </button>
+          <button className="admin-btn admin-btn--secondary" type="button" onClick={onCancel}>Cancelar</button>
         </div>
       </footer>
 

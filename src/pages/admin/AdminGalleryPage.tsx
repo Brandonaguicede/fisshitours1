@@ -8,7 +8,7 @@ import { useMemo, useRef, useState } from 'react';
 
 import AdminConfirmDialog from '../../components/admin/AdminConfirmDialog';
 import AdminImageManager from '../../components/admin/AdminImageManager';
-import { AdminFilterMenu, AdminListToolbar, AdminModuleSurface, AdminPageHeader, AdminReorderHandle, AdminReorderToolbar } from '../../components/admin/AdminPrimitives';
+import { AdminBadge, AdminFilterMenu, AdminListToolbar, AdminModuleSurface, AdminPageHeader, AdminReorderHandle, AdminReorderToolbar } from '../../components/admin/AdminPrimitives';
 import FormSection from '../../components/admin/FormSection';
 import ModalFooter from '../../components/admin/ModalFooter';
 import { Modal } from '../../components/common/Modal';
@@ -283,9 +283,8 @@ export default function AdminGalleryPage() {
                     />
                   ) : (
                     <>
-                      <span className="admin-visibility-indicator" title={image.active ? 'Visible en el sitio' : 'Oculta'} aria-label={image.active ? 'Visible en el sitio' : 'Oculta'}>
-                        {image.active ? <Eye size={15} /> : <EyeOff size={15} />}
-                      </span>
+                      {/* State is text, not an eye icon: Eye/EyeOff only ever mean the Mostrar/Ocultar action. */}
+                      <AdminBadge value={image.active} label={image.active ? 'Visible' : 'Oculta'} />
                       <div className="admin-row-actions">
                         <button className="admin-icon-action" type="button" disabled={loading} title="Editar imagen" aria-label={`Editar imagen ${image.alt || image.category}`} onClick={() => openEditor(image)}><Pencil size={17} /></button>
                       </div>

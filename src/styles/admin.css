@@ -661,14 +661,6 @@ tr.admin-sortable-row--dragging {
   background: var(--admin-selected);
 }
 
-/* Non-interactive visibility indicator (e.g. gallery cards): shows state, never toggles it — toggling lives in the edit form. */
-.admin-visibility-indicator {
-  display: inline-grid;
-  place-items: center;
-  padding: 0.35rem;
-  color: var(--admin-muted);
-}
-
 .admin-cell-with-icon {
   display: flex;
   align-items: flex-start;
@@ -955,23 +947,17 @@ tr.admin-sortable-row--dragging {
   transform: none;
 }
 
-/* Icon-only reorder + filter triggers (see AdminReorderToolbar / AdminFilterMenu `iconOnly`). */
-.admin-btn--icon-only {
-  flex: 0 0 auto;
-  width: var(--admin-control-height);
-  min-width: var(--admin-control-height);
-  padding: 0;
-}
-
-.admin-filter-trigger--icon-only {
+/* Filter trigger: a funnel icon with no visible button border (the icon-btn base is transparent); the active-filter count is a badge on the corner. */
+.admin-filter-trigger {
   position: relative;
 }
 
-.admin-filter-trigger--icon-only .admin-badge {
+.admin-filter-trigger .admin-badge {
   position: absolute;
-  top: -0.4rem;
-  right: -0.4rem;
+  top: -0.15rem;
+  right: -0.15rem;
   min-width: 1.15rem;
+  justify-content: center;
   padding: 0.05rem 0.3rem;
   font-size: 0.66rem;
   line-height: 1.2;
@@ -1245,11 +1231,6 @@ tr.admin-sortable-row--dragging {
 .admin-filter-menu {
   position: relative;
   flex: 0 0 auto;
-}
-
-.admin-filter-trigger .admin-badge {
-  min-width: 1.35rem;
-  justify-content: center;
 }
 
 .admin-filter-panel {
@@ -3265,25 +3246,12 @@ tr.admin-sortable-row--dragging {
     flex-basis: 100%;
   }
 
-  .admin-filter-menu,
-  .admin-filter-trigger {
-    width: 100%;
-  }
-
   .admin-toolbar__actions {
     width: 100%;
   }
 
   .admin-toolbar__actions .admin-btn {
     flex: 1 1 9rem;
-  }
-
-  /* Icon-only controls keep their square hit target instead of stretching full-width. */
-  .admin-filter-menu:has(.admin-filter-trigger--icon-only),
-  .admin-filter-trigger--icon-only,
-  .admin-toolbar__actions .admin-btn--icon-only {
-    flex: 0 0 auto;
-    width: var(--admin-control-height);
   }
 
   .admin-filter-backdrop {

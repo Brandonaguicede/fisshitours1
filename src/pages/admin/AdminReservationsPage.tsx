@@ -735,7 +735,6 @@ export default function AdminReservationsPage() {
           <h2 id="cancel-booking-title" className="admin-card__title"><Trash2 size={18} /> Cancelar reserva</h2>
           <p className="admin-muted mt-2">¿Cancelar esta reserva? Esta acción cambiará el estado de la reserva y puede afectar la disponibilidad.</p>
           <div className="admin-actions mt-5">
-            <button className="admin-btn admin-btn--secondary" type="button" disabled={busyId === editingReservation?.id} onClick={() => setCancelConfirmOpen(false)}>Volver</button>
             <button
               className="admin-btn admin-btn--danger"
               type="button"
@@ -750,6 +749,7 @@ export default function AdminReservationsPage() {
             >
               {busyId === editingReservation?.id ? <Loader2 className="animate-spin" size={15} /> : <Trash2 size={15} />} Sí, cancelar reserva
             </button>
+            <button className="admin-btn admin-btn--secondary" type="button" disabled={busyId === editingReservation?.id} onClick={() => setCancelConfirmOpen(false)}>Volver</button>
           </div>
         </div>
       </Modal>
