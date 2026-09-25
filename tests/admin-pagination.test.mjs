@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import ExcelJS from 'exceljs';
 import fs from 'node:fs/promises';
 import test from 'node:test';
 import { chromium, expect } from '@playwright/test';
@@ -102,10 +103,11 @@ test('reservations paginate on the server, preserve filters, export all matches 
     await expect(nav).toContainText('Mostrando 1–50 de 76 reservas');
     await nav.getByLabel('Registros por página').selectOption('10');
     const downloadPromise = page.waitForEvent('download');
-    await page.getByRole('button', { name: 'Exportar', exact: true }).click();
+    await page.getByRole('button', { name: 'Descargar Excel', exact: true }).click();
     const download = await downloadPromise;
-    const csv = await fs.readFile(await download.path(), 'utf8');
-    assert.equal(csv.trim().split('\r\n').length, 77);
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(await fs.readFile(await download.path()));
+    assert.equal(workbook.getWorksheet('Reservas').rowCount, 77, 'header + all 76 matches, not only the visible page');
     await page.getByRole('button', { name: /^Filtros/ }).click();
     await page.getByLabel('Estado de reserva', { exact: true }).selectOption('pending_payment');
     await page.getByRole('button', { name: 'Listo', exact: true }).click();

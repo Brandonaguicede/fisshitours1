@@ -1527,6 +1527,73 @@ tr.admin-sortable-row--dragging {
 .admin-reservation-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
 .admin-reservation-cards { display: none; }
 
+/*
+ * "Crear reserva manual": 12-column grid so every row shares one left/right edge and one gap. Controls keep the shared
+ * --admin-control-height; the "Máximo X" hint lives in the label row, so it never changes a field's height and the four
+ * inputs of the date/time/people/departure row stay on one baseline.
+ */
+.admin-reservation-modal { max-width: 56rem; }
+.admin-reservation-form {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  align-items: start;
+  gap: 1rem;
+}
+.admin-reservation-form .admin-input:not(textarea),
+.admin-reservation-form .admin-select { height: var(--admin-control-height); }
+.admin-reservation-form .admin-textarea-list { min-height: 5.5rem; }
+.admin-reservation-form__full { grid-column: 1 / -1; }
+.admin-reservation-form__half { grid-column: span 6; }
+.admin-reservation-form__quarter { grid-column: span 3; }
+.admin-field__label-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  min-width: 0;
+}
+.admin-field__label-row .admin-field-help {
+  flex: 0 0 auto;
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+.admin-reservation-total {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--admin-line);
+  border-radius: var(--admin-radius-sm);
+  background: var(--admin-primary-soft);
+}
+.admin-reservation-total__copy { display: grid; gap: 0.15rem; min-width: 0; }
+.admin-reservation-total__label {
+  color: var(--admin-ink);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.admin-reservation-total small { color: var(--admin-muted); font-size: 0.76rem; font-weight: 600; line-height: 1.35; }
+.admin-reservation-total__amount {
+  flex: 0 0 auto;
+  color: var(--admin-ink);
+  font-size: 1.6rem;
+  font-weight: 800;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+@media (max-width: 860px) {
+  .admin-reservation-form__quarter { grid-column: span 6; }
+}
+@media (max-width: 560px) {
+  .admin-reservation-form { gap: 0.85rem; }
+  .admin-reservation-form__half,
+  .admin-reservation-form__quarter { grid-column: 1 / -1; }
+  .admin-reservation-total { align-items: flex-start; flex-direction: column; gap: 0.5rem; }
+}
+
 @media (max-width: 767px) {
   .admin-reservations-table { display: none; }
   .admin-reservation-cards { display: grid; gap: 1.25rem; }

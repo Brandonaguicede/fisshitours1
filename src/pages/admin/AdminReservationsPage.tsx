@@ -1,5 +1,5 @@
 import { formatTime, money } from '../../utils/format';
-import { Calendar, Check, CheckCircle2, Clock, Download, Loader2, Pencil, Plus, RefreshCw, Trash2, X, XCircle } from 'lucide-react';
+import { Calendar, Check, CheckCircle2, Clock, FileSpreadsheet, FileText, Loader2, Pencil, Plus, RefreshCw, Trash2, X, XCircle } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
@@ -14,39 +14,21 @@ import { getAdminReservationsPage } from '../../services/adminListService';
 import { getActiveBoatTours, getActiveTimeSlots } from '../../services/boatTourService';
 import { adminCreateBooking, confirmBooking, getActiveDepartureLocations, retryConfirmationEmail, updateBooking, type DepartureLocation } from '../../services/bookingService';
 import type { BoatTour, TourTimeSlot } from '../../types/boatTour';
-
-interface AdminReservation {
-  id: string;
-  boat_id: string;
-  tour_id: string;
-  tour_package_id: string;
-  time_slot_id: string;
-  special_requests: string | null;
-  booking_reference: string;
-  tour_date: string;
-  guests: number;
-  total_snapshot: number;
-  departure_location_name_snapshot: string | null;
-  departure_surcharge_snapshot: number | null;
-  payment_method_key: string;
-  payment_status: string;
-  booking_status: string;
-  created_at: string;
-  customers: {
-    full_name: string;
-    email: string | null;
-    whatsapp: string;
-  } | null;
-  boats: {
-    name: string;
-  } | null;
-  tours: {
-    title: string;
-  } | null;
-  time_slots: {
-    label: string;
-  } | null;
-}
+import { loadLogoDataUrl } from '../../utils/packagesPdf';
+import {
+  PAYMENT_STATUS_LABELS,
+  activeReservationFilterLabels,
+  buildReservationExportRows,
+  computeReservationStats,
+  createReservationsXlsx,
+  downloadBlob,
+  fetchAllReservations,
+  formatPaymentMethodLabel,
+  formatPaymentStatusLabel,
+  loadAllBookingStatuses,
+  reservationsFileName,
+  type AdminReservation,
+} from '../../utils/reservationsExport';
 
 const bookingStatusOptions = [
   { value: 'all', label: 'Todos los estados' },
@@ -59,32 +41,8 @@ const bookingStatusOptions = [
 
 const paymentStatusOptions = [
   { value: 'all', label: 'Todos los pagos' },
-  { value: 'paid', label: 'Pagado' },
-  { value: 'pending', label: 'Pendiente' },
-  { value: 'processing', label: 'Procesando' },
-  { value: 'not_required_yet', label: 'Pago en tour' },
-  { value: 'failed', label: 'Fallido' },
-  { value: 'refunded', label: 'Reembolsado' },
+  ...Object.entries(PAYMENT_STATUS_LABELS).map(([value, label]) => ({ value, label })),
 ];
-
-// Display-only formatters for the "Pago" column and the mobile card. They
-// never touch the stored payment_method_key / payment_status, the export, or
-// anything sent to PayPal — they only turn the values into short labels.
-const paymentStatusLabels: Record<string, string> = Object.fromEntries(
-  paymentStatusOptions.filter((option) => option.value !== 'all').map((option) => [option.value, option.label]),
-);
-
-function formatPaymentStatusLabel(status: string) {
-  return paymentStatusLabels[status] ?? status.split('_').join(' ');
-}
-
-function formatPaymentMethodLabel(key: string, name: string) {
-  const source = `${key} ${name}`.toLowerCase();
-  if (source.includes('paypal')) return 'PayPal';
-  if (source.includes('whatsapp')) return 'WhatsApp';
-  if (/pay[\s_-]*on[\s_-]*(the[\s_-]*)?day|pago[\s_-]*(el[\s_-]*)?d[ií]a/.test(source)) return 'Día del tour';
-  return name;
-}
 
 function needsEditorNotice(message: string) {
   return /permission denied|denied for table|must be logged in|jwt|admin or editor/i.test(message);
@@ -128,7 +86,7 @@ export default function AdminReservationsPage() {
   const [bookingStatus, setBookingStatus] = useState('all');
   const [paymentStatus, setPaymentStatus] = useState('all');
   const [date, setDate] = useState('');
-  const [exporting, setExporting] = useState(false);
+  const [exporting, setExporting] = useState<'' | 'xlsx' | 'pdf'>('');
   const [catalogLoading, setCatalogLoading] = useState(true);
   const [busyId, setBusyId] = useState('');
   const [manualOpen, setManualOpen] = useState(false);
@@ -159,19 +117,17 @@ export default function AdminReservationsPage() {
   const confirmationSentByBooking = Object.fromEntries(((notificationsQuery.data ?? []) as Array<{ booking_id: string; sent_at: string | null }>).map((row) => [row.booking_id, Boolean(row.sent_at)]));
   const statsQuery = useQuery({
     queryKey: ['admin', 'reservationStats'],
-    queryFn: async () => {
-      const rows = (await readWithAdminSession(() => db.from('bookings').select('booking_status')) ?? []) as Array<{ booking_status: string }>;
-      return {
-        total: rows.length,
-        pending: rows.filter((row) => ['pending_confirmation', 'pending_payment'].includes(row.booking_status)).length,
-        confirmed: rows.filter((row) => row.booking_status === 'confirmed').length,
-        cancelled: rows.filter((row) => row.booking_status === 'cancelled').length,
-      };
-    },
+    // Cards count every booking in the system (they do not follow the list's search/filters), once each by its own
+    // booking_status. See computeReservationStats for exactly what each card includes.
+    queryFn: async () => computeReservationStats(await loadAllBookingStatuses(
+      async (from, to) => (await readWithAdminSession(() => db.from('bookings').select('booking_status').order('id').range(from, to))) as Array<{ booking_status: string }> | null,
+    )),
     refetchInterval: 30_000,
     retry: false,
   });
   const stats = statsQuery.data;
+  // A failed/unavailable count shows "—", never a made-up 0.
+  const statValue = (value: number | undefined) => (statsQuery.isLoading ? '…' : value === undefined ? '—' : String(value));
 
   function resetFilters() {
     setBookingStatus('all');
@@ -389,50 +345,36 @@ export default function AdminReservationsPage() {
     }
   }
 
-  async function exportCsv() {
-    setExporting(true);
+  // Exports exactly what the admin is consulting: current search + filters, every page (not just the visible one).
+  async function collectExportRows() {
+    const all = await fetchAllReservations((page, size) => getAdminReservationsPage<AdminReservation>(filters, page, size));
+    return buildReservationExportRows(all, paymentMethodLabel);
+  }
+
+  async function exportXlsx() {
+    setExporting('xlsx');
     setError('');
     try {
-      const exportRows: AdminReservation[] = [];
-      for (let page = 1; ; page += 1) {
-        const result = await getAdminReservationsPage<AdminReservation>(filters, page, 50);
-        exportRows.push(...result.rows);
-        if (exportRows.length >= result.total || result.rows.length === 0) break;
-      }
-      const rows = exportRows.map((reservation) => ({
-        'Referencia de reserva': reservation.booking_reference,
-        'Nombre del cliente': reservation.customers?.full_name ?? '',
-        'Correo electrónico': reservation.customers?.email ?? '',
-        WhatsApp: reservation.customers?.whatsapp ?? '',
-        'Fecha del tour': reservation.tour_date,
-        Horario: reservation.time_slots?.label ?? '',
-        Bote: reservation.boats?.name ?? '',
-        Tour: reservation.tours?.title ?? '',
-        Personas: String(reservation.guests),
-        'Lugar de salida': reservation.departure_location_name_snapshot ?? '',
-        'Cargo de salida (USD)': Number(reservation.departure_surcharge_snapshot ?? 0).toFixed(2),
-        'Total (USD)': Number(reservation.total_snapshot ?? 0).toFixed(2),
-        'Método de pago': paymentMethodLabel(reservation.payment_method_key),
-        'Estado del pago': reservation.payment_status,
-        'Estado de reserva': reservation.booking_status,
-        'Creada el': new Date(reservation.created_at).toLocaleString('es-CR'),
-      }));
-      const headers = Object.keys(rows[0] ?? { 'Referencia de reserva': '', 'Nombre del cliente': '', 'Correo electrónico': '', WhatsApp: '', 'Fecha del tour': '', Horario: '', Bote: '', Tour: '', Personas: '', 'Lugar de salida': '', 'Cargo de salida (USD)': '', 'Total (USD)': '', 'Método de pago': '', 'Estado del pago': '', 'Estado de reserva': '', 'Creada el': '' });
-      const csv = [
-        headers.join(','),
-        ...rows.map((row) => headers.map((header) => csvCell((row as Record<string, string>)[header])).join(',')),
-      ].join('\r\n');
-      const blob = new Blob([`\ufeff${csv}`], { type: 'text/csv;charset=utf-8' });
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement('a');
-      anchor.href = url;
-      anchor.download = `reservas-${new Date().toISOString().slice(0, 10)}.csv`;
-      anchor.click();
-      URL.revokeObjectURL(url);
+      const workbook = await createReservationsXlsx({ rows: await collectExportRows(), filters: activeReservationFilterLabels(filters) });
+      downloadBlob(workbook, reservationsFileName('xlsx'));
     } catch (exportError) {
-      setError(exportError instanceof Error ? exportError.message : 'No se pudieron exportar las reservas.');
+      setError(exportError instanceof Error ? `No se pudo generar el Excel: ${exportError.message}` : 'No se pudo generar el Excel.');
     } finally {
-      setExporting(false);
+      setExporting('');
+    }
+  }
+
+  async function exportPdf() {
+    setExporting('pdf');
+    setError('');
+    try {
+      const [rows, logoDataUrl, { createReservationsPdf }] = await Promise.all([collectExportRows(), loadLogoDataUrl(), import('../../utils/reservationsPdf')]);
+      const doc = await createReservationsPdf({ rows, filters: activeReservationFilterLabels(filters), logoDataUrl });
+      doc.save(reservationsFileName('pdf'));
+    } catch (exportError) {
+      setError(exportError instanceof Error ? `No se pudo generar el PDF: ${exportError.message}` : 'No se pudo generar el PDF.');
+    } finally {
+      setExporting('');
     }
   }
 
@@ -516,10 +458,10 @@ export default function AdminReservationsPage() {
   return (
     <div className="admin-page">
       <section className="admin-stat-grid">
-        <AdminStatCard label="Reservas" value={statsQuery.isLoading ? '…' : String(stats?.total ?? 0)} icon={Calendar} />
-        <AdminStatCard label="Pendientes" value={statsQuery.isLoading ? '…' : String(stats?.pending ?? 0)} icon={Clock} tone="warning" />
-        <AdminStatCard label="Confirmadas" value={statsQuery.isLoading ? '…' : String(stats?.confirmed ?? 0)} icon={CheckCircle2} tone="success" />
-        <AdminStatCard label="Canceladas" value={statsQuery.isLoading ? '…' : String(stats?.cancelled ?? 0)} icon={XCircle} tone="danger" />
+        <AdminStatCard label="Reservas" value={statValue(stats?.total)} icon={Calendar} />
+        <AdminStatCard label="Pendientes" value={statValue(stats?.pending)} icon={Clock} tone="warning" />
+        <AdminStatCard label="Confirmadas" value={statValue(stats?.confirmed)} icon={CheckCircle2} tone="success" />
+        <AdminStatCard label="Canceladas" value={statValue(stats?.cancelled)} icon={XCircle} tone="danger" />
       </section>
       <AdminModuleSurface className="admin-reservations-surface">
       <AdminListToolbar
@@ -548,7 +490,16 @@ export default function AdminReservationsPage() {
           </AdminFilterMenu>
         }
         primaryAction={<button className="admin-btn" type="button" onClick={() => setManualOpen(true)}><Plus size={16} /> Crear reserva</button>}
-        secondaryActions={<button className="admin-btn admin-btn--secondary" type="button" disabled={exporting} onClick={() => void exportCsv()}><Download size={16} /> {exporting ? 'Exportando...' : 'Exportar'}</button>}
+        secondaryActions={
+          <>
+            <button className="admin-btn admin-btn--secondary" type="button" disabled={Boolean(exporting)} onClick={() => void exportXlsx()} title="Descarga en Excel (.xlsx) las reservas que ves con la búsqueda y los filtros actuales">
+              {exporting === 'xlsx' ? <Loader2 className="animate-spin" size={16} /> : <FileSpreadsheet size={16} />} {exporting === 'xlsx' ? 'Generando Excel...' : 'Descargar Excel'}
+            </button>
+            <button className="admin-btn admin-btn--secondary" type="button" disabled={Boolean(exporting)} onClick={() => void exportPdf()} title="Descarga en PDF las reservas que ves con la búsqueda y los filtros actuales">
+              {exporting === 'pdf' ? <Loader2 className="animate-spin" size={16} /> : <FileText size={16} />} {exporting === 'pdf' ? 'Generando PDF...' : 'Descargar PDF'}
+            </button>
+          </>
+        }
       />
 
       {error || listError ? (
@@ -643,62 +594,66 @@ export default function AdminReservationsPage() {
           <div className="admin-modal-body">
             {catalogLoading ? <div className="admin-alert">Cargando opciones...</div> : null}
             <div className="admin-form-section">
-              <div className="admin-form-columns">
-                <label className="admin-field">
+              <div className="admin-reservation-form">
+                <label className="admin-field admin-reservation-form__half">
                   <span className="admin-field__label">Nombre del cliente</span>
                   <input className="admin-input" required value={manualForm.fullName} onChange={(event) => updateManualForm('fullName', event.target.value)} />
                 </label>
-                <label className="admin-field">
+                <label className="admin-field admin-reservation-form__half">
                   <span className="admin-field__label">Email</span>
                   <input className="admin-input" type="email" value={manualForm.email} onChange={(event) => updateManualForm('email', event.target.value)} />
                 </label>
-                <label className="admin-field">
+                <label className="admin-field admin-reservation-form__half">
                   <span className="admin-field__label">WhatsApp</span>
                   <input className="admin-input" required value={manualForm.whatsapp} onChange={(event) => updateManualForm('whatsapp', event.target.value)} />
                 </label>
-                <label className="admin-field">
+                <label className="admin-field admin-reservation-form__half">
                   <span className="admin-field__label">Pais</span>
                   <input className="admin-input" value={manualForm.country} onChange={(event) => updateManualForm('country', event.target.value)} />
                 </label>
-                <label className="admin-field admin-field--wide">
+                <label className="admin-field admin-reservation-form__full">
                   <span className="admin-field__label">Tour / paquete</span>
                   <select className="admin-select" required value={manualForm.tourPackageId} onChange={(event) => updateManualForm('tourPackageId', event.target.value)}>
                     <option value="">Selecciona un tour</option>
                     {tours.map((tour) => <option key={tour.id} value={tour.id}>{tour.tourTitle ?? tour.name} - {tour.name} ({money(tour.basePrice)})</option>)}
                   </select>
                 </label>
-                <label className="admin-field">
+                <label className="admin-field admin-reservation-form__quarter">
                   <span className="admin-field__label">Fecha</span>
                   <input className="admin-input" required type="date" value={manualForm.tourDate} onChange={(event) => updateManualForm('tourDate', event.target.value)} />
                 </label>
-                <label className="admin-field">
+                <label className="admin-field admin-reservation-form__quarter">
                   <span className="admin-field__label">Hora</span>
                   <select className="admin-select" required value={manualForm.timeSlotId} onChange={(event) => updateManualForm('timeSlotId', event.target.value)}>
                     <option value="">Selecciona horario</option>
                     {manualTimeSlots.map((slot) => <option key={slot.id} value={slot.id}>{formatTime(slot.time)}</option>)}
                   </select>
                 </label>
-                <label className="admin-field">
-                  <span className="admin-field__label">Personas</span>
-                  <input className="admin-input" required type="number" min={1} max={manualMaxGuests} value={manualForm.guests} onChange={(event) => updateManualForm('guests', Number(event.target.value))} />
-                  {selectedTour ? <span className="admin-field-help">Máximo {manualMaxGuests} (mínimo entre capacidad del paquete y del bote).</span> : null}
-                </label>
-                <label className="admin-field">
+                <div className="admin-field admin-reservation-form__quarter">
+                  <div className="admin-field__label-row">
+                    <label className="admin-field__label" htmlFor="manual-booking-guests">Personas</label>
+                    {selectedTour ? <span className="admin-field-help" id="manual-booking-guests-help" title="Mínimo entre la capacidad del paquete y la del bote">Máximo {manualMaxGuests}</span> : null}
+                  </div>
+                  <input id="manual-booking-guests" className="admin-input" required type="number" min={1} max={manualMaxGuests} aria-describedby={selectedTour ? 'manual-booking-guests-help' : undefined} value={manualForm.guests} onChange={(event) => updateManualForm('guests', Number(event.target.value))} />
+                </div>
+                <label className="admin-field admin-reservation-form__quarter">
                   <span className="admin-field__label">Lugar de salida</span>
                   <select className="admin-select" required value={manualForm.departureLocationId} onChange={(event) => updateManualForm('departureLocationId', event.target.value)}>
                     <option value="">Selecciona salida</option>
                     {departureLocations.map((location) => <option key={location.id} value={location.id}>{location.name} {Number(location.surcharge_amount) > 0 ? `+ USD ${location.surcharge_amount}` : '- sin costo'}</option>)}
                   </select>
                 </label>
-                <label className="admin-field admin-field--wide">
+                <label className="admin-field admin-reservation-form__full">
                   <span className="admin-field__label">Notas</span>
                   <textarea className="admin-input admin-textarea-list" value={manualForm.specialRequests} onChange={(event) => updateManualForm('specialRequests', event.target.value)} />
                 </label>
               </div>
               <div className="admin-reservation-total">
-                <span>Total estimado</span>
-                <strong>{money(manualTotalPreview)}</strong>
-                <small>El total definitivo lo recalcula Supabase al guardar.</small>
+                <div className="admin-reservation-total__copy">
+                  <span className="admin-reservation-total__label">Total estimado</span>
+                  <small>El total definitivo lo recalcula Supabase al guardar.</small>
+                </div>
+                <strong className="admin-reservation-total__amount" aria-live="polite">{money(manualTotalPreview)}</strong>
               </div>
             </div>
           </div>
@@ -800,10 +755,4 @@ export default function AdminReservationsPage() {
       </Modal>
     </div>
   );
-}
-
-function csvCell(value: string) {
-  const text = String(value ?? '');
-  const safeText = /^[=+\-@]/.test(text) ? `'${text}` : text;
-  return `"${safeText.replace(/"/g, '""')}"`;
 }

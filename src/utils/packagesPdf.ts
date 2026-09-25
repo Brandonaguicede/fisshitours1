@@ -24,14 +24,14 @@ export interface PackagePdfInput {
 }
 
 // Same palette as the admin: --admin-ink / --admin-primary-dark / --admin-primary / --admin-primary-soft.
-const INK: [number, number, number] = [11, 40, 66];
-const PRIMARY: [number, number, number] = [43, 95, 130];
-const SOFT: [number, number, number] = [242, 250, 253];
-const LINE: [number, number, number] = [208, 226, 236];
-const MUTED: [number, number, number] = [96, 122, 143];
-const GREEN: [number, number, number] = [22, 128, 76];
-const GRAY: [number, number, number] = [130, 143, 156];
-const BRAND = 'Papagayo Fishing Tour';
+export const INK: [number, number, number] = [11, 40, 66];
+export const PRIMARY: [number, number, number] = [43, 95, 130];
+export const SOFT: [number, number, number] = [242, 250, 253];
+export const LINE: [number, number, number] = [208, 226, 236];
+export const MUTED: [number, number, number] = [96, 122, 143];
+export const GREEN: [number, number, number] = [22, 128, 76];
+export const GRAY: [number, number, number] = [130, 143, 156];
+export const BRAND = 'Papagayo Fishing Tour';
 
 export async function createPackagesPdf(input: PackagePdfInput) {
   const [{ jsPDF }, { default: autoTable }] = await Promise.all([import('jspdf'), import('jspdf-autotable')]);
