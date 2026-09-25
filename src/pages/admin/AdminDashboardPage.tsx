@@ -5,53 +5,45 @@ import { Link } from 'react-router-dom';
 
 import { AdminBadge, AdminModuleSurface, AdminStatCard, AdminTable } from '../../components/admin/AdminPrimitives';
 import { supabase } from '../../lib/supabase';
-import { readWithAdminSession } from '../../services/adminAuthService';
+import { fetchDashboardKpis, fetchPendingReviewsCount, fetchRecentReservations } from '../../services/adminDashboardService';
+import type { DashboardKpis } from '../../utils/dashboardMetrics';
 import { money } from '../../utils/format';
-
-type DashboardReservation = {
-  id: string;
-  booking_reference: string;
-  tour_date: string;
-  payment_status: string;
-  payment_method_key: string;
-  booking_status: string;
-  total_snapshot: number;
-  customers: { full_name: string; whatsapp: string } | null;
-  tours: { title: string } | null;
-};
 
 export default function AdminDashboardPage() {
   const queryClient = useQueryClient();
   const pendingReviewsQuery = useQuery({
     queryKey: ['admin', 'pendingReviews'],
-    queryFn: async () => {
-      const { count, error } = await supabase.from('reviews').select('id', { count: 'exact', head: true }).eq('status', 'pending');
-      if (error) throw new Error(error.message);
-      return count ?? 0;
-    },
+    queryFn: fetchPendingReviewsCount,
+    refetchInterval: 30_000,
+    retry: false,
   });
-  const pendingReviews = pendingReviewsQuery.data ?? 0;
+  const kpisQuery = useQuery({
+    queryKey: ['admin', 'dashboardKpis'],
+    queryFn: fetchDashboardKpis,
+    refetchInterval: 30_000,
+    retry: false,
+  });
   const reservationsQuery = useQuery({
     queryKey: ['admin', 'dashboardReservations'],
-    queryFn: async () => {
-      const data = await readWithAdminSession(() => supabase
-        .from('bookings')
-        .select('id, booking_reference, tour_date, payment_status, payment_method_key, booking_status, total_snapshot, customers(full_name, whatsapp), tours(title)')
-        .order('created_at', { ascending: false }));
-      return (data ?? []) as DashboardReservation[];
-    },
+    queryFn: () => fetchRecentReservations(8),
     refetchInterval: 30_000,
     retry: false,
   });
   const reservations = reservationsQuery.data ?? [];
-  const paidReservations = reservations.filter((item) => item.payment_status === 'paid');
-  const estimatedRevenue = 0;
+  const kpis = kpisQuery.data;
+  // A card that is loading shows "…" and one that failed shows "—": never a made-up 0.
+  const kpiValue = (pick: (value: DashboardKpis) => string) => (kpisQuery.isLoading ? '…' : kpis ? pick(kpis) : '—');
+  const pendingReviewsValue = pendingReviewsQuery.isLoading ? '…' : pendingReviewsQuery.data === undefined ? '—' : String(pendingReviewsQuery.data);
+  const hasLoadError = kpisQuery.isError || reservationsQuery.isError || pendingReviewsQuery.isError;
+  const isRefetching = kpisQuery.isFetching || reservationsQuery.isFetching || pendingReviewsQuery.isFetching;
+  const loadError = kpisQuery.error ?? reservationsQuery.error ?? pendingReviewsQuery.error;
 
   useEffect(() => {
     const channel = supabase
       .channel('admin-dashboard-bookings')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings' }, () => {
         void queryClient.invalidateQueries({ queryKey: ['admin', 'dashboardReservations'] });
+        void queryClient.invalidateQueries({ queryKey: ['admin', 'dashboardKpis'] });
       })
       .subscribe();
     return () => { void supabase.removeChannel(channel); };
@@ -59,27 +51,27 @@ export default function AdminDashboardPage() {
 
   return (
     <div className="admin-page">
-      {reservationsQuery.isError ? (
+      {hasLoadError ? (
         <div className="admin-alert admin-alert--danger" role="alert">
-          <p>No se pudieron cargar las reservas. {reservationsQuery.error instanceof Error ? reservationsQuery.error.message : 'Intenta nuevamente.'}</p>
-          <button className="admin-btn admin-btn--secondary" type="button" disabled={reservationsQuery.isFetching} onClick={() => void reservationsQuery.refetch()}>Reintentar</button>
+          <p>No se pudieron cargar los datos del Dashboard. {loadError instanceof Error ? loadError.message : 'Intenta nuevamente.'}</p>
+          <button className="admin-btn admin-btn--secondary" type="button" disabled={isRefetching} onClick={() => { void kpisQuery.refetch(); void reservationsQuery.refetch(); void pendingReviewsQuery.refetch(); }}>Reintentar</button>
           <Link className="admin-btn admin-btn--secondary" to="/admin/login">Iniciar sesion</Link>
         </div>
       ) : null}
       <section className="admin-stat-grid">
-        <AdminStatCard label="Reservas totales" value={reservationsQuery.isLoading ? '…' : String(reservations.length)} icon={CalendarDays} />
-        <AdminStatCard label="Pagos pendientes" value={reservationsQuery.isLoading ? '…' : String(reservations.filter((item) => item.payment_status !== 'paid').length)} icon={CreditCard} tone="warning" />
-        <AdminStatCard label="Ingresos" value={money(estimatedRevenue)} icon={DollarSign} tone="success" />
-        <AdminStatCard label="Pagos confirmados" value={reservationsQuery.isLoading ? '…' : String(paidReservations.length)} icon={Star} />
-        <AdminStatCard label="Reservas por confirmar" value={reservationsQuery.isLoading ? '…' : String(reservations.filter((item) => item.payment_method_key !== 'paypal' && ['pending_confirmation', 'pending_payment'].includes(item.booking_status)).length)} icon={Ship} />
-        <AdminStatCard label="Comentarios por revisar" value={String(pendingReviews)} icon={MessageSquare} />
+        <AdminStatCard label="Reservas totales" value={kpiValue((value) => String(value.totalReservations))} icon={CalendarDays} />
+        <AdminStatCard label="Pagos pendientes" value={kpiValue((value) => String(value.pendingPayments))} icon={CreditCard} tone="warning" />
+        <AdminStatCard label="Ingresos" value={kpiValue((value) => money(value.revenue))} icon={DollarSign} tone="success" />
+        <AdminStatCard label="Pagos confirmados" value={kpiValue((value) => String(value.confirmedPayments))} icon={Star} />
+        <AdminStatCard label="Reservas por confirmar" value={kpiValue((value) => String(value.reservationsToConfirm))} icon={Ship} />
+        <AdminStatCard label="Comentarios por revisar" value={pendingReviewsValue} icon={MessageSquare} />
       </section>
       <AdminModuleSurface className="admin-dashboard-reservations">
         <div className="admin-module-surface__header">
           <div><h2>Reservas recientes</h2><p>Ultimas solicitudes listas para validar disponibilidad y pago.</p></div>
         </div>
         <AdminTable embedded headers={['Referencia', 'Cliente', 'Fecha', 'Tour', 'Pago', 'Reserva']}>
-            {reservations.slice(0, 8).map((reservation) => (
+            {reservations.map((reservation) => (
               <tr key={reservation.id}>
                 <td>{reservation.booking_reference}</td>
                 <td>{reservation.customers?.full_name ?? '-'}<div className="admin-muted">{reservation.customers?.whatsapp ?? '-'}</div></td>
