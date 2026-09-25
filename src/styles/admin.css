@@ -51,6 +51,32 @@ body:has(.admin-login) {
   --admin-shadow: 0 1px 3px rgba(11, 40, 66, 0.08), 0 12px 28px -22px rgba(11, 40, 66, 0.42);
   --admin-shadow-elevated: 0 18px 42px -22px rgba(11, 40, 66, 0.45);
   --admin-control-height: 2.5rem;
+  --admin-control-height-sm: 2rem;
+  --admin-hit-target: 2.5rem;
+  --admin-hit-target-sm: 2rem;
+  /* Shared keyboard-focus ring. --admin-focus (softer) still tints field glows;
+     the ring itself needs >=3:1 against its surface, so it has its own token. */
+  --admin-focus-ring: #1f6f9a;
+  --admin-focus-outline: 2px solid var(--admin-focus-ring);
+  --admin-focus-offset: 2px;
+  /* Solid fills for success/danger buttons: white text stays >=4.5:1 in both themes. */
+  --admin-success-solid: #047857;
+  --admin-success-solid-hover: #065f46;
+  --admin-danger-solid: #dc2626;
+  --admin-danger-solid-hover: #b91c1c;
+  /* Select caret is a data-URI (can't read CSS vars), so each theme carries its own. */
+  --admin-select-caret: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23357294' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+}
+
+/* Touch / phone: controls and icon-only hit targets grow toward the 44px guideline. */
+@media (pointer: coarse), (max-width: 640px) {
+  body:has(.admin-shell),
+  body:has(.admin-login) {
+    --admin-control-height: 2.75rem;
+    --admin-hit-target: 2.75rem;
+    --admin-hit-target-sm: 2.5rem;
+    --admin-control-height-sm: 2.25rem;
+  }
 }
 
 /*
@@ -99,6 +125,10 @@ html[data-theme='dark'] body:has(.admin-login) {
   --admin-on-primary: #ffffff;
   --admin-shadow: 0 1px 3px rgba(0, 0, 0, 0.4), 0 16px 32px -20px rgba(0, 0, 0, 0.65);
   --admin-shadow-elevated: 0 24px 48px -20px rgba(0, 0, 0, 0.75);
+  --admin-focus-ring: #5cc3e4;
+  --admin-danger-solid: #b91c1c;
+  --admin-danger-solid-hover: #991b1b;
+  --admin-select-caret: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%237fa0b8' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
 }
 
 .admin-shell {
@@ -385,34 +415,92 @@ body:has(.admin-shell) {
   backdrop-filter: blur(12px);
 }
 
+/*
+ * Icon-only button base. Flex (not grid `place-items`) so the glyph is centred
+ * even when the content box is smaller than the glyph, and the svg is forced to
+ * `display: block` so no inline baseline gap shifts it off-centre. Every
+ * icon-only control must carry `aria-label` + `title`; size comes from the
+ * --admin-hit-target tokens (grows on touch), with `--sm` for dense rows.
+ */
 .admin-topbar__menu,
 .admin-icon-btn,
 .admin-account__trigger {
-  display: grid;
-  width: 2.35rem;
-  height: 2.35rem;
-  place-items: center;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: var(--admin-hit-target);
+  height: var(--admin-hit-target);
+  min-width: var(--admin-hit-target);
+  padding: 0;
   border: 1px solid transparent;
   border-radius: var(--admin-radius-sm);
   background: transparent;
   color: var(--admin-muted);
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.16s ease, border-color 0.16s ease, color 0.16s ease;
+}
+
+.admin-topbar__menu svg,
+.admin-icon-btn svg,
+.admin-account__trigger svg {
+  display: block;
+  flex: 0 0 auto;
+}
+
+.admin-icon-btn--sm {
+  width: var(--admin-hit-target-sm);
+  height: var(--admin-hit-target-sm);
+  min-width: var(--admin-hit-target-sm);
+}
+
+/* Outlined variant for icon buttons that sit on a surface (filters, reorder). */
+.admin-icon-btn--bordered {
+  border-color: var(--admin-line);
+  background: var(--admin-surface);
+  color: var(--admin-ink);
 }
 
 .admin-topbar__menu:hover,
-.admin-icon-btn:hover,
+.admin-icon-btn:hover:not(:disabled),
 .admin-account__trigger:hover {
   background: var(--admin-primary-soft);
   color: var(--admin-ink);
 }
 
+.admin-icon-btn--bordered:hover:not(:disabled) {
+  border-color: var(--admin-primary);
+}
+
+.admin-icon-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* One focus-visible treatment for every interactive admin control. */
 .admin-topbar__menu:focus-visible,
 .admin-icon-btn:focus-visible,
 .admin-account__trigger:focus-visible,
 .admin-account__signout:focus-visible,
+.admin-icon-action:focus-visible,
+.admin-action-btn:focus-visible,
+.admin-btn:focus-visible,
+.admin-tab:focus-visible,
+.admin-segmented button:focus-visible,
+.admin-stepper__item button:focus-visible,
+.admin-location-chip button:focus-visible,
+.admin-table-wrap:focus-visible {
+  outline: var(--admin-focus-outline);
+  outline-offset: var(--admin-focus-offset);
+}
+
+/* The sidebar is navy in both themes, so its ring is a fixed light tone. */
 .admin-sidebar__toggle:focus-visible,
 .admin-sidebar__link:focus-visible {
-  outline: 2px solid var(--admin-focus);
-  outline-offset: 3px;
+  outline: 2px solid #b6e3f2;
+  outline-offset: 2px;
 }
 
 .admin-icon-action {
@@ -429,11 +517,6 @@ body:has(.admin-shell) {
 .admin-icon-action:hover {
   color: var(--admin-ink);
   background: var(--admin-primary-soft);
-}
-
-.admin-icon-action:focus-visible {
-  outline: 2px solid var(--admin-focus);
-  outline-offset: 2px;
 }
 
 .admin-icon-action--success {
@@ -466,11 +549,6 @@ body:has(.admin-shell) {
 
 .admin-action-btn:hover:not(:disabled) {
   background: var(--admin-primary-soft);
-}
-
-.admin-action-btn:focus-visible {
-  outline: 2px solid var(--admin-focus);
-  outline-offset: 2px;
 }
 
 .admin-action-btn:disabled {
@@ -537,13 +615,8 @@ body:has(.admin-shell) {
 
 .admin-reorder-handle__buttons {
   display: inline-flex;
-  flex-direction: column;
-  gap: 0.1rem;
-}
-
-.admin-reorder-handle__buttons .admin-icon-btn {
-  width: 1.5rem;
-  height: 1.1rem;
+  align-items: center;
+  gap: 0.25rem;
 }
 
 tr.admin-sortable-row {
@@ -601,19 +674,32 @@ tr.admin-sortable-row--dragging {
   position: relative;
 }
 
+/*
+ * Avatar centring: the trigger is a fixed square (hit target) with zero padding
+ * and a flex-centred, fixed-size avatar inside. Previously padding + border ate
+ * the content box (2.35rem - 0.3rem - 2px < the 2rem avatar), so the avatar
+ * overflowed its track and sat off-centre.
+ */
 .admin-account__trigger {
-  padding: 0.15rem;
   border-color: var(--admin-line);
   border-radius: 999px;
   background: var(--admin-surface);
 }
 
+.admin-account__trigger:hover {
+  border-color: var(--admin-primary);
+}
+
 .admin-account__avatar {
-  display: grid;
-  width: 2rem;
-  height: 2rem;
-  place-items: center;
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: calc(var(--admin-hit-target) - 0.5rem);
+  height: calc(var(--admin-hit-target) - 0.5rem);
   border-radius: 50%;
+  line-height: 1;
   background: var(--admin-primary);
   color: var(--admin-on-primary);
   font-size: 0.72rem;
@@ -726,19 +812,33 @@ tr.admin-sortable-row--dragging {
   gap: 0.5rem;
 }
 
+/*
+ * Button system. One structural rule + per-variant custom properties, so
+ * primary / secondary / ghost / danger / success only declare their colors
+ * (rest, hover) instead of re-stating hover/disabled/`.admin-shell button`
+ * overrides for each. The state rules below read the variables, so a new
+ * variant is just a new set of --btn-* values.
+ */
 .admin-btn {
+  --btn-bg: var(--admin-primary);
+  --btn-fg: var(--admin-on-primary);
+  --btn-border: color-mix(in srgb, var(--admin-primary) 18%, transparent);
+  --btn-bg-hover: var(--admin-primary-hover);
+  --btn-fg-hover: var(--admin-on-primary);
+  --btn-border-hover: var(--admin-primary-hover);
   appearance: none;
   -webkit-appearance: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 0.45rem;
+  box-sizing: border-box;
   min-height: var(--admin-control-height);
   padding: 0.55rem 0.85rem;
-  border: 1px solid color-mix(in srgb, var(--admin-primary) 18%, transparent);
+  border: 1px solid var(--btn-border);
   border-radius: var(--admin-radius-sm);
-  background: var(--admin-primary);
-  color: var(--admin-on-primary);
+  background: var(--btn-bg);
+  color: var(--btn-fg);
   font-size: 0.84rem;
   font-weight: 600;
   line-height: 1.1;
@@ -748,11 +848,48 @@ tr.admin-sortable-row--dragging {
   transition: background 0.16s ease, border-color 0.16s ease, color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
 }
 
+.admin-btn--secondary {
+  --btn-bg: var(--admin-surface);
+  --btn-fg: var(--admin-ink);
+  --btn-border: var(--admin-line);
+  --btn-bg-hover: var(--admin-primary-soft);
+  --btn-fg-hover: var(--admin-ink);
+  --btn-border-hover: var(--admin-primary);
+}
+
+.admin-btn--ghost {
+  --btn-bg: var(--admin-selected);
+  --btn-fg: var(--admin-ink);
+  --btn-border: var(--admin-line);
+  --btn-bg-hover: var(--admin-primary);
+  --btn-fg-hover: var(--admin-on-primary);
+  --btn-border-hover: var(--admin-primary);
+}
+
+.admin-btn--success {
+  --btn-bg: var(--admin-success-solid);
+  --btn-fg: #fff;
+  --btn-border: var(--admin-success-solid);
+  --btn-bg-hover: var(--admin-success-solid-hover);
+  --btn-fg-hover: #fff;
+  --btn-border-hover: var(--admin-success-solid-hover);
+}
+
+.admin-btn--danger {
+  --btn-bg: var(--admin-danger-solid);
+  --btn-fg: #fff;
+  --btn-border: var(--admin-danger-solid-hover);
+  --btn-bg-hover: var(--admin-danger-solid-hover);
+  --btn-fg-hover: #fff;
+  --btn-border-hover: var(--admin-danger-solid-hover);
+}
+
+/* Same colors, but with enough specificity to beat element/rule resets inside the shell. */
 .admin-shell button.admin-btn,
 .admin-shell a.admin-btn,
 .admin-shell label.admin-btn {
-  background-color: var(--admin-primary);
-  color: var(--admin-on-primary);
+  background-color: var(--btn-bg);
+  color: var(--btn-fg);
 }
 
 .admin-btn svg {
@@ -761,151 +898,50 @@ tr.admin-sortable-row--dragging {
   stroke: currentColor;
 }
 
-.admin-btn:hover {
-  background: var(--admin-primary-hover);
-  border-color: var(--admin-primary-hover);
-  color: var(--admin-on-primary);
+.admin-btn:hover,
+.admin-shell button.admin-btn:hover,
+.admin-shell a.admin-btn:hover,
+.admin-shell label.admin-btn:hover {
+  border-color: var(--btn-border-hover);
+  background-color: var(--btn-bg-hover);
+  color: var(--btn-fg-hover);
   box-shadow: 0 8px 18px -12px rgba(11, 37, 51, 0.55);
   transform: translateY(-1px);
 }
 
-.admin-btn:focus-visible {
-  outline: 2px solid var(--admin-focus);
-  outline-offset: 3px;
-}
-
-.admin-btn--secondary {
-  border-color: var(--admin-line);
-  background: var(--admin-surface);
-  color: var(--admin-ink);
-}
-
-.admin-shell button.admin-btn--secondary,
-.admin-shell a.admin-btn--secondary,
-.admin-shell label.admin-btn--secondary {
-  background-color: var(--admin-surface);
-  color: var(--admin-ink);
-}
-
-.admin-btn--secondary:hover {
-  border-color: var(--admin-primary);
-  background: var(--admin-primary-soft);
-  color: var(--admin-ink);
-}
-
-.admin-shell button.admin-btn:hover,
-.admin-shell a.admin-btn:hover,
-.admin-shell label.admin-btn:hover {
-  background-color: var(--admin-primary-hover);
-  color: var(--admin-on-primary);
-}
-
-.admin-shell button.admin-btn--secondary:hover,
-.admin-shell a.admin-btn--secondary:hover,
-.admin-shell label.admin-btn--secondary:hover {
-  background-color: var(--admin-primary-soft);
-  color: var(--admin-ink);
-}
-
-.admin-btn--ghost {
-  border-color: var(--admin-line);
-  background: var(--admin-selected);
-  color: var(--admin-ink);
-}
-
-.admin-shell button.admin-btn--ghost,
-.admin-shell a.admin-btn--ghost,
-.admin-shell label.admin-btn--ghost {
-  background-color: var(--admin-selected);
-  color: var(--admin-ink);
-}
-
-.admin-btn--ghost:hover {
-  border-color: var(--admin-primary);
-  background: var(--admin-primary);
-  color: white;
-}
-
-.admin-shell button.admin-btn--ghost:hover,
-.admin-shell a.admin-btn--ghost:hover,
-.admin-shell label.admin-btn--ghost:hover {
-  background-color: var(--admin-primary);
-  color: #fff;
-}
-
-.admin-btn--success {
-  border-color: var(--admin-success-ink);
-  background: var(--admin-success-ink);
-  color: white;
-}
-
-.admin-btn--danger {
-  border-color: var(--admin-danger-hover);
-  background: var(--admin-danger);
-  color: white;
-}
-
-.admin-shell button.admin-btn--danger,
-.admin-shell a.admin-btn--danger,
-.admin-shell label.admin-btn--danger {
-  background-color: var(--admin-danger);
-  color: #fff;
-}
-
-.admin-shell button.admin-btn--success,
-.admin-shell a.admin-btn--success,
-.admin-shell label.admin-btn--success {
-  background-color: var(--admin-success-ink);
-  color: #fff;
-}
-
-.admin-btn--success:hover {
-  border-color: var(--admin-success-hover);
-  background: var(--admin-success-hover);
-  color: #fff;
-}
-
-.admin-btn--danger:hover {
-  border-color: var(--admin-danger-ink);
-  background: var(--admin-danger-hover);
-  color: #fff;
-}
-
-.admin-btn:disabled {
+.admin-btn:disabled,
+.admin-btn:disabled:hover,
+.admin-shell button.admin-btn:disabled,
+.admin-shell button.admin-btn:disabled:hover {
+  border-color: var(--btn-border);
+  background-color: var(--btn-bg);
+  color: var(--btn-fg);
+  box-shadow: 0 1px 2px rgba(11, 37, 51, 0.08);
   cursor: not-allowed;
   opacity: 0.45;
   transform: none;
 }
 
-.admin-btn:disabled:hover {
-  background: var(--admin-primary);
-  border-color: color-mix(in srgb, var(--admin-primary) 18%, transparent);
-  color: #fff;
-  box-shadow: 0 1px 2px rgba(11, 37, 51, 0.08);
+/* Icon-only reorder + filter triggers (see AdminReorderToolbar / AdminFilterMenu `iconOnly`). */
+.admin-btn--icon-only {
+  flex: 0 0 auto;
+  width: var(--admin-control-height);
+  min-width: var(--admin-control-height);
+  padding: 0;
 }
 
-.admin-btn--secondary:disabled:hover {
-  border-color: var(--admin-line);
-  background: var(--admin-surface);
-  color: var(--admin-ink);
+.admin-filter-trigger--icon-only {
+  position: relative;
 }
 
-.admin-btn--ghost:disabled:hover {
-  border-color: var(--admin-line);
-  background: var(--admin-primary-soft);
-  color: var(--admin-ink);
-}
-
-.admin-btn--success:disabled:hover {
-  border-color: var(--admin-success-ink);
-  background: var(--admin-success-ink);
-  color: #fff;
-}
-
-.admin-btn--danger:disabled:hover {
-  border-color: var(--admin-danger-hover);
-  background: var(--admin-danger);
-  color: #fff;
+.admin-filter-trigger--icon-only .admin-badge {
+  position: absolute;
+  top: -0.4rem;
+  right: -0.4rem;
+  min-width: 1.15rem;
+  padding: 0.05rem 0.3rem;
+  font-size: 0.66rem;
+  line-height: 1.2;
 }
 
 .admin-alert {
@@ -936,17 +972,22 @@ tr.admin-sortable-row--dragging {
   min-width: 14rem;
 }
 
+/*
+ * Compact KPI cards: label + icon chip on one row, value directly under.
+ * Purely presentational — value/label/icon still come from AdminStatCard props.
+ */
 .admin-stat-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(10.5rem, 1fr));
-  gap: 0.65rem;
+  grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
+  gap: 0.5rem;
 }
 
 .admin-stat-card {
   --stat-color: var(--admin-primary);
   display: grid;
-  gap: 0.4rem;
-  padding: 0.75rem 0.85rem;
+  gap: 0.2rem;
+  min-width: 0;
+  padding: 0.5rem 0.7rem 0.55rem;
   border: 1px solid color-mix(in srgb, var(--stat-color) 18%, var(--admin-surface));
   border-radius: var(--admin-radius-md);
   background: linear-gradient(180deg, color-mix(in srgb, var(--stat-color) 7%, var(--admin-surface)), var(--admin-surface) 78%);
@@ -968,37 +1009,43 @@ tr.admin-sortable-row--dragging {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 1rem;
+  gap: 0.5rem;
 }
 
 .admin-stat-card__label {
+  min-width: 0;
   margin: 0;
   color: var(--admin-muted);
-  font-size: 0.8rem;
+  font-size: 0.76rem;
   font-weight: 600;
+  line-height: 1.25;
 }
 
 .admin-stat-card__icon {
-  display: grid;
-  width: 1.9rem;
-  height: 1.9rem;
-  place-items: center;
-  border-radius: 8px;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  border-radius: 7px;
   background: color-mix(in srgb, var(--stat-color) 12%, var(--admin-surface));
   color: var(--stat-color);
 }
 
 .admin-stat-card__icon svg {
-  width: 15px;
-  height: 15px;
+  display: block;
+  width: 14px;
+  height: 14px;
 }
 
 .admin-stat-card__value {
   color: var(--admin-ink);
-  font-size: 1.4rem;
+  font-size: 1.25rem;
   font-weight: 700;
-  line-height: 1;
+  line-height: 1.1;
   font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
 }
 
 .admin-grid-2 {
@@ -1068,11 +1115,6 @@ tr.admin-sortable-row--dragging {
   color: var(--admin-ink);
 }
 
-.admin-tab:focus-visible {
-  outline: 2px solid var(--admin-focus);
-  outline-offset: 2px;
-}
-
 .admin-tab--active,
 .admin-tab--active:hover {
   background: linear-gradient(120deg, var(--admin-primary), var(--admin-primary-dark));
@@ -1106,11 +1148,6 @@ tr.admin-sortable-row--dragging {
   color: var(--admin-ink);
 }
 
-.admin-segmented button:focus-visible {
-  outline: 2px solid var(--admin-focus);
-  outline-offset: 2px;
-}
-
 .admin-segmented button.admin-segmented__option--active {
   background: var(--admin-primary-dark);
   color: white;
@@ -1119,15 +1156,16 @@ tr.admin-sortable-row--dragging {
 .admin-input,
 .admin-select {
   width: 100%;
-  min-height: 2.35rem;
+  box-sizing: border-box;
+  min-height: var(--admin-control-height);
   border: 1px solid var(--admin-line);
   border-radius: var(--admin-radius-sm);
-  background: var(--admin-primary-soft);
+  background-color: var(--admin-primary-soft);
   color: var(--admin-ink);
   font: inherit;
   font-size: 0.86rem;
   font-weight: 600;
-  transition: background 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease;
+  transition: background-color 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease;
 }
 
 .admin-input {
@@ -1241,22 +1279,62 @@ tr.admin-sortable-row--dragging {
   pointer-events: none;
 }
 
+/*
+ * Select: native chevron is replaced by a themed caret (--admin-select-caret)
+ * pinned inside the right padding. `appearance: none` + reserved right padding
+ * keeps long option text from running under the caret in light, dark and
+ * narrow/mobile layouts; text truncates instead of overflowing the control.
+ * Hover/focus use `background-color` (never the `background` shorthand) so the
+ * caret image isn't wiped on interaction.
+ */
 .admin-select {
-  padding: 0.5rem 0.75rem;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  min-width: 0;
+  max-width: 100%;
+  padding: 0.5rem 2.25rem 0.5rem 0.75rem;
+  background-image: var(--admin-select-caret);
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  background-size: 1rem 1rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.admin-select[multiple],
+.admin-select[size]:not([size='1']) {
+  padding-right: 0.75rem;
+  background-image: none;
+  white-space: normal;
+}
+
+.admin-select option {
+  background: var(--admin-surface-elevated);
+  color: var(--admin-ink);
+}
+
+.admin-select:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
 }
 
 .admin-input:hover,
 .admin-select:hover {
   border-color: var(--admin-muted);
-  background: var(--admin-surface);
+  background-color: var(--admin-surface);
 }
 
+/* Fields keep their glow, plus a solid ring color so focus never relies on a faint shadow alone (and survives forced-colors via the transparent outline). */
 .admin-input:focus,
 .admin-select:focus {
-  border-color: var(--admin-primary);
-  background: var(--admin-surface);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--admin-focus) 24%, transparent);
-  outline: none;
+  border-color: var(--admin-focus-ring);
+  background-color: var(--admin-surface);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--admin-focus-ring) 30%, transparent);
+  outline: 2px solid transparent;
+  outline-offset: 2px;
 }
 
 .admin-input[aria-invalid='true'],
@@ -2506,11 +2584,6 @@ tr.admin-sortable-row--dragging {
   color: var(--admin-ink);
 }
 
-.admin-stepper__item button:focus-visible {
-  outline: 2px solid var(--admin-focus);
-  outline-offset: 2px;
-}
-
 .admin-stepper__item button span {
   z-index: 1;
   display: grid;
@@ -2772,11 +2845,6 @@ tr.admin-sortable-row--dragging {
   color: var(--admin-danger);
 }
 
-.admin-location-chip button:focus-visible {
-  outline: 2px solid var(--admin-focus);
-  outline-offset: 2px;
-}
-
 .admin-tour-image-slot__empty {
   display: grid;
   place-items: center;
@@ -2904,7 +2972,11 @@ tr.admin-sortable-row--dragging {
 .admin-token button:focus-visible {
   background: var(--admin-primary);
   color: white;
-  outline: none;
+}
+
+.admin-token button:focus-visible {
+  outline: var(--admin-focus-outline);
+  outline-offset: var(--admin-focus-offset);
 }
 
 .admin-dynamic-list,
@@ -3080,6 +3152,14 @@ tr.admin-sortable-row--dragging {
 
   .admin-toolbar__actions .admin-btn {
     flex: 1 1 9rem;
+  }
+
+  /* Icon-only controls keep their square hit target instead of stretching full-width. */
+  .admin-filter-menu:has(.admin-filter-trigger--icon-only),
+  .admin-filter-trigger--icon-only,
+  .admin-toolbar__actions .admin-btn--icon-only {
+    flex: 0 0 auto;
+    width: var(--admin-control-height);
   }
 
   .admin-filter-backdrop {
@@ -3862,7 +3942,7 @@ tr.admin-sortable-row--dragging {
 }
 
 .admin-btn--sm {
-  min-height: 1.9rem;
+  min-height: var(--admin-control-height-sm);
   padding: 0.2rem 0.6rem;
   font-size: 0.8rem;
 }

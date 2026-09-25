@@ -1,6 +1,6 @@
-import { ArrowUpDown, ChevronDown, ChevronUp, Filter, GripVertical, Search, X } from 'lucide-react';
+import { ArrowUpDown, Check, ChevronDown, ChevronUp, Filter, GripVertical, Search, X } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import type { ReactNode } from 'react';
+import type { ButtonHTMLAttributes, ReactNode } from 'react';
 import { useEffect, useId, useRef, useState } from 'react';
 
 export function AdminPageHeader(props: { title: string; description: string; actions?: ReactNode }) {
@@ -15,12 +15,44 @@ export function AdminPageHeader(props: { title: string; description: string; act
   );
 }
 
+/**
+ * Shared icon-only button. `label` is required and becomes both `aria-label`
+ * and (unless overridden) `title`, so an icon-only control can never ship
+ * without an accessible name or hover hint. Hit target and focus-visible ring
+ * come from the `.admin-icon-btn` tokens in admin.css (grow on touch).
+ */
+export function AdminIconButton({
+  icon: Icon,
+  label,
+  title,
+  size = 'md',
+  bordered = false,
+  iconSize,
+  className,
+  type = 'button',
+  ...rest
+}: {
+  icon: LucideIcon;
+  label: string;
+  title?: string;
+  size?: 'sm' | 'md';
+  bordered?: boolean;
+  iconSize?: number;
+} & Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'children' | 'aria-label'>) {
+  const classes = ['admin-icon-btn', size === 'sm' ? 'admin-icon-btn--sm' : '', bordered ? 'admin-icon-btn--bordered' : '', className ?? ''].filter(Boolean).join(' ');
+  return (
+    <button {...rest} type={type} className={classes} aria-label={label} title={title ?? label}>
+      <Icon size={iconSize ?? (size === 'sm' ? 15 : 18)} aria-hidden="true" />
+    </button>
+  );
+}
+
 export function AdminStatCard(props: { label: string; value: string; icon: LucideIcon; tone?: 'ocean' | 'success' | 'warning' | 'danger' }) {
   return (
     <article className={`admin-stat-card admin-stat-card--${props.tone ?? 'ocean'}`}>
       <div className="admin-stat-card__head">
         <p className="admin-stat-card__label">{props.label}</p>
-        <span className="admin-stat-card__icon"><props.icon size={18} /></span>
+        <span className="admin-stat-card__icon" aria-hidden="true"><props.icon size={14} /></span>
       </div>
       <strong className="admin-stat-card__value">{props.value}</strong>
     </article>
@@ -73,6 +105,8 @@ export function AdminToolbar(props: { children: ReactNode; embedded?: boolean })
  */
 export function AdminFilterMenu(props: {
   label?: string;
+  /** Renders the trigger as a square icon-only button (label stays as aria-label/title). */
+  iconOnly?: boolean;
   panelLabel: string;
   panelTitle?: string;
   panelDescription?: string;
@@ -108,8 +142,18 @@ export function AdminFilterMenu(props: {
 
   return (
     <div className="admin-filter-menu">
-      <button ref={triggerRef} className="admin-btn admin-btn--secondary admin-filter-trigger" type="button" aria-expanded={open} aria-controls={panelId} onClick={() => setOpen((value) => !value)}>
-        <Filter size={16} /> <span>{props.label ?? 'Filtros'}</span>
+      <button
+        ref={triggerRef}
+        className={`admin-btn admin-btn--secondary admin-filter-trigger${props.iconOnly ? ' admin-btn--icon-only admin-filter-trigger--icon-only' : ''}`}
+        type="button"
+        aria-expanded={open}
+        aria-controls={panelId}
+        aria-label={props.iconOnly ? (props.activeCount ? `${props.label ?? 'Filtros'} (${props.activeCount} activos)` : (props.label ?? 'Filtros')) : undefined}
+        title={props.iconOnly ? (props.label ?? 'Filtros') : undefined}
+        onClick={() => setOpen((value) => !value)}
+      >
+        <Filter size={16} aria-hidden="true" />
+        {props.iconOnly ? null : <span>{props.label ?? 'Filtros'}</span>}
         {props.activeCount ? <AdminBadge value={String(props.activeCount)} /> : null}
       </button>
       {open ? (
@@ -121,7 +165,7 @@ export function AdminFilterMenu(props: {
                 <strong>{props.panelTitle ?? 'Filtros'}</strong>
                 {props.panelDescription ? <span>{props.panelDescription}</span> : null}
               </div>
-              <button className="admin-icon-btn" type="button" aria-label="Cerrar filtros" onClick={() => { setOpen(false); triggerRef.current?.focus(); }}><X size={17} /></button>
+              <AdminIconButton icon={X} iconSize={17} label="Cerrar filtros" onClick={() => { setOpen(false); triggerRef.current?.focus(); }} />
             </div>
             {props.children}
             <div className="admin-filter-panel__actions">
@@ -197,18 +241,34 @@ export function AdminReorderToolbar(props: {
   onCancel: () => void;
   onSave: () => void;
   disabledReason?: string;
+  /** Icon-only controls (Reordenar / Cancelar / Guardar orden keep aria-label + title). */
+  iconOnly?: boolean;
 }) {
+  const iconClass = props.iconOnly ? ' admin-btn--icon-only' : '';
   if (!props.reordering) {
     return (
-      <button className="admin-btn admin-btn--secondary" type="button" onClick={props.onStart} disabled={Boolean(props.disabledReason)} title={props.disabledReason}>
-        <ArrowUpDown size={16} /> Reordenar
+      <button
+        className={`admin-btn admin-btn--secondary${iconClass}`}
+        type="button"
+        onClick={props.onStart}
+        disabled={Boolean(props.disabledReason)}
+        aria-label={props.iconOnly ? 'Reordenar' : undefined}
+        title={props.disabledReason ?? (props.iconOnly ? 'Reordenar' : undefined)}
+      >
+        <ArrowUpDown size={16} aria-hidden="true" />
+        {props.iconOnly ? null : ' Reordenar'}
       </button>
     );
   }
+  const saveLabel = props.saving ? 'Guardando...' : 'Guardar orden';
   return (
     <div className="admin-toolbar__actions">
-      <button className="admin-btn admin-btn--secondary" type="button" onClick={props.onCancel} disabled={props.saving}>Cancelar</button>
-      <button className="admin-btn" type="button" onClick={props.onSave} disabled={props.saving}>{props.saving ? 'Guardando...' : 'Guardar orden'}</button>
+      <button className={`admin-btn admin-btn--secondary${iconClass}`} type="button" onClick={props.onCancel} disabled={props.saving} aria-label={props.iconOnly ? 'Cancelar' : undefined} title={props.iconOnly ? 'Cancelar' : undefined}>
+        {props.iconOnly ? <X size={16} aria-hidden="true" /> : 'Cancelar'}
+      </button>
+      <button className={`admin-btn${iconClass}`} type="button" onClick={props.onSave} disabled={props.saving} aria-label={props.iconOnly ? saveLabel : undefined} title={props.iconOnly ? saveLabel : undefined}>
+        {props.iconOnly ? <Check size={16} aria-hidden="true" /> : saveLabel}
+      </button>
     </div>
   );
 }
@@ -224,8 +284,8 @@ export function AdminReorderHandle(props: { position: number; total: number; dra
       <GripVertical size={16} aria-hidden="true" className="admin-reorder-handle__grip" />
       <span className="admin-reorder-handle__position">{props.position}</span>
       <div className="admin-reorder-handle__buttons">
-        <button type="button" className="admin-icon-btn" aria-label="Subir" disabled={props.position === 1} onClick={props.onMoveUp}><ChevronUp size={14} /></button>
-        <button type="button" className="admin-icon-btn" aria-label="Bajar" disabled={props.position === props.total} onClick={props.onMoveDown}><ChevronDown size={14} /></button>
+        <AdminIconButton icon={ChevronUp} label="Subir" size="sm" iconSize={14} disabled={props.position === 1} onClick={props.onMoveUp} />
+        <AdminIconButton icon={ChevronDown} label="Bajar" size="sm" iconSize={14} disabled={props.position === props.total} onClick={props.onMoveDown} />
       </div>
     </div>
   );

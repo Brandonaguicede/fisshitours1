@@ -216,7 +216,7 @@ export default function AdminLayout() {
               <img src="/images/papagayo-logo.png" alt="" aria-hidden="true" />
             </span>
           </Link>
-          <button className="admin-sidebar__toggle" type="button" aria-label={open ? 'Colapsar menu' : 'Expandir menu'} aria-expanded={open} aria-controls="admin-sidebar" onClick={() => setOpen((value) => !value)}>
+          <button className="admin-sidebar__toggle" type="button" aria-label={open ? 'Colapsar menu' : 'Expandir menu'} title={open ? 'Colapsar menu' : 'Expandir menu'} aria-expanded={open} aria-controls="admin-sidebar" onClick={() => setOpen((value) => !value)}>
             {open ? <ChevronLeft size={18} /> : <ChevronRight size={18} />}
           </button>
         </div>
@@ -248,15 +248,15 @@ export default function AdminLayout() {
       <main className="admin-main">
         <div className="admin-content">
           <header className="admin-topbar">
-            <button ref={menuButtonRef} className="admin-topbar__menu" type="button" aria-label="Abrir menu" aria-expanded={open} aria-controls="admin-sidebar" onClick={() => setOpen(true)}>
-              <Menu size={19} />
+            <button ref={menuButtonRef} className="admin-topbar__menu" type="button" aria-label="Abrir menu" title="Abrir menu" aria-expanded={open} aria-controls="admin-sidebar" onClick={() => setOpen(true)}>
+              <Menu size={19} aria-hidden="true" />
             </button>
             <div className="admin-topbar__titles">
               <h1 className="admin-topbar__title">{title}</h1>
               <div className="admin-topbar__crumb">{crumb}</div>
             </div>
             <Link className="admin-icon-btn" to="/" aria-label="Ver sitio publico" title="Ver sitio publico">
-              <Globe2 size={18} />
+              <Globe2 size={18} aria-hidden="true" />
             </Link>
             <ThemeToggle />
             <div ref={accountRef} className="admin-account">
