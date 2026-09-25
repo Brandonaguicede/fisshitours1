@@ -601,6 +601,7 @@ body:has(.admin-shell) {
   cursor: grab;
 }
 
+.admin-position,
 .admin-reorder-handle__position {
   display: inline-grid;
   min-width: 1.4rem;

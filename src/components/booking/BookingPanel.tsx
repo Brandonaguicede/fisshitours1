@@ -17,6 +17,7 @@ import { calculateBookingTotal, getBoatStartingPrice, getEffectiveMaxGuests, get
 import { isBookableCatalogPackage } from '../../utils/tourCatalog';
 import { filterPackageSlots } from '../../utils/packageSettings';
 import { cn } from '../../utils/cn';
+import { getDefaultDepartureLocation } from '../../utils/departureLocations';
 import { formatTime } from '../../utils/format';
 import { formatCurrency } from '../../utils/formatCurrency';
 import { Button, ChoiceCard, Field, FieldError, GlassPanel, Input, ModalShell, TextArea } from '../ui';
@@ -242,8 +243,9 @@ export function BookingPanel({ selectedBoat, selectedTour: requestedTour, boats,
       return;
     }
     if (departureLocationId || !departureLocations.length) return;
-    const defaultLocation = departureLocations.find((location) => location.is_default) ?? departureLocations[0];
-    setDepartureLocationId(defaultLocation.id);
+    // Position 1 (sort_order) is the default; the legacy is_default flag no longer decides.
+    const defaultLocation = getDefaultDepartureLocation(departureLocations);
+    if (defaultLocation) setDepartureLocationId(defaultLocation.id);
   }, [departureLocationId, departureLocations, departureLocationsQuery.isSuccess, departureLocationsQuery.isFetching]);
 
   function handleBoatChange(boatId: string) {

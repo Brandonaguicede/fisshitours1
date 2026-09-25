@@ -1,6 +1,7 @@
 import { functionsUrl, supabase } from '../lib/supabase';
 import type { BookingPaymentMethod } from '../utils/bookingPayment';
 import { getStoredLanguage } from '../i18n/LanguageContext';
+import { sortDepartureLocations } from '../utils/departureLocations';
 
 export interface PriceRequest {
   boatId: string;
@@ -39,7 +40,8 @@ export interface DepartureLocation {
   currency: string;
   active: boolean;
   sort_order: number;
-  is_default: boolean;
+  /** Legacy column, kept in the schema but no longer a product decision: position 1 (sort_order) is the default. */
+  is_default?: boolean;
 }
 
 export interface CreateBookingRequest {
@@ -154,10 +156,11 @@ export function updateBooking(input: {
 export async function getActiveDepartureLocations() {
   const { data, error } = await (supabase as any)
     .from('departure_locations')
-    .select('id, name, slug, description, description_es, description_en, surcharge_amount, currency, active, sort_order, is_default')
+    .select('id, name, slug, description, description_es, description_en, surcharge_amount, currency, active, sort_order')
     .eq('active', true)
     .order('sort_order', { ascending: true })
     .order('name', { ascending: true });
   if (error) throw error;
-  return (data ?? []) as DepartureLocation[];
+  // Position order is the contract for every consumer (first item = default), so it is enforced here, not just in the query.
+  return sortDepartureLocations((data ?? []) as DepartureLocation[]);
 }

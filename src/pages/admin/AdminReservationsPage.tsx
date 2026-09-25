@@ -166,7 +166,7 @@ export default function AdminReservationsPage() {
           ...current,
           tourPackageId: current.tourPackageId || tourRows[0]?.id || '',
           timeSlotId: current.timeSlotId || slotRows[0]?.id || '',
-          departureLocationId: current.departureLocationId || locationRows.find((item) => item.is_default)?.id || locationRows[0]?.id || '',
+          departureLocationId: current.departureLocationId || locationRows[0]?.id || '',
         }));
       } catch (catalogError) {
         setError(catalogError instanceof Error ? catalogError.message : 'No se pudo cargar el catalogo para crear reservas.');
