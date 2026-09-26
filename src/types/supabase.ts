@@ -298,6 +298,7 @@ export type Database = {
           length: string | null
           max_guests: number
           name: string
+          publication_status: string
           slug: string
           sort_order: number
           updated_at: string
@@ -322,6 +323,7 @@ export type Database = {
           length?: string | null
           max_guests: number
           name: string
+          publication_status?: string
           slug: string
           sort_order?: number
           updated_at?: string
@@ -346,6 +348,7 @@ export type Database = {
           length?: string | null
           max_guests?: number
           name?: string
+          publication_status?: string
           slug?: string
           sort_order?: number
           updated_at?: string
