@@ -3,22 +3,21 @@ import { useAdminPagedList } from '../../hooks/useAdminPagedList';
 import { adminSearchFilter, getAdminTablePage } from '../../services/adminListService';
 import { useQuery } from '@tanstack/react-query';
 import { readWithAdminSession } from '../../services/adminAuthService';
-import { Eye, EyeOff, Plus, Pencil, Settings, Trash2, X } from 'lucide-react';
-import { useMemo, useRef, useState } from 'react';
+import { Pencil, X } from 'lucide-react';
+import { useMemo, useState } from 'react';
 
 import AdminConfirmDialog from '../../components/admin/AdminConfirmDialog';
 import AdminImageManager from '../../components/admin/AdminImageManager';
-import { AdminBadge, AdminFilterMenu, AdminListToolbar, AdminModuleSurface, AdminPageHeader, AdminReorderHandle, AdminReorderToolbar } from '../../components/admin/AdminPrimitives';
-import FormSection from '../../components/admin/FormSection';
+import { AdminMediaCard } from '../../components/admin/AdminMediaKit';
+import AdminStatusSection from '../../components/admin/AdminStatusSection';
+import { AdminBadge, AdminCreateButton, AdminFilterMenu, AdminListToolbar, AdminModuleSurface, AdminPageHeader, AdminReorderHandle } from '../../components/admin/AdminPrimitives';
 import ModalFooter from '../../components/admin/ModalFooter';
 import { Modal } from '../../components/common/Modal';
 import { useAdminReorder } from '../../hooks/useAdminReorder';
 import { supabase } from '../../lib/supabase';
 import { deleteStorageImage } from '../../services/imageService';
 import type { StorageImage } from '../../services/imageService';
-import { translateTextsToSpanish } from '../../services/translationService';
 import { friendlyDeleteError } from '../../utils/adminErrors';
-import { editableText, textColumns, textsToTranslate, type BilingualColumns } from '../../utils/bilingualContent';
 
 interface GalleryRow {
   id: string;
@@ -34,10 +33,8 @@ interface GalleryRow {
   sort_order: number;
 }
 
-// The alt text is public (image description, shown in the visitor's language). The admin writes it in ENGLISH
-// (alt_en, else the legacy alt) and DeepL generates alt_es when it is saved. `title` is not shown on the
-// landing page (GallerySection only reads alt/alt_es/alt_en), so it stays a plain admin label.
-const ALT: BilingualColumns = { legacy: 'alt', en: 'alt_en', es: 'alt_es' };
+// The image description (alt text) is not exposed in the Admin: new images start with a fixed bilingual alt and existing ones keep the
+// one they have; saving from here never rewrites it (and never calls the translator).
 
 const CATEGORY_OPTIONS = ['fishing', 'experiences', 'boats', 'wildlife', 'beach'];
 
@@ -53,13 +50,7 @@ export default function AdminGalleryPage() {
   const [editing, setEditing] = useState<GalleryRow | null>(null);
   const [pendingDelete, setPendingDelete] = useState<GalleryRow | null>(null);
   const [saving, setSaving] = useState(false);
-  // The English alt as loaded: only a changed alt is translated on save.
-  const altBeforeRef = useRef('');
-  const openEditor = (row: GalleryRow) => {
-    const alt = editableText(row as unknown as Record<string, unknown>, ALT);
-    altBeforeRef.current = alt;
-    setEditing({ ...row, alt });
-  };
+  const openEditor = (row: GalleryRow) => setEditing({ ...row });
 
   const pagination = useAdminPagedList<GalleryRow>('gallery', JSON.stringify({ filter, search }), (page, size) => getAdminTablePage(() => {
     let query = (supabase as any).from('gallery_images').select('id, src, image_url, image_public_id, alt, alt_en, alt_es, category, title, active, sort_order', { count: 'exact' }).order('sort_order', { ascending: true }).order('id');
@@ -120,20 +111,10 @@ export default function AdminGalleryPage() {
       if (!editing.src && !editing.image_url) {
         await supabase.from('gallery_images').delete().eq('id', editing.id);
       } else {
-        // Persist any pending title/alt/category/order edits so closing the
-        // modal never silently discards them (upload only saves the image).
-        // Alt: English -> Spanish first; if DeepL fails the modal stays open with what was typed and nothing is saved.
-        let altColumns: Record<string, unknown>;
-        try {
-          const alt = editing.alt.trim();
-          altColumns = textColumns(alt, altBeforeRef.current, ALT, await translateTextsToSpanish(textsToTranslate(alt, altBeforeRef.current)));
-        } catch (caught) {
-          setError(caught instanceof Error ? caught.message : 'No se pudo generar la traducción al español. Intenta nuevamente.');
-          return;
-        }
+        // Persist any pending category/visibility edits so closing the modal never silently discards them (upload only saves the image).
         await supabase
           .from('gallery_images')
-          .update({ alt: editing.alt.trim(), ...altColumns, category: editing.category, title: editing.title, active: editing.active, sort_order: editing.sort_order })
+          .update({ category: editing.category, active: editing.active, sort_order: editing.sort_order })
           .eq('id', editing.id);
       }
       await loadImages();
@@ -146,25 +127,15 @@ export default function AdminGalleryPage() {
     setSaving(true);
     setError('');
     setNotice('');
-    let altColumns: Record<string, unknown>;
-    try {
-      const alt = editing.alt.trim();
-      altColumns = textColumns(alt, altBeforeRef.current, ALT, await translateTextsToSpanish(textsToTranslate(alt, altBeforeRef.current)));
-    } catch (caught) {
-      setSaving(false);
-      setError(caught instanceof Error ? caught.message : 'No se pudo generar la traducción al español. Intenta nuevamente.');
-      return;
-    }
     const { error } = await supabase
       .from('gallery_images')
-      .update({ alt: editing.alt.trim(), ...altColumns, category: editing.category, title: editing.title, active: editing.active, sort_order: editing.sort_order })
+      .update({ category: editing.category, active: editing.active, sort_order: editing.sort_order })
       .eq('id', editing.id);
     setSaving(false);
     if (error) {
       setError(error.message);
       return;
     }
-    altBeforeRef.current = editing.alt.trim();
     setNotice('Cambios de galería guardados.');
     await loadImages();
   }
@@ -222,7 +193,7 @@ export default function AdminGalleryPage() {
           embedded
           searchValue={search}
           onSearchChange={setSearch}
-          searchPlaceholder="Buscar por alt o titulo"
+          searchPlaceholder="Buscar por título"
           filters={
             <AdminFilterMenu panelLabel="Filtros de galeria" panelDescription="Refina la lista de imagenes." activeCount={Number(filter !== 'all')} onReset={() => setFilter('all')}>
               <label className="admin-field">
@@ -234,17 +205,15 @@ export default function AdminGalleryPage() {
               </label>
             </AdminFilterMenu>
           }
-          primaryAction={<button className="admin-btn" type="button" disabled={reorder.reordering} onClick={() => void createImage()}><Plus size={16} /> Nueva imagen</button>}
-          secondaryActions={
-            <AdminReorderToolbar
-              reordering={reorder.reordering}
-              saving={reorder.saving || reorderLoading}
-              onStart={() => void startReorder()}
-              onCancel={reorder.cancel}
-              onSave={() => void reorder.save(persistOrder)}
-              disabledReason={canReorder ? undefined : 'Limpia la búsqueda y el filtro de categoría para reordenar.'}
-            />
-          }
+          primaryAction={<AdminCreateButton label="Nueva imagen" disabled={reorder.reordering} onClick={() => void createImage()} />}
+          reorder={{
+            reordering: reorder.reordering,
+            saving: reorder.saving || reorderLoading,
+            onStart: () => void startReorder(),
+            onCancel: reorder.cancel,
+            onSave: () => void reorder.save(persistOrder),
+            disabledReason: canReorder ? undefined : 'Limpia la búsqueda y el filtro de categoría para reordenar.',
+          }}
         />
 
       {error || queryError ? (
@@ -259,40 +228,33 @@ export default function AdminGalleryPage() {
       {loading ? <p className="admin-muted" role="status">Cargando galería...</p> : null}
         <section className="admin-media-grid" aria-busy={loading}>
           {(reorder.reordering ? reorder.order : visibleImages).map((image, index) => (
-            <article
-              className={`admin-media-card${reorder.reordering ? ' admin-sortable-row' : ''}${reorder.dragId === image.id ? ' admin-sortable-row--dragging' : ''}`}
+            <AdminMediaCard
+              className={`${reorder.reordering ? 'admin-sortable-row' : ''}${reorder.dragId === image.id ? ' admin-sortable-row--dragging' : ''}`.trim()}
               key={image.id}
               {...(reorder.reordering ? reorder.dragHandlers(image.id) : {})}
-            >
-              {image.src ?? image.image_url ? (
-                <img src={image.src ?? image.image_url ?? ''} alt={image.alt} loading="lazy" decoding="async" width={1600} height={1200} />
+              url={image.src ?? image.image_url}
+              alt={image.alt}
+              emptyText="Sin imagen"
+              title={image.title || image.category}
+              subtitle={image.title ? image.category : ''}
+              footer={reorder.reordering ? (
+                <AdminReorderHandle
+                  position={index + 1}
+                  total={reorder.order.length}
+                  dragging={reorder.dragId === image.id}
+                  onMoveUp={() => reorder.moveBy(image.id, -1)}
+                  onMoveDown={() => reorder.moveBy(image.id, 1)}
+                />
               ) : (
-                <div className="grid aspect-[4/3] place-items-center text-sm font-semibold admin-media-card__empty">Sin imagen</div>
+                <>
+                  {/* State as text through the shared status vocabulary (Visible / Oculta). */}
+                  <AdminBadge value={image.active ? 'visible' : 'hidden_f'} />
+                  <div className="admin-row-actions">
+                    <button className="admin-icon-action" type="button" disabled={loading} title="Editar imagen" aria-label={`Editar imagen ${image.title || image.category}`} onClick={() => openEditor(image)}><Pencil size={17} /></button>
+                  </div>
+                </>
               )}
-              <div className="admin-media-card__body">
-                <strong>{image.category}</strong>
-                <span className="admin-muted">{image.alt}</span>
-                <div className="admin-actions">
-                  {reorder.reordering ? (
-                    <AdminReorderHandle
-                      position={index + 1}
-                      total={reorder.order.length}
-                      dragging={reorder.dragId === image.id}
-                      onMoveUp={() => reorder.moveBy(image.id, -1)}
-                      onMoveDown={() => reorder.moveBy(image.id, 1)}
-                    />
-                  ) : (
-                    <>
-                      {/* State is text, not an eye icon: Eye/EyeOff only ever mean the Mostrar/Ocultar action. */}
-                      <AdminBadge value={image.active} label={image.active ? 'Visible' : 'Oculta'} />
-                      <div className="admin-row-actions">
-                        <button className="admin-icon-action" type="button" disabled={loading} title="Editar imagen" aria-label={`Editar imagen ${image.alt || image.category}`} onClick={() => openEditor(image)}><Pencil size={17} /></button>
-                      </div>
-                    </>
-                  )}
-                </div>
-              </div>
-            </article>
+            />
           ))}
           {!loading && !queryError && visibleImages.length === 0 ? (
             <div className="admin-empty">No hay imágenes en este estado.</div>
@@ -301,7 +263,7 @@ export default function AdminGalleryPage() {
       {reorder.reordering ? null : <AdminPagination {...pagination} noun="imágenes" loading={loading} />}
       </AdminModuleSurface>
 
-      <Modal open={Boolean(editing)} onClose={() => void closeEditor()} titleId="gallery-edit-title" className="max-w-2xl">
+      <Modal open={Boolean(editing)} onClose={() => void closeEditor()} titleId="gallery-edit-title" className="max-w-2xl admin-gallery-modal">
         {editing ? (
           <div className="admin-modal-shell">
             <header className="admin-modal-header">
@@ -319,18 +281,11 @@ export default function AdminGalleryPage() {
                 currentStoragePath={editing.image_public_id}
                 label={editing.alt}
                 aspect={4 / 3}
+                showDelete={false}
                 onImageSaved={onImageSaved}
                 onImageDeleted={onImageDeleted}
               />
-              <div className="grid gap-3 sm:grid-cols-2">
-                <label className="grid gap-1">
-                  <span className="admin-muted">Titulo</span>
-                  <input className="admin-input" value={editing.title ?? ''} onChange={(event) => setEditing({ ...editing, title: event.target.value || null })} />
-                </label>
-                <label className="grid gap-1">
-                  <span className="admin-muted">Alt (en inglés: el español se genera al guardar)</span>
-                  <input className="admin-input" value={editing.alt} onChange={(event) => setEditing({ ...editing, alt: event.target.value })} />
-                </label>
+              <div className="grid gap-3">
                 <label className="grid gap-1">
                   <span className="admin-muted">Categoria</span>
                   <select className="admin-select" value={editing.category} onChange={(event) => setEditing({ ...editing, category: event.target.value })}>
@@ -338,38 +293,21 @@ export default function AdminGalleryPage() {
                   </select>
                 </label>
               </div>
-              <p className="admin-field-help">Orden actual: {editing.sort_order}. Se reordena desde la lista con el botón "Reordenar".</p>
-              <FormSection title="Configuracion" description="Controla si esta imagen se muestra en el sitio publico." icon={<Settings size={16} />}>
-                <div className="admin-config-row">
-                  <div>
-                    <p className="admin-config-row__label">Estado actual</p>
-                    <span className="admin-muted">{editing.active ? 'Visible: aparece en la galeria publica.' : 'Oculta: no aparece en la galeria publica.'}</span>
-                  </div>
-                  <button
-                    className={`admin-btn ${editing.active ? 'admin-btn--secondary' : ''}`}
-                    type="button"
-                    onClick={() => setEditing({ ...editing, active: !editing.active })}
-                  >
-                    {editing.active ? <EyeOff size={15} /> : <Eye size={15} />}
-                    {editing.active ? 'Ocultar imagen' : 'Mostrar imagen'}
-                  </button>
-                </div>
-              </FormSection>
-
-              <FormSection title="Zona de peligro" description="Esta accion no se puede deshacer." icon={<Trash2 size={16} />}>
-                <div className="admin-danger-zone">
-                  <p className="admin-muted">Elimina esta imagen de la galeria y de Storage.</p>
-                  <button className="admin-btn admin-btn--danger" type="button" onClick={() => setPendingDelete(editing)}>
-                    <Trash2 size={15} /> Eliminar imagen
-                  </button>
-                </div>
-              </FormSection>
+              <AdminStatusSection
+                description="Controla si esta imagen se muestra en el sitio público."
+                active={editing.active}
+                visibleHint="Visible: aparece en la galería pública."
+                hiddenHint="Oculta: no aparece en la galería pública."
+                hideLabel="Ocultar imagen"
+                showLabel="Mostrar imagen"
+                onToggle={() => setEditing({ ...editing, active: !editing.active })}
+                deleteAction={{ title: 'Eliminar imagen', description: 'Elimina esta imagen de la galería y del almacenamiento. No se puede deshacer.', label: 'Eliminar imagen', onDelete: () => setPendingDelete(editing) }}
+              />
             </div>
             <ModalFooter>
               <button className="admin-btn" type="button" disabled={saving} onClick={() => void saveEditor()}>
-                {saving ? 'Guardando...' : 'Guardar cambios'}
+                {saving ? 'Guardando...' : 'Guardar'}
               </button>
-              <button className="admin-btn admin-btn--secondary" type="button" onClick={() => void closeEditor()}>Cerrar</button>
             </ModalFooter>
           </div>
         ) : null}

@@ -15,7 +15,13 @@ const eqRow = (id, boatId, es, en, order) => ({ id, boat_id: boatId, label: es ?
 const imgRow = (id, boatId, order, extra = {}) => ({ id, boat_id: boatId, image_url: 'data:image/gif;base64,R0lGODlhAQABAAAAACw=', storage_path: `boats/${boatId}/${id}.webp`, alt_text: `foto ${order}`, is_primary: order === 1, sort_order: order, active: true, pending_deletion: false, ...extra });
 const threeImages = (boatId) => [imgRow('img1', boatId, 1), imgRow('img2', boatId, 2), imgRow('img3', boatId, 3)];
 
-const boatRow = (id, name, order, extra = {}) => ({ id, slug: id, name, images: [], badge: null, length: null, engine: null, featured_spec: null, max_guests: 10, image_url: null, image_public_id: null, active: true, sort_order: order, ...extra });
+const boatRow = (id, name, order, extra = {}) => {
+  const row = { id, slug: id, name, images: [], badge: null, length: null, engine: null, featured_spec: null, max_guests: 10, image_url: null, image_public_id: null, active: true, sort_order: order, ...extra };
+  // Same mapping as the migration for pre-existing rows: active -> published, inactive -> inactive (a draft must be asked for explicitly).
+  return { publication_status: row.active ? 'published' : 'inactive', ...row };
+};
+// The DB trigger (sync_boat_active_from_publication_status): publication_status is the source of truth, `active` follows it.
+const withBoatTrigger = (row) => ({ ...row, active: row.publication_status === 'published' });
 const tourRow = (id, title, order, extra = {}) => ({ id, title, category: 'Fishing', publication_status: 'published', active: true, sort_order: order, ...extra });
 const pkgRow = (id, link, name, price, order, extra = {}) => ({ id, boat_tour_id: link, name, package_type: 'half-day', description: null, duration_minutes: 240, base_price: price, included_guests: 5, max_guests: 10, extra_guest_price: 0, custom_quote: false, image_url: null, image_public_id: null, active: true, sort_order: order, departure_times: null, meal_options: [], package_included: null, ...extra });
 
@@ -59,9 +65,9 @@ async function fixture({ boats: boatsOverride, slowCreate = 0, images = [], extr
       if (method === 'POST') {
         if (slowCreate) await new Promise((resolve) => setTimeout(resolve, slowCreate));
         const body = request.postDataJSON(); writes.push({ table: 'boats', method, body });
-        state.boats.push({ ...body }); return route.fulfill({ json: [] });
+        state.boats.push(withBoatTrigger({ publication_status: 'published', ...body })); return route.fulfill({ json: [] });
       }
-      if (method === 'PATCH') { const body = request.postDataJSON(); writes.push({ table: 'boats', method, body, id: q('id') }); events.push('PATCH:boats'); state.boats = state.boats.map((b) => (b.id === q('id') ? { ...b, ...body } : b)); return route.fulfill({ json: [] }); }
+      if (method === 'PATCH') { const body = request.postDataJSON(); writes.push({ table: 'boats', method, body, id: q('id') }); events.push('PATCH:boats'); state.boats = state.boats.map((b) => (b.id === q('id') ? ('publication_status' in body ? withBoatTrigger({ ...b, ...body }) : { ...b, ...body }) : b)); return route.fulfill({ json: [] }); }
       if (method === 'DELETE') { writes.push({ table: 'boats', method, id: q('id') }); state.boats = state.boats.filter((b) => b.id !== q('id')); return route.fulfill({ json: [] }); }
       if (url.searchParams.get('select') === 'sort_order') {
         const highest = [...state.boats].sort((a, b) => b.sort_order - a.sort_order)[0];
@@ -209,19 +215,19 @@ test('boat wizard: 4 steps — Información / Galería / Tours y paquetes / Conf
     await expect(page.getByRole('heading', { name: 'Estado y visibilidad' })).toBeVisible();
     await expect(page.getByText('Zona de peligro')).toHaveCount(0);
     await expect(page.getByText('Estado actual')).toBeVisible();
-    await expect(page.getByText('Posición actual: 1. Puedes cambiarla usando Reordenar en la lista de Botes.')).toBeVisible();
+    await expect(page.getByText(/Posición actual|usando Reordenar/)).toHaveCount(0); // the list's Reordenar owns the position: no helper text in the form
     await expect(page.getByRole('button', { name: 'Eliminar bote' })).toBeVisible();
     await expect(page.locator('#boat-name')).toHaveCount(0);
   } finally { await f.browser.close(); }
 });
 
-test('boat footer matches Tours: no Cancelar (the X closes), ← on the left, Guardar borrador + Siguiente/Guardar on the right', async () => {
+test('boat footer matches Tours: no Cancelar (the X closes), ← on the left, Siguiente/Guardar (primary) before Guardar borrador on the right', async () => {
   const f = await fixture(); const { page } = f;
   try {
     await openSecondWind(page);
     await expect(page.getByRole('button', { name: 'Cerrar', exact: true })).toBeVisible();
     const names = () => page.locator('.admin-wizard-footer button').evaluateAll((buttons) => buttons.map((b) => (b.getAttribute('aria-label') || b.textContent || '').trim()));
-    const expected = [['Guardar borrador', 'Siguiente'], ['Anterior', 'Guardar borrador', 'Siguiente'], ['Anterior', 'Guardar borrador', 'Siguiente'], ['Anterior', 'Guardar borrador', 'Guardar']];
+    const expected = [['Siguiente', 'Guardar borrador'], ['Anterior', 'Siguiente', 'Guardar borrador'], ['Anterior', 'Siguiente', 'Guardar borrador'], ['Anterior', 'Guardar', 'Guardar borrador']];
     for (const [index, label] of ['Información', 'Galería', 'Tours y paquetes', 'Configuración'].entries()) {
       await goToStep(page, label);
       await expect(activeStep(page)).toContainText(label);
@@ -292,11 +298,12 @@ test('Siguiente with a name creates exactly one boat (even on double click), the
     assert.equal(boatPosts(writes).length, 1);
     const created = boatPosts(writes)[0].body;
     assert.equal(created.name, 'Bote Nuevo');
-    assert.equal(created.active, false);
+    assert.equal(created.publication_status, 'draft');
+    assert.equal('active' in created, false, 'the state is written through publication_status only');
     assert.equal(created.sort_order, 3); // max(1, 2) + 1
     // The gallery only accepts a photo in the first empty slot (photos are appended).
-    await expect(page.locator('.admin-tour-image-slot__empty:not([disabled])')).toHaveCount(1);
-    await expect(page.locator('.admin-tour-image-slot__empty[disabled]')).toHaveCount(5);
+    await expect(page.locator('.admin-tour-image-slot footer .admin-image-manager__pick:not([aria-disabled="true"])')).toHaveCount(1);
+    await expect(page.locator('.admin-tour-image-slot footer .admin-image-manager__pick[aria-disabled="true"]')).toHaveCount(5);
     // The packages step works against the real, just-created boat id.
     await page.getByRole('button', { name: 'Siguiente', exact: true }).click();
     await expect(activeStep(page)).toContainText('Tours y paquetes');
@@ -326,7 +333,7 @@ test('boat: Guardar (last step) is blocked without 3-6 photos, points to Galerí
     await page.getByRole('button', { name: 'Guardar', exact: true }).click();
     await expect(activeStep(page)).toContainText('Galería');
     await expect(page.locator('.admin-gallery-error')).toHaveText('Para publicar el bote necesitas entre 3 y 6 imagenes.');
-    assert.ok(writes.filter((w) => w.table === 'boats' && w.body && w.body.active === true).length === 0);
+    assert.ok(writes.filter((w) => w.table === 'boats' && w.body && w.body.publication_status === 'published').length === 0);
   } finally { await f.browser.close(); }
 });
 
@@ -343,7 +350,7 @@ test('new package is created from the boat, keeps boat_tour_id, and gets max(sor
     await expect(page.getByRole('heading', { name: 'Nuevo paquete' })).toBeVisible();
     await page.getByLabel('Nombre', { exact: true }).fill('Sunset Special');
     await page.getByLabel('Precio base (USD)').fill('450');
-    await page.getByRole('button', { name: 'Guardar paquete', exact: true }).click();
+    await page.getByRole('button', { name: 'Guardar', exact: true }).click();
     await expect(page.getByText('Paquete guardado.')).toBeVisible();
     const saved = writes.find((w) => w.table === 'tour_packages' && w.method === 'POST').body;
     assert.equal(saved.boat_tour_id, 'l1');
@@ -366,7 +373,7 @@ test('editing a package from the boat keeps its id, boat_tour_id and sort_order'
     await expect(page.getByLabel('Ubicación del paquete')).toHaveText('Second Wind / Fishing Tour');
     await expect(page.getByRole('heading', { name: 'Editar Half Day' })).toBeVisible();
     await page.getByLabel('Precio base (USD)').fill('700');
-    await page.getByRole('button', { name: 'Guardar paquete', exact: true }).click();
+    await page.getByRole('button', { name: 'Guardar', exact: true }).click();
     await expect(page.getByText('Paquete guardado.')).toBeVisible();
     const saved = writes.find((w) => w.table === 'tour_packages' && w.method === 'POST').body;
     assert.deepEqual([saved.id, saved.boat_tour_id, saved.base_price, saved.sort_order], ['p1', 'l1', 700, 1]);
@@ -466,12 +473,12 @@ test('Resumen de paquetes is a consult screen: clean table (no technical ids), "
     const row = page.getByRole('row').filter({ hasText: 'Splash' });
     await expect(row).toContainText('Water Toys Tour');
     await expect(row.getByRole('button', { name: 'Ver detalles del paquete Splash' })).toHaveText('Ver detalles');
-    await expect(page.getByRole('button', { name: 'Descargar PDF' })).toBeEnabled();
+    await expect(page.getByRole('button', { name: 'Descargar', exact: true })).toBeEnabled();
     assert.equal(writes.length, 0);
   } finally { await f.browser.close(); }
 });
 
-test('"Ver detalles" is a lightweight inline action: Eye icon + text, no border/card/box, accessible, hover and focus-visible', async () => {
+test('"Ver detalles" is a lightweight inline action: icon + text, no border/card/box, accessible, hover and focus-visible', async () => {
   const f = await fixture(); const { page, writes } = f;
   try {
     await page.goto(`${base}/admin/boat-tours`);
@@ -480,7 +487,7 @@ test('"Ver detalles" is a lightweight inline action: Eye icon + text, no border/
     await expect(action).toBeVisible();
     await expect(action).toHaveText('Ver detalles');
     await expect(action).toHaveAttribute('title', /detalle de este paquete/);
-    await expect(action.locator('svg')).toHaveCount(1); // the Eye icon, hidden from assistive tech
+    await expect(action.locator('svg')).toHaveCount(1); // the icon (not an Eye: Eye means visible/active), hidden from assistive tech
     await expect(action.locator('svg')).toHaveAttribute('aria-hidden', 'true');
     const style = (locator) => locator.evaluate((el) => { const s = getComputedStyle(el); return { border: s.borderTopWidth, borderStyle: s.borderTopStyle, bg: s.backgroundColor, shadow: s.boxShadow, underline: s.textDecorationLine, color: s.color, outline: s.outlineStyle }; });
     const rest = await style(action);
@@ -543,6 +550,19 @@ test('"Ver detalles" opens a compact read-only summary: no technical wording, on
     assert.deepEqual(buttons, ['Cerrar', 'Editar en Botes']);
     const footerButtons = await modal.locator('.admin-modal-footer button').count();
     assert.equal(footerButtons, 1);
+    // "Editar en Botes" is the PRIMARY action: the shared primary fill (not the dark navy that vanishes in dark mode), never secondary/ghost.
+    const edit = modal.getByRole('button', { name: 'Editar en Botes' });
+    await expect(edit).not.toHaveClass(/admin-btn--(secondary|ghost)/);
+    for (const theme of ['light', 'dark']) {
+      await page.evaluate((value) => { window.localStorage.setItem('pft-admin-theme', value); document.documentElement.setAttribute('data-theme', value); }, theme);
+      await page.waitForTimeout(900); // .admin-btn animates its background for 160ms (slack for a loaded machine)
+      const { bg, primary, color } = await edit.evaluate((el) => {
+        const probe = document.createElement('i'); probe.style.background = 'var(--admin-primary)'; document.body.appendChild(probe);
+        const out = { bg: getComputedStyle(el).backgroundColor, primary: getComputedStyle(probe).backgroundColor, color: getComputedStyle(el).color }; probe.remove(); return out;
+      });
+      assert.equal(bg, primary, `${theme}: Editar en Botes uses the primary fill`);
+      assert.equal(color, 'rgb(255, 255, 255)');
+    }
     await modal.getByRole('button', { name: 'Cerrar', exact: true }).click();
     await expect(modal).toHaveCount(0);
     // A package with its own list shows it, and hides "Comidas" when it has none.
@@ -617,7 +637,8 @@ test('Descargar PDF exports what is being consulted (search and filters, all pag
     await page.waitForTimeout(600);
     const exportRequests = [];
     page.on('request', (request) => { const url = request.url(); if (url.includes('/rest/v1/tour_packages') && url.includes('limit=2000')) exportRequests.push(decodeURIComponent(url)); });
-    const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Descargar PDF' }).click()]);
+    await page.getByRole('button', { name: 'Descargar', exact: true }).click();
+    const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('menuitem', { name: 'PDF (.pdf)' }).click()]);
     assert.match(download.suggestedFilename(), /^resumen-de-paquetes-\d{4}-\d{2}-\d{2}\.pdf$/);
     const path = await download.path();
     const bytes = (await import('node:fs')).readFileSync(path);
@@ -627,7 +648,7 @@ test('Descargar PDF exports what is being consulted (search and filters, all pag
     assert.match(exportRequests[0], /active=eq\.true/);
     assert.match(exportRequests[0], /name=ilike\.[%*]Day[%*]/);
     assert.doesNotMatch(exportRequests[0], /offset=/);
-    await expect(page.getByRole('button', { name: 'Descargar PDF' })).toBeEnabled();
+    await expect(page.getByRole('button', { name: 'Descargar', exact: true })).toBeEnabled();
     assert.equal(writes.length, 0);
   } finally { await f.browser.close(); }
 });
@@ -657,6 +678,90 @@ test('the PDF layout: brand header, title, generation date, filters, striped tab
   } finally { await f.browser.close(); }
 });
 
+
+// The photo gallery of Tours and Botes is ONE component (AdminImageSlots): both screens must produce exactly this structure.
+const GALLERY_SIGNATURE = {
+  slots: ['Foto 1', 'Foto 2', 'Foto 3', 'Foto 4', 'Foto 5', 'Foto 6'],
+  badges: ['Portada', '', '', '', '', ''],
+  // The primary picker of every slot: "Cambiar" once the slot has a photo, icon-only Upload while it is empty (named by aria-label).
+  pickers: ['Cambiar foto 1', 'Cambiar foto 2', 'Cambiar foto 3', 'Subir foto 4', 'Subir foto 5', 'Subir foto 6'],
+  pickerText: ['Cambiar', 'Cambiar', 'Cambiar', '', '', ''],
+  deletes: ['Eliminar foto 1', 'Eliminar foto 2', 'Eliminar foto 3', '', '', ''],
+  frames: [1, 1, 1, 1, 1, 1],
+};
+const gallerySignature = (page) => page.locator('.admin-tour-image-slot').evaluateAll((slots) => ({
+  slots: slots.map((slot) => slot.querySelector('header strong').textContent.trim()),
+  badges: slots.map((slot) => slot.querySelector('header .admin-badge')?.textContent.trim() ?? ''),
+  pickers: slots.map((slot) => slot.querySelector('footer .admin-image-manager__pick')?.getAttribute('aria-label') ?? ''),
+  pickerText: slots.map((slot) => slot.querySelector('footer .admin-image-manager__pick')?.textContent.trim() ?? ''),
+  deletes: slots.map((slot) => slot.querySelector('footer button.admin-icon-btn')?.getAttribute('aria-label') ?? ''),
+  frames: slots.map((slot) => slot.querySelectorAll('.admin-media-preview').length),
+}));
+
+
+const slotMetrics = (page) => page.locator('.admin-tour-image-slot').evaluateAll((slots) => slots.map((slot) => {
+  const box = slot.getBoundingClientRect();
+  const frame = slot.querySelector('.admin-media-preview').getBoundingClientRect();
+  const picker = slot.querySelector('footer .admin-image-manager__pick');
+  const style = getComputedStyle(picker);
+  return { h: Math.round(box.height), w: Math.round(box.width), top: Math.round(box.top), frameH: Math.round(frame.height), frameW: Math.round(frame.width), picker: { className: picker.className, text: picker.textContent.trim(), icons: picker.querySelectorAll('svg').length, w: Math.round(picker.getBoundingClientRect().width), h: Math.round(picker.getBoundingClientRect().height), bg: style.backgroundColor, title: picker.getAttribute('title') } };
+}));
+
+async function checkSlotPickers(page, name) {
+  const before = await slotMetrics(page);
+  // Same frame everywhere, and every card of a row has the same height (empty or filled).
+  assert.equal(new Set(before.map((slot) => slot.frameH)).size, 1, `${name}: one frame height ${JSON.stringify(before.map((slot) => slot.frameH))}`);
+  assert.equal(new Set(before.map((slot) => slot.h)).size, 1, `${name}: equal card heights ${JSON.stringify(before.map((slot) => slot.h))}`);
+  // Filled slots: "Cambiar" is the PRIMARY button. Empty slots: the icon-only primary Upload with an accessible name.
+  before.forEach((slot, index) => {
+    assert.doesNotMatch(slot.picker.className, /secondary|ghost/, `${name}: slot ${index + 1} picker is primary`);
+    assert.notEqual(slot.picker.bg, 'rgba(0, 0, 0, 0)', `${name}: slot ${index + 1} is filled`);
+    if (index < 3) assert.deepEqual([slot.picker.text, slot.picker.icons, slot.picker.title], ['Cambiar', 0, `Cambiar foto ${index + 1}`], `${name}: filled slot ${index + 1}`);
+    else assert.deepEqual([slot.picker.text, slot.picker.icons, slot.picker.title, slot.picker.w >= 40 && slot.picker.h >= 40], ['', 1, `Subir foto ${index + 1}`, true], `${name}: empty slot ${index + 1} is icon-only`);
+  });
+  await expect(page.locator('.admin-tour-image-slot').getByRole('button', { name: /^(Cerrar|Cancelar|Seleccionar|Subir imagen)$/ })).toHaveCount(0);
+  // Picking a file opens the crop dialog on its own: nothing grows inside the slots.
+  await page.locator('.admin-tour-image-slot').nth(3).locator('input[type="file"][aria-label="Elegir archivo de imagen"]').setInputFiles({ name: 'foto.png', mimeType: 'image/png', buffer: makePng() });
+  const crop = page.getByRole('dialog').filter({ hasText: 'Ajustar imagen' });
+  await expect(crop.getByRole('heading', { name: 'Ajustar imagen' })).toBeVisible();
+  assert.deepEqual((await slotMetrics(page)).map((slot) => [slot.h, slot.frameH]), before.map((slot) => [slot.h, slot.frameH]), `${name}: the slots did not change size`);
+  await crop.getByRole('button', { name: 'Cerrar', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Ajustar imagen' })).toHaveCount(0);
+  assert.deepEqual((await slotMetrics(page)).map((slot) => [slot.h, slot.frameH]), before.map((slot) => [slot.h, slot.frameH]), `${name}: still the same after closing`);
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, `${name}: no horizontal overflow`);
+}
+
+test('Botes gallery slots: the picker never enlarges a card (desktop and phone), Cambiar is primary, empty slots have the icon-only primary Upload, the crop dialog closes with its X', async () => {
+  const f = await fixture({ images: threeImages('second-wind') }); const { page } = f;
+  try {
+    await openSecondWind(page);
+    await goToStep(page, 'Galería');
+    await expect(page.locator('.admin-tour-image-slot')).toHaveCount(6);
+    await checkSlotPickers(page, 'boats desktop');
+    await page.setViewportSize({ width: 390, height: 900 });
+    await checkSlotPickers(page, 'boats phone');
+  } finally { await f.browser.close(); }
+});
+
+test('Botes gallery = Tours gallery: same six slots, Portada on the first photo, Cambiar + delete icon per photo, no boat-only cover / reorder tools', async () => {
+  const f = await fixture({ images: threeImages('second-wind') }); const { page } = f;
+  try {
+    await openSecondWind(page);
+    await goToStep(page, 'Galería');
+    await expect(page.locator('.admin-tour-image-slot')).toHaveCount(6);
+    assert.deepEqual(await gallerySignature(page), GALLERY_SIGNATURE);
+    await expect(page.getByRole('button', { name: /Marcar foto|Mover foto/ })).toHaveCount(0);
+    await expect(page.getByText(/de 6 imágenes/)).toHaveCount(0);
+    // Nothing opens or grows inside a slot: no inline editor, no Cerrar / Cancelar / Seleccionar buttons.
+    await expect(page.locator('.admin-tour-image-slot').getByRole('button', { name: /^(Cerrar|Cancelar|Seleccionar)$/ })).toHaveCount(0);
+    // "Cambiar" is the primary button of a filled slot; the empty one is the icon-only primary Upload.
+    assert.deepEqual(await page.locator('.admin-tour-image-slot footer .admin-image-manager__pick').evaluateAll((nodes) => nodes.map((node) => node.className.includes('admin-btn--icon'))), [false, false, false, true, true, true]);
+    // Deleting goes through the same confirmation.
+    await page.getByRole('button', { name: 'Eliminar foto 3' }).click();
+    await expect(page.getByRole('dialog').last()).toContainText('Eliminar imagen');
+  } finally { await f.browser.close(); }
+});
+
 // --- Botes: Información (equipment), Galería (Tours pattern), Configuración (Tours layout) ------------------
 
 test('equipment: English is the source — Spanish is generated on save, only for new or changed items', async () => {
@@ -670,7 +775,12 @@ test('equipment: English is the source — Spanish is generated on save, only fo
     await expect(rows.locator('input')).toHaveCount(2);
     await expect(page.locator('.admin-boat-step-body').getByText(/^(English|Inglés|Español)$/)).toHaveCount(0);
     await expect(page.getByLabel('Equipamiento 1')).toHaveValue('Garmin GPS');
-    await expect(page.getByText('Escríbelo en inglés: el español se genera al guardar.')).toBeVisible();
+    await expect(page.getByText(/se genera al guardar|Escríbelos? en inglés/)).toHaveCount(0);
+    // Equipment can be added and removed, never reordered: no handle, no up/down, only Eliminar per item.
+    await expect(rows.getByRole('button', { name: /^(Subir|Bajar)/ })).toHaveCount(0);
+    await expect(rows.locator('.admin-reorder-handle, [draggable="true"]')).toHaveCount(0);
+    await expect(rows.first().getByRole('button')).toHaveText(['']);
+    await expect(rows.first().getByRole('button', { name: 'Eliminar Garmin GPS' })).toBeVisible();
     // Typing/adding does not call the translator by itself.
     await page.locator('#boat-equipment-input').fill('Cooler');
     await page.locator('#boat-equipment-input').press('Enter');
@@ -770,12 +880,12 @@ test('boat badge: English is the source, Spanish is generated on save (create an
 });
 
 test('Configuración of a boat: Requisitos pendientes only when something is missing; active boats show none', async () => {
-  const draft = await fixture({ boats: [boatRow('borrador', 'Bote borrador', 1, { active: false })] });
+  const draft = await fixture({ boats: [boatRow('borrador', 'Bote borrador', 1, { publication_status: 'draft', active: false })] });
   try {
     await draft.page.goto(`${base}/admin/boats`);
     await draft.page.getByRole('button', { name: 'Editar bote Bote borrador' }).click();
     await goToStep(draft.page, 'Configuración');
-    await expect(draft.page.locator('.admin-tour-config-row .admin-badge')).toHaveText('Inactivo');
+    await expect(draft.page.locator('.admin-tour-config-row .admin-badge')).toHaveText('Borrador');
     await expect(draft.page.getByText('No aparece en el sitio público ni puede reservarse.')).toBeVisible();
     await expect(draft.page.locator('.admin-tour-missing').getByRole('listitem')).toHaveText(['Al menos 3 fotos']);
   } finally { await draft.browser.close(); }
@@ -840,9 +950,9 @@ test('"Disponibles para agregar" is a compact list; a search box only appears wh
     await expect(many.page.locator('.admin-boat-tours__available-list li')).toContainText('Extra Tour 3');
     await search.fill('zzz');
     await expect(many.page.getByText('Ningún tour coincide con la búsqueda.')).toBeVisible();
-    // The list scrolls inside its own panel, never pushing the page.
-    const overflowY = await many.page.locator('.admin-boat-tours__available-list').evaluate((el) => getComputedStyle(el).overflowY);
-    assert.equal(overflowY, 'auto');
+    // No inner scroll area: the list grows with its content and the page scrolls.
+    const list = await many.page.locator('.admin-boat-tours__available-list').evaluate((el) => { const s = getComputedStyle(el); const panel = getComputedStyle(el.closest('.admin-boat-tours__available')); return { overflowY: s.overflowY, maxHeight: s.maxHeight, scrolls: el.scrollHeight > el.clientHeight + 1, sticky: panel.position }; });
+    assert.deepEqual(list, { overflowY: 'visible', maxHeight: 'none', scrolls: false, sticky: 'static' });
   } finally { await many.browser.close(); }
 });
 
@@ -858,7 +968,7 @@ test('package form: grouped in sections, short fields on an aligned 2-column gri
     await expect(page.getByRole('group', { name: 'Tours que se pueden agregar' })).toBeHidden();
 
     const box = async (label) => editor.getByLabel(label).first().boundingBox();
-    const [name, duration, price, extra, included, max] = [await editor.getByLabel('Nombre', { exact: true }).boundingBox(), await box('Duración (horas, opcional)'), await box('Precio base (USD)'), await box('Extra por persona adicional (USD)'), await box('Personas incluidas'), await box('Máximo del paquete')];
+    const [name, duration, price, extra, included, max] = [await editor.getByLabel('Nombre', { exact: true }).boundingBox(), await box('Duración (horas, opcional)'), await box('Precio base (USD)'), await box('Extra por persona adicional (USD)'), await box('Personas incluidas'), await box('Máximo de personas')];
     // Pairs share a row and the same width; both columns line up down the form.
     assert.equal(Math.round(name.y), Math.round(duration.y));
     assert.equal(Math.round(price.y), Math.round(extra.y));
@@ -873,8 +983,8 @@ test('package form: grouped in sections, short fields on an aligned 2-column gri
     // The package's own footer is inside the editor, always reachable, and separate from the wizard footer.
     const footer = editor.locator('.admin-package-editor__footer');
     await expect(footer.getByRole('button', { name: 'Cancelar' })).toBeInViewport();
-    await expect(footer.getByRole('button', { name: 'Guardar paquete' })).toBeInViewport();
-    await expect(page.locator('.admin-wizard-footer').getByRole('button', { name: 'Guardar paquete' })).toHaveCount(0);
+    await expect(footer.getByRole('button', { name: 'Guardar', exact: true })).toBeInViewport();
+    await expect(page.locator('.admin-wizard-footer').getByRole('button', { name: 'Guardar', exact: true })).toHaveCount(0);
     await expect(page.locator('.admin-wizard-footer').getByRole('button', { name: 'Cancelar' })).toHaveCount(0);
     await footer.getByRole('button', { name: 'Cancelar' }).click();
     await expect(editor).toHaveCount(0);
@@ -931,7 +1041,7 @@ test('package form keeps every real field: what is typed is exactly what is save
     await editor.getByLabel('Precio base (USD)').fill('500');
     await editor.getByLabel('Extra por persona adicional (USD)').fill('25');
     await editor.getByLabel('Personas incluidas').fill('2');
-    await editor.getByLabel('Máximo del paquete').fill('8');
+    await editor.getByLabel('Máximo de personas').fill('8');
     await editor.getByRole('checkbox', { name: /Cotización personalizada/ }).check();
     await editor.getByLabel('Agregar hora de salida').fill('09:30');
     await editor.getByRole('button', { name: 'Agregar hora' }).click();
@@ -940,7 +1050,7 @@ test('package form keeps every real field: what is typed is exactly what is save
     await editor.getByLabel('Elementos incluidos, uno por línea').fill('Snacks\nBebidas');
     await editor.getByRole('button', { name: 'Agregar comida' }).click();
     await editor.getByLabel('Comida 1', { exact: true }).fill('Ceviche');
-    await editor.getByRole('button', { name: 'Guardar paquete', exact: true }).click();
+    await editor.getByRole('button', { name: 'Guardar', exact: true }).click();
     await expect(page.getByText('Paquete guardado.')).toBeVisible();
     const saved = writes.find((w) => w.table === 'tour_packages' && w.method === 'POST').body;
     assert.equal(saved.boat_tour_id, 'l1');
@@ -974,9 +1084,9 @@ test('package form: general schedule + tour list save as null, Desactivar paquet
     await expect(editor.getByRole('checkbox', { name: 'Usar los horarios generales' })).toBeChecked();
     await expect(editor.getByRole('checkbox', { name: 'Personalizar lo incluido' })).not.toBeChecked();
     await expect(editor.getByText('Visible y reservable.')).toBeVisible();
-    await editor.getByRole('button', { name: 'Desactivar paquete' }).click();
+    await editor.getByRole('button', { name: /Ocultar paquete/ }).click();
     await expect(editor.getByText('Oculto y no reservable.')).toBeVisible();
-    await editor.getByRole('button', { name: 'Guardar paquete', exact: true }).click();
+    await editor.getByRole('button', { name: 'Guardar', exact: true }).click();
     await expect(page.getByText('Paquete guardado.')).toBeVisible();
     const saved = writes.find((w) => w.table === 'tour_packages' && w.method === 'POST').body;
     assert.deepEqual([saved.id, saved.departure_times, saved.package_included, saved.active], ['p1', null, null, false]);
@@ -992,28 +1102,31 @@ test('package form: general schedule + tour list save as null, Desactivar paquet
 
 // --- Configuración: Guardar borrador / Guardar / Mostrar-Ocultar ---------------------------------------------
 
-test('Configuración: an inactive boat shows "Mostrar bote" (Eye); showing checks name, capacity and 3-6 photos, then Ocultar bote (EyeOff) hides it again', async () => {
+test('Configuración: an inactive boat shows EyeOff (hidden) on "Mostrar bote"; showing checks name, capacity and 3-6 photos, then Eye (visible) on "Ocultar bote"', async () => {
   const f = await fixture({ boats: [boatRow('borrador', 'Bote borrador', 1, { active: false })], images: threeImages('borrador') }); const { page, writes, state } = f;
   try {
     await page.goto(`${base}/admin/boats`);
     await page.getByRole('button', { name: 'Editar bote Bote borrador' }).click();
     await goToStep(page, 'Configuración');
-    const toggle = page.locator('.admin-tour-config-row').getByRole('button', { name: /^(Mostrar|Ocultar) bote$/ });
-    await expect(toggle).toHaveText('Mostrar bote');
-    await expect(toggle.locator('svg.lucide-eye')).toHaveCount(1);
-    await expect(toggle.locator('svg.lucide-eye-off')).toHaveCount(0);
+    const toggle = page.locator('.admin-tour-config-row .admin-visibility-btn');
+    await expect(toggle).toHaveText('No visible');
+    await expect(toggle).toHaveAccessibleName(/Mostrar bote/);
+    await expect(toggle.locator('svg.lucide-eye-off')).toHaveCount(1); // the icon is the current state: hidden
+    await expect(toggle.locator('svg.lucide-eye')).toHaveCount(0);
     await expect(page.getByText('Listo para publicar.')).toBeVisible();
     await expect(page.locator('.admin-tour-config-row .admin-badge')).toHaveText('Inactivo');
     await toggle.click();
     await expect(page.locator('.admin-tour-config-row .admin-badge')).toHaveText('Activo');
-    await expect(toggle).toHaveText('Ocultar bote');
-    await expect(toggle.locator('svg.lucide-eye-off')).toHaveCount(1);
+    await expect(toggle).toHaveText('Visible');
+    await expect(toggle).toHaveAccessibleName(/Ocultar bote/);
+    await expect(toggle.locator('svg.lucide-eye')).toHaveCount(1); // now visible
+    await expect(toggle.locator('svg.lucide-eye-off')).toHaveCount(0);
     await expect(page.getByText('Requisitos pendientes')).toHaveCount(0);
-    assert.deepEqual(writes.filter((w) => w.table === 'boats' && 'active' in w.body).map((w) => [w.method, w.id, w.body.active]), [['PATCH', 'borrador', true]]);
+    assert.deepEqual(writes.filter((w) => w.table === 'boats' && 'publication_status' in w.body).map((w) => [w.method, w.id, w.body.publication_status]), [['PATCH', 'borrador', 'published']]);
     assert.equal(state.boats[0].active, true);
     await toggle.click();
-    await expect(toggle).toHaveText('Mostrar bote');
-    assert.deepEqual(writes.filter((w) => w.table === 'boats' && 'active' in w.body).map((w) => w.body.active), [true, false]);
+    await expect(toggle).toHaveText('No visible');
+    assert.deepEqual(writes.filter((w) => w.table === 'boats' && 'publication_status' in w.body).map((w) => w.body.publication_status), ['published', 'inactive']);
     assert.equal(state.boats[0].active, false);
     assert.equal(writes.some((w) => w.method === 'DELETE' || w.table === 'boat_tours' || w.table === 'tour_packages'), false);
   } finally { await f.browser.close(); }
@@ -1028,7 +1141,7 @@ test('Configuración: an inactive boat shows "Mostrar bote" (Eye); showing check
     await short.page.getByRole('button', { name: 'Mostrar bote' }).click();
     await expect(short.page.locator('.admin-boat-modal').getByText('Completa los requisitos antes de mostrar el bote.')).toBeVisible();
     await expect(short.page.locator('.admin-tour-config-row .admin-badge')).toHaveText('Inactivo');
-    assert.equal(short.writes.filter((w) => w.table === 'boats' && 'active' in w.body).length, 0);
+    assert.equal(short.writes.filter((w) => w.table === 'boats' && 'publication_status' in w.body).length, 0);
   } finally { await short.browser.close(); }
 
   // Name and capacity are enforced before Configuración can even be reached.
@@ -1049,18 +1162,21 @@ test('Configuración: an inactive boat shows "Mostrar bote" (Eye); showing check
   } finally { await invalid.browser.close(); }
 });
 
-test('Guardar borrador never changes visibility: a visible boat stays visible, a hidden one stays hidden', async () => {
+test('Guardar borrador saves a REAL draft (publication_status = draft, like Tours): a visible boat goes back to draft, an inactive one too — never just active=false', async () => {
   const f = await fixture({ images: threeImages('second-wind') }); const { page, writes, state } = f;
   try {
     await openSecondWind(page);
     await page.locator('#boat-badge').fill('Nueva etiqueta');
     await page.getByRole('button', { name: 'Guardar borrador' }).click();
-    await expect(page.getByText('Cambios guardados. El bote sigue visible.')).toBeVisible();
+    await expect(page.getByText('Borrador guardado.')).toBeVisible();
     const patches = writes.filter((w) => w.table === 'boats' && w.method === 'PATCH');
     assert.equal(patches.length, 1);
-    assert.equal('active' in patches[0].body, false, 'Guardar borrador must not send `active`');
+    assert.equal(patches[0].body.publication_status, 'draft');
+    assert.equal('active' in patches[0].body, false, 'Guardar borrador sends the status, not `active`');
     assert.equal(patches[0].body.badge, 'Nueva etiqueta');
-    assert.equal(state.boats.find((b) => b.id === 'second-wind').active, true);
+    assert.deepEqual([state.boats.find((b) => b.id === 'second-wind').publication_status, state.boats.find((b) => b.id === 'second-wind').active], ['draft', false]);
+    // The list tells it apart from an inactive boat.
+    await expect(page.locator('.admin-table tbody tr').filter({ hasText: 'Second Wind' }).locator('.admin-badge')).toHaveText('Borrador');
   } finally { await f.browser.close(); }
 
   const hidden = await fixture({ boats: [boatRow('oculto', 'Bote oculto', 1, { active: false })], images: threeImages('oculto') });
@@ -1070,9 +1186,40 @@ test('Guardar borrador never changes visibility: a visible boat stays visible, a
     await hidden.page.locator('#boat-badge').fill('x');
     await hidden.page.getByRole('button', { name: 'Guardar borrador' }).click();
     await expect(hidden.page.getByText('Borrador guardado.')).toBeVisible();
-    assert.equal(hidden.writes.some((w) => w.table === 'boats' && 'active' in (w.body ?? {})), false);
-    assert.equal(hidden.state.boats[0].active, false);
+    assert.equal(hidden.writes.filter((w) => w.table === 'boats' && w.method === 'PATCH').at(-1).body.publication_status, 'draft');
+    assert.deepEqual([hidden.state.boats[0].publication_status, hidden.state.boats[0].active], ['draft', false]);
   } finally { await hidden.browser.close(); }
+});
+
+test('Estados de Botes: the list shows Activo / Borrador / Inactivo, the filter tells them apart, and editing without saving as draft (Siguiente) keeps each status', async () => {
+  const boats = [boatRow('publicado', 'Bote publicado', 1), boatRow('borrador', 'Bote borrador', 2, { publication_status: 'draft', active: false }), boatRow('inactivo', 'Bote inactivo', 3, { active: false })];
+  const f = await fixture({ boats, images: [...threeImages('publicado'), ...threeImages('borrador'), ...threeImages('inactivo')] }); const { page, writes, state } = f;
+  try {
+    await page.goto(`${base}/admin/boats`);
+    const rows = page.locator('.admin-table tbody tr');
+    await expect(rows).toHaveCount(3);
+    await expect(rows.locator('.admin-badge')).toHaveText(['Activo', 'Borrador', 'Inactivo']);
+    // Filter by the new state.
+    await page.getByRole('button', { name: /^Filtros/ }).click();
+    await page.getByLabel('Estado').selectOption('draft');
+    await expect(rows).toHaveCount(1);
+    await expect(rows.first()).toContainText('Bote borrador');
+    await page.getByLabel('Estado').selectOption('all');
+    // Opening and saving the info step of a draft / an inactive boat never reinterprets its state.
+    for (const [name, expected] of [['Bote borrador', ['draft', false]], ['Bote inactivo', ['inactive', false]]]) {
+      await page.getByRole('button', { name: `Editar bote ${name}` }).click();
+      await page.locator('#boat-badge').fill('Etiqueta');
+      await page.getByRole('button', { name: 'Siguiente', exact: true }).click();
+      await expect(activeStep(page)).toContainText('Galería');
+      const patch = writes.filter((w) => w.table === 'boats' && w.method === 'PATCH').at(-1);
+      assert.equal('publication_status' in patch.body, false, `${name}: Siguiente does not touch the state`);
+      const row = state.boats.find((b) => b.name === name);
+      assert.deepEqual([row.publication_status, row.active], expected, name);
+      await page.getByRole('button', { name: 'Cerrar', exact: true }).click();
+      await expect(page.locator('.admin-boat-modal')).toHaveCount(0);
+    }
+    await expect(rows.locator('.admin-badge')).toHaveText(['Activo', 'Borrador', 'Inactivo']);
+  } finally { await f.browser.close(); }
 });
 
 test('Guardar (last step) publishes a complete boat, but a boat hidden from Configuración stays hidden', async () => {
@@ -1084,8 +1231,9 @@ test('Guardar (last step) publishes a complete boat, but a boat hidden from Conf
     await draft.page.getByRole('button', { name: 'Guardar', exact: true }).click();
     await expect(draft.page.getByText('Bote publicado.')).toBeVisible();
     const patch = draft.writes.filter((w) => w.table === 'boats' && w.method === 'PATCH').at(-1);
-    assert.equal(patch.body.active, true);
-    assert.equal(draft.state.boats[0].active, true);
+    assert.equal(patch.body.publication_status, 'published');
+    assert.equal('active' in patch.body, false);
+    assert.deepEqual([draft.state.boats[0].publication_status, draft.state.boats[0].active], ['published', true]);
   } finally { await draft.browser.close(); }
 
   const shown = await fixture({ images: threeImages('second-wind') });
@@ -1096,8 +1244,8 @@ test('Guardar (last step) publishes a complete boat, but a boat hidden from Conf
     await expect(shown.page.getByRole('button', { name: 'Mostrar bote' })).toBeVisible();
     await shown.page.getByRole('button', { name: 'Guardar', exact: true }).click();
     await expect(shown.page.getByText('Cambios guardados. El bote sigue oculto.')).toBeVisible();
-    assert.equal(shown.state.boats.find((b) => b.id === 'second-wind').active, false);
-    assert.equal(shown.writes.filter((w) => w.table === 'boats' && w.body.active === true).length, 0);
+    assert.deepEqual([shown.state.boats.find((b) => b.id === 'second-wind').publication_status, shown.state.boats.find((b) => b.id === 'second-wind').active], ['inactive', false]);
+    assert.equal(shown.writes.filter((w) => w.table === 'boats' && w.body.publication_status === 'published').length, 0);
   } finally { await shown.browser.close(); }
 });
 
@@ -1123,9 +1271,8 @@ test('Configuración: Eliminar bote still asks for confirmation and then deletes
 async function replacePhoto(page, slot = 1) {
   await goToStep(page, 'Galería');
   await expect(activeStep(page)).toContainText('Galería');
-  await page.getByRole('button', { name: `Cambiar foto ${slot}` }).click();
-  await page.locator('input[type="file"][aria-label="Elegir archivo de imagen"]').setInputFiles({ name: 'nueva.png', mimeType: 'image/png', buffer: makePng() });
-  const go = page.getByRole('button', { name: 'Continuar y subir' });
+  await page.locator('.admin-tour-image-slot').nth(slot - 1).locator('input[type="file"][aria-label="Elegir archivo de imagen"]').setInputFiles({ name: 'nueva.png', mimeType: 'image/png', buffer: makePng() });
+  const go = page.getByRole('dialog').getByRole('button', { name: 'Subir imagen', exact: true });
   await expect(go).toBeEnabled({ timeout: 15000 });
   await go.click();
 }
@@ -1230,8 +1377,7 @@ test('meals form: one English field per meal — no Español/Inglés field anywh
     await expect(editor.getByText(/· Español|· Inglés/)).toHaveCount(0);
     await expect(editor.locator('.admin-package-meal')).toHaveCount(2);
     for (const row of await editor.locator('.admin-package-meal').all()) await expect(row.locator('input')).toHaveCount(1);
-    await expect(editor.getByText('Escríbelas en inglés: el español se genera al guardar.')).toBeVisible();
-    await expect(editor.getByText('Escribe los textos del paquete en inglés: el español se genera al guardar.')).toBeVisible();
+    await expect(editor.getByText(/se genera al guardar|Escríbelas? en inglés|Escribe los textos/)).toHaveCount(0);
   } finally { await f.browser.close(); }
 });
 
@@ -1250,7 +1396,7 @@ test('meals: nothing is translated while typing, on blur, on opening the editor 
     await page.locator('.admin-boat-package-row').filter({ hasText: 'Half Day' }).getByRole('button', { name: 'Editar Half Day' }).click();
     const again = page.locator('.admin-package-compact-editor');
     await again.getByLabel('Comida 1', { exact: true }).fill('Fish casado with rice');
-    await again.getByRole('button', { name: 'Guardar paquete', exact: true }).click();
+    await again.getByRole('button', { name: 'Guardar', exact: true }).click();
     await expect(page.getByText('Paquete guardado.')).toBeVisible();
     assert.equal(translateCalls.length, 1);
   } finally { await f.browser.close(); }
@@ -1269,7 +1415,7 @@ test('meals: new English meals are translated EN -> ES in one batch on save and 
     await editor.getByLabel('Comida 1', { exact: true }).fill('Fish casado');
     await editor.getByRole('button', { name: 'Agregar comida' }).click();
     await editor.getByLabel('Comida 2', { exact: true }).fill('Seafood pasta');
-    await editor.getByRole('button', { name: 'Guardar paquete', exact: true }).click();
+    await editor.getByRole('button', { name: 'Guardar', exact: true }).click();
     await expect(page.getByText('Paquete guardado.')).toBeVisible();
     assert.equal(translateCalls.length, 1, 'one batched call for name + meals');
     assert.deepEqual(translateCalls[0], { texts: ['With lunch', 'Fish casado', 'Seafood pasta'], targetLang: 'ES', sourceLang: 'EN' });
@@ -1284,7 +1430,7 @@ test('meals: editing a package without touching the meals does not translate aga
   try {
     const editor = await openHalfDay(page);
     await editor.getByLabel('Precio base (USD)').fill('700');
-    await editor.getByRole('button', { name: 'Guardar paquete', exact: true }).click();
+    await editor.getByRole('button', { name: 'Guardar', exact: true }).click();
     await expect(page.getByText('Paquete guardado.')).toBeVisible();
     assert.equal(translateCalls.length, 0, 'no translator call when no text changed');
     const saved = packageWrites(writes).at(-1).body;
@@ -1299,7 +1445,7 @@ test('meals: changing one meal retranslates only that one; the others keep their
   try {
     const editor = await openHalfDay(page);
     await editor.getByLabel('Comida 1', { exact: true }).fill('Fish casado with rice');
-    await editor.getByRole('button', { name: 'Guardar paquete', exact: true }).click();
+    await editor.getByRole('button', { name: 'Guardar', exact: true }).click();
     await expect(page.getByText('Paquete guardado.')).toBeVisible();
     assert.deepEqual(translateCalls.map((call) => call.texts), [['Fish casado with rice']]);
     assert.deepEqual(packageWrites(writes).at(-1).body.meal_options, [{ es: 'Fish casado with rice [ES]', en: 'Fish casado with rice' }, { es: 'Pasta con mariscos', en: 'Seafood pasta' }]);
@@ -1312,14 +1458,14 @@ test('meals: adding one meal to an existing package translates only the new one;
     let editor = await openHalfDay(page);
     await editor.getByRole('button', { name: 'Agregar comida' }).click();
     await editor.getByLabel('Comida 3', { exact: true }).fill('Vegan salad');
-    await editor.getByRole('button', { name: 'Guardar paquete', exact: true }).click();
+    await editor.getByRole('button', { name: 'Guardar', exact: true }).click();
     await expect(page.getByText('Paquete guardado.')).toBeVisible();
     assert.deepEqual(translateCalls.map((call) => call.texts), [['Vegan salad']]);
     assert.deepEqual(packageWrites(writes).at(-1).body.meal_options.map((meal) => meal.es), ['Casado con pescado', 'Pasta con mariscos', 'Vegan salad [ES]']);
     await page.locator('.admin-boat-package-row').filter({ hasText: 'Half Day' }).getByRole('button', { name: 'Editar Half Day' }).click();
     editor = page.locator('.admin-package-compact-editor');
     await editor.getByRole('button', { name: 'Eliminar comida 3' }).click();
-    await editor.getByRole('button', { name: 'Guardar paquete', exact: true }).click();
+    await editor.getByRole('button', { name: 'Guardar', exact: true }).click();
     await expect.poll(() => packageWrites(writes).length).toBe(2);
     assert.equal(translateCalls.length, 1);
     assert.equal(packageWrites(writes).at(-1).body.meal_options.length, 2);
@@ -1336,7 +1482,7 @@ test('package name and description: English source, Spanish generated on create 
     await editor.getByLabel('Nombre', { exact: true }).fill('Sunset Special');
     await editor.getByLabel(/^Descripción/).fill('Private cruise with drinks.');
     await editor.getByLabel('Precio base (USD)').fill('450');
-    await editor.getByRole('button', { name: 'Guardar paquete', exact: true }).click();
+    await editor.getByRole('button', { name: 'Guardar', exact: true }).click();
     await expect(page.getByText('Paquete guardado.')).toBeVisible();
     assert.deepEqual(translateCalls.map((call) => call.texts), [['Sunset Special', 'Private cruise with drinks.']]);
     let saved = packageWrites(writes).at(-1).body;
@@ -1346,7 +1492,7 @@ test('package name and description: English source, Spanish generated on create 
     await page.locator('.admin-boat-package-row').filter({ hasText: 'Sunset Special' }).getByRole('button', { name: 'Editar Sunset Special' }).click();
     editor = page.locator('.admin-package-compact-editor');
     await editor.getByLabel(/^Descripción/).fill('Private sunset cruise with drinks and snacks.');
-    await editor.getByRole('button', { name: 'Guardar paquete', exact: true }).click();
+    await editor.getByRole('button', { name: 'Guardar', exact: true }).click();
     await expect.poll(() => packageWrites(writes).length).toBe(2);
     assert.deepEqual(translateCalls.map((call) => call.texts).at(-1), ['Private sunset cruise with drinks and snacks.']);
     saved = packageWrites(writes).at(-1).body;
@@ -1363,7 +1509,7 @@ test('package: if any translation fails the whole package is NOT saved (name/des
     await editor.getByLabel('Precio base (USD)').fill('777');
     await editor.getByLabel(/^Descripción/).fill('Changed description');
     await editor.getByLabel('Comida 2', { exact: true }).fill('Seafood pasta with pesto');
-    await editor.getByRole('button', { name: 'Guardar paquete', exact: true }).click();
+    await editor.getByRole('button', { name: 'Guardar', exact: true }).click();
     await expect(page.getByRole('alert').filter({ hasText: SPANISH_ERROR })).toBeVisible();
     assert.equal(translateCalls.length, 1, 'both changed texts went out together');
     assert.deepEqual(translateCalls[0].texts, ['Changed description', 'Seafood pasta with pesto']);
@@ -1375,7 +1521,7 @@ test('package: if any translation fails the whole package is NOT saved (name/des
     await editor.getByLabel(/^Descripción/).fill('');
     await editor.getByLabel('Comida 2', { exact: true }).fill('Seafood pasta');
     translateCalls.length = 0;
-    await editor.getByRole('button', { name: 'Guardar paquete', exact: true }).click();
+    await editor.getByRole('button', { name: 'Guardar', exact: true }).click();
     await expect(page.getByText('Paquete guardado.')).toBeVisible();
     assert.equal(translateCalls.length, 0);
     translation.fails = false;
@@ -1386,7 +1532,7 @@ test('package: if any translation fails the whole package is NOT saved (name/des
     const editor = await openHalfDay(g.page);
     const mark = g.writes.length;
     await editor.getByLabel('Comida 1', { exact: true }).fill('Fish casado with rice');
-    await editor.getByRole('button', { name: 'Guardar paquete', exact: true }).click();
+    await editor.getByRole('button', { name: 'Guardar', exact: true }).click();
     await expect(g.page.getByRole('alert').filter({ hasText: SPANISH_ERROR })).toBeVisible();
     assert.equal(g.writes.slice(mark).length, 0, 'an empty translation is a failure too');
   } finally { await g.browser.close(); }
@@ -1411,12 +1557,12 @@ test('Incluye: the list is written in English; a changed list is translated EN -
     const editor = await openThreeQuarterDay(page);
     // One textarea (English content), no Spanish/English pair.
     await expect(includedBox(editor)).toHaveValue('Drinks\nSnacks');
-    await expect(editor.getByText('Escríbelos en inglés: el español se genera al guardar.')).toBeVisible();
+    await expect(editor.getByText(/se genera al guardar|Escríbelos en inglés/)).toHaveCount(0);
     await expect(editor.getByLabel(/Inglés|English|Español/)).toHaveCount(0);
     await includedBox(editor).fill('Drinks\nSnacks\n  Towel  \n\n');
     await page.waitForTimeout(300);
     assert.equal(translateCalls.length, 0, 'nothing is translated before Guardar paquete');
-    await editor.getByRole('button', { name: 'Guardar paquete', exact: true }).click();
+    await editor.getByRole('button', { name: 'Guardar', exact: true }).click();
     await expect(page.getByText('Paquete guardado.')).toBeVisible();
     assert.equal(translateCalls.length, 1);
     // English goes in as the source, Spanish comes out.
@@ -1434,7 +1580,7 @@ test('Incluye: an unchanged list is not translated and its stored ES/EN copies a
   try {
     const editor = await openThreeQuarterDay(page);
     await editor.getByLabel('Precio base (USD)').fill('820');
-    await editor.getByRole('button', { name: 'Guardar paquete', exact: true }).click();
+    await editor.getByRole('button', { name: 'Guardar', exact: true }).click();
     await expect(page.getByText('Paquete guardado.')).toBeVisible();
     assert.equal(translateCalls.length, 0);
     const saved = packageWrites(writes).at(-1).body;
@@ -1445,7 +1591,7 @@ test('Incluye: an unchanged list is not translated and its stored ES/EN copies a
     // Same when the same items are retyped with different spacing/blank lines.
     await page.locator('.admin-boat-package-row').filter({ hasText: '3/4 Day' }).getByRole('button', { name: 'Editar 3/4 Day' }).click();
     await includedBox(page.locator('.admin-package-compact-editor')).fill(' Drinks \n\nSnacks ');
-    await page.locator('.admin-package-compact-editor').getByRole('button', { name: 'Guardar paquete', exact: true }).click();
+    await page.locator('.admin-package-compact-editor').getByRole('button', { name: 'Guardar', exact: true }).click();
     await expect.poll(() => packageWrites(writes).length).toBe(2);
     assert.equal(translateCalls.length, 0);
     assert.equal('package_included_es' in packageWrites(writes).at(-1).body, false);
@@ -1459,7 +1605,7 @@ test('Incluye: if DeepL fails nothing is saved (message says "al español"), the
     const mark = writes.length;
     await editor.getByLabel('Precio base (USD)').fill('999');
     await includedBox(editor).fill('Drinks\nTowel');
-    await editor.getByRole('button', { name: 'Guardar paquete', exact: true }).click();
+    await editor.getByRole('button', { name: 'Guardar', exact: true }).click();
     await expect(page.getByRole('alert').filter({ hasText: SPANISH_ERROR })).toBeVisible();
     await expect(page.getByText('traducción al inglés')).toHaveCount(0);
     assert.equal(translateCalls.length, 1);
@@ -1468,7 +1614,7 @@ test('Incluye: if DeepL fails nothing is saved (message says "al español"), the
     assert.deepEqual([stored.package_included, stored.package_included_en, stored.package_included_es, stored.base_price], [['Drinks', 'Snacks'], ['Drinks', 'Snacks'], ['Bebidas', 'Snacks (viejo)'], 800]);
     await expect(includedBox(editor)).toHaveValue('Drinks\nTowel');
     translation.fails = false;
-    await editor.getByRole('button', { name: 'Guardar paquete', exact: true }).click();
+    await editor.getByRole('button', { name: 'Guardar', exact: true }).click();
     await expect(page.getByText('Paquete guardado.')).toBeVisible();
     const saved = packageWrites(writes).at(-1).body;
     assert.deepEqual([saved.package_included, saved.package_included_en, saved.package_included_es, saved.base_price], [['Drinks', 'Towel'], ['Drinks', 'Towel'], ['Drinks [ES]', 'Towel [ES]'], 999]);
@@ -1481,7 +1627,7 @@ test('Incluye: an empty translation from the service is a failure too, never sto
     const editor = await openThreeQuarterDay(page);
     const mark = writes.length;
     await includedBox(editor).fill('Drinks\nTowel');
-    await editor.getByRole('button', { name: 'Guardar paquete', exact: true }).click();
+    await editor.getByRole('button', { name: 'Guardar', exact: true }).click();
     await expect(page.getByRole('alert').filter({ hasText: SPANISH_ERROR })).toBeVisible();
     assert.equal(writes.slice(mark).length, 0);
   } finally { await f.browser.close(); }
@@ -1492,7 +1638,7 @@ test('Incluye: NULL still inherits the tour list and [] is still an explicit emp
   try {
     let editor = await openThreeQuarterDay(page);
     await includedBox(editor).fill('');
-    await editor.getByRole('button', { name: 'Guardar paquete', exact: true }).click();
+    await editor.getByRole('button', { name: 'Guardar', exact: true }).click();
     await expect.poll(() => packageWrites(writes).length).toBe(1);
     let saved = packageWrites(writes).at(-1).body;
     assert.deepEqual([saved.package_included, saved.package_included_es, saved.package_included_en], [[], [], []]);
@@ -1503,14 +1649,14 @@ test('Incluye: NULL still inherits the tour list and [] is still an explicit emp
     editor = page.locator('.admin-package-compact-editor');
     await expect(editor.getByRole('checkbox', { name: 'Personalizar lo incluido' })).toBeChecked(); // [] is a list of its own, not "inherit"
     await editor.getByRole('checkbox', { name: 'Personalizar lo incluido' }).uncheck();
-    await editor.getByRole('button', { name: 'Guardar paquete', exact: true }).click();
+    await editor.getByRole('button', { name: 'Guardar', exact: true }).click();
     await expect.poll(() => packageWrites(writes).length).toBe(2);
     saved = packageWrites(writes).at(-1).body;
     assert.deepEqual([saved.package_included, saved.package_included_es, saved.package_included_en], [null, null, null]);
     assert.equal(translateCalls.length, 0);
     // A package that never customised its list (NULL) and is saved again writes no copies.
     await page.locator('.admin-boat-package-row').filter({ hasText: 'Half Day' }).getByRole('button', { name: 'Editar Half Day' }).click();
-    await page.locator('.admin-package-compact-editor').getByRole('button', { name: 'Guardar paquete', exact: true }).click();
+    await page.locator('.admin-package-compact-editor').getByRole('button', { name: 'Guardar', exact: true }).click();
     await expect.poll(() => packageWrites(writes).length).toBe(3);
     saved = packageWrites(writes).at(-1).body;
     assert.equal(saved.package_included, null);
@@ -1532,7 +1678,7 @@ test('Incluye: a new package translates name, English list and English meals tog
     await includedBox(editor).fill('Ice');
     await editor.getByRole('button', { name: 'Agregar comida' }).click();
     await editor.getByLabel('Comida 1', { exact: true }).fill('Ceviche');
-    await editor.getByRole('button', { name: 'Guardar paquete', exact: true }).click();
+    await editor.getByRole('button', { name: 'Guardar', exact: true }).click();
     await expect(page.getByText('Paquete guardado.')).toBeVisible();
     assert.equal(translateCalls.length, 1);
     assert.deepEqual(translateCalls[0], { texts: ['New', 'Ice', 'Ceviche'], targetLang: 'ES', sourceLang: 'EN' });
@@ -1548,7 +1694,7 @@ test('Incluye: a 50-item list (the database maximum) goes to DeepL in one reques
     const editor = await openThreeQuarterDay(page);
     const items = Array.from({ length: 50 }, (_, n) => `Item ${n + 1}`);
     await includedBox(editor).fill(items.join('\n'));
-    await editor.getByRole('button', { name: 'Guardar paquete', exact: true }).click();
+    await editor.getByRole('button', { name: 'Guardar', exact: true }).click();
     await expect(page.getByText('Paquete guardado.')).toBeVisible();
     assert.deepEqual(translateCalls.map((call) => call.texts.length), [50]);
     const saved = packageWrites(writes).at(-1).body;

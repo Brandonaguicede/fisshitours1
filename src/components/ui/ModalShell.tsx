@@ -4,6 +4,9 @@ import { createPortal } from 'react-dom';
 
 import { cn } from '../../utils/cn';
 
+// Open modals in stacking order: Escape only closes the top-most one (a confirmation opened over an editor must not close the editor too).
+const openModalStack: symbol[] = [];
+
 export interface ModalShellProps {
   open: boolean;
   onClose: () => void;
@@ -26,6 +29,8 @@ export function ModalShell({ open, onClose, titleId, children, className, tone =
   useEffect(() => {
     if (!open) return;
     previousFocusRef.current = document.activeElement as HTMLElement;
+    const modalId = Symbol('modal');
+    openModalStack.push(modalId);
     const scrollY = window.scrollY;
     const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
     const previousBodyStyles = {
@@ -45,6 +50,7 @@ export function ModalShell({ open, onClose, titleId, children, className, tone =
 
     function onKeyDown(event: KeyboardEvent) {
       if (event.key === 'Escape') {
+        if (openModalStack[openModalStack.length - 1] !== modalId) return;
         event.stopPropagation();
         onCloseRef.current();
         return;
@@ -67,6 +73,8 @@ export function ModalShell({ open, onClose, titleId, children, className, tone =
 
     document.addEventListener('keydown', onKeyDown);
     return () => {
+      const stackIndex = openModalStack.indexOf(modalId);
+      if (stackIndex !== -1) openModalStack.splice(stackIndex, 1);
       document.body.style.overflow = previousBodyStyles.overflow;
       document.body.style.position = previousBodyStyles.position;
       document.body.style.top = previousBodyStyles.top;

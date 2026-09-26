@@ -1,10 +1,11 @@
 import imageCompression from 'browser-image-compression';
-import { Crop, ImagePlus, Loader2, RotateCcw, Trash2, UploadCloud, X } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState, type CSSProperties, type DragEvent } from 'react';
+import { Crop, Loader2, Minus, Plus, Trash2, UploadCloud, X } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState, type DragEvent } from 'react';
 import Cropper, { type Area } from 'react-easy-crop';
 
 import { Modal } from '../common/Modal';
 import ModalFooter from './ModalFooter';
+import { AdminFilePicker, AdminMediaPreview } from './AdminMediaKit';
 import { deleteStorageImage, ImageSessionExpiredError, uploadStorageImageWithProgress, type StorageImage } from '../../services/imageService';
 import { isSupabaseConfigured, supabase } from '../../lib/supabase';
 import { formatBytes } from '../../utils/format';
@@ -19,14 +20,33 @@ interface AdminImageManagerProps {
   maxWidth?: number;
   maxHeight?: number;
   maxSizeMB?: number;
-  previewAspect?: number;
   label?: string;
   requireReplacementToDelete?: boolean;
   disabled?: boolean;
+  /**
+   * `panel` (default): the shared preview frame + the primary picker (+ delete). `trigger`: only the picker and the crop dialog, for a
+   * slot that shows its own photo (Tours / Botes galleries) — picking a file opens "Ajustar imagen", nothing grows inside the slot.
+   */
+  variant?: 'panel' | 'trigger';
+  /** Accessible names of the picker: empty state / with media (e.g. "Subir foto 4" / "Cambiar foto 1"). */
+  uploadLabel?: string;
+  changeLabel?: string;
+  /** Editors that already have their own delete control (Galería's "Estado y visibilidad") hide this one. */
+  showDelete?: boolean;
   retainPreviousOnUpload?: boolean;
   beforeUpload?: () => Promise<void>;
   onImageSaved?: (image: StorageImage) => Promise<void> | void;
   onImageDeleted?: (storagePath: string) => Promise<void> | void;
+}
+
+const ZOOM_MIN = 1;
+const ZOOM_MAX = 3;
+const ZOOM_STEP = 0.05;
+
+/** +/- buttons move the zoom by 10% and never leave the slider's range (rounded to the slider's step to avoid float drift). */
+function stepZoom(value: number, direction: 1 | -1) {
+  const next = Math.round((value + direction * 0.1) / ZOOM_STEP) * ZOOM_STEP;
+  return Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Number(next.toFixed(2))));
 }
 
 interface CropFile {
@@ -45,10 +65,13 @@ export default function AdminImageManager({
   maxWidth = 1600,
   maxHeight = 1200,
   maxSizeMB = 2,
-  previewAspect,
   label,
   requireReplacementToDelete = false,
   disabled = false,
+  variant = 'panel',
+  uploadLabel = 'Subir imagen',
+  changeLabel,
+  showDelete = true,
   retainPreviousOnUpload = false,
   beforeUpload,
   onImageSaved,
@@ -255,77 +278,65 @@ export default function AdminImageManager({
     }
   }
 
+  const picker = (
+    <AdminFilePicker
+      hasMedia={Boolean(imageUrl)}
+      accept="image/jpeg,image/png,image/webp"
+      inputRef={inputRef}
+      inputLabel="Elegir archivo de imagen"
+      uploadLabel={uploadLabel}
+      changeLabel={changeLabel}
+      disabled={disabled}
+      onFile={acceptFile}
+    />
+  );
+  // A slot only surfaces problems: the new photo itself is the confirmation.
+  const visibleMessage = variant === 'trigger' && message?.kind === 'success' ? null : message;
+
   return (
-    <div className="admin-image-manager">
-      <div
-        className={`admin-image-manager__preview${dragOver ? ' admin-image-manager__preview--drag' : ''}`}
-        aria-disabled={disabled || undefined}
-        onDragOver={(event) => {
-          if (disabled) return;
-          event.preventDefault();
-          setDragOver(true);
-        }}
-        onDragLeave={() => setDragOver(false)}
-        onDrop={onDrop}
-      >
-        {imageUrl ? (
-          <img
-            src={imageUrl}
-            alt={label ?? 'Imagen actual'}
-            loading="lazy"
-            decoding="async"
-            style={previewAspect ? ({ '--admin-image-preview-aspect': String(previewAspect) } as CSSProperties) : undefined}
-          />
-        ) : (
-          <div className="admin-image-manager__empty">
-            <ImagePlus size={28} />
-            <span>Arrastra una imagen aquí o elige un archivo</span>
-          </div>
-        )}
-        {uploading ? <div className="admin-image-manager__overlay"><Loader2 className="animate-spin" size={22} />Subiendo {progress}%</div> : null}
-      </div>
-
-      {imageUrl && storagePath ? (
-        <p className="admin-image-manager__path" title={storagePath}>{storagePath}</p>
-      ) : null}
-
-      <div className="admin-image-manager__actions">
-        <label className="admin-btn admin-btn--secondary admin-image-manager__pick" role="button" tabIndex={disabled ? -1 : 0} aria-disabled={disabled || undefined}
-          onKeyDown={(event) => {
-            if (!disabled && (event.key === 'Enter' || event.key === ' ')) {
-              event.preventDefault();
-              inputRef.current?.click();
-            }
-          }}
-        >
-          <UploadCloud size={16} /> {imageUrl ? 'Reemplazar imagen' : 'Subir imagen'}
-          <input
-            ref={inputRef}
-            type="file"
-            accept="image/jpeg,image/png,image/webp"
-            className="sr-only"
-            aria-label="Elegir archivo de imagen"
+    <div className={`admin-image-manager${variant === 'trigger' ? ' admin-image-manager--trigger' : ''}`}>
+      {variant === 'trigger' ? picker : (
+        <>
+          <AdminMediaPreview
+            kind="image"
+            emptyText="Arrastra una imagen aquí o elige un archivo"
+            dragOver={dragOver}
             disabled={disabled}
-            onChange={(event) => {
-              acceptFile(event.target.files?.[0] ?? null);
-              // Allow selecting the same file again after replacing an image.
-              event.currentTarget.value = '';
+            uploadingProgress={uploading ? progress : null}
+            onDragOver={(event) => {
+              if (disabled) return;
+              event.preventDefault();
+              setDragOver(true);
             }}
-          />
-        </label>
-        {imageUrl && storagePath && !requireReplacementToDelete ? (
-          <button className="admin-btn admin-btn--danger admin-image-manager__delete" type="button" onClick={() => void handleDelete()} disabled={deleting || uploading}>
-            {deleting ? <Loader2 className="animate-spin" size={16} /> : <Trash2 size={16} />}
-            {confirmDelete ? '¿Confirmar eliminar?' : 'Eliminar'}
-          </button>
-        ) : null}
-        {confirmDelete ? <button className="admin-btn admin-btn--ghost" type="button" onClick={() => setConfirmDelete(false)}>Cancelar</button> : null}
-      </div>
+            onDragLeave={() => setDragOver(false)}
+            onDrop={onDrop}
+          >
+            {imageUrl ? (
+              <img src={imageUrl} alt={label ?? 'Imagen actual'} loading="lazy" decoding="async" />
+            ) : undefined}
+          </AdminMediaPreview>
 
-      {message ? (
-        <div className={`admin-alert admin-alert--${message.kind}`} role="status" aria-live="polite">
-          <span>{message.text}</span>
-          {message.text === new ImageSessionExpiredError().message ? (
+          {imageUrl && storagePath ? (
+            <p className="admin-image-manager__path" title={storagePath}>{storagePath}</p>
+          ) : null}
+
+          <div className="admin-image-manager__actions">
+            {picker}
+            {showDelete && imageUrl && storagePath && !requireReplacementToDelete ? (
+              <button className="admin-btn admin-btn--danger admin-image-manager__delete" type="button" onClick={() => void handleDelete()} disabled={deleting || uploading}>
+                {deleting ? <Loader2 className="animate-spin" size={16} /> : <Trash2 size={16} />}
+                {confirmDelete ? '¿Confirmar eliminar?' : 'Eliminar'}
+              </button>
+            ) : null}
+            {confirmDelete ? <button className="admin-btn admin-btn--ghost" type="button" onClick={() => setConfirmDelete(false)}>Cancelar</button> : null}
+          </div>
+        </>
+      )}
+
+      {visibleMessage ? (
+        <div className={`admin-alert admin-alert--${visibleMessage.kind}`} role="status" aria-live="polite">
+          <span>{visibleMessage.text}</span>
+          {visibleMessage.text === new ImageSessionExpiredError().message ? (
             <a className="ml-2 font-extrabold underline" href="/admin/login">Ir al login</a>
           ) : null}
         </div>
@@ -354,21 +365,23 @@ export default function AdminImageManager({
             ) : null}
             <div className="admin-image-crop__meta">
               <span>Original: {cropFile ? formatBytes(cropFile.originalSize) : '-'}</span>
-              <span>Zoom: {Math.round(zoom * 100)}%</span>
-              <div className="admin-image-crop__zoom">
-                <RotateCcw size={15} aria-hidden />
-                <input type="range" min={1} max={3} step={0.05} value={zoom}
-                  aria-label="Zoom del recorte"
-                  onChange={(event) => setZoom(Number(event.target.value))} />
+              <div className="admin-image-crop__zoom" role="group" aria-label="Zoom del recorte">
+                <p className="admin-image-crop__zoom-value" aria-live="off">Zoom <output aria-label="Zoom actual">{Math.round(zoom * 100)}%</output></p>
+                <div className="admin-image-crop__zoom-row">
+                  <button className="admin-icon-btn admin-icon-btn--bordered" type="button" aria-label="Alejar" title="Alejar" disabled={processing || zoom <= ZOOM_MIN} onClick={() => setZoom((value) => stepZoom(value, -1))}><Minus size={16} aria-hidden="true" /></button>
+                  <input type="range" min={ZOOM_MIN} max={ZOOM_MAX} step={ZOOM_STEP} value={zoom}
+                    aria-label="Zoom del recorte"
+                    aria-valuetext={`${Math.round(zoom * 100)}%`}
+                    onChange={(event) => setZoom(Number(event.target.value))} />
+                  <button className="admin-icon-btn admin-icon-btn--bordered" type="button" aria-label="Acercar" title="Acercar" disabled={processing || zoom >= ZOOM_MAX} onClick={() => setZoom((value) => stepZoom(value, 1))}><Plus size={16} aria-hidden="true" /></button>
+                </div>
               </div>
             </div>
           </div>
           <ModalFooter>
-            <button className="admin-btn" type="button" disabled={processing || !croppedAreaPixels} onClick={() => void confirmCrop()}>
-              {processing ? <Loader2 className="animate-spin" size={16} /> : <UploadCloud size={16} />}
-              {processing ? 'Procesando...' : 'Continuar y subir'}
+            <button className="admin-btn admin-btn--icon" type="button" aria-label={processing ? 'Procesando...' : 'Subir imagen'} title={processing ? 'Procesando...' : 'Subir imagen'} disabled={processing || !croppedAreaPixels} onClick={() => void confirmCrop()}>
+              {processing ? <Loader2 className="animate-spin" size={18} aria-hidden="true" /> : <UploadCloud size={18} aria-hidden="true" />}
             </button>
-            <button className="admin-btn admin-btn--ghost" type="button" disabled={processing} onClick={() => setCropFile(null)}>Cancelar</button>
           </ModalFooter>
         </div>
       </Modal>

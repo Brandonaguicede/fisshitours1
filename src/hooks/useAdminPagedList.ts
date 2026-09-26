@@ -1,16 +1,18 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 
+import { ADMIN_PAGE_SIZE } from '../components/admin/adminPaginationItems';
+
 export interface AdminPageResult<T> { rows: T[]; total: number }
 
 export function useAdminPagedList<T>(name: string, filters: string, fetchPage: (page: number, size: number) => Promise<AdminPageResult<T>>) {
-  const [state, setState] = useState({ filters, page: 1, size: 10 });
+  const [state, setState] = useState({ filters, page: 1 });
   useEffect(() => {
     setState((current) => current.filters === filters ? current : { ...current, filters, page: 1 });
   }, [filters]);
   // Derive the reset synchronously so a new filter never requests an old page.
   const page = state.filters === filters ? state.page : 1;
-  const pageSize = state.size;
+  const pageSize = ADMIN_PAGE_SIZE;
   const query = useQuery({
     queryKey: ['admin', name, filters, page, pageSize],
     queryFn: () => fetchPage(page, pageSize),
@@ -25,7 +27,7 @@ export function useAdminPagedList<T>(name: string, filters: string, fetchPage: (
   useEffect(() => {
     if (!query.isFetching && !query.isError && query.data) {
       const lastPage = Math.max(1, Math.ceil(total / pageSize));
-      if (page > lastPage) setState({ filters, page: lastPage, size: pageSize });
+      if (page > lastPage) setState({ filters, page: lastPage });
     }
   }, [filters, page, pageSize, total, query.data, query.isFetching, query.isError]);
   return {
@@ -37,11 +39,7 @@ export function useAdminPagedList<T>(name: string, filters: string, fetchPage: (
     onPageChange: (next: number) => {
       if (!Number.isFinite(next)) return;
       const lastPage = Math.max(1, Math.ceil(total / pageSize));
-      setState({ filters, page: Math.min(Math.max(1, Math.trunc(next)), lastPage), size: pageSize });
-    },
-    onPageSizeChange: (size: number) => {
-      if (!Number.isFinite(size) || size <= 0) return;
-      setState({ filters, page: 1, size });
+      setState({ filters, page: Math.min(Math.max(1, Math.trunc(next)), lastPage) });
     },
   };
 }

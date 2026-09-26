@@ -1,7 +1,8 @@
-import { Edit2, MapPin, Plus, Save, X } from 'lucide-react';
+import { Edit2, MapPin, Plus, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 
-import { AdminBadge, AdminFilterMenu, AdminListToolbar, AdminModuleSurface, AdminPageHeader, AdminReorderHandle, AdminReorderToolbar, AdminTable } from '../../components/admin/AdminPrimitives';
+import AdminStatusSection from '../../components/admin/AdminStatusSection';
+import { AdminBadge, AdminCreateButton, AdminFilterMenu, AdminListToolbar, AdminModuleSurface, AdminPageHeader, AdminReorderHandle, AdminTable } from '../../components/admin/AdminPrimitives';
 import ModalFooter from '../../components/admin/ModalFooter';
 import { Modal } from '../../components/common/Modal';
 import { useAdminReorder } from '../../hooks/useAdminReorder';
@@ -202,17 +203,15 @@ export default function AdminDepartureLocationsPage() {
               </label>
             </AdminFilterMenu>
           }
-          primaryAction={<button className="admin-btn" type="button" onClick={openCreate} disabled={reorder.reordering}><Plus size={16} /> Nuevo lugar</button>}
-          secondaryActions={
-            <AdminReorderToolbar
-              reordering={reorder.reordering}
-              saving={reorder.saving}
-              onStart={() => reorder.start()}
-              onCancel={reorder.cancel}
-              onSave={() => void reorder.save(persistOrder)}
-              disabledReason={canReorder ? undefined : 'Limpia la búsqueda y el filtro de estado para reordenar.'}
-            />
-          }
+          primaryAction={<AdminCreateButton label="Nuevo lugar" onClick={openCreate} disabled={reorder.reordering} />}
+          reorder={{
+            reordering: reorder.reordering,
+            saving: reorder.saving,
+            onStart: () => reorder.start(),
+            onCancel: reorder.cancel,
+            onSave: () => void reorder.save(persistOrder),
+            disabledReason: canReorder ? undefined : 'Limpia la búsqueda y el filtro de estado para reordenar.',
+          }}
         />
 
         {error && !modalOpen ? <div className="admin-alert admin-alert--danger">{error}</div> : null}
@@ -221,13 +220,23 @@ export default function AdminDepartureLocationsPage() {
         {loading ? (
           <p className="admin-muted">Cargando lugares...</p>
         ) : (
-          <AdminTable embedded headers={['Posición', 'Lugar', 'Cargo', 'Estado', 'Acciones']}>
+          <AdminTable embedded headers={['Lugar', 'Cargo', 'Posición', 'Estado', 'Acciones']}>
             {(reorder.reordering ? reorder.order : visibleLocations).map((location, index) => (
               <tr
                 key={location.id}
                 className={reorder.reordering ? `admin-sortable-row${reorder.dragId === location.id ? ' admin-sortable-row--dragging' : ''}` : undefined}
                 {...(reorder.reordering ? reorder.dragHandlers(location.id) : {})}
               >
+                <td>
+                  <div className="admin-cell-with-icon">
+                    <MapPin size={16} className="admin-cell-with-icon__icon" />
+                    <div>
+                      <div>{location.name}</div>
+                      <div className="admin-muted">{location.description || '-'}</div>
+                    </div>
+                  </div>
+                </td>
+                <td>{Number(location.surcharge_amount) > 0 ? money(Number(location.surcharge_amount)) : 'Sin costo'}</td>
                 <td>
                   {reorder.reordering ? (
                     <AdminReorderHandle
@@ -239,16 +248,6 @@ export default function AdminDepartureLocationsPage() {
                     />
                   ) : <span className="admin-position">{positionById.get(location.id)}</span>}
                 </td>
-                <td>
-                  <div className="admin-cell-with-icon">
-                    <MapPin size={16} className="admin-cell-with-icon__icon" />
-                    <div>
-                      <div>{location.name}</div>
-                      <div className="admin-muted">{location.description || '-'}</div>
-                    </div>
-                  </div>
-                </td>
-                <td>{Number(location.surcharge_amount) > 0 ? money(Number(location.surcharge_amount)) : 'Sin costo'}</td>
                 <td><AdminBadge value={location.active ? 'active' : 'inactive'} /></td>
                 <td>
                   <div className="admin-row-actions">
@@ -281,15 +280,22 @@ export default function AdminDepartureLocationsPage() {
                 <input className="admin-input" min={0} step="0.01" type="number" value={form.surcharge_amount} onChange={(event) => setForm((value) => ({ ...value, surcharge_amount: Number(event.target.value) }))} />
               </label>
               <label className="admin-field admin-field--wide">
-                <span className="admin-field__label">Descripcion (en inglés: el español se genera al guardar)</span>
+                <span className="admin-field__label">Descripción</span>
                 <textarea className="admin-input" rows={3} value={form.description ?? ''} onChange={(event) => setForm((value) => ({ ...value, description: event.target.value }))} />
               </label>
-              <label className="admin-check"><input type="checkbox" checked={form.active} onChange={(event) => setForm((value) => ({ ...value, active: event.target.checked }))} /> Activo</label>
             </div>
-            <p className="admin-field-help">{editingId ? `Posición actual: ${positionById.get(editingId) ?? '-'}.` : 'Se agregará al final de la lista.'} Se reordena desde la lista con el botón "Reordenar".</p>
+            <AdminStatusSection
+              description="Controla si este lugar se ofrece al reservar."
+              active={form.active}
+              visibleHint="Activo: se ofrece como lugar de salida al reservar."
+              hiddenHint="Inactivo: no se ofrece como lugar de salida."
+              hideLabel="Desactivar lugar"
+              showLabel="Activar lugar"
+              onToggle={() => setForm((value) => ({ ...value, active: !value.active }))}
+            />
           </div>
           <ModalFooter>
-            <button className="admin-btn" type="button" disabled={saving} onClick={() => void saveLocation()}><Save size={16} /> {saving ? 'Guardando...' : 'Guardar'}</button>
+            <button className="admin-btn" type="button" disabled={saving} onClick={() => void saveLocation()}>{saving ? 'Guardando...' : 'Guardar'}</button>
             <button className="admin-btn admin-btn--secondary" type="button" onClick={closeModal}>Cancelar</button>
           </ModalFooter>
         </div>

@@ -109,7 +109,7 @@ export default function AdminPaymentMethodsPage() {
                       aria-label={method.active ? `Desactivar ${method.name}` : `Activar ${method.name}`}
                       onClick={() => void toggleActive(method)}
                     >
-                      {method.active ? <EyeOff size={17} /> : <Eye size={17} />}
+                      {method.active ? <Eye size={17} /> : <EyeOff size={17} />}
                     </button>
                   </div>
                 </td>

@@ -1,4 +1,4 @@
-import { ContentSection, TranslateAllSiteContentCard, type ContentField } from '../../components/admin/AdminContentSection';
+import { ContentSection, type ContentField } from '../../components/admin/AdminContentSection';
 import { AdminPageHeader } from '../../components/admin/AdminPrimitives';
 import { ABOUT_CAROUSEL_DEFAULTS, buildAboutCarouselImages, DEFAULT_ABOUT_SETTINGS } from '../../services/aboutSettings';
 
@@ -16,10 +16,8 @@ const ABOUT_FIELDS: ContentField[] = [
   ...(([
     ['about.title', 'Titulo', 'text'],
     ['about.description', 'Descripcion', 'textarea'],
-    ['about.preview_text', 'Texto de inicio (home) - parrafos separados por linea vacia', 'textarea'],
-    ['about.story', 'Historia (pagina Nosotros) - parrafos separados por linea vacia', 'textarea'],
-    ['about.cta_title', 'Titulo final', 'text'],
-    ['about.cta_text', 'Texto final', 'textarea'],
+    ['about.preview_text', 'Texto de inicio', 'textarea'],
+    ['about.story', 'Historia', 'textarea'],
     ['about.image_alt', 'Texto alternativo imagen', 'text'],
   ] as const).flatMap(([base, label, type]): ContentField[] => (['es', 'en'] as const).map((lang) => {
     const key = `${base}.${lang}` as keyof typeof DEFAULT_ABOUT_SETTINGS;
@@ -35,7 +33,7 @@ export default function AdminAboutPage() {
     <div className="admin-page admin-content-page">
       <AdminPageHeader
         title="Sobre Nosotros"
-        description="Administra la seccion Sobre Nosotros (fotos del carrusel, textos e historia) sin cambiar codigo."
+        description="Fotos del carrusel, textos e historia de la sección Sobre Nosotros."
         actions={<span />}
       />
 
@@ -43,26 +41,26 @@ export default function AdminAboutPage() {
         title="Sobre Nosotros"
         description="Cambia cada foto del carrusel de Sobre nosotros. Se muestran en orden del 1 al 5 y cambian automáticamente. La quinta foto es opcional."
         fields={ABOUT_FIELDS}
-        saveLabel="Guardar Sobre Nosotros"
         savedMessage="Sobre Nosotros actualizado."
-        preview={(draft) => (
-          <div className="grid items-center gap-4 sm:grid-cols-[minmax(0,1fr)_220px]">
-            <div>
-              <h3 className="font-display text-2xl font-extrabold leading-tight sm:text-3xl">{draft['about.title.en']}</h3>
-              <p className="admin-content-preview__text">{draft['about.preview_text.en'].split('\n')[0]}</p>
-            </div>
-            {buildAboutCarouselImages(draft).length ? (
-              <div className="grid grid-cols-2 gap-2">{buildAboutCarouselImages(draft).map((src, index) => <img key={src} className="aspect-video w-full rounded-xl object-cover" src={src} alt={`Foto ${index + 1}`} />)}</div>
-            ) : (
-              <div className="grid aspect-[4/3] w-full place-items-center rounded-xl border border-dashed border-white/25 text-xs text-white/60">
-                Sin imagen gestionada (usa fotos por defecto)
+        preview={(draft) => {
+          const images = buildAboutCarouselImages(draft);
+          return (
+            <div className="admin-about-preview">
+              <div className="admin-about-preview__copy">
+                <h3 className="admin-about-preview__title">{draft['about.title.en']}</h3>
+                <p className="admin-content-preview__text">{draft['about.preview_text.en'].split('\n')[0]}</p>
               </div>
-            )}
-          </div>
-        )}
+              {images.length ? (
+                <div className="admin-about-preview__thumbs">
+                  {images.map((src, index) => <img key={src} src={src} alt={`Foto ${index + 1}`} loading="lazy" />)}
+                </div>
+              ) : (
+                <div className="admin-about-preview__empty">Sin imagen gestionada (usa fotos por defecto)</div>
+              )}
+            </div>
+          );
+        }}
       />
-
-      <TranslateAllSiteContentCard />
     </div>
   );
 }

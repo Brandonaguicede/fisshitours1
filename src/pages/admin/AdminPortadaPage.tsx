@@ -1,4 +1,5 @@
-import { ContentSection, TranslateAllSiteContentCard, type ContentField } from '../../components/admin/AdminContentSection';
+import { ContentSection, type ContentField } from '../../components/admin/AdminContentSection';
+import AdminHeroPreview from '../../components/admin/AdminHeroPreview';
 import { AdminPageHeader } from '../../components/admin/AdminPrimitives';
 
 const FALLBACK_HERO_IMAGE = '/images/placeholder-image.jpg';
@@ -46,47 +47,19 @@ export default function AdminPortadaPage() {
     <div className="admin-page admin-content-page">
       <AdminPageHeader
         title="Portada"
-        description="Administra la portada del inicio (imagenes, video y textos) sin cambiar codigo."
+        description="Configura el fondo y los textos principales de la portada."
         actions={<span />}
       />
 
       <ContentSection
         title="Portada"
-        description="La imagen administrada es el fondo principal de la portada. El archivo de video queda conservado, pero no bloquea el contenido editable."
+        description="Elige si el fondo es de imágenes o de video y edita los textos que se muestran encima."
         fields={HERO_FIELDS}
-        saveLabel="Guardar portada"
         savedMessage="Portada actualizada."
         imageRequireReplacement
         mediaTextTabs
-        preview={(draft) => (
-          <div className="relative overflow-hidden rounded-xl">
-            {draft['home.hero.mobile_image'] ? (
-              <img className="aspect-[4/5] w-full object-cover sm:hidden" src={draft['home.hero.mobile_image']} alt={draft['home.hero.image_alt.en']} />
-            ) : (
-              <div className="grid aspect-[4/5] w-full place-items-center border border-dashed border-white/25 text-xs text-white/60 sm:hidden">
-                Sin imagen de celular
-              </div>
-            )}
-            {draft['home.hero.image'] ? (
-              <img className="hidden aspect-video w-full object-cover sm:block" src={draft['home.hero.image']} alt={draft['home.hero.image_alt.en']} />
-            ) : (
-              <div className="hidden aspect-video w-full place-items-center border border-dashed border-white/25 text-xs text-white/60 sm:grid">
-                Sin imagen de compu
-              </div>
-            )}
-            <div className="absolute inset-0 bg-ocean-950/55" />
-            <div className="absolute inset-0 grid place-items-center p-5 text-center">
-              <div>
-                <p className="admin-content-preview__eyebrow">{draft['home.hero.eyebrow.en']}</p>
-                <h3 className="mt-2 font-display text-3xl font-extrabold leading-tight sm:text-5xl">{draft['home.hero.title.en']}</h3>
-                <p className="admin-content-preview__lead">{draft['home.hero.subtitle.en']}</p>
-              </div>
-            </div>
-          </div>
-        )}
+        preview={(draft) => <AdminHeroPreview draft={draft} />}
       />
-
-      <TranslateAllSiteContentCard />
     </div>
   );
 }

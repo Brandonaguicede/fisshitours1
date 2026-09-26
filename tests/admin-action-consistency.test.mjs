@@ -133,9 +133,10 @@ test('filters: every admin list has a funnel-only trigger — no visible button 
       assert.equal(info.borderColor, 'rgba(0, 0, 0, 0)', `${path}: no visible border`);
       assert.equal(info.background, 'rgba(0, 0, 0, 0)', `${path}: no button background`);
       assert.ok(info.width >= 40 && info.height >= 40, `${path}: hit target is ${info.width}x${info.height}`);
-      // Reached by keyboard straight after the search box, with a visible focus ring.
+      // Reached by keyboard right after the search (and the primary action, on screens that have one).
+      const hasPrimary = (await page.locator('.admin-toolbar > .admin-btn').count()) > 0;
       await page.locator('.admin-toolbar .admin-search-field input').focus();
-      await page.keyboard.press('Tab');
+      for (let i = 0; i < (hasPrimary ? 2 : 1); i += 1) await page.keyboard.press('Tab');
       await expect(trigger, path).toBeFocused();
       assert.notEqual(await trigger.evaluate((el) => getComputedStyle(el).outlineStyle), 'none', `${path}: focus ring`);
     }
@@ -159,19 +160,33 @@ test('filters: the active count is announced and shown, and Escape closes the pa
   } finally { await f.browser.close(); }
 });
 
-test('toolbars: search, filters, then the primary action, then secondary ones — same in the DOM (Tab) order', async () => {
+test('toolbars: exactly search, primary action, filter, reorder, download — same in the DOM (Tab) order', async () => {
   const f = await fixture(seed); const { page } = f;
   try {
     for (const { path } of LIST_PAGES) {
       await page.goto(`${base}${path}`);
       await expect(page.locator('.admin-toolbar .admin-filter-trigger'), path).toBeVisible();
-      const kinds = await toolbarKinds(page);
-      assert.equal(kinds[0], 'search', `${path}: ${kinds}`);
-      assert.equal(kinds[1], 'filter', `${path}: ${kinds}`);
-      const firstSecondary = kinds.findIndex((kind) => kind === 'secondary' || kind === 'icon');
-      const lastPrimary = kinds.lastIndexOf('primary');
-      if (firstSecondary !== -1 && lastPrimary !== -1) assert.ok(lastPrimary < firstSecondary, `${path}: primary must precede secondary (${kinds})`);
+      const controls = await page.evaluate(() => [...document.querySelector('.admin-toolbar').querySelectorAll('input, button, a[href], select')].map((el) => (
+        el.matches('input') ? 'search'
+          : el.classList.contains('admin-filter-trigger') ? 'filter'
+            : el.getAttribute('aria-label') === 'Reordenar' ? 'reorder'
+              : el.classList.contains('admin-export-trigger') ? 'download'
+                : 'primary'
+      )));
+      const rank = { search: 0, primary: 1, filter: 2, reorder: 3, download: 4 };
+      assert.equal(controls[0], 'search', `${path}: search is first (${controls})`);
+      assert.deepEqual(controls, [...controls].sort((a, b) => rank[a] - rank[b]), `${path}: order must be search, primary, filter, reorder, download (${controls})`);
+      assert.equal(controls.filter((kind) => kind === 'primary').length <= 1, true, `${path}: one primary action`);
+      // Visual order (left to right on one desktop row) matches the DOM order.
+      const xs = await page.evaluate(() => [...document.querySelector('.admin-toolbar').querySelectorAll('input, button, a[href]')].map((el) => Math.round(el.getBoundingClientRect().left)));
+      assert.deepEqual(xs, [...xs].sort((a, b) => a - b), `${path}: visual order follows the DOM (${xs})`);
     }
+    // The primary action is right after the search on the screens that have one.
+    await page.goto(`${base}/admin/reservations`);
+    await expect(page.locator('.admin-toolbar > .admin-btn')).toBeVisible();
+    assert.equal(await page.evaluate(() => document.querySelector('.admin-toolbar > .admin-btn').previousElementSibling.classList.contains('admin-search-field')), true);
+    // The download control, where a screen has one, is a single icon.
+    assert.ok((await page.locator('.admin-toolbar .admin-export-trigger').count()) <= 1);
   } finally { await f.browser.close(); }
 });
 
@@ -193,37 +208,46 @@ test('reorder: the entry point is an icon-only Reordenar; while reordering, Guar
       assert.notEqual(await reorder.evaluate((el) => getComputedStyle(el).outlineStyle), 'none', `${path}: focus ring`);
       await page.keyboard.press('Enter');
       await expect(page.getByRole('button', { name: 'Guardar orden', exact: true }), path).toBeVisible();
-      const order = await page.evaluate(() => [...document.querySelectorAll('.admin-toolbar button')].map((el) => el.textContent.trim()).filter((text) => ['Guardar orden', 'Cancelar'].includes(text)));
-      assert.deepEqual(order, ['Guardar orden', 'Cancelar'], path);
+      const order = await page.evaluate(() => [...document.querySelectorAll('.admin-toolbar button')].map((el) => el.textContent.trim()).filter((text) => ['Guardar', 'Cancelar'].includes(text)));
+      assert.deepEqual(order, ['Guardar', 'Cancelar'], path);
+      // While reordering, "Guardar" (named Guardar orden) takes the primary slot (second control, after the search).
+      assert.deepEqual(await page.evaluate(() => [...document.querySelector('.admin-toolbar').querySelectorAll('input, button')].slice(0, 2).map((el) => (el.matches('input') ? 'search' : el.textContent.trim()))), ['search', 'Guardar'], `${path}: Guardar takes the primary slot, right after the search`);
       await page.getByRole('button', { name: 'Cancelar', exact: true }).click();
       await expect(reorder, path).toBeVisible();
     }
   } finally { await f.browser.close(); }
 });
 
-// ---- Eye / EyeOff: the icon is always the action that will happen (Mostrar -> Eye, Ocultar -> EyeOff) -----------------
+// ---- Eye / EyeOff: Eye = active / visible, EyeOff = inactive / hidden — the icon is the CURRENT STATE, everywhere ----------
 
 const iconOf = (locator) => locator.evaluate((el) => (el.querySelector('svg.lucide-eye-off') ? 'eye-off' : el.querySelector('svg.lucide-eye') ? 'eye' : 'none'));
 
-test('Eye / EyeOff: payment methods — an active method offers Desactivar with EyeOff, an inactive one Activar with Eye', async () => {
+test('Eye / EyeOff: payment methods — an active method shows Eye, an inactive one EyeOff (the labels name the action)', async () => {
   const f = await fixture(seed); const { page } = f;
   try {
     await page.goto(`${base}/admin/payment-methods`);
-    assert.equal(await iconOf(page.getByRole('button', { name: 'Desactivar PayPal' })), 'eye-off');
-    assert.equal(await iconOf(page.getByRole('button', { name: 'Activar Cash on the day' })), 'eye');
+    assert.equal(await iconOf(page.getByRole('button', { name: 'Desactivar PayPal' })), 'eye');
+    assert.equal(await iconOf(page.getByRole('button', { name: 'Activar Cash on the day' })), 'eye-off');
+    // The state badge next to it agrees with the icon.
+    await expect(page.getByRole('row').filter({ hasText: 'PayPal' }).locator('.admin-badge')).toHaveText('Activo');
+    await expect(page.getByRole('row').filter({ hasText: 'Cash on the day' }).locator('.admin-badge')).toHaveText('Inactivo');
   } finally { await f.browser.close(); }
 });
 
-test('Eye / EyeOff: comments — a visible comment offers Ocultar with EyeOff, a hidden one Mostrar with Eye', async () => {
+test('Eye / EyeOff: comments — a visible comment shows Eye, a hidden one EyeOff', async () => {
   const f = await fixture(seed); const { page } = f;
   try {
     await page.goto(`${base}/admin/reviews`);
-    assert.equal(await iconOf(page.getByRole('button', { name: 'Ocultar comentario de Ana' })), 'eye-off');
-    assert.equal(await iconOf(page.getByRole('button', { name: 'Mostrar comentario de Ben' })), 'eye');
+    // The table only has Editar; visibility is managed inside the editor, with the same convention.
+    await page.getByRole('button', { name: 'Editar comentario de Ana' }).click();
+    assert.equal(await iconOf(page.getByRole('button', { name: /Ocultar comentario/ })), 'eye');
+    await page.keyboard.press('Escape');
+    await page.getByRole('button', { name: 'Editar comentario de Ben' }).click();
+    assert.equal(await iconOf(page.getByRole('button', { name: /Mostrar comentario/ })), 'eye-off');
   } finally { await f.browser.close(); }
 });
 
-test('Eye / EyeOff: gallery cards state Visible / Oculta as text (no eye icon that could read as an action); the editor button follows the convention', async () => {
+test('Eye / EyeOff: gallery cards state Visible / Oculta as text badges; the editor button shows the current state (Eye visible, EyeOff hidden)', async () => {
   const f = await fixture(seed); const { page } = f;
   try {
     await page.goto(`${base}/admin/gallery`);
@@ -233,9 +257,9 @@ test('Eye / EyeOff: gallery cards state Visible / Oculta as text (no eye icon th
     await expect(cards.nth(1).locator('.admin-badge')).toHaveText('Oculta');
     await expect(cards.locator('svg.lucide-eye, svg.lucide-eye-off')).toHaveCount(0);
     await cards.nth(0).getByRole('button', { name: /Editar imagen/ }).click();
-    assert.equal(await iconOf(page.getByRole('button', { name: 'Ocultar imagen' })), 'eye-off');
-    await page.getByRole('button', { name: 'Ocultar imagen' }).click();
-    assert.equal(await iconOf(page.getByRole('button', { name: 'Mostrar imagen' })), 'eye');
+    assert.equal(await iconOf(page.getByRole('button', { name: /Ocultar imagen/ })), 'eye');
+    await page.getByRole('button', { name: /Ocultar imagen/ }).click();
+    assert.equal(await iconOf(page.getByRole('button', { name: /Mostrar imagen/ })), 'eye-off');
   } finally { await f.browser.close(); }
 });
 
@@ -245,13 +269,14 @@ test('confirm dialog: the confirming button precedes Cancelar in the DOM and Esc
   const f = await fixture(seed); const { page, writes } = f;
   try {
     await page.goto(`${base}/admin/reviews`);
-    await page.getByRole('button', { name: 'Eliminar comentario de Ana' }).click();
-    const dialog = page.getByRole('dialog');
-    await expect(dialog).toBeVisible();
+    await page.getByRole('button', { name: 'Editar comentario de Ana' }).click();
+    await page.getByRole('button', { name: 'Eliminar comentario', exact: true }).click();
+    const dialog = page.getByRole('dialog').last();
+    await expect(dialog).toContainText('Eliminar comentario');
     const names = await dialog.locator('button').evaluateAll((els) => els.map((el) => el.textContent.trim()));
     assert.deepEqual(names, ['Eliminar', 'Cancelar']);
     await page.keyboard.press('Escape');
-    await expect(dialog).toHaveCount(0);
+    await expect(page.getByRole('dialog')).toHaveCount(1); // only the editor is left
     assert.equal(writes.filter((w) => w.method === 'DELETE').length, 0, 'Escape never deletes');
   } finally { await f.browser.close(); }
 });
@@ -268,7 +293,7 @@ test('no admin screen uses a positive tabindex', async () => {
   } finally { await f.browser.close(); }
 });
 
-test('phone toolbar: the funnel sits beside the search (not on a row of its own), in light and dark, without overflow', async () => {
+test('phone toolbar: search first; with a primary action it gets its own row and the primary + icon controls share the next; otherwise the icons sit beside the search — no overflow, light and dark', async () => {
   const f = await fixture(seed); const { page } = f;
   try {
     await page.setViewportSize({ width: 390, height: 844 });
@@ -278,17 +303,24 @@ test('phone toolbar: the funnel sits beside the search (not on a row of its own)
         await page.evaluate((value) => { window.localStorage.setItem('pft-admin-theme', value); document.documentElement.setAttribute('data-theme', value); }, theme);
         const search = page.locator('.admin-toolbar .admin-search-field input');
         const trigger = page.locator('.admin-toolbar .admin-filter-trigger');
+        const primary = page.locator('.admin-toolbar > .admin-btn');
         await expect(trigger, `${theme} ${path}`).toBeVisible();
         const [s, t] = await Promise.all([search.boundingBox(), trigger.boundingBox()]);
-        assert.ok(Math.abs(s.y + s.height / 2 - (t.y + t.height / 2)) <= 6, `${theme} ${path}: funnel shares the search row (${JSON.stringify([s, t])})`);
-        assert.ok(t.x > s.x + 100 && t.x + t.width <= 390, `${theme} ${path}: funnel is to the right of the search and inside the viewport`);
-        assert.ok(t.width >= 40 && t.height >= 40, `${theme} ${path}: hit target`);
-        assert.ok(s.width >= 150, `${theme} ${path}: the search stays usable (${s.width}px)`);
+        if (await primary.count()) {
+          const p = await primary.first().boundingBox();
+          assert.ok(s.y + s.height <= p.y + 1, `${theme} ${path}: the search row comes first`);
+          assert.ok(Math.abs(p.y + p.height / 2 - (t.y + t.height / 2)) <= 6 && p.x + p.width <= t.x + 1, `${theme} ${path}: primary then funnel on the second row`);
+          assert.ok(p.width >= 120, `${theme} ${path}: the primary action keeps a comfortable width (${p.width}px)`);
+        } else {
+          assert.ok(Math.abs(s.y + s.height / 2 - (t.y + t.height / 2)) <= 6, `${theme} ${path}: funnel shares the search row`);
+          assert.ok(s.width >= 150, `${theme} ${path}: the search stays usable (${s.width}px)`);
+        }
+        assert.ok(t.x + t.width <= 390 && t.width >= 40 && t.height >= 40, `${theme} ${path}: funnel inside the viewport with a real hit target`);
         const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
         assert.ok(overflow <= 0, `${theme} ${path}: overflow ${overflow}px`);
       }
     }
-    // Icon-only actions (Reordenar on Comentarios) share that row; the filter panel still opens and closes.
+    // Icon-only actions (Reordenar on Comentarios) share the search row; the filter panel still opens and closes.
     await page.goto(`${base}/admin/reviews`);
     const reorder = page.getByRole('button', { name: 'Reordenar', exact: true });
     const [r, s2] = await Promise.all([reorder.boundingBox(), page.locator('.admin-toolbar .admin-search-field input').boundingBox()]);

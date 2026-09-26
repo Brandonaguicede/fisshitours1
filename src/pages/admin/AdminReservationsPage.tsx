@@ -3,11 +3,12 @@ import { Calendar, Check, CheckCircle2, Clock, FileSpreadsheet, FileText, Loader
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
-import { AdminBadge, AdminFilterMenu, AdminListToolbar, AdminModuleSurface, AdminStatCard, AdminTable } from '../../components/admin/AdminPrimitives';
+import { AdminBadge, AdminCreateButton, AdminFilterMenu, AdminListToolbar, AdminModuleSurface, AdminStatCard, AdminTable } from '../../components/admin/AdminPrimitives';
 import AdminConfirmDialog from '../../components/admin/AdminConfirmDialog';
 import { Modal } from '../../components/common/Modal';
 import { supabase } from '../../lib/supabase';
 import { readWithAdminSession } from '../../services/adminAuthService';
+import { AdminExportMenu } from '../../components/admin/AdminExportMenu';
 import AdminPagination from '../../components/admin/AdminPagination';
 import { useAdminPagedList } from '../../hooks/useAdminPagedList';
 import { getAdminReservationsPage } from '../../services/adminListService';
@@ -427,7 +428,6 @@ export default function AdminReservationsPage() {
     const busy = loading || busyId === reservation.id;
     return (
       <div className="admin-row-actions admin-reservation-actions">
-        <button className="admin-icon-action" type="button" title="Editar reserva" aria-label={`Editar reserva ${reservation.booking_reference}`} disabled={busy} onClick={() => openEdit(reservation)}><Pencil size={17} /></button>
         {canConfirmReservation(reservation) ? (
           <button
             className="admin-action-btn admin-action-btn--confirm"
@@ -452,6 +452,7 @@ export default function AdminReservationsPage() {
             {busyId === reservation.id ? <Loader2 className="animate-spin" size={14} /> : <RefreshCw size={14} />} Reenviar correo
           </button>
         ) : null}
+        <button className="admin-icon-action" type="button" title="Editar reserva" aria-label={`Editar reserva ${reservation.booking_reference}`} disabled={busy} onClick={() => openEdit(reservation)}><Pencil size={17} /></button>
       </div>
     );
   }
@@ -490,16 +491,15 @@ export default function AdminReservationsPage() {
             </label>
           </AdminFilterMenu>
         }
-        primaryAction={<button className="admin-btn" type="button" onClick={() => setManualOpen(true)}><Plus size={16} /> Crear reserva</button>}
+        primaryAction={<AdminCreateButton label="Crear reserva" onClick={() => setManualOpen(true)} />}
         secondaryActions={
-          <>
-            <button className="admin-btn admin-btn--secondary" type="button" disabled={Boolean(exporting)} onClick={() => void exportXlsx()} title="Descarga en Excel (.xlsx) las reservas que ves con la búsqueda y los filtros actuales">
-              {exporting === 'xlsx' ? <Loader2 className="animate-spin" size={16} /> : <FileSpreadsheet size={16} />} {exporting === 'xlsx' ? 'Generando Excel...' : 'Descargar Excel'}
-            </button>
-            <button className="admin-btn admin-btn--secondary" type="button" disabled={Boolean(exporting)} onClick={() => void exportPdf()} title="Descarga en PDF las reservas que ves con la búsqueda y los filtros actuales">
-              {exporting === 'pdf' ? <Loader2 className="animate-spin" size={16} /> : <FileText size={16} />} {exporting === 'pdf' ? 'Generando PDF...' : 'Descargar PDF'}
-            </button>
-          </>
+          <AdminExportMenu
+            busy={exporting}
+            options={[
+              { key: 'xlsx', label: 'Excel (.xlsx)', icon: FileSpreadsheet, title: 'Descarga en Excel (.xlsx) las reservas que ves con la búsqueda y los filtros actuales', onSelect: exportXlsx },
+              { key: 'pdf', label: 'PDF (.pdf)', icon: FileText, title: 'Descarga en PDF las reservas que ves con la búsqueda y los filtros actuales', onSelect: exportPdf },
+            ]}
+          />
         }
       />
 
@@ -542,7 +542,7 @@ export default function AdminReservationsPage() {
               <td>
                 <div className="admin-payment-cell">
                   <span className="admin-payment-cell__method">{methodLabel(reservation)}</span>
-                  <AdminBadge value={reservation.payment_status} label={formatPaymentStatusLabel(reservation.payment_status)} />
+                  <AdminBadge value={reservation.payment_status} />
                 </div>
               </td>
               <td><AdminBadge value={reservation.booking_status} /></td>
@@ -572,7 +572,7 @@ export default function AdminReservationsPage() {
               <div><dt>Lugar de salida</dt><dd>{reservation.departure_location_name_snapshot ?? '-'}<div className="admin-muted">{Number(reservation.departure_surcharge_snapshot ?? 0) > 0 ? money(Number(reservation.departure_surcharge_snapshot)) : 'Sin costo'}</div></dd></div>
               <div><dt>Total</dt><dd>{money(Number(reservation.total_snapshot))}</dd></div>
               <div><dt>Método de pago</dt><dd>{methodLabel(reservation)}</dd></div>
-              <div><dt>Estado de pago</dt><dd><AdminBadge value={reservation.payment_status} label={formatPaymentStatusLabel(reservation.payment_status)} /></dd></div>
+              <div><dt>Estado de pago</dt><dd><AdminBadge value={reservation.payment_status} /></dd></div>
               <div><dt>Estado de reserva</dt><dd><AdminBadge value={reservation.booking_status} /></dd></div>
             </dl>
             {renderReservationActions(reservation)}
@@ -660,8 +660,8 @@ export default function AdminReservationsPage() {
           </div>
           <footer className="admin-modal-footer">
             <button className="admin-btn" type="submit" disabled={manualSaving || catalogLoading}>
-              {manualSaving ? <Loader2 className="animate-spin" size={15} /> : <Check size={15} />}
-              Crear reserva
+              {manualSaving ? <Loader2 className="animate-spin" size={15} /> : null}
+              Crear
             </button>
             <button className="admin-btn admin-btn--secondary" type="button" onClick={() => setManualOpen(false)}>Cancelar</button>
           </footer>
@@ -672,7 +672,7 @@ export default function AdminReservationsPage() {
           <header className="admin-modal-header">
             <div>
               <h2 id="edit-booking-title" className="admin-card__title">Editar reserva</h2>
-              <p className="admin-muted">Guardar cambios no confirma ni vuelve a enviar el correo.</p>
+              <p className="admin-muted">Guardar no confirma ni vuelve a enviar el correo.</p>
             </div>
             <button className="admin-icon-btn" type="button" aria-label="Cerrar" onClick={() => setEditOpen(false)}><X size={18} /></button>
           </header>
@@ -706,7 +706,7 @@ export default function AdminReservationsPage() {
             </div>
           ) : null}
           </div> : null}
-          <footer className="admin-modal-footer"><button className="admin-btn" type="submit" disabled={editSaving || !editForm}>{editSaving ? <Loader2 className="animate-spin" size={15} /> : <Check size={15} />} Guardar cambios</button><button className="admin-btn admin-btn--secondary" type="button" onClick={() => setEditOpen(false)}>Cerrar</button></footer>
+          <footer className="admin-modal-footer"><button className="admin-btn" type="submit" disabled={editSaving || !editForm}>{editSaving ? 'Guardando...' : 'Guardar'}</button><button className="admin-btn admin-btn--secondary" type="button" onClick={() => setEditOpen(false)}>Cancelar</button></footer>
         </form>
       </Modal>
 

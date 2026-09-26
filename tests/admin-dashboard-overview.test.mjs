@@ -69,7 +69,7 @@ async function screenshot(page, name) {
   await page.setViewportSize(viewport);
 }
 
-test('dashboard with data: compact KPIs, the four analytics, the latest five and a working "Ver todas"', async () => {
+test('dashboard with data: compact KPIs, the four analytics and a compact latest-five card without "Ver todas"', async () => {
   const browser = await chromium.launch({ headless: true, channel: 'msedge' });
   try {
     const { page, base, bookingRequests } = await openDashboard(browser, { rows: bookingRows() });
@@ -135,17 +135,18 @@ test('dashboard with data: compact KPIs, the four analytics, the latest five and
     await expect(rows.nth(4)).toContainText('Pago en tour');
     for (const absent of ['Cliente F', 'Cliente G', 'Cliente H', 'PFT-', 'Test Tour']) await expect(recent).not.toContainText(absent);
 
-    // Ver todas: accessible link with a focus ring, leads to the reservations list.
-    const viewAll = recent.getByRole('link', { name: 'Ver todas' });
-    await expect(viewAll).toHaveAttribute('href', '/admin/reservations');
-    // Reached with the keyboard (Tab), so :focus-visible applies.
-    let reached = false;
-    for (let i = 0; i < 80 && !reached; i += 1) {
-      await page.keyboard.press('Tab');
-      reached = await viewAll.evaluate((node) => node === document.activeElement);
-    }
-    assert.ok(reached, 'Ver todas is reachable with Tab');
-    assert.notEqual(await viewAll.evaluate((node) => getComputedStyle(node).outlineStyle), 'none', 'focus ring is visible');
+    // A secondary summary: no "Ver todas" button, a small header and tight rows (the card is not the protagonist of the page).
+    await expect(page.getByRole('link', { name: 'Ver todas' })).toHaveCount(0);
+    await expect(recent.getByRole('link')).toHaveCount(0);
+    await expect(recent.getByRole('button')).toHaveCount(0);
+    const dims = await recent.evaluate((node) => {
+      const box = node.getBoundingClientRect();
+      const row = node.querySelector('tbody tr').getBoundingClientRect();
+      return { height: box.height, row: row.height, title: parseFloat(getComputedStyle(node.querySelector('h2')).fontSize) };
+    });
+    assert.ok(dims.row <= 36, `recent rows are compact (${dims.row}px)`);
+    assert.ok(dims.title <= 16, `small header (${dims.title}px)`);
+    assert.ok(dims.height <= 300, `the card is compact (${dims.height}px for 5 rows)`);
     // DOM order matches the visual order: KPIs, recent reservations, analytics.
     const order = await page.evaluate(() => {
       const top = (selector) => document.querySelector(selector).getBoundingClientRect().top;
@@ -159,9 +160,6 @@ test('dashboard with data: compact KPIs, the four analytics, the latest five and
     await expect(page.locator('.admin-dash-chart').first()).toBeVisible();
     await screenshot(page, 'dashboard-desktop-dark.png');
     await page.evaluate(() => { document.documentElement.dataset.theme = 'light'; });
-
-    await viewAll.click();
-    await expect(page).toHaveURL(`${base}/admin/reservations`);
   } finally {
     await browser.close();
   }
@@ -211,9 +209,9 @@ test('dashboard without bookings: KPIs at zero, every chart says there is not en
     await expect(page.getByText(EMPTY, { exact: true })).toHaveCount(4);
     await expect(page.locator('.admin-dash-bars, .admin-dash-weeks, .admin-dash-donut')).toHaveCount(0);
     await expect(page.getByRole('region', { name: 'Analítica de reservas' })).toContainText('Últimas 12 semanas');
-    // Recent reservations: honest empty row, and the way to the full list is still there.
+    // Recent reservations: honest empty row (the full list is one click away in the sidebar: Reservas).
     await expect(page.locator('.admin-dashboard-reservations')).toContainText('No hay reservas registradas todavía.');
-    await expect(page.getByRole('link', { name: 'Ver todas' })).toHaveAttribute('href', '/admin/reservations');
+    await expect(page.getByRole('link', { name: 'Ver todas' })).toHaveCount(0);
     await expect(page.getByRole('alert')).toHaveCount(0);
     await screenshot(page, 'dashboard-empty-desktop.png');
   } finally {

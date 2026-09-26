@@ -1,10 +1,11 @@
-import { Check, ChevronLeft, ChevronRight, Eye, EyeOff, Image as ImageIcon, Info, Loader2, Pencil, Plus, Save, Settings, Trash2, X } from 'lucide-react';
+import { Check, ChevronLeft, ChevronRight, Image as ImageIcon, Info, Loader2, Pencil, Plus, Settings, Trash2, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import AdminConfirmDialog from '../../components/admin/AdminConfirmDialog';
 import AdminImageManager from '../../components/admin/AdminImageManager';
+import AdminImageSlots from '../../components/admin/AdminImageSlots';
 import AdminStepper from '../../components/admin/AdminStepper';
-import { AdminBadge, AdminFilterMenu, AdminListToolbar, AdminModuleSurface, AdminReorderHandle, AdminReorderToolbar, AdminTable } from '../../components/admin/AdminPrimitives';
+import { AdminBadge, AdminCreateButton, AdminVisibilityButton, AdminFilterMenu, AdminListToolbar, AdminModuleSurface, AdminReorderHandle, AdminTable } from '../../components/admin/AdminPrimitives';
 import FormSection from '../../components/admin/FormSection';
 import ModalFooter from '../../components/admin/ModalFooter';
 import { Modal } from '../../components/common/Modal';
@@ -126,7 +127,6 @@ export default function AdminToursPage() {
   const [inclusionRows, setInclusionRows] = useState<TourInclusionRow[]>([]);
   const [editing, setEditing] = useState<TourEditor | null>(null);
   const [step, setStep] = useState<EditorStep>('info');
-  const [gallerySlot, setGallerySlot] = useState<number | null>(null);
   const [deleteImage, setDeleteImage] = useState<TourImageRow | null>(null);
   const [pendingTourDelete, setPendingTourDelete] = useState<TourRow | null>(null);
   const [togglingTourId, setTogglingTourId] = useState<string | null>(null);
@@ -180,7 +180,7 @@ export default function AdminToursPage() {
     setEditing(createEditor(tour, imageRows.filter((item) => item.tour_id === tour.id), tourInclusions));
     beforeRef.current = beforeFromRows(tour, tourInclusions);
     createRowRef.current = null;
-    setStep('info'); setFieldErrors({}); setGallerySlot(null); setDirty(false); setError('');
+    setStep('info'); setFieldErrors({}); setDirty(false); setError('');
   }
 
   // "Crear tour" only opens the wizard with local state: nothing is written until the
@@ -195,7 +195,7 @@ export default function AdminToursPage() {
       id, isNew: true, title: '', slug: id, description: '', longDescription: '', category: 'Snorkeling & Beach', publicationStatus: 'draft',
       featured: false, sortOrder: 0, activities: [], images: [], inclusions: [],
     });
-    setStep('info'); setFieldErrors({}); setGallerySlot(null); setDirty(false); setError('');
+    setStep('info'); setFieldErrors({}); setDirty(false); setError('');
   }
 
   // Assigns a fresh max(sort_order)+1 read right before the insert, not `tours.length`:
@@ -291,7 +291,7 @@ export default function AdminToursPage() {
       const { error: orderError } = await supabase.from('tours').update({ sort_order: index + 1 }).eq('id', item.id);
       if (orderError) { renumberError = orderError.message; break; }
     }
-    if (renumberError) setError(`Tour eliminado, pero no se pudo renumerar el orden: ${renumberError}. Usa Reordenar > Guardar orden.`);
+    if (renumberError) setError(`Tour eliminado, pero no se pudo renumerar el orden: ${renumberError}. Usa Reordenar > Guardar.`);
     else setNotice('Tour eliminado.');
     await loadTours();
   }
@@ -464,7 +464,7 @@ export default function AdminToursPage() {
     const cleanup = current ? await cleanupReplacedImage(current.storage_path, image.storage_path, 'tour_images', current.id) : 'none';
     const images = [...editing.images]; images[slot] = result.data;
     markEditing({ ...editing, images: images.filter(Boolean).map((item, index) => ({ ...item, sort_order: index + 1, is_primary: index === 0 })) });
-    setGallerySlot(null); await loadTours();
+    await loadTours();
     if (cleanup === 'pending') setError('Foto cambiada. La foto anterior no se pudo borrar del almacenamiento y quedó pendiente de limpieza.');
   }
 
@@ -538,17 +538,15 @@ export default function AdminToursPage() {
               </label>
             </AdminFilterMenu>
           }
-          primaryAction={<button className="admin-btn" type="button" disabled={reorder.reordering} onClick={createTour}><Plus size={16} /> Crear tour</button>}
-          secondaryActions={
-            <AdminReorderToolbar
-              reordering={reorder.reordering}
-              saving={reorder.saving}
-              onStart={() => reorder.start()}
-              onCancel={reorder.cancel}
-              onSave={() => void reorder.save(persistTourOrder)}
-              disabledReason={canReorder ? undefined : 'Limpia la búsqueda y el filtro de publicación para reordenar.'}
-            />
-          }
+          primaryAction={<AdminCreateButton label="Crear tour" disabled={reorder.reordering} onClick={createTour} />}
+          reorder={{
+            reordering: reorder.reordering,
+            saving: reorder.saving,
+            onStart: () => reorder.start(),
+            onCancel: reorder.cancel,
+            onSave: () => void reorder.save(persistTourOrder),
+            disabledReason: canReorder ? undefined : 'Limpia la búsqueda y el filtro de publicación para reordenar.',
+          }}
         />
         {error && !editing ? <div className="admin-alert admin-alert--danger">{error}</div> : null}
         {notice && !editing ? <div className="admin-alert admin-alert--success">{notice}</div> : null}
@@ -562,7 +560,7 @@ export default function AdminToursPage() {
               >
                 <td>{tour.title || <span className="admin-muted">Sin nombre</span>}<div className="admin-muted admin-table__truncate" title={tour.description || tour.slug}>{tour.description || tour.slug}</div></td>
                 <td>{(boatNamesByTour.get(tour.id) ?? []).length ? (boatNamesByTour.get(tour.id) ?? []).join(', ') : <span className="admin-muted">Sin bote asignado</span>}</td>
-                <td><AdminBadge value={publicationStatus(tour) === 'draft' ? 'Borrador' : publicationStatus(tour) === 'published' ? 'Activo' : 'Inactivo'} /></td>
+                <td><AdminBadge value={publicationStatus(tour) === 'draft' ? 'draft' : publicationStatus(tour) === 'published' ? 'active' : 'inactive'} /></td>
                 <td>
                   {reorder.reordering ? (
                     <AdminReorderHandle
@@ -592,7 +590,7 @@ export default function AdminToursPage() {
           <AdminStepper label="Progreso del Tour" steps={steps} current={step} onSelect={(next) => { if (editing.isNew && next !== 'info') void navigateStep(1, next); else setStep(next); }} />
           <div className="admin-modal-body admin-tour-step-body">{error ? <div className="admin-alert admin-alert--danger" role="alert">{error}</div> : null}
             {step === 'info' ? <InfoStep editing={editing} errors={fieldErrors} onChange={markEditing} /> : null}
-            {step === 'gallery' ? <GalleryStep editing={editing} errors={fieldErrors} selectedSlot={gallerySlot} setSelectedSlot={setGallerySlot} setDeleteImage={setDeleteImage} saveImage={saveGalleryImage} /> : null}
+            {step === 'gallery' ? <GalleryStep editing={editing} errors={fieldErrors} setDeleteImage={setDeleteImage} saveImage={saveGalleryImage} /> : null}
             {step === 'experience' ? <ExperienceStep editing={editing} activityInput={activityInput} inclusionInput={inclusionInput} setActivityInput={setActivityInput} setInclusionInput={setInclusionInput} addActivity={addActivity} addInclusion={addInclusion} onChange={markEditing} /> : null}
             {step === 'config' ? <ConfigStep tour={tours.find((item) => item.id === editing.id) ?? null} missing={missingPublicationLabels(editing)} togglingTourId={togglingTourId} onToggle={requestToggleTourPublication} onRequestDelete={setPendingTourDelete} /> : null}
           </div>
@@ -601,8 +599,8 @@ export default function AdminToursPage() {
               {step !== 'info' ? <button className="admin-btn admin-btn--ghost admin-wizard-footer__icon-btn" type="button" aria-label="Anterior" title="Anterior" disabled={saving} onClick={() => void navigateStep(-1)}><ChevronLeft size={18} /></button> : null}
             </div>
             <div className="admin-wizard-footer__actions">
-              <button className="admin-btn admin-btn--secondary" type="button" disabled={saving} onClick={() => void saveDraftAndClose()}>{saving ? <Loader2 className="animate-spin" size={15} /> : <Save size={15} />} Guardar borrador</button>
-              {step !== 'config' ? <button key="next" className="admin-btn admin-wizard-footer__icon-btn" type="button" aria-label="Siguiente" title="Siguiente" disabled={saving} onClick={() => void navigateStep(1)}>{saving ? <Loader2 className="animate-spin" size={18} /> : <ChevronRight size={18} />}</button> : <button key="save" className="admin-btn" type="submit" disabled={saving}>{saving ? <Loader2 className="animate-spin" size={15} /> : <Save size={15} />} Guardar</button>}
+              {step !== 'config' ? <button key="next" className="admin-btn admin-wizard-footer__icon-btn" type="button" aria-label="Siguiente" title="Siguiente" disabled={saving} onClick={() => void navigateStep(1)}>{saving ? <Loader2 className="animate-spin" size={18} /> : <ChevronRight size={18} />}</button> : <button key="save" className="admin-btn" type="submit" disabled={saving}>{saving ? 'Guardando...' : 'Guardar'}</button>}
+              <button className="admin-btn admin-btn--secondary" type="button" disabled={saving} onClick={() => void saveDraftAndClose()}>{saving ? 'Guardando...' : 'Guardar borrador'}</button>
             </div>
           </ModalFooter>
         </form> : null}
@@ -631,11 +629,24 @@ export default function AdminToursPage() {
 }
 
 function InfoStep({ editing, errors, onChange }: { editing: TourEditor; errors: FieldErrors; onChange: (value: TourEditor) => void }) {
-  return <FormSection title="Información general" description="Los datos esenciales que describen el Tour." icon={<Info size={16} />}><label className="admin-field"><span className="admin-field__label">Nombre del tour</span><input id="tour-title" className="admin-input" placeholder="Ej. Fishing Tour" aria-required="true" aria-invalid={Boolean(errors.title) || undefined} aria-describedby={errors.title ? 'tour-title-error' : undefined} value={editing.title} onChange={(event) => onChange({ ...editing, title: event.target.value, slug: slugify(event.target.value) })} />{errors.title ? <span id="tour-title-error" className="admin-field-error" role="alert">{errors.title}</span> : null}</label><label className="admin-field"><span className="admin-field__label">Frase</span><textarea className="admin-input" rows={3} value={editing.description} onChange={(event) => onChange({ ...editing, description: event.target.value })} /></label><label className="admin-field"><span className="admin-field__label">Descripción</span><textarea className="admin-input admin-textarea-list" value={editing.longDescription} onChange={(event) => onChange({ ...editing, longDescription: event.target.value })} /></label><p className="admin-field-help">Escribe los textos en inglés: el español se genera al guardar.</p><p className="admin-field-help">{editing.isNew ? 'El orden de aparición se asignará automáticamente al guardar.' : `Orden de aparición actual: ${editing.sortOrder}. Se reordena desde la lista de tours.`}</p></FormSection>;
+  return <FormSection title="Información general" description="Los datos esenciales que describen el Tour." icon={<Info size={16} />}><label className="admin-field"><span className="admin-field__label">Nombre del tour</span><input id="tour-title" className="admin-input" placeholder="Ej. Fishing Tour" aria-required="true" aria-invalid={Boolean(errors.title) || undefined} aria-describedby={errors.title ? 'tour-title-error' : undefined} value={editing.title} onChange={(event) => onChange({ ...editing, title: event.target.value, slug: slugify(event.target.value) })} />{errors.title ? <span id="tour-title-error" className="admin-field-error" role="alert">{errors.title}</span> : null}</label><label className="admin-field"><span className="admin-field__label">Frase</span><textarea className="admin-input" rows={3} value={editing.description} onChange={(event) => onChange({ ...editing, description: event.target.value })} /></label><label className="admin-field"><span className="admin-field__label">Descripción</span><textarea className="admin-input admin-textarea-list" value={editing.longDescription} onChange={(event) => onChange({ ...editing, longDescription: event.target.value })} /></label></FormSection>;
 }
 
-function GalleryStep({ editing, errors, selectedSlot, setSelectedSlot, setDeleteImage, saveImage }: { editing: TourEditor; errors: FieldErrors; selectedSlot: number | null; setSelectedSlot: (value: number | null) => void; setDeleteImage: (value: TourImageRow | null) => void; saveImage: (image: StorageImage, slot: number) => Promise<void> }) {
-  return <FormSection title="Galería" description="Mínimo 3 imágenes para continuar." icon={<ImageIcon size={16} />}>{errors.images ? <div className="admin-alert admin-alert--danger admin-gallery-error" role="alert">{errors.images}</div> : null}<div className="admin-tour-image-slots">{Array.from({ length: 6 }, (_, index) => { const image = editing.images[index]; const selected = selectedSlot === index; return <article className={`admin-tour-image-slot${selected ? ' admin-tour-image-slot--editing' : ''}`} key={image?.id ?? index}><header><strong>Foto {index + 1}</strong>{index === 0 ? <AdminBadge value="Portada" /> : null}</header>{selected ? <AdminImageManager resourceTable="tours" resourceId={editing.id} folder="tours" currentImageUrl={image?.image_url} currentStoragePath={image?.storage_path} label={`${editing.title} foto ${index + 1}`} aspect={3 / 2} maxWidth={1200} maxHeight={800} maxSizeMB={0.35} retainPreviousOnUpload requireReplacementToDelete onImageSaved={(saved) => saveImage(saved, index)} /> : image ? <button className="admin-tour-image-slot__media" type="button" aria-label={`Cambiar foto ${index + 1}`} onClick={() => setSelectedSlot(index)}><img src={image.image_url} alt={image.alt_text || `${editing.title} foto ${index + 1}`} /></button> : <button className="admin-tour-image-slot__empty" type="button" onClick={() => setSelectedSlot(index)}><Plus size={18} /> Seleccionar</button>}<footer>{selected ? <button className="admin-btn admin-btn--ghost" type="button" onClick={() => setSelectedSlot(null)}>Cerrar</button> : <button className="admin-btn admin-btn--ghost" type="button" onClick={() => setSelectedSlot(index)}>{image ? 'Cambiar' : 'Seleccionar'}</button>}{image && !selected ? <button className="admin-icon-btn" type="button" aria-label={`Eliminar foto ${index + 1}`} onClick={() => setDeleteImage(image)}><Trash2 size={15} /></button> : null}</footer></article>; })}</div></FormSection>;
+function GalleryStep({ editing, errors, setDeleteImage, saveImage }: { editing: TourEditor; errors: FieldErrors; setDeleteImage: (value: TourImageRow | null) => void; saveImage: (image: StorageImage, slot: number) => Promise<void> }) {
+  const slots = editing.images.map((image, index) => ({ id: image.id, url: image.image_url, alt: image.alt_text, cover: index === 0 }));
+  return (
+    <FormSection title="Galería" description="Mínimo 3 imágenes para continuar." icon={<ImageIcon size={16} />}>
+      {errors.images ? <div className="admin-alert admin-alert--danger admin-gallery-error" role="alert">{errors.images}</div> : null}
+      <AdminImageSlots
+        images={slots}
+        onDelete={(item) => setDeleteImage(editing.images.find((image) => image.id === item.id) ?? null)}
+        fallbackAlt={(index) => `${editing.title} foto ${index + 1}`}
+        renderManager={(index, image, picker) => (
+          <AdminImageManager {...picker} resourceTable="tours" resourceId={editing.id} folder="tours" currentImageUrl={image?.url} currentStoragePath={editing.images[index]?.storage_path} label={`${editing.title} foto ${index + 1}`} aspect={3 / 2} maxWidth={1200} maxHeight={800} maxSizeMB={0.35} retainPreviousOnUpload requireReplacementToDelete onImageSaved={(saved) => saveImage(saved, index)} />
+        )}
+      />
+    </FormSection>
+  );
 }
 
 interface TagListItem { key: string; label: string; removeLabel: string; onRemove: () => void }
@@ -675,7 +686,7 @@ function TagListField({ id, label, placeholder, value, onValueChange, onAdd, add
 
 function ExperienceStep({ editing, activityInput, inclusionInput, setActivityInput, setInclusionInput, addActivity, addInclusion, onChange }: { editing: TourEditor; activityInput: string; inclusionInput: string; setActivityInput: (value: string) => void; setInclusionInput: (value: string) => void; addActivity: () => void; addInclusion: () => void; onChange: (value: TourEditor) => void }) {
   return (
-    <FormSection title="Actividades e incluye" description="Escríbelo en inglés: el español se genera al guardar." icon={<Check size={16} />}>
+    <FormSection title="Actividades e incluye" description="Lo que se hace en el tour y lo que incluye." icon={<Check size={16} />}>
       <TagListField
         id="tour-activity-input"
         label="Actividades del tour"
@@ -728,7 +739,7 @@ function ConfigStep({ tour, missing, togglingTourId, onToggle, onRequestDelete }
         <div className="admin-tour-config-row admin-tour-config-row--tour">
           <div className="admin-tour-config-row__status">
             <p className="admin-config-row__label">Estado actual</p>
-            {isPublished ? <AdminBadge value={true} label="Activo" /> : <AdminBadge value={status === 'draft' ? 'Borrador' : 'Inactivo'} />}
+            <AdminBadge value={isPublished ? 'active' : status === 'draft' ? 'draft' : 'inactive'} />
             <p className="admin-muted">{hint}</p>
             {!isPublished ? (
               missing.length ? (
@@ -741,16 +752,8 @@ function ConfigStep({ tour, missing, togglingTourId, onToggle, onRequestDelete }
               )
             ) : null}
           </div>
-          {/* The icon is the action that will happen: Mostrar -> Eye, Ocultar -> EyeOff. */}
-          <button
-            className={`admin-btn ${isPublished ? 'admin-btn--secondary' : ''}`}
-            type="button"
-            disabled={togglingTourId === tour.id}
-            onClick={() => void onToggle(tour)}
-          >
-            {togglingTourId === tour.id ? <Loader2 className="animate-spin" size={15} /> : isPublished ? <EyeOff size={15} /> : <Eye size={15} />}
-            {isPublished ? 'Ocultar tour' : 'Mostrar tour'}
-          </button>
+          {/* Shows the CURRENT state ("Visible" / "No visible"); the accessible name says what pressing does. */}
+          <AdminVisibilityButton visible={isPublished} busy={togglingTourId === tour.id} actionLabel={isPublished ? 'Ocultar tour' : 'Mostrar tour'} onClick={() => void onToggle(tour)} />
         </div>
         <div className="admin-tour-config-divider" role="separator" />
         <div className="admin-tour-danger-row">

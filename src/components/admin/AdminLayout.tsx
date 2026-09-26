@@ -218,9 +218,6 @@ export default function AdminLayout() {
               <img src="/images/papagayo-logo.png" alt="" aria-hidden="true" />
             </span>
           </Link>
-          <button className="admin-sidebar__toggle" type="button" aria-label={open ? 'Colapsar menu' : 'Expandir menu'} title={open ? 'Colapsar menu' : 'Expandir menu'} aria-expanded={open} aria-controls="admin-sidebar" onClick={() => setOpen((value) => !value)}>
-            {open ? <ChevronLeft size={18} /> : <ChevronRight size={18} />}
-          </button>
         </div>
         <div ref={sidebarScrollRef} className={sidebarHasMoreBelow ? 'admin-sidebar__scroll admin-sidebar__scroll--has-more' : 'admin-sidebar__scroll'}>
           {navGroups.map((group) => (
@@ -245,6 +242,11 @@ export default function AdminLayout() {
               </ul>
             </div>
           ))}
+        </div>
+        <div className="admin-sidebar__footer">
+          <button className="admin-sidebar__toggle" type="button" aria-label={open ? 'Colapsar menu' : 'Expandir menu'} title={open ? 'Colapsar menu' : 'Expandir menu'} aria-expanded={open} aria-controls="admin-sidebar" onClick={() => setOpen((value) => !value)}>
+            {open ? <ChevronLeft size={18} /> : <ChevronRight size={18} />}
+          </button>
         </div>
       </aside>
       <main className="admin-main">

@@ -1,6 +1,7 @@
 export type AdminPaginationItem = number | 'ellipsis-start' | 'ellipsis-end';
 
-export const ADMIN_PAGE_SIZE_OPTIONS = [10, 25, 50];
+/** Every paginated Admin list shows exactly this many rows per page; there is no user-facing page-size control. */
+export const ADMIN_PAGE_SIZE = 10;
 
 export function getAdminPageCount(total: number, pageSize: number) {
   if (!Number.isFinite(total) || !Number.isFinite(pageSize) || pageSize <= 0) return 1;

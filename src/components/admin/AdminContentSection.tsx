@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronRight, Eye, FileText, Globe2, Loader2, Save } from 'lucide-react';
+import { ChevronDown, ChevronRight, FileText, Globe2, Loader2, Monitor } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { supabase } from '../../lib/supabase';
@@ -6,6 +6,7 @@ import type { StorageImage } from '../../services/imageService';
 import { translateAllSiteContent, translateTextsToSpanish, type TranslateAllSiteContentResult } from '../../services/translationService';
 import AdminConfirmDialog from './AdminConfirmDialog';
 import AdminImageManager from './AdminImageManager';
+import { AdminMediaAssetCard, AdminMediaAssetEditor } from './AdminMediaAssets';
 import AdminVideoManager from './AdminVideoManager';
 
 interface SiteSettingRow {
@@ -55,7 +56,6 @@ interface ContentSectionProps {
   title: string;
   description: string;
   fields: ContentField[];
-  saveLabel: string;
   /** Success notice shown after saving the texts (defaults to "<title> actualizado."). */
   savedMessage?: string;
   imageRequireReplacement?: boolean;
@@ -64,7 +64,7 @@ interface ContentSectionProps {
   mediaTextTabs?: boolean;
 }
 
-export function ContentSection({ title, description, fields, saveLabel, savedMessage, imageRequireReplacement = false, preview, mediaTextTabs = false }: ContentSectionProps) {
+export function ContentSection({ title, description, fields, savedMessage, imageRequireReplacement = false, preview, mediaTextTabs = false }: ContentSectionProps) {
   const keys = useMemo(() => fields.map((field) => field.key), [fields]);
   const [draft, setDraft] = useState<Draft>(() => defaultsFrom(fields));
   const [loading, setLoading] = useState(true);
@@ -77,6 +77,8 @@ export function ContentSection({ title, description, fields, saveLabel, savedMes
   const [heroMediaMode, setHeroMediaMode] = useState<'image' | 'video'>('image');
   const [switchingMediaMode, setSwitchingMediaMode] = useState(false);
   const [innerTab, setInnerTab] = useState<'media' | 'texts'>('media');
+  // The asset (image / video) open in its editor; the list only shows summary cards.
+  const [assetEditor, setAssetEditor] = useState<{ field: ContentField; kind: 'image' | 'video' } | null>(null);
 
   const imageFields = useMemo(() => fields.filter((field) => field.type === 'image'), [fields]);
   const primaryImageFields = useMemo(() => imageFields.filter((field) => !field.key.includes('.slide_') && field.key !== 'home.hero.video_poster'), [imageFields]);
@@ -88,8 +90,9 @@ export function ContentSection({ title, description, fields, saveLabel, savedMes
     [fields],
   );
 
-  async function loadSettings() {
-    setLoading(true);
+  // `silent` refreshes the values without swapping the whole form for the loading text (used after an upload/delete, so an open editor stays open).
+  async function loadSettings(silent = false) {
+    if (!silent) setLoading(true);
     setError('');
     const { data, error } = await supabase
       .from('site_settings')
@@ -168,7 +171,7 @@ export function ContentSection({ title, description, fields, saveLabel, savedMes
     try {
       await upsertKey(field.key, image.public_url, 'image');
       setNotice('Imagen actualizada.');
-      await loadSettings();
+      await loadSettings(true);
     } catch (imageError) {
       throw new Error(imageError instanceof Error ? imageError.message : 'No se pudo guardar la imagen.');
     }
@@ -185,7 +188,7 @@ export function ContentSection({ title, description, fields, saveLabel, savedMes
     try {
       await upsertKey(field.key, field.fallback, 'image');
       setNotice('Imagen eliminada. El sitio vuelve al contenido por defecto.');
-      await loadSettings();
+      await loadSettings(true);
     } catch {
       setNotice(`No se pudo actualizar la referencia de la imagen eliminada: ${storagePath}`);
     }
@@ -195,7 +198,7 @@ export function ContentSection({ title, description, fields, saveLabel, savedMes
     try {
       await upsertKey(field.key, video.public_url, 'video');
       setNotice('Video actualizado.');
-      await loadSettings();
+      await loadSettings(true);
     } catch (videoError) {
       throw new Error(videoError instanceof Error ? videoError.message : 'No se pudo guardar el video.');
     }
@@ -205,7 +208,7 @@ export function ContentSection({ title, description, fields, saveLabel, savedMes
     try {
       await upsertKey(field.key, field.fallback, 'video');
       setNotice('Video eliminado. El sitio vuelve al contenido por defecto.');
-      await loadSettings();
+      await loadSettings(true);
     } catch {
       setNotice(`No se pudo actualizar la referencia del video eliminado: ${storagePath}`);
     }
@@ -229,6 +232,49 @@ export function ContentSection({ title, description, fields, saveLabel, savedMes
       setSwitchingMediaMode(false);
     }
   }
+
+  // The managers below are the same ones the inline lists used (replace / delete / R2 URL, same props); they now live in the asset editor.
+  function renderImageManager(field: ContentField) {
+    const isPoster = field.key === 'home.hero.video_poster';
+    const isPrimary = primaryImageFields.includes(field);
+    return (
+      <AdminImageManager
+        resourceTable="site_settings"
+        resourceId={field.key}
+        folder="general"
+        currentImageUrl={draft[field.key]}
+        currentStoragePath={storagePathFromPublicUrl(draft[field.key])}
+        label={isPoster ? field.label : draft[`${field.key.replace(/\.mobile_image$/, '').replace(/\.image$/, '')}.image_alt.en`] ?? field.label}
+        aspect={field.aspect ?? 16 / 9}
+        maxWidth={field.maxWidth ?? 1920}
+        maxHeight={field.maxHeight ?? 1080}
+        maxSizeMB={0.9}
+        {...(isPrimary ? { beforeUpload: () => ensureImageSetting(field) } : {})}
+        {...(isPoster ? {} : { requireReplacementToDelete: imageRequireReplacement && Boolean(field.fallback) })}
+        onImageSaved={(image) => handleImageSaved(field, image)}
+        onImageDeleted={(storagePath) => handleImageDeleted(field, storagePath)}
+      />
+    );
+  }
+
+  function renderVideoManager(field: ContentField) {
+    return (
+      <AdminVideoManager
+        resourceTable="site_settings"
+        resourceId={field.key}
+        folder="general"
+        currentVideoUrl={draft[field.key]}
+        currentStoragePath={storagePathFromPublicUrl(draft[field.key])}
+        label={field.label}
+        onVideoSaved={(video) => handleVideoSaved(field, video)}
+        onVideoDeleted={(storagePath) => handleVideoDeleted(field, storagePath)}
+      />
+    );
+  }
+
+  const assetCard = (field: ContentField, kind: 'image' | 'video') => (
+    <AdminMediaAssetCard key={field.key} label={field.label} kind={kind} url={draft[field.key]} onEdit={() => setAssetEditor({ field, kind })} />
+  );
 
   return (
     <section className="admin-card admin-content-section">
@@ -275,30 +321,7 @@ export function ContentSection({ title, description, fields, saveLabel, savedMes
           ) : null}
 
           {(videoFields.length === 0 || heroMediaMode === 'image') && primaryImageFields.length > 0 ? (
-            <div className="grid gap-5 lg:grid-cols-2">
-              {primaryImageFields.map((imageField) => (
-                <div className="admin-media-field" key={imageField.key}>
-                  <p className="admin-media-field__label">{imageField.label}</p>
-                  <AdminImageManager
-                    resourceTable="site_settings"
-                    resourceId={imageField.key}
-                    folder="general"
-                    currentImageUrl={draft[imageField.key]}
-                    currentStoragePath={storagePathFromPublicUrl(draft[imageField.key])}
-                    label={draft[`${imageField.key.replace(/\.mobile_image$/, '').replace(/\.image$/, '')}.image_alt.en`] ?? imageField.label}
-                    aspect={imageField.aspect ?? 16 / 9}
-                    previewAspect={imageField.aspect ?? 16 / 9}
-                    maxWidth={imageField.maxWidth ?? 1920}
-                    maxHeight={imageField.maxHeight ?? 1080}
-                    maxSizeMB={0.9}
-                    beforeUpload={() => ensureImageSetting(imageField)}
-                    requireReplacementToDelete={imageRequireReplacement && Boolean(imageField.fallback)}
-                    onImageSaved={(image) => handleImageSaved(imageField, image)}
-                    onImageDeleted={(storagePath) => handleImageDeleted(imageField, storagePath)}
-                  />
-                </div>
-              ))}
-            </div>
+            <div className="admin-media-grid">{primaryImageFields.map((field) => assetCard(field, 'image'))}</div>
           ) : null}
 
           {(videoFields.length === 0 || heroMediaMode === 'image') && extraImageFields.length > 0 ? (
@@ -312,79 +335,21 @@ export function ContentSection({ title, description, fields, saveLabel, savedMes
                 {showExtraSlides ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                 {showExtraSlides ? 'Ocultar diapositivas adicionales' : `Mostrar diapositivas adicionales (${extraImageFields.length})`}
               </button>
-              {showExtraSlides ? (
-                <div className="grid gap-5 lg:grid-cols-2">
-                  {extraImageFields.map((imageField) => (
-                    <div className="admin-media-field" key={imageField.key}>
-                      <p className="admin-media-field__label">{imageField.label}</p>
-                      <AdminImageManager
-                        resourceTable="site_settings"
-                        resourceId={imageField.key}
-                        folder="general"
-                        currentImageUrl={draft[imageField.key]}
-                        currentStoragePath={storagePathFromPublicUrl(draft[imageField.key])}
-                        label={draft[`${imageField.key.replace(/\.mobile_image$/, '').replace(/\.image$/, '')}.image_alt.en`] ?? imageField.label}
-                        aspect={imageField.aspect ?? 16 / 9}
-                        previewAspect={imageField.aspect ?? 16 / 9}
-                        maxWidth={imageField.maxWidth ?? 1920}
-                        maxHeight={imageField.maxHeight ?? 1080}
-                        maxSizeMB={0.9}
-                        requireReplacementToDelete={imageRequireReplacement && Boolean(imageField.fallback)}
-                        onImageSaved={(image) => handleImageSaved(imageField, image)}
-                        onImageDeleted={(storagePath) => handleImageDeleted(imageField, storagePath)}
-                      />
-                    </div>
-                  ))}
-                </div>
-              ) : null}
+              {showExtraSlides ? <div className="admin-media-grid">{extraImageFields.map((field) => assetCard(field, 'image'))}</div> : null}
             </div>
           ) : null}
 
           {videoFields.length > 0 && heroMediaMode === 'video' ? (
-            <div className="grid gap-5 lg:grid-cols-2">
-              {videoFields.map((videoField) => (
-                <div className="admin-media-field" key={videoField.key}>
-                  <p className="admin-media-field__label">{videoField.label}</p>
-                  <AdminVideoManager
-                    resourceTable="site_settings"
-                    resourceId={videoField.key}
-                    folder="general"
-                    currentVideoUrl={draft[videoField.key]}
-                    currentStoragePath={storagePathFromPublicUrl(draft[videoField.key])}
-                    label={videoField.label}
-                    onVideoSaved={(video) => handleVideoSaved(videoField, video)}
-                    onVideoDeleted={(storagePath) => handleVideoDeleted(videoField, storagePath)}
-                  />
-                </div>
-              ))}
-              {videoPosterField ? (
-                <div className="admin-media-field" key={videoPosterField.key}>
-                  <p className="admin-media-field__label">{videoPosterField.label}</p>
-                  <AdminImageManager
-                    resourceTable="site_settings"
-                    resourceId={videoPosterField.key}
-                    folder="general"
-                    currentImageUrl={draft[videoPosterField.key]}
-                    currentStoragePath={storagePathFromPublicUrl(draft[videoPosterField.key])}
-                    label={videoPosterField.label}
-                    aspect={videoPosterField.aspect ?? 16 / 9}
-                    previewAspect={videoPosterField.aspect ?? 16 / 9}
-                    maxWidth={videoPosterField.maxWidth ?? 1920}
-                    maxHeight={videoPosterField.maxHeight ?? 1080}
-                    maxSizeMB={0.9}
-                    onImageSaved={(image) => handleImageSaved(videoPosterField, image)}
-                    onImageDeleted={(storagePath) => handleImageDeleted(videoPosterField, storagePath)}
-                  />
-                </div>
-              ) : null}
+            <div className="admin-media-grid">
+              {videoFields.map((field) => assetCard(field, 'video'))}
+              {videoPosterField ? assetCard(videoPosterField, 'image') : null}
             </div>
           ) : null}
           </div>
 
           <div style={mediaTextTabs && innerTab !== 'texts' ? { display: 'none' } : undefined} className="grid gap-5">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="admin-muted font-extrabold">Textos (en inglés)</p>
-            <p className="admin-field-help">Escríbelos en inglés: el español se genera al guardar.</p>
+            <p className="admin-muted font-extrabold">Textos</p>
           </div>
 
           <div className="grid gap-3 lg:grid-cols-2">
@@ -399,10 +364,10 @@ export function ContentSection({ title, description, fields, saveLabel, savedMes
                   <span className="admin-muted">{field.label}</span>
                 </label>
               ) : (
-                <label className="grid gap-1" key={field.key}>
+                <label className={`grid gap-1${field.type === 'textarea' ? ' lg:col-span-2' : ''}`} key={field.key}>
                   <span className="admin-muted">{field.label.replace(/ EN$/, '')}</span>
                   {field.type === 'textarea' ? (
-                    <textarea className="admin-input min-h-24" value={draft[field.key]} onChange={(event) => updateDraft(field.key, event.target.value)} />
+                    <textarea className="admin-input admin-content-textarea" rows={field.key.includes('.story') ? 9 : field.key.includes('preview_text') ? 6 : 4} value={draft[field.key]} onChange={(event) => updateDraft(field.key, event.target.value)} />
                   ) : (
                     <input className="admin-input" value={draft[field.key]} onChange={(event) => updateDraft(field.key, event.target.value)} />
                   )}
@@ -413,7 +378,7 @@ export function ContentSection({ title, description, fields, saveLabel, savedMes
 
           {preview ? (
             <div className="admin-content-preview">
-              <p className="admin-content-preview__label"><Eye size={14} aria-hidden="true" /> Vista previa</p>
+              <p className="admin-content-preview__label"><Monitor size={14} aria-hidden="true" /> Vista previa</p>
               {preview(draft)}
             </div>
           ) : null}
@@ -421,12 +386,15 @@ export function ContentSection({ title, description, fields, saveLabel, savedMes
 
           <div className="admin-image-manager__actions">
             <button className="admin-btn" type="button" disabled={saving} onClick={() => void saveSettings()}>
-              <Save size={16} /> {saving ? 'Guardando...' : saveLabel}
+              {saving ? 'Guardando...' : 'Guardar'}
             </button>
-            <button className="admin-btn admin-btn--ghost" type="button" onClick={() => void loadSettings()}>Descartar cambios</button>
+            <button className="admin-btn admin-btn--ghost" type="button" onClick={() => void loadSettings()}>Cancelar</button>
           </div>
         </div>
       )}
+      <AdminMediaAssetEditor open={Boolean(assetEditor)} title={assetEditor?.field.label ?? ''} onClose={() => setAssetEditor(null)}>
+        {assetEditor ? (assetEditor.kind === 'video' ? renderVideoManager(assetEditor.field) : renderImageManager(assetEditor.field)) : null}
+      </AdminMediaAssetEditor>
     </section>
   );
 }
@@ -434,7 +402,7 @@ export function ContentSection({ title, description, fields, saveLabel, savedMes
 // The BACKFILL / repair tool (formerly "Traducir todo el sitio", now BACKFILL only): normal edits are translated on save. Covers tours, packages,
 // inclusions, boats, gallery, payment methods, departure locations, Hero/
 // About sections and reviews in one call — see translate-all-site-content.
-// Site-wide scope, so both content screens (Portada and Sobre Nosotros) render it.
+// Site-wide maintenance tool, no longer shown on the content screens (normal edits are translated on save); kept here, unused by the UI, so a future backfill screen can reuse it.
 export function TranslateAllSiteContentCard() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [running, setRunning] = useState(false);

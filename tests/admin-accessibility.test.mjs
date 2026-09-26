@@ -244,9 +244,9 @@ test('dialogs: create / edit / confirm dialogs trap focus, close on Escape and r
     await assertDialogKeyboard(page, { name: undefined, opener: newLocation });
     await expect(newLocation).toBeFocused();
 
-    // Reviews: delete confirmation.
+    // Reviews: the comment editor (visibility, featured and delete are managed inside it).
     await page.goto(`${base}/admin/reviews`);
-    const del = page.getByRole('button', { name: 'Eliminar comentario de Ana' });
+    const del = page.getByRole('button', { name: 'Editar comentario de Ana' });
     await del.click();
     await assertDialogKeyboard(page, { name: undefined, opener: del });
     await expect(del).toBeFocused();

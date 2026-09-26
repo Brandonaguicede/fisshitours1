@@ -115,7 +115,7 @@ test('boat: Guardar borrador persists with only the name, stays inactive, and ca
     await expect.poll(() => writes.filter((w) => w.table === 'boats' && w.method === 'POST').length).toBeGreaterThan(0);
     const write = writes.find((w) => w.table === 'boats' && w.method === 'POST');
     assert.equal(write.body.name, 'Bote en progreso');
-    assert.equal(write.body.active, false);
+    assert.equal(write.body.publication_status, 'draft');
   } finally {
     await f.browser.close();
   }
@@ -137,7 +137,7 @@ test('boat: Guardar (final, last step) blocks publishing without the required ph
     await expect(page.locator('.admin-gallery-error')).toHaveText('Para publicar el bote necesitas entre 3 y 6 imagenes.');
     // Only the draft (inactive) row exists; nothing was ever written as published.
     assert.equal(writes.filter((w) => w.table === 'boats' && w.method === 'POST').length, 1);
-    assert.equal(writes.filter((w) => w.table === 'boats').every((w) => w.body.active === false), true);
+    assert.equal(writes.filter((w) => w.table === 'boats').every((w) => w.body.publication_status !== 'published'), true);
   } finally {
     await f.browser.close();
   }

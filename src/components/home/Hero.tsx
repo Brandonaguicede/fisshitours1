@@ -8,19 +8,10 @@ import { Button, IconButton } from '../ui';
 import { FACEBOOK_URL, INSTAGRAM_URL, WHATSAPP_NUMBER } from '../../constants/contact';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { supabase } from '../../lib/supabase';
+import { resolveHeroMedia } from '../../utils/heroMedia';
 import { scrollToHomeSection } from '../../utils/homeNavigation';
 
 const FALLBACK_HERO_IMAGE = '/images/placeholder-image.jpg';
-
-// Upgrade only our bundled assets. Custom videos selected in the admin remain intact.
-function currentHeroAsset(value: string) {
-  const upgrades: Record<string, string> = {
-    '/videos/hero-papagayo-desktop-v1.mp4': '/videos/hero-papagayo-desktop-v2.mp4',
-    '/videos/hero-papagayo-mobile-v1.mp4': '/videos/hero-papagayo-mobile-v2.mp4',
-    '/images/hero-papagayo-poster-v1.webp': '/images/hero-papagayo-poster-v2.webp',
-  };
-  return upgrades[value] ?? value;
-}
 
 // React 18 doesn't recognize the camelCase `fetchPriority` prop (added in React 19) and
 // silently drops it — the lowercase `fetchpriority` HTML attribute reaches the DOM instead.
@@ -102,12 +93,9 @@ export function Hero() {
   const [failedVideoUrl, setFailedVideoUrl] = useState('');
   const [readyVideoUrl, setReadyVideoUrl] = useState('');
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const videoUrl = currentHeroAsset(hero['home.hero.video']);
-  const mobileVideoUrl = currentHeroAsset(hero['home.hero.mobile_video']) || videoUrl;
-  const selectedVideoUrl = isMobile ? mobileVideoUrl : videoUrl || mobileVideoUrl;
-  const poster = currentHeroAsset(hero['home.hero.video_poster']) || (isMobile ? hero['home.hero.mobile_image'] : '') || hero['home.hero.image'];
+  // The same media resolution the Admin's Portada preview uses (see utils/heroMedia.ts).
+  const { videoUrl: selectedVideoUrl, poster, videoMode } = resolveHeroMedia(hero, isMobile);
   const videoReady = readyVideoUrl === selectedVideoUrl;
-  const videoMode = hero['home.hero.media_mode'] === 'video';
   // A looping background video replaces the image slideshow outright rather than
   // mixing two independent motion sources; respect prefers-reduced-motion by
   // falling back to a static poster frame instead of autoplaying.

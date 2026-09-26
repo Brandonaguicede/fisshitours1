@@ -9,7 +9,6 @@ import { supabase } from '../../lib/supabase';
 import { fetchDashboardOverview, fetchPendingReviewsCount } from '../../services/adminDashboardService';
 import type { DashboardKpis } from '../../utils/dashboardMetrics';
 import { money } from '../../utils/format';
-import { formatPaymentStatusLabel } from '../../utils/reservationsExport';
 
 export default function AdminDashboardPage() {
   const queryClient = useQueryClient();
@@ -67,14 +66,13 @@ export default function AdminDashboardPage() {
       <AdminModuleSurface className="admin-dashboard-reservations">
         <div className="admin-module-surface__header admin-dash-recent__header">
           <h2 id="admin-dash-recent-title">Reservas recientes</h2>
-          <Link className="admin-btn admin-btn--secondary" to="/admin/reservations">Ver todas<span className="admin-visually-hidden"> las reservas</span></Link>
         </div>
         <AdminTable embedded headers={['Cliente', 'Fecha del tour', 'Pago']}>
           {recentReservations.map((reservation) => (
             <tr key={reservation.id}>
               <td>{reservation.customerName ?? '-'}</td>
               <td>{formatIsoDay(reservation.tourDate, true)}</td>
-              <td><AdminBadge value={reservation.paymentStatus} label={formatPaymentStatusLabel(reservation.paymentStatus)} /></td>
+              <td><AdminBadge value={reservation.paymentStatus} /></td>
             </tr>
           ))}
           {overviewStatus === 'ready' && recentReservations.length === 0 ? <tr><td colSpan={3} className="admin-muted">No hay reservas registradas todavía.</td></tr> : null}

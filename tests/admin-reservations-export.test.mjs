@@ -78,9 +78,11 @@ async function fixture({ bookings = Array.from({ length: 14 }, (_, i) => reserva
   return { browser, page, listRequests, createRequests, statRequests };
 }
 
-async function download(page, buttonName) {
+// One icon-only "Descargar" trigger opens a menu with the formats: choose one of its menu items ('Excel (.xlsx)' or 'PDF (.pdf)').
+async function download(page, optionName) {
   const pending = page.waitForEvent('download');
-  await page.getByRole('button', { name: buttonName, exact: true }).click();
+  await page.getByRole('button', { name: 'Descargar', exact: true }).click();
+  await page.getByRole('menuitem', { name: optionName }).click();
   const file = await pending;
   return { name: file.suggestedFilename(), bytes: await fs.readFile(await file.path()) };
 }
@@ -104,7 +106,7 @@ test('KPI cards count each real status correctly (Reservas, Pendientes, Confirma
     await expect(stat(page, 'Canceladas')).toHaveText(String(expected.cancelled));
     await page.getByRole('button', { name: /^Filtros/ }).click();
     await page.getByLabel('Estado de reserva', { exact: true }).selectOption('cancelled');
-    await expect(page.getByRole('navigation', { name: 'Paginación de reservas' })).toContainText('de 2 reservas');
+    await expect(page.locator('.admin-reservations-table tbody tr')).toHaveCount(2);
     await expect(stat(page, 'Reservas')).toHaveText(String(expected.total));
     await expect(stat(page, 'Pendientes')).toHaveText(String(expected.pending));
   } finally { await f.browser.close(); }
@@ -156,7 +158,7 @@ test('Crear reserva manual: aligned grid, uniform controls, full-width notes, pr
     const help = await box(dialog.locator('#manual-booking-guests-help')); const guestsInput = await box(dialog.getByLabel('Personas'));
     assert.ok(help.y + help.height <= guestsInput.y + 1, 'the hint sits above the input, not inside the row flow');
     // Primary first in DOM / tab order, then Cancelar.
-    assert.deepEqual((await dialog.locator('.admin-modal-footer button').allTextContents()).map((t) => t.trim()), ['Crear reserva', 'Cancelar']);
+    assert.deepEqual((await dialog.locator('.admin-modal-footer button').allTextContents()).map((t) => t.trim()), ['Crear', 'Cancelar']);
     await expect(dialog.locator('.admin-modal-footer button').first()).toHaveClass(/admin-btn(?!--)/);
     await expect(dialog.locator('.admin-modal-footer button').first()).not.toHaveClass(/admin-btn--secondary/);
     await expect(dialog.locator('.admin-modal-footer button').first()).toHaveAttribute('type', 'submit');
@@ -169,7 +171,7 @@ test('Crear reserva manual: aligned grid, uniform controls, full-width notes, pr
     await dialog.getByLabel('WhatsApp').fill('+506 7000 1111');
     await dialog.getByLabel('Fecha').fill('2026-11-05');
     await dialog.getByLabel('Notas').fill('Celebración');
-    await dialog.getByRole('button', { name: 'Crear reserva', exact: true }).click();
+    await dialog.getByRole('button', { name: 'Crear', exact: true }).click();
     await expect(page.getByRole('status').filter({ hasText: 'Reserva PFT-NEW-0001 guardada como pendiente' })).toBeVisible();
     assert.equal(f.createRequests.length, 1);
     assert.deepEqual(f.createRequests[0], {
@@ -194,7 +196,7 @@ test('Crear reserva manual on a phone: single column, no horizontal overflow, ac
     const overflow = await dialog.locator('.admin-modal-body').evaluate((node) => node.scrollWidth - node.clientWidth);
     assert.ok(overflow <= 1, `no horizontal overflow (${overflow}px)`);
     const [primary, secondary] = await dialog.locator('.admin-modal-footer button').evaluateAll((nodes) => nodes.map((node) => Math.round(node.getBoundingClientRect().y)));
-    assert.ok(primary < secondary, 'Crear reserva stacks above Cancelar');
+    assert.ok(primary < secondary, 'Crear stacks above Cancelar');
   } finally { await f.browser.close(); }
 });
 
@@ -208,9 +210,9 @@ test('Descargar Excel produces a real .xlsx (zip/OOXML, not CSV) with the filter
     await page.getByRole('button', { name: /^Filtros/ }).click();
     await page.getByLabel('Estado de reserva', { exact: true }).selectOption('confirmed');
     await page.getByRole('button', { name: 'Listo' }).click();
-    await expect(page.getByRole('navigation', { name: 'Paginación de reservas' })).toContainText('de 4 reservas');
+    await expect(page.locator('.admin-reservations-table tbody tr')).toHaveCount(4);
     f.listRequests.length = 0;
-    const file = await download(page, 'Descargar Excel');
+    const file = await download(page, 'Excel (.xlsx)');
     assert.match(file.name, /^reservas-\d{4}-\d{2}-\d{2}\.xlsx$/);
     // Real container: ZIP signature + OOXML part names, and none of the CSV markers the old export had.
     assert.equal(file.bytes.subarray(0, 2).toString('latin1'), 'PK');
@@ -282,9 +284,9 @@ test('Descargar PDF reuses the packages PDF look: brand header, date/time, filte
   const f = await fixture(); const { page } = f;
   try {
     await page.getByLabel('Buscar reservas').fill('Second Wind');
-    await expect(page.getByRole('navigation', { name: 'Paginación de reservas' })).toContainText('de 14 reservas');
+    await expect(page.getByRole('navigation', { name: 'Paginación de reservas' })).toContainText('Página 1 de 2'); // 14 matches = 2 pages of 10
     f.listRequests.length = 0;
-    const file = await download(page, 'Descargar PDF');
+    const file = await download(page, 'PDF (.pdf)');
     assert.match(file.name, /^reservas-\d{4}-\d{2}-\d{2}\.pdf$/);
     assert.equal(file.bytes.subarray(0, 5).toString('latin1'), '%PDF-');
     assert.ok(file.bytes.length > 8000);

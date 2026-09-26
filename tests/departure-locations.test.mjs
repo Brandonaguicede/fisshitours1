@@ -122,23 +122,25 @@ test('admin: Posición column follows sort_order and there is no Predeterminado 
     await page.goto(`${base}/admin/departure-locations`);
     await expect(page.locator('.admin-table tbody tr')).toHaveCount(2);
     await expect(page.getByRole('columnheader', { name: 'Posición' })).toBeVisible();
+    // Posición sits between Cargo and Estado, like the position/status columns of the other tables (header and cells).
+    await expect(page.getByRole('columnheader')).toHaveText(['Lugar', 'Cargo', 'Posición', 'Estado', 'Acciones']);
     await expect(page.getByText('Predeterminado')).toHaveCount(0);
     const rows = page.locator('.admin-table tbody tr');
-    await expect(rows.nth(0).locator('td').first()).toHaveText('1');
+    await expect(rows.nth(0).locator('td').nth(2)).toHaveText('1');
     await expect(rows.nth(0)).toContainText('Playas del Coco');
-    await expect(rows.nth(1).locator('td').first()).toHaveText('2');
+    await expect(rows.nth(1).locator('td').nth(2)).toHaveText('2');
     await expect(rows.nth(1)).toContainText('Tamarindo');
 
     // A search does not renumber: Tamarindo stays position 2.
     await page.getByPlaceholder('Buscar lugar por nombre').fill('Tamarindo');
     await expect(page.locator('.admin-table tbody tr')).toHaveCount(1);
-    await expect(page.locator('.admin-table tbody tr td').first()).toHaveText('2');
+    await expect(page.locator('.admin-table tbody tr').first().locator('td').nth(2)).toHaveText('2');
     await page.getByPlaceholder('Buscar lugar por nombre').fill('');
 
     // The editor has no default checkbox and shows the current position.
     await page.getByRole('button', { name: 'Editar lugar de salida Tamarindo' }).click();
     await expect(page.getByText('Seleccionado por defecto')).toHaveCount(0);
-    await expect(page.getByText('Posición actual: 2.')).toBeVisible();
+    await expect(page.getByText(/Posición actual|Se reordena desde la lista|Se agregará al final/)).toHaveCount(0); // no position helper text in the form
   } finally {
     await f.browser.close();
   }
@@ -167,7 +169,7 @@ test('admin: saving a location normalizes persisted sort_order to 1..N and never
     assert.deepEqual(finalOrder, { 'loc-a': 1, 'loc-b': 2, 'loc-c': 3 });
     assert.ok(writes.every((write) => !('is_default' in write.body)));
     const rows = page.locator('.admin-table tbody tr');
-    await expect(rows.nth(2).locator('td').first()).toHaveText('3');
+    await expect(rows.nth(2).locator('td').nth(2)).toHaveText('3');
   } finally {
     await f.browser.close();
   }
@@ -209,7 +211,7 @@ test('admin: reordering keeps its labelled controls, shows positions and persist
     await page.getByRole('button', { name: 'Guardar orden' }).click();
     await expect.poll(() => f.state.rows.map((row) => `${row.id}:${row.sort_order}`).sort().join()).toBe('loc-1:1,loc-2:3,loc-3:2');
     assert.ok(writes.every((write) => !('is_default' in write.body)));
-    await expect(page.locator('.admin-table tbody tr').nth(1).locator('td').first()).toHaveText('2');
+    await expect(page.locator('.admin-table tbody tr').nth(1).locator('td').nth(2)).toHaveText('2');
     await expect(page.locator('.admin-table tbody tr').nth(1)).toContainText('Flamingo');
   } finally {
     await f.browser.close();
