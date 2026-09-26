@@ -18,6 +18,8 @@ const schema = z.object({
   timeSlotId: z.string().min(1),
   guests: z.number().int().positive(),
   specialRequests: z.string().max(1000).optional(),
+  // Mandatory (enforced by the database) when date, time, package, boat, tour or guests change.
+  reason: z.string().max(500).optional(),
 });
 
 serve(withCors(async (req) => {

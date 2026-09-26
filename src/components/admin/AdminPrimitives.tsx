@@ -130,6 +130,8 @@ export const ADMIN_STATUS_BADGES: Record<string, { label: string; tone: BadgeTon
   confirmed: { label: 'Confirmada', tone: 'success' },
   cancelled: { label: 'Cancelada', tone: 'danger' },
   completed: { label: 'Completada', tone: 'neutral' },
+  // Not a lifecycle status: shown next to it when a reservation has audited operational changes (booking_changes).
+  modified: { label: 'Modificada', tone: 'warning' },
 };
 
 /** Shared Spanish label for a stored status value; unknown values are humanized, never shown as raw codes. */

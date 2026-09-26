@@ -33,6 +33,26 @@ import {
   type AdminReservation,
 } from '../../utils/reservationsExport';
 
+/** One audited modification of a reservation (booking_changes): what changed (before / after), why, when and who. */
+interface BookingChange {
+  id: string;
+  reason: string;
+  changed_at: string;
+  changes: Record<string, { before: unknown; after: unknown }>;
+  profiles?: { full_name: string | null; email: string | null } | null;
+}
+
+const CHANGE_LABELS: Record<string, string> = { tour_date: 'Fecha', departure_time: 'Hora', tour_package: 'Paquete', boat: 'Bote', tour: 'Tour', guests: 'Personas' };
+const formatChangeDate = (value: string) => new Date(value).toLocaleString('es-CR', { dateStyle: 'medium', timeStyle: 'short' });
+const describeChange = (changes: BookingChange['changes']) => Object.entries(changes).map(([field, change]) => `${CHANGE_LABELS[field] ?? field}: ${String(change.before ?? '-')} → ${String(change.after ?? '-')}`).join(' · ');
+const changedByName = (change: BookingChange) => change.profiles?.full_name || change.profiles?.email || 'Administración';
+
+function friendlyEditError(message: string) {
+  if (/cannot be edited/i.test(message)) return 'Las reservas canceladas o completadas no se pueden editar.';
+  if (/already reserved|BOAT_TIME_CONFLICT/i.test(message)) return 'El bote ya está ocupado en esa fecha y hora. Elige otro horario.';
+  return message;
+}
+
 const bookingStatusOptions = [
   { value: 'all', label: 'Todos los estados' },
   { value: 'confirmed', label: 'Confirmadas' },
@@ -101,6 +121,10 @@ export default function AdminReservationsPage() {
   // Google Calendar state of the reservation open in the editor (read from the booking row; `busy` while a sync is running).
   const [calendar, setCalendar] = useState<{ status: string | null; error: string | null } | null>(null);
   const [calendarBusy, setCalendarBusy] = useState(false);
+  // Reason for an operational edit + the audit history of the reservation open in the editor.
+  const [editReason, setEditReason] = useState('');
+  const [editReasonError, setEditReasonError] = useState('');
+  const [history, setHistory] = useState<BookingChange[]>([]);
   // Syncs that never reached the server (network / session): nothing was recorded in the booking, so this session remembers them.
   const unreachableSyncs = useRef(new Set<string>());
   const [confirmTarget, setConfirmTarget] = useState<AdminReservation | null>(null);
@@ -113,6 +137,17 @@ export default function AdminReservationsPage() {
   const pagination = useAdminPagedList<AdminReservation>('reservations', JSON.stringify(filters), (page, size) => getAdminReservationsPage(filters, page, size));
   const reservations = pagination.rows;
   const visibleReservations = reservations;
+  // Which of the visible reservations have audited changes -> the "Modificada" badge next to their status.
+  const changedIdsKey = reservations.map((reservation) => reservation.id).join(',');
+  const changedQuery = useQuery({
+    queryKey: ['admin', 'bookingChanges', changedIdsKey],
+    enabled: reservations.length > 0,
+    queryFn: async () => {
+      const { data } = await db.from('booking_changes').select('booking_id').in('booking_id', reservations.map((reservation) => reservation.id));
+      return new Set<string>(((data ?? []) as Array<{ booking_id: string }>).map((row) => row.booking_id));
+    },
+  });
+  const isModified = (id: string) => changedQuery.data?.has(id) ?? false;
   const loading = pagination.query.isFetching;
   const listError = pagination.query.error instanceof Error ? pagination.query.error.message : '';
   const notificationIds = reservations.map((reservation) => reservation.id);
@@ -206,6 +241,11 @@ export default function AdminReservationsPage() {
 
   function methodLabel(reservation: AdminReservation) {
     return formatPaymentMethodLabel(reservation.payment_method_key, paymentMethodLabel(reservation.payment_method_key));
+  }
+
+  async function loadHistory(reservationId: string) {
+    const { data } = await db.from('booking_changes').select('id, reason, changed_at, changes, profiles(full_name, email)').eq('booking_id', reservationId).order('changed_at', { ascending: false });
+    setHistory((data ?? []) as BookingChange[]);
   }
 
   async function loadCalendarState(reservationId: string) {
@@ -331,7 +371,11 @@ export default function AdminReservationsPage() {
     const tour = tours.find((item) => item.id === reservation.tour_package_id);
     setEditingReservation(reservation);
     setCalendar(null);
+    setEditReason('');
+    setEditReasonError('');
+    setHistory([]);
     void loadCalendarState(reservation.id);
+    void loadHistory(reservation.id);
     setEditForm({
       fullName: reservation.customers?.full_name ?? '',
       email: reservation.customers?.email ?? '',
@@ -350,8 +394,23 @@ export default function AdminReservationsPage() {
     setEditForm((current) => current ? { ...current, [key]: value } : current);
   }
 
+  // What changes the trip itself (date, time, package -> boat / tour, guests) needs a reason; contact details and notes do not.
+  const operationalChange = Boolean(editingReservation && editForm && (
+    editForm.tourPackageId !== (editingReservation.tour_package_id ?? '')
+    || editForm.tourDate !== editingReservation.tour_date
+    || editForm.timeSlotId !== (editingReservation.time_slot_id ?? '')
+    || Number(editForm.guests) !== editingReservation.guests
+  ));
+  // A cancelled / completed reservation is history: it is not edited like an active one.
+  const editLocked = Boolean(editingReservation && ['cancelled', 'completed'].includes(editingReservation.booking_status));
+
   async function saveEdit() {
-    if (!editingReservation || !editForm) return;
+    if (!editingReservation || !editForm || editLocked) return;
+    if (operationalChange && !editReason.trim()) {
+      setEditReasonError('Indica el motivo de la modificación.');
+      return;
+    }
+    setEditReasonError('');
     const selectedEditTour = tours.find((tour) => tour.id === editForm.tourPackageId);
     if (!selectedEditTour?.boatId || !selectedEditTour.tourId) {
       setError('Selecciona un tour y paquete válidos.');
@@ -371,7 +430,9 @@ export default function AdminReservationsPage() {
         timeSlotId: editForm.timeSlotId,
         guests: Number(editForm.guests),
         specialRequests: editForm.specialRequests,
+        reason: operationalChange ? editReason.trim() : undefined,
       });
+      void queryClient.invalidateQueries({ queryKey: ['admin', 'bookingChanges'] });
       const editedId = editingReservation.id;
       const keepsEvent = ['confirmed', 'completed'].includes(editingReservation.booking_status);
       setEditOpen(false);
@@ -381,7 +442,7 @@ export default function AdminReservationsPage() {
       if (keepsEvent) void runCalendarSync(editedId).then((synced) => { if (!synced) setNotice((current) => `${current} No se pudo actualizar Google Calendar: reintenta desde Editar reserva.`); });
       await loadReservations();
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : 'No se pudo guardar la reserva.');
+      setError(saveError instanceof Error ? friendlyEditError(saveError.message) : 'No se pudo guardar la reserva.');
     } finally {
       setEditSaving(false);
     }
@@ -586,7 +647,7 @@ export default function AdminReservationsPage() {
                   <AdminBadge value={reservation.payment_status} />
                 </div>
               </td>
-              <td><AdminBadge value={reservation.booking_status} /></td>
+              <td><div className="admin-actions"><AdminBadge value={reservation.booking_status} />{isModified(reservation.id) ? <AdminBadge value="modified" /> : null}</div></td>
               <td>
                 {renderReservationActions(reservation)}
               </td>
@@ -614,7 +675,7 @@ export default function AdminReservationsPage() {
               <div><dt>Total</dt><dd>{money(Number(reservation.total_snapshot))}</dd></div>
               <div><dt>Método de pago</dt><dd>{methodLabel(reservation)}</dd></div>
               <div><dt>Estado de pago</dt><dd><AdminBadge value={reservation.payment_status} /></dd></div>
-              <div><dt>Estado de reserva</dt><dd><AdminBadge value={reservation.booking_status} /></dd></div>
+              <div><dt>Estado de reserva</dt><dd><AdminBadge value={reservation.booking_status} />{isModified(reservation.id) ? <> <AdminBadge value="modified" /></> : null}</dd></div>
             </dl>
             {renderReservationActions(reservation)}
           </article>
@@ -714,6 +775,7 @@ export default function AdminReservationsPage() {
             <div>
               <h2 id="edit-booking-title" className="admin-card__title">Editar reserva</h2>
               <p className="admin-muted">Guardar no confirma ni vuelve a enviar el correo.</p>
+              {editingReservation ? <div className="admin-actions mt-1"><AdminBadge value={editingReservation.booking_status} />{history.length > 0 || isModified(editingReservation.id) ? <AdminBadge value="modified" /> : null}</div> : null}
             </div>
             <button className="admin-icon-btn" type="button" aria-label="Cerrar" onClick={() => setEditOpen(false)}><X size={18} /></button>
           </header>
@@ -727,6 +789,30 @@ export default function AdminReservationsPage() {
             <label className="admin-field"><span className="admin-field__label">Personas</span><input className="admin-input" required type="number" min={1} value={editForm.guests} onChange={(event) => updateEditForm('guests', Number(event.target.value))} /></label>
             <label className="admin-field admin-field--wide"><span className="admin-field__label">Notas</span><textarea className="admin-input admin-textarea-list" value={editForm.specialRequests} onChange={(event) => updateEditForm('specialRequests', event.target.value)} /></label>
           </div>
+          {editLocked ? <p className="admin-muted mt-3" role="status">Esta reserva está {editingReservation?.booking_status === 'cancelled' ? 'cancelada' : 'completada'}: ya no se puede editar.</p> : null}
+          {operationalChange && !editLocked ? (
+            <label className="admin-field mt-3">
+              <span className="admin-field__label">Motivo de la modificación *</span>
+              <textarea className="admin-input admin-textarea-list" rows={2} aria-required="true" placeholder="Ej. El cliente solicitó cambiar la hora de salida." value={editReason} onChange={(event) => { setEditReason(event.target.value); setEditReasonError(''); }} aria-invalid={Boolean(editReasonError) || undefined} />
+              {editReasonError ? <span className="admin-field-error" role="alert">{editReasonError}</span> : null}
+            </label>
+          ) : null}
+          {history.length > 0 ? (
+            <div className="admin-booking-history" role="group" aria-label="Última modificación">
+              <dl>
+                <div><dt>Última modificación</dt><dd>{formatChangeDate(history[0].changed_at)}</dd></div>
+                <div><dt>Modificado por</dt><dd>{changedByName(history[0])}</dd></div>
+                <div><dt>Motivo</dt><dd>{history[0].reason}</dd></div>
+              </dl>
+              <p className="admin-muted">{describeChange(history[0].changes)}</p>
+              {history.length > 1 ? (
+                <details>
+                  <summary>Historial ({history.length})</summary>
+                  <ul>{history.map((change) => <li key={change.id}><strong>{formatChangeDate(change.changed_at)}</strong> · {changedByName(change)} — {change.reason}<br /><span className="admin-muted">{describeChange(change.changes)}</span></li>)}</ul>
+                </details>
+              ) : null}
+            </div>
+          ) : null}
           {editingReservation && ['confirmed', 'completed'].includes(editingReservation.booking_status) && calendar !== null ? (
             <div className="admin-calendar-sync" role="group" aria-label="Google Calendar">
               <span className="admin-calendar-sync__label">Google Calendar</span>
@@ -760,7 +846,7 @@ export default function AdminReservationsPage() {
             </FormSection>
           ) : null}
           </div> : null}
-          <footer className="admin-modal-footer"><button className="admin-btn" type="submit" disabled={editSaving || !editForm}>{editSaving ? 'Guardando...' : 'Guardar'}</button><button className="admin-btn admin-btn--secondary" type="button" onClick={() => setEditOpen(false)}>Cancelar</button></footer>
+          <footer className="admin-modal-footer"><button className="admin-btn" type="submit" disabled={editSaving || !editForm || editLocked}>{editSaving ? 'Guardando...' : 'Guardar'}</button><button className="admin-btn admin-btn--secondary" type="button" onClick={() => setEditOpen(false)}>Cancelar</button></footer>
         </form>
       </Modal>
 
