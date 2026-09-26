@@ -25,7 +25,7 @@ const withBoatTrigger = (row) => ({ ...row, active: row.publication_status === '
 const tourRow = (id, title, order, extra = {}) => ({ id, title, category: 'Fishing', publication_status: 'published', active: true, sort_order: order, ...extra });
 const pkgRow = (id, link, name, price, order, extra = {}) => ({ id, boat_tour_id: link, name, package_type: 'half-day', description: null, duration_minutes: 240, base_price: price, included_guests: 5, max_guests: 10, extra_guest_price: 0, custom_quote: false, image_url: null, image_public_id: null, active: true, sort_order: order, departure_times: null, meal_options: [], package_included: null, ...extra });
 
-async function fixture({ boats: boatsOverride, slowCreate = 0, images = [], extraTours = 0, uploadFails = false, imageUpdateFails = false, deleteStatus = 200, equipment = [], translate = {} } = {}) {
+async function fixture({ boats: boatsOverride, packages: packagesOverride, slowCreate = 0, images = [], extraTours = 0, uploadFails = false, imageUpdateFails = false, deleteStatus = 200, equipment = [], translate = {} } = {}) {
   const browser = await chromium.launch({ headless: true, channel: 'msedge' });
   const page = await browser.newPage({ viewport: { width: 1366, height: 900 } });
   await page.addInitScript(() => {
@@ -47,7 +47,7 @@ async function fixture({ boats: boatsOverride, slowCreate = 0, images = [], extr
     tours: [tourRow('fishing', 'Fishing Tour', 1), tourRow('water', 'Water Toys Tour', 2), tourRow('sunset', 'Sunset Cruise', 3, { publication_status: 'draft', active: false }), tourRow('surf', 'Surfing Tour', 4), ...Array.from({ length: extraTours }, (_, n) => tourRow(`extra-${n + 1}`, `Extra Tour ${n + 1}`, 5 + n))],
     links: [{ id: 'l1', boat_id: 'second-wind', tour_id: 'fishing', active: true, sort_order: 1 }, { id: 'l2', boat_id: 'second-wind', tour_id: 'water', active: false, sort_order: 2 }],
     // sort_order 1, 2 and 4 (a hole at 3, as left by a deleted package): count+1 would be 4 and collide.
-    packages: [pkgRow('p1', 'l1', 'Half Day', 680, 1, { meal_options: [{ es: 'Casado con pescado', en: 'Fish casado' }, { es: 'Pasta con mariscos', en: 'Seafood pasta' }] }), pkgRow('p2', 'l1', '3/4 Day', 800, 2, { package_included: ['Drinks', 'Snacks'], package_included_en: ['Drinks', 'Snacks'], package_included_es: ['Bebidas', 'Snacks (viejo)'] }), pkgRow('p3', 'l1', 'Full Day', 1050, 4), pkgRow('p4', 'l2', 'Splash', 300, 1)],
+    packages: packagesOverride ?? [pkgRow('p1', 'l1', 'Half Day', 680, 1, { meal_options: [{ es: 'Casado con pescado', en: 'Fish casado' }, { es: 'Pasta con mariscos', en: 'Seafood pasta' }] }), pkgRow('p2', 'l1', '3/4 Day', 800, 2, { package_included: ['Drinks', 'Snacks'], package_included_en: ['Drinks', 'Snacks'], package_included_es: ['Bebidas', 'Snacks (viejo)'] }), pkgRow('p3', 'l1', 'Full Day', 1050, 4), pkgRow('p4', 'l2', 'Splash', 300, 1)],
   };
   const objectAccept = (request) => (request.headers().accept ?? '').includes('vnd.pgrst.object');
 
@@ -151,7 +151,8 @@ async function fixture({ boats: boatsOverride, slowCreate = 0, images = [], extr
     }
     if (path.endsWith('/time_slots')) {
       if (method !== 'GET' && method !== 'HEAD') { writes.push({ table: path.split('/').pop(), method, body: request.postDataJSON() }); }
-      return route.fulfill({ json: [] });
+      // The shared departure times (the real project has active ones); a package that inherits them needs at least one.
+      return route.fulfill({ json: [{ id: 'slot-1', label: 'Morning', starts_at: '07:00:00', active: true, sort_order: 1 }, { id: 'slot-2', label: 'Midday', starts_at: '11:30:00', active: true, sort_order: 2 }], headers: { 'access-control-expose-headers': 'content-range', 'content-range': '0-1/2' } });
     }
     if (method !== 'GET' && method !== 'HEAD') { writes.push({ table: path.split('/').pop(), method }); return route.fulfill({ json: [] }); }
     return route.fulfill({ json: [], headers: { 'access-control-expose-headers': 'content-range', 'content-range': '0-0/0' } });
@@ -350,6 +351,7 @@ test('new package is created from the boat, keeps boat_tour_id, and gets max(sor
     await expect(page.getByRole('heading', { name: 'Nuevo paquete' })).toBeVisible();
     await page.getByLabel('Nombre', { exact: true }).fill('Sunset Special');
     await page.getByLabel('Precio base (USD)').fill('450');
+    await page.getByLabel('Duración (horas)').fill('4');
     await page.getByRole('button', { name: 'Guardar', exact: true }).click();
     await expect(page.getByText('Paquete guardado.')).toBeVisible();
     const saved = writes.find((w) => w.table === 'tour_packages' && w.method === 'POST').body;
@@ -373,6 +375,7 @@ test('editing a package from the boat keeps its id, boat_tour_id and sort_order'
     await expect(page.getByLabel('Ubicación del paquete')).toHaveText('Second Wind / Fishing Tour');
     await expect(page.getByRole('heading', { name: 'Editar Half Day' })).toBeVisible();
     await page.getByLabel('Precio base (USD)').fill('700');
+    await page.getByLabel('Duración (horas)').fill('4');
     await page.getByRole('button', { name: 'Guardar', exact: true }).click();
     await expect(page.getByText('Paquete guardado.')).toBeVisible();
     const saved = writes.find((w) => w.table === 'tour_packages' && w.method === 'POST').body;
@@ -968,7 +971,7 @@ test('package form: grouped in sections, short fields on an aligned 2-column gri
     await expect(page.getByRole('group', { name: 'Tours que se pueden agregar' })).toBeHidden();
 
     const box = async (label) => editor.getByLabel(label).first().boundingBox();
-    const [name, duration, price, extra, included, max] = [await editor.getByLabel('Nombre', { exact: true }).boundingBox(), await box('Duración (horas, opcional)'), await box('Precio base (USD)'), await box('Extra por persona adicional (USD)'), await box('Personas incluidas'), await box('Máximo de personas')];
+    const [name, duration, price, extra, included, max] = [await editor.getByLabel('Nombre', { exact: true }).boundingBox(), await box('Duración (horas)'), await box('Precio base (USD)'), await box('Extra por persona adicional (USD)'), await box('Personas incluidas'), await box('Máximo de personas')];
     // Pairs share a row and the same width; both columns line up down the form.
     assert.equal(Math.round(name.y), Math.round(duration.y));
     assert.equal(Math.round(price.y), Math.round(extra.y));
@@ -1036,7 +1039,7 @@ test('package form keeps every real field: what is typed is exactly what is save
     await page.getByRole('region', { name: 'Fishing Tour en Second Wind' }).getByRole('button', { name: 'Agregar paquete' }).click();
     const editor = page.locator('.admin-package-compact-editor');
     await editor.getByLabel('Nombre', { exact: true }).fill('Sunset Special');
-    await editor.getByLabel('Duración (horas, opcional)').fill('2,5');
+    await editor.getByLabel('Duración (horas)').fill('2,5');
     await editor.getByLabel(/^Descripción/).fill('Atardecer con snacks');
     await editor.getByLabel('Precio base (USD)').fill('500');
     await editor.getByLabel('Extra por persona adicional (USD)').fill('25');
@@ -1062,7 +1065,7 @@ test('package form keeps every real field: what is typed is exactly what is save
     assert.equal(saved.included_guests, 2);
     assert.equal(saved.max_guests, 8);
     assert.equal(saved.custom_quote, true);
-    assert.deepEqual(saved.departure_times, ['09:30']);
+    assert.deepEqual(saved.departure_times, ['07:00', '11:30', '09:30']); // the general times a new package starts with + the one added
     assert.deepEqual(saved.package_included, ['Snacks', 'Bebidas']);
     assert.deepEqual(saved.meal_options, [{ es: 'Ceviche [ES]', en: 'Ceviche' }]); // Spanish comes from the (mocked) translator
     assert.deepEqual([saved.name, saved.name_en, saved.name_es], ['Sunset Special', 'Sunset Special', 'Sunset Special [ES]']);
@@ -1411,6 +1414,7 @@ test('meals: new English meals are translated EN -> ES in one batch on save and 
     const editor = page.locator('.admin-package-compact-editor');
     await editor.getByLabel('Nombre', { exact: true }).fill('With lunch');
     await editor.getByLabel('Precio base (USD)').fill('900');
+    await editor.getByLabel('Duración (horas)').fill('4');
     await editor.getByRole('button', { name: 'Agregar comida' }).click();
     await editor.getByLabel('Comida 1', { exact: true }).fill('Fish casado');
     await editor.getByRole('button', { name: 'Agregar comida' }).click();
@@ -1430,6 +1434,7 @@ test('meals: editing a package without touching the meals does not translate aga
   try {
     const editor = await openHalfDay(page);
     await editor.getByLabel('Precio base (USD)').fill('700');
+    await editor.getByLabel('Duración (horas)').fill('4');
     await editor.getByRole('button', { name: 'Guardar', exact: true }).click();
     await expect(page.getByText('Paquete guardado.')).toBeVisible();
     assert.equal(translateCalls.length, 0, 'no translator call when no text changed');
@@ -1482,6 +1487,7 @@ test('package name and description: English source, Spanish generated on create 
     await editor.getByLabel('Nombre', { exact: true }).fill('Sunset Special');
     await editor.getByLabel(/^Descripción/).fill('Private cruise with drinks.');
     await editor.getByLabel('Precio base (USD)').fill('450');
+    await editor.getByLabel('Duración (horas)').fill('4');
     await editor.getByRole('button', { name: 'Guardar', exact: true }).click();
     await expect(page.getByText('Paquete guardado.')).toBeVisible();
     assert.deepEqual(translateCalls.map((call) => call.texts), [['Sunset Special', 'Private cruise with drinks.']]);
@@ -1507,6 +1513,7 @@ test('package: if any translation fails the whole package is NOT saved (name/des
     const editor = await openHalfDay(page);
     const mark = writes.length;
     await editor.getByLabel('Precio base (USD)').fill('777');
+    await editor.getByLabel('Duración (horas)').fill('4');
     await editor.getByLabel(/^Descripción/).fill('Changed description');
     await editor.getByLabel('Comida 2', { exact: true }).fill('Seafood pasta with pesto');
     await editor.getByRole('button', { name: 'Guardar', exact: true }).click();
@@ -1580,6 +1587,7 @@ test('Incluye: an unchanged list is not translated and its stored ES/EN copies a
   try {
     const editor = await openThreeQuarterDay(page);
     await editor.getByLabel('Precio base (USD)').fill('820');
+    await editor.getByLabel('Duración (horas)').fill('4');
     await editor.getByRole('button', { name: 'Guardar', exact: true }).click();
     await expect(page.getByText('Paquete guardado.')).toBeVisible();
     assert.equal(translateCalls.length, 0);
@@ -1604,6 +1612,7 @@ test('Incluye: if DeepL fails nothing is saved (message says "al español"), the
     const editor = await openThreeQuarterDay(page);
     const mark = writes.length;
     await editor.getByLabel('Precio base (USD)').fill('999');
+    await editor.getByLabel('Duración (horas)').fill('4');
     await includedBox(editor).fill('Drinks\nTowel');
     await editor.getByRole('button', { name: 'Guardar', exact: true }).click();
     await expect(page.getByRole('alert').filter({ hasText: SPANISH_ERROR })).toBeVisible();
@@ -1674,6 +1683,7 @@ test('Incluye: a new package translates name, English list and English meals tog
     const editor = page.locator('.admin-package-compact-editor');
     await editor.getByLabel('Nombre', { exact: true }).fill('New');
     await editor.getByLabel('Precio base (USD)').fill('500');
+    await editor.getByLabel('Duración (horas)').fill('4');
     await editor.getByRole('checkbox', { name: 'Personalizar lo incluido' }).check();
     await includedBox(editor).fill('Ice');
     await editor.getByRole('button', { name: 'Agregar comida' }).click();
@@ -1739,5 +1749,121 @@ test('boat Guardar (final save / publish) also translates changed content first;
     assert.equal(state.boats[0].active, true);
     assert.deepEqual([state.equipment[0].label_en, state.equipment[0].label_es], ['Garmin GPS plotter', 'Garmin GPS plotter [ES]']);
     assert.equal(translateCalls.length, 2, 'the final save had nothing new to translate');
+  } finally { await f.browser.close(); }
+});
+
+
+// --- Paquetes completos: nothing incomplete may be visible / reservable ------------------------------------------------------------
+
+async function newPackageForm(page) {
+  await openSecondWind(page);
+  await goToStep(page, 'Tours y paquetes');
+  await page.getByRole('region', { name: 'Fishing Tour en Second Wind' }).getByRole('button', { name: 'Agregar paquete' }).click();
+  await page.getByLabel('Nombre', { exact: true }).fill('Paquete nuevo');
+  await page.getByLabel('Precio base (USD)').fill('500');
+}
+const packagePosts = (writes) => writes.filter((w) => w.table === 'tour_packages' && w.method === 'POST');
+
+test('package form: a VISIBLE package needs a duration — the error is next to the field, in plain words, and nothing is saved', async () => {
+  const f = await fixture(); const { page, writes } = f;
+  try {
+    await newPackageForm(page);
+    await expect(page.getByText('Duración (horas)', { exact: true })).toBeVisible(); // no longer "opcional"
+    await page.getByRole('button', { name: 'Guardar', exact: true }).click();
+    const field = page.locator('label').filter({ hasText: 'Duración (horas)' });
+    await expect(field.getByText('Ingresa la duración del paquete.')).toBeVisible();
+    assert.equal(packagePosts(writes).length, 0);
+    // Zero and text are invalid too.
+    for (const value of ['0', 'abc']) {
+      await page.getByLabel('Duración (horas)').fill(value);
+      await page.getByRole('button', { name: 'Guardar', exact: true }).click();
+      await expect(field.getByText('Indica una duración válida, mayor a 0.')).toBeVisible();
+    }
+    assert.equal(packagePosts(writes).length, 0);
+    // A valid one saves it in minutes.
+    await page.getByLabel('Duración (horas)').fill('2,5');
+    await page.getByRole('button', { name: 'Guardar', exact: true }).click();
+    await expect(page.getByText('Paquete guardado.')).toBeVisible();
+    assert.equal(packagePosts(writes).at(-1).body.duration_minutes, 150);
+    assert.equal(packagePosts(writes).at(-1).body.active, true);
+  } finally { await f.browser.close(); }
+});
+
+test('package form: a VISIBLE package needs at least one departure time (own list or a shared schedule)', async () => {
+  const f = await fixture(); const { page, writes } = f;
+  try {
+    await newPackageForm(page);
+    await page.getByLabel('Duración (horas)').fill('4');
+    // A new package starts with the general times ticked: untick them all.
+    const chips = page.locator('.admin-package-compact-editor .admin-time-chip input');
+    for (let index = 0; index < await chips.count(); index += 1) await chips.nth(index).uncheck();
+    await page.getByRole('button', { name: 'Guardar', exact: true }).click();
+    await expect(page.getByText('Agrega al menos un horario de salida.')).toBeVisible();
+    assert.equal(packagePosts(writes).length, 0);
+    await chips.first().check();
+    await page.getByRole('button', { name: 'Guardar', exact: true }).click();
+    await expect(page.getByText('Paquete guardado.')).toBeVisible();
+    assert.equal(packagePosts(writes).at(-1).body.departure_times.length, 1);
+  } finally { await f.browser.close(); }
+});
+
+test('package form: the price must be above 0 and the max guests never below the included guests', async () => {
+  const f = await fixture(); const { page, writes } = f;
+  try {
+    await newPackageForm(page);
+    await page.getByLabel('Duración (horas)').fill('4');
+    await page.getByLabel('Precio base (USD)').fill('0');
+    await page.getByLabel('Personas incluidas').fill('6');
+    await page.getByLabel('Máximo de personas').fill('4');
+    await page.getByRole('button', { name: 'Guardar', exact: true }).click();
+    await expect(page.getByText('Ingresa un precio mayor a 0.')).toBeVisible();
+    await expect(page.getByText('El máximo de personas no puede ser menor que las personas incluidas.')).toBeVisible();
+    assert.equal(packagePosts(writes).length, 0);
+    await page.getByLabel('Máximo de personas').fill('');
+    await page.getByRole('button', { name: 'Guardar', exact: true }).click();
+    await expect(page.getByText('Ingresa el máximo de personas.')).toBeVisible();
+    await page.getByLabel('Precio base (USD)').fill('500');
+    await page.getByLabel('Máximo de personas').fill('8');
+    await page.getByRole('button', { name: 'Guardar', exact: true }).click();
+    await expect(page.getByText('Paquete guardado.')).toBeVisible();
+    assert.deepEqual([packagePosts(writes).at(-1).body.included_guests, packagePosts(writes).at(-1).body.max_guests, packagePosts(writes).at(-1).body.base_price], [6, 8, 500]);
+  } finally { await f.browser.close(); }
+});
+
+test('package form: an incomplete package can only be kept HIDDEN (never visible), and a custom quote needs no duration or schedule', async () => {
+  const f = await fixture(); const { page, writes } = f;
+  try {
+    await newPackageForm(page);
+    // Hidden + no duration: allowed, and stored inactive so it can never be offered.
+    await page.getByRole('button', { name: /Ocultar paquete/ }).click();
+    await page.getByRole('button', { name: 'Guardar', exact: true }).click();
+    await expect(page.getByText('Paquete guardado.')).toBeVisible();
+    const hidden = packagePosts(writes).at(-1).body;
+    assert.deepEqual([hidden.active, hidden.duration_minutes], [false, null]);
+  } finally { await f.browser.close(); }
+
+  const quote = await fixture();
+  try {
+    await newPackageForm(quote.page);
+    await quote.page.getByRole('checkbox', { name: /Cotización personalizada/ }).check();
+    await expect(quote.page.getByText('Duración (horas, opcional)')).toBeVisible();
+    const chips = quote.page.locator('.admin-package-compact-editor .admin-time-chip input');
+    for (let index = 0; index < await chips.count(); index += 1) await chips.nth(index).uncheck();
+    await quote.page.getByRole('button', { name: 'Guardar', exact: true }).click();
+    await expect(quote.page.getByText('Paquete guardado.')).toBeVisible();
+    assert.equal(packagePosts(quote.writes).at(-1).body.custom_quote, true);
+  } finally { await quote.browser.close(); }
+});
+
+test('package list: an ACTIVE legacy package without duration is flagged "Incompleto" with what is missing; complete ones are not', async () => {
+  const f = await fixture({ packages: [pkgRow('legacy', 'l1', 'Paquete legacy', 700, 1, { duration_minutes: null }), pkgRow('fine', 'l1', 'Paquete completo', 800, 2), pkgRow('hidden', 'l1', 'Paquete oculto', 900, 3, { duration_minutes: null, active: false })] }); const { page } = f;
+  try {
+    await openSecondWind(page);
+    await goToStep(page, 'Tours y paquetes');
+    const rows = page.locator('.admin-boat-package-row');
+    await expect(rows.filter({ hasText: 'Paquete legacy' })).toContainText('Incompleto: falta la duración');
+    await expect(rows.filter({ hasText: 'Paquete legacy' })).toContainText('No se ofrece a los clientes');
+    await expect(rows.filter({ hasText: 'Paquete completo' })).not.toContainText('Incompleto');
+    await expect(rows.filter({ hasText: 'Paquete oculto' })).not.toContainText('Incompleto'); // hidden: nothing to warn about
   } finally { await f.browser.close(); }
 });

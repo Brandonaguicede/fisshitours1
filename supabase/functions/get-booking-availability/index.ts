@@ -27,16 +27,16 @@ serve(withCors(async (req) => {
   await supabase.rpc('expire_pending_paypal_bookings');
 
   const { data: boat } = await supabase.from('boats').select('id').eq('id', parsed.data.boatId).eq('active', true).maybeSingle();
-  if (!boat) return Response.json({ message: 'Boat not found' }, { status: 404, headers });
+  if (!boat) return Response.json({ message: 'Boat not found', code: 'PACKAGE_UNAVAILABLE' }, { status: 404, headers });
 
   const { data: boatTour } = await supabase.from('boat_tours').select('id, tour_id, tours!inner(operating_end_time)')
     .eq('boat_id', parsed.data.boatId).eq('tour_id', parsed.data.tourId).eq('active', true).maybeSingle();
-  if (!boatTour) return Response.json({ message: 'Tour is not available for this boat' }, { status: 404, headers });
+  if (!boatTour) return Response.json({ message: 'Tour is not available for this boat', code: 'PACKAGE_UNAVAILABLE' }, { status: 404, headers });
   const { data: tourPackage } = await supabase.from('tour_packages')
     .select('id, duration_minutes, departure_times, active, custom_quote')
     .eq('id', parsed.data.tourPackageId).eq('boat_tour_id', boatTour.id).eq('active', true).maybeSingle();
   if (!tourPackage || tourPackage.custom_quote || !Number.isInteger(tourPackage.duration_minutes) || tourPackage.duration_minutes <= 0) {
-    return Response.json({ message: 'Tour package is not available for booking' }, { status: 400, headers });
+    return Response.json({ message: 'Tour package is not available for booking', code: 'PACKAGE_UNAVAILABLE' }, { status: 400, headers });
   }
 
   const [{ data: slots, error: slotsError }, { data: blocks, error: blocksError }, { data: bookings, error: bookingsError }] = await Promise.all([

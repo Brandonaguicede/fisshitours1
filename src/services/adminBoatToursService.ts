@@ -1,5 +1,6 @@
 import { supabase } from '../lib/supabase';
 import type { Tables } from '../types/supabase';
+import { findPackageIssues, PackageIncompleteError, type PackageFacts } from '../utils/packageRequirements';
 
 // Admin data + writes for the boat-centric "Tours y paquetes" editor.
 //
@@ -101,14 +102,50 @@ export async function ensureBoatTourLink(boatId: string, tourId: string, sortOrd
   return inserted.data.id;
 }
 
+/** Active shared departure times (what a package with no own list of hours falls back to). */
+async function countSharedTimeSlots(): Promise<number> {
+  const { count, error } = await supabase.from('time_slots').select('id', { count: 'exact', head: true }).eq('active', true);
+  if (error) throw new Error(error.message);
+  return count ?? 0;
+}
+
+const rowFacts = (row: AdminPackageRow, sharedTimeCount: number): PackageFacts => ({
+  name: row.name,
+  customQuote: row.custom_quote,
+  basePrice: row.base_price == null ? null : Number(row.base_price),
+  includedGuests: row.included_guests,
+  maxGuests: row.max_guests,
+  extraGuestPrice: row.extra_guest_price == null ? null : Number(row.extra_guest_price),
+  durationMinutes: row.duration_minutes,
+  departureTimes: row.departure_times,
+  sharedTimeCount,
+});
+
+/** What a stored package is missing to be bookable (same rules as the form, the service layer and the public catalog). */
+export const packageRowIssues = (row: AdminPackageRow, sharedTimeCount: number) => findPackageIssues(rowFacts(row, sharedTimeCount));
+
+/** Last line of defence (the form validates too): nothing may become ACTIVE unless a customer could actually book it. */
+export async function assertPackageCanBeActive(row: AdminPackageRow): Promise<void> {
+  const issues = findPackageIssues(rowFacts(row, row.departure_times == null ? await countSharedTimeSlots() : 0));
+  if (issues.length) throw new PackageIncompleteError(row.id, issues);
+}
+
 export async function savePackageForBoatTour(
   boatId: string,
   tourId: string,
   input: PackageInput,
   boatMaxGuests: number,
 ): Promise<void> {
-  const boatTourId = await ensureBoatTourLink(boatId, tourId, input.sortOrder);
   const maxGuests = Math.max(input.includedGuests, Math.min(input.maxGuests, boatMaxGuests));
+  if (input.active) {
+    const issues = findPackageIssues({
+      name: input.name, customQuote: input.customQuote, basePrice: input.basePrice, includedGuests: input.includedGuests, maxGuests,
+      extraGuestPrice: input.extraGuestPrice, durationMinutes: input.durationMinutes, departureTimes: input.departureTimes,
+      sharedTimeCount: input.departureTimes == null ? await countSharedTimeSlots() : 0,
+    });
+    if (issues.length) throw new PackageIncompleteError(input.id, issues);
+  }
+  const boatTourId = await ensureBoatTourLink(boatId, tourId, input.sortOrder);
   const { error } = await supabase.from('tour_packages').upsert({
     id: input.id,
     boat_tour_id: boatTourId,
@@ -135,6 +172,11 @@ export async function savePackageForBoatTour(
 }
 
 export async function setPackageActive(packageId: string, active: boolean): Promise<void> {
+  if (active) {
+    const current = await supabase.from('tour_packages').select('*').eq('id', packageId).single();
+    if (current.error) throw new Error(current.error.message);
+    await assertPackageCanBeActive(current.data as AdminPackageRow);
+  }
   const { error } = await supabase
     .from('tour_packages')
     .update({ active, updated_at: new Date().toISOString() })
@@ -148,19 +190,34 @@ export async function deletePackage(packageId: string): Promise<void> {
   if (error) throw new Error(error.message);
 }
 
-/** Enable a tour for a boat: ensure the link and reactivate any existing packages. */
-export async function enableTourForBoat(boatId: string, tourId: string, sortOrderHint = 0): Promise<void> {
+/**
+ * Enable a tour for a boat: ensure the link and reactivate the existing packages that can be booked. A package that is
+ * incomplete stays hidden (it would break the booking) and is reported back so the admin can finish it.
+ */
+export async function enableTourForBoat(boatId: string, tourId: string, sortOrderHint = 0): Promise<{ skipped: Array<{ id: string; name: string }> }> {
   const boatTourId = await ensureBoatTourLink(boatId, tourId, sortOrderHint);
   const link = await supabase
     .from('boat_tours')
     .update({ active: true })
     .eq('id', boatTourId);
   if (link.error) throw new Error(link.error.message);
-  const { error } = await supabase
-    .from('tour_packages')
-    .update({ active: true, updated_at: new Date().toISOString() })
-    .eq('boat_tour_id', boatTourId);
-  if (error) throw new Error(error.message);
+  const packages = await supabase.from('tour_packages').select('*').eq('boat_tour_id', boatTourId);
+  if (packages.error) throw new Error(packages.error.message);
+  const shared = await countSharedTimeSlots();
+  const ready: string[] = [];
+  const skipped: Array<{ id: string; name: string }> = [];
+  for (const row of (packages.data ?? []) as AdminPackageRow[]) {
+    if (findPackageIssues(rowFacts(row, shared)).length === 0) ready.push(row.id);
+    else skipped.push({ id: row.id, name: row.name });
+  }
+  if (ready.length) {
+    const { error } = await supabase
+      .from('tour_packages')
+      .update({ active: true, updated_at: new Date().toISOString() })
+      .in('id', ready);
+    if (error) throw new Error(error.message);
+  }
+  return { skipped };
 }
 
 /** Disable a tour for a boat without destroying packages or history. */
