@@ -124,7 +124,8 @@ test('tour editor no longer has an Ubicaciones field', async () => {
 test('About content edited in the Admin reaches the public homepage', async () => {
   const browser = await chromium.launch({ headless: true, channel: 'msedge' });
   const page = await browser.newPage({ viewport: { width: 1366, height: 1200 } });
-  const customCtaTitle = 'Escríbenos por WhatsApp ahora mismo';
+  const customTitle = 'Pasión local ahora mismo';
+  const staleCtaTitle = 'Escríbenos por WhatsApp ahora mismo';
   // HomePage renders nothing at all (`if (!selectedBoat) return null`) until
   // the boat/tour catalog resolves at least one boat — same minimal rows
   // booking-payment-method-key.test.mjs uses to get past that gate, shaped
@@ -141,14 +142,13 @@ test('About content edited in the Admin reaches the public homepage', async () =
     },
   };
   try {
-    // LanguageContext defaults to 'en' with no saved preference — force 'es'
-    // so this exercises the same `about.cta_title.es` key the Admin edits.
+    // LanguageContext defaults to 'en' with no saved preference — force 'es'.
     await page.addInitScript(() => { localStorage.setItem('language', 'es'); });
     await page.route('https://admin-test.supabase.co/**', async (route) => {
       const url = new URL(route.request().url());
       const path = url.pathname;
       if (path.endsWith('/site_settings')) {
-        return route.fulfill({ json: [{ key: 'about.cta_title.es', value: customCtaTitle, type: 'text', active: true }] });
+        return route.fulfill({ json: [{ key: 'about.title.es', value: customTitle, type: 'text', active: true }, { key: 'about.cta_title.es', value: staleCtaTitle, type: 'text', active: true }] });
       }
       if (path.endsWith('/boats')) return route.fulfill({ json: [boatRow] });
       if (path.endsWith('/tour_packages')) return route.fulfill({ json: [tourPackageRow] });
@@ -158,7 +158,11 @@ test('About content edited in the Admin reaches the public homepage', async () =
     await page.goto(`${base}/`);
     const acceptDialog = page.getByRole('dialog').getByRole('button', { name: /Aceptar|Accept/i });
     if (await acceptDialog.isVisible().catch(() => false)) await acceptDialog.click();
-    await expect(page.getByText(customCtaTitle)).toHaveCount(1, { timeout: 15000 });
+    await expect(page.getByText(customTitle)).toHaveCount(1, { timeout: 15000 });
+    // The contact card under About is fixed copy: an old `about.cta_*` row in the database no longer changes it.
+    await expect(page.getByText('¿Quieres hablar con nosotros?')).toHaveCount(1);
+    await expect(page.getByText('Escríbenos y con gusto te ayudamos.')).toHaveCount(1);
+    await expect(page.getByText(staleCtaTitle)).toHaveCount(0);
   } finally {
     await browser.close();
   }
@@ -180,7 +184,7 @@ test('Hero and About: the admin edits English only; saving generates the Spanish
       return route.fulfill({ json: [], headers: { 'access-control-expose-headers': 'content-range', 'content-range': '0-0/0' } });
     });
 
-    await page.goto(`${base}/admin/content`);
+    await page.goto(`${base}/admin/portada`);
     await page.getByRole('button', { name: 'Textos' }).click();
 
     // Only the English text is editable: no Spanish field and no language selector.
@@ -191,7 +195,7 @@ test('Hero and About: the admin edits English only; saving generates the Spanish
     await page.getByLabel('Titulo principal', { exact: true }).fill('New title in English');
     await page.waitForTimeout(300);
     assert.equal(translation.calls.length, 0, 'nothing is translated while typing');
-    await page.getByRole('button', { name: 'Guardar hero' }).click();
+    await page.getByRole('button', { name: 'Guardar', exact: true }).click();
 
     await expect.poll(() => ['home.hero.title.es', 'home.hero.title.en'].every((key) => settingsWrites.some((row) => row.key === key))).toBe(true);
     assert.equal(settingsWrites.find((row) => row.key === 'home.hero.title.en').value, 'New title in English');
@@ -202,9 +206,9 @@ test('Hero and About: the admin edits English only; saving generates the Spanish
 
     // About: same rule.
     settingsWrites.length = 0;
-    await page.getByRole('button', { name: 'Nosotros / About' }).click();
+    await page.getByRole('link', { name: 'Sobre Nosotros' }).click();
     await page.getByLabel('Titulo', { exact: true }).fill('About Title EN');
-    await page.getByRole('button', { name: 'Guardar Nosotros' }).click();
+    await page.getByRole('button', { name: 'Guardar', exact: true }).click();
     await expect.poll(() => ['about.title.es', 'about.title.en'].every((key) => settingsWrites.some((row) => row.key === key))).toBe(true);
     assert.equal(settingsWrites.find((row) => row.key === 'about.title.en').value, 'About Title EN');
     assert.equal(settingsWrites.find((row) => row.key === 'about.title.es').value, 'About Title EN [ES]');

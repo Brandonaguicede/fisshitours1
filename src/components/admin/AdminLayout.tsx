@@ -1,4 +1,4 @@
-import { CalendarDays, ChevronLeft, ChevronRight, CreditCard, FileText, Gauge, Globe2, Image, LayoutDashboard, LifeBuoy, LogOut, MapPin, Menu, MessageSquare, Package, Ship, Star, Users } from 'lucide-react';
+import { CalendarDays, ChevronLeft, ChevronRight, CreditCard, FileText, Gauge, Globe2, Image, LayoutDashboard, LifeBuoy, LogOut, MapPin, Menu, MessageSquare, Package, Info, Ship, Star, Users } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, NavLink, Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom';
 
@@ -27,7 +27,8 @@ const navGroups = [
   {
     caption: 'Contenido',
     items: [
-      { label: 'Hero Section', to: '/admin/content', icon: FileText },
+      { label: 'Portada', to: '/admin/portada', icon: FileText },
+      { label: 'Sobre Nosotros', to: '/admin/sobre-nosotros', icon: Info },
       { label: 'Galeria', to: '/admin/gallery', icon: Image },
       { label: 'Comentarios', to: '/admin/reviews', icon: MessageSquare },
     ],
@@ -42,7 +43,8 @@ const titles: Record<string, string> = {
   '/admin/boat-tours': 'Resumen de paquetes',
   '/admin/reviews': 'Comentarios',
   '/admin/gallery': 'Galeria',
-  '/admin/content': 'Hero Section',
+  '/admin/portada': 'Portada',
+  '/admin/sobre-nosotros': 'Sobre Nosotros',
   '/admin/payment-methods': 'Metodos de pago',
   '/admin/departure-locations': 'Lugares de salida',
 };
@@ -216,9 +218,6 @@ export default function AdminLayout() {
               <img src="/images/papagayo-logo.png" alt="" aria-hidden="true" />
             </span>
           </Link>
-          <button className="admin-sidebar__toggle" type="button" aria-label={open ? 'Colapsar menu' : 'Expandir menu'} aria-expanded={open} aria-controls="admin-sidebar" onClick={() => setOpen((value) => !value)}>
-            {open ? <ChevronLeft size={18} /> : <ChevronRight size={18} />}
-          </button>
         </div>
         <div ref={sidebarScrollRef} className={sidebarHasMoreBelow ? 'admin-sidebar__scroll admin-sidebar__scroll--has-more' : 'admin-sidebar__scroll'}>
           {navGroups.map((group) => (
@@ -244,19 +243,24 @@ export default function AdminLayout() {
             </div>
           ))}
         </div>
+        <div className="admin-sidebar__footer">
+          <button className="admin-sidebar__toggle" type="button" aria-label={open ? 'Colapsar menu' : 'Expandir menu'} title={open ? 'Colapsar menu' : 'Expandir menu'} aria-expanded={open} aria-controls="admin-sidebar" onClick={() => setOpen((value) => !value)}>
+            {open ? <ChevronLeft size={18} /> : <ChevronRight size={18} />}
+          </button>
+        </div>
       </aside>
       <main className="admin-main">
         <div className="admin-content">
           <header className="admin-topbar">
-            <button ref={menuButtonRef} className="admin-topbar__menu" type="button" aria-label="Abrir menu" aria-expanded={open} aria-controls="admin-sidebar" onClick={() => setOpen(true)}>
-              <Menu size={19} />
+            <button ref={menuButtonRef} className="admin-topbar__menu" type="button" aria-label="Abrir menu" title="Abrir menu" aria-expanded={open} aria-controls="admin-sidebar" onClick={() => setOpen(true)}>
+              <Menu size={19} aria-hidden="true" />
             </button>
             <div className="admin-topbar__titles">
               <h1 className="admin-topbar__title">{title}</h1>
               <div className="admin-topbar__crumb">{crumb}</div>
             </div>
             <Link className="admin-icon-btn" to="/" aria-label="Ver sitio publico" title="Ver sitio publico">
-              <Globe2 size={18} />
+              <Globe2 size={18} aria-hidden="true" />
             </Link>
             <ThemeToggle />
             <div ref={accountRef} className="admin-account">

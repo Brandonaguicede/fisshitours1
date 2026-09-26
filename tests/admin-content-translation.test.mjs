@@ -91,9 +91,9 @@ test('departure locations: the description is English-only in the form; a change
   try {
     await page.goto(`${base}/admin/departure-locations`);
     await page.getByRole('button', { name: 'Editar lugar de salida Playas del Coco' }).click();
-    await expect(page.getByLabel(/^Descripcion/)).toHaveValue('Boat leaves from the main pier.');
+    await expect(page.getByLabel(/^Descripción/)).toHaveValue('Boat leaves from the main pier.');
     await expect(page.getByLabel(/Español|Inglés|English/)).toHaveCount(0);
-    await page.getByLabel(/^Descripcion/).fill('Boat leaves from the new marina.');
+    await page.getByLabel(/^Descripción/).fill('Boat leaves from the new marina.');
     await page.waitForTimeout(300);
     assert.equal(translation.calls.length, 0, 'not while typing');
     await page.getByRole('button', { name: /Guardar/ }).click();
@@ -122,12 +122,12 @@ test('departure locations: unchanged description is not translated or rewritten;
 
     translation.fails = true;
     await page.getByRole('button', { name: 'Editar lugar de salida Playas del Coco' }).click();
-    await page.getByLabel(/^Descripcion/).fill('Changed while DeepL is down.');
+    await page.getByLabel(/^Descripción/).fill('Changed while DeepL is down.');
     const before = writes.length;
     await page.getByRole('button', { name: /Guardar/ }).click();
     await expect(page.getByRole('alert').filter({ hasText: SPANISH_ERROR })).toBeVisible();
     assert.equal(writes.length, before, 'nothing is persisted when the translation fails');
-    await expect(page.getByLabel(/^Descripcion/)).toHaveValue('Changed while DeepL is down.');
+    await expect(page.getByLabel(/^Descripción/)).toHaveValue('Changed while DeepL is down.');
     translation.fails = false;
     await page.getByRole('button', { name: /Guardar/ }).click();
     await expect(page.getByText('Lugar actualizado.')).toBeVisible();
@@ -141,7 +141,7 @@ test('departure locations: CREATE translates the description before inserting th
     await page.goto(`${base}/admin/departure-locations`);
     await page.getByRole('button', { name: 'Nuevo lugar' }).click();
     await page.getByLabel('Nombre', { exact: true }).fill('Tamarindo');
-    await page.getByLabel(/^Descripcion/).fill('Pickup at the beach club.');
+    await page.getByLabel(/^Descripción/).fill('Pickup at the beach club.');
     await page.getByRole('button', { name: /Guardar/ }).click();
     await expect(page.getByText('Lugar creado.')).toBeVisible();
     assert.equal(translation.calls.length, 1);
@@ -158,47 +158,27 @@ test('departure locations: CREATE translates the description before inserting th
 
 const galleryImage = { id: 'gal-1', src: 'data:image/gif;base64,R0lGODlhAQABAAAAACw=', image_url: 'data:image/gif;base64,R0lGODlhAQABAAAAACw=', image_public_id: null, alt: 'Boat at dock', alt_en: null, alt_es: null, category: 'boats', title: 'Dock', active: true, sort_order: 1 };
 
-test('gallery: alt text is written in English and its Spanish copy is generated on Guardar cambios — only when it changed', async () => {
+test('gallery: the Alt field is not exposed; saving or closing never touches the alt columns nor calls DeepL', async () => {
   const f = await fixture({ gallery_images: [galleryImage] }); const { page, writes, translation } = f;
   try {
+    translation.fails = true; // even a broken translator cannot get in the way: alt is not part of this editor any more
     await page.goto(`${base}/admin/gallery`);
-    await page.getByRole('button', { name: 'Editar imagen Boat at dock' }).click();
-    await expect(page.getByLabel(/^Alt/)).toHaveValue('Boat at dock');
-    // Unchanged alt: no translation, no alt_es/alt_en written.
-    await page.getByRole('button', { name: 'Guardar cambios' }).click();
+    await page.getByRole('button', { name: /^Editar imagen/ }).click();
+    await expect(page.getByRole('heading', { name: 'Editar imagen' })).toBeVisible();
+    await expect(page.getByLabel(/^Alt/)).toHaveCount(0);
+    await expect(page.getByText(/^Alt$/)).toHaveCount(0);
+    await expect(page.getByLabel('Titulo', { exact: true })).toHaveCount(0);
+    await page.getByRole('combobox', { name: 'Categoria' }).selectOption('fishing');
+    await page.getByRole('button', { name: 'Guardar', exact: true }).click();
     await expect(page.getByText('Cambios de galería guardados.').first()).toBeVisible();
     assert.equal(translation.calls.length, 0);
-    let saved = writesTo(writes, 'gallery_images', 'PATCH').at(-1).body;
-    assert.equal('alt_es' in saved, false);
-    // Changed alt: translated EN -> ES.
-    await page.getByLabel(/^Alt/).fill('Fishing boat at sunset');
-    await page.getByRole('button', { name: 'Guardar cambios' }).click();
-    await expect.poll(() => translation.calls.length).toBe(1);
-    assert.deepEqual(translation.calls[0], { texts: ['Fishing boat at sunset'], targetLang: 'ES', sourceLang: 'EN' });
-    await expect.poll(() => writesTo(writes, 'gallery_images', 'PATCH').length).toBe(2);
-    saved = writesTo(writes, 'gallery_images', 'PATCH').at(-1).body;
-    assert.deepEqual([saved.alt, saved.alt_en, saved.alt_es], ['Fishing boat at sunset', 'Fishing boat at sunset', 'Fishing boat at sunset [ES]']);
-    assert.equal('title_es' in saved, false, 'the title is not shown publicly and is not translated');
-  } finally { await f.browser.close(); }
-});
-
-test('gallery: a failed translation saves nothing (Guardar cambios and closing the modal) and keeps the typed alt', async () => {
-  const f = await fixture({ gallery_images: [galleryImage] }); const { page, writes, translation } = f;
-  try {
-    translation.fails = true;
-    await page.goto(`${base}/admin/gallery`);
-    await page.getByRole('button', { name: 'Editar imagen Boat at dock' }).click();
-    await page.getByLabel(/^Alt/).fill('Fishing boat at sunset');
-    await page.getByRole('button', { name: 'Guardar cambios' }).click();
-    await expect(page.getByRole('alert').filter({ hasText: SPANISH_ERROR })).toBeVisible();
-    assert.equal(writesTo(writes, 'gallery_images', 'PATCH').length, 0);
+    const saved = writesTo(writes, 'gallery_images', 'PATCH').at(-1).body;
+    assert.equal(saved.category, 'fishing');
+    assert.equal('title' in saved, false, 'the (hidden) title is never rewritten');
+    for (const column of ['alt', 'alt_en', 'alt_es']) assert.equal(column in saved, false, `${column} is left exactly as it was`);
     await page.getByRole('button', { name: 'Cerrar', exact: true }).last().click();
-    await expect(page.getByLabel(/^Alt/)).toHaveValue('Fishing boat at sunset');
-    assert.equal(writesTo(writes, 'gallery_images', 'PATCH').length, 0, 'closing must not persist an untranslated alt either');
-    translation.fails = false;
-    await page.getByRole('button', { name: 'Guardar cambios' }).click();
-    await expect.poll(() => writesTo(writes, 'gallery_images', 'PATCH').length).toBe(1);
-    assert.equal(writesTo(writes, 'gallery_images', 'PATCH')[0].body.alt_es, 'Fishing boat at sunset [ES]');
+    for (const write of writesTo(writes, 'gallery_images', 'PATCH')) for (const column of ['alt', 'alt_en', 'alt_es']) assert.equal(column in write.body, false);
+    assert.equal(translation.calls.length, 0);
   } finally { await f.browser.close(); }
 });
 
@@ -230,18 +210,18 @@ const heroRows = [
 test('hero: only the English texts are editable; changing one translates just it and writes its .es key', async () => {
   const f = await fixture({ site_settings: heroRows }); const { page, writes, translation, store } = f;
   try {
-    await page.goto(`${base}/admin/content`);
+    await page.goto(`${base}/admin/portada`);
     await page.getByRole('button', { name: 'Textos', exact: true }).click();
     await expect(page.getByLabel('Titulo principal', { exact: true })).toHaveValue('Experience the Ocean');
     // No Spanish field, no ES/EN language filter.
     await expect(page.getByLabel('Titulo principal ES')).toHaveCount(0);
     await expect(page.getByRole('group', { name: 'Filtrar por idioma' })).toHaveCount(0);
-    await expect(page.getByText('Escríbelos en inglés: el español se genera al guardar.').first()).toBeVisible();
+    await expect(page.getByText(/se genera al guardar|Escríbelos en inglés/)).toHaveCount(0); // no translation copy anywhere
     await page.getByLabel('Titulo principal', { exact: true }).fill('Experience the Pacific');
     await page.waitForTimeout(300);
     assert.equal(translation.calls.length, 0, 'not while typing');
-    await page.getByRole('button', { name: 'Guardar hero' }).click();
-    await expect(page.getByText(/Hero Section actualizado/)).toBeVisible();
+    await page.getByRole('button', { name: 'Guardar', exact: true }).click();
+    await expect(page.getByText(/Portada actualizada/)).toBeVisible();
     assert.deepEqual(translation.calls, [{ texts: ['Experience the Pacific'], targetLang: 'ES', sourceLang: 'EN' }]);
     const settings = Object.fromEntries(store.site_settings.map((row) => [row.key, row.value]));
     assert.equal(settings['home.hero.title.en'], 'Experience the Pacific');
@@ -255,18 +235,18 @@ test('hero: only the English texts are editable; changing one translates just it
 test('hero: saving without changes does not call DeepL and does not touch any .es key; a failure persists nothing', async () => {
   const f = await fixture({ site_settings: heroRows }); const { page, writes, translation } = f;
   try {
-    await page.goto(`${base}/admin/content`);
+    await page.goto(`${base}/admin/portada`);
     await page.getByRole('button', { name: 'Textos', exact: true }).click();
     await expect(page.getByLabel('Titulo principal', { exact: true })).toHaveValue('Experience the Ocean');
-    await page.getByRole('button', { name: 'Guardar hero' }).click();
-    await expect(page.getByText(/Hero Section actualizado/)).toBeVisible();
+    await page.getByRole('button', { name: 'Guardar', exact: true }).click();
+    await expect(page.getByText(/Portada actualizada/)).toBeVisible();
     assert.equal(translation.calls.length, 0);
     assert.equal(writesTo(writes, 'site_settings', 'POST').some((w) => String(w.body.key).endsWith('.es')), false);
 
     translation.fails = true;
     await page.getByLabel('Titulo principal', { exact: true }).fill('Experience the Pacific');
     const before = writes.length;
-    await page.getByRole('button', { name: 'Guardar hero' }).click();
+    await page.getByRole('button', { name: 'Guardar', exact: true }).click();
     await expect(page.getByRole('alert').filter({ hasText: SPANISH_ERROR }).or(page.getByText(SPANISH_ERROR)).first()).toBeVisible();
     assert.equal(writes.length, before, 'nothing (not even the English) is saved when the translation fails');
     await expect(page.getByLabel('Titulo principal', { exact: true })).toHaveValue('Experience the Pacific');
@@ -276,13 +256,12 @@ test('hero: saving without changes does not call DeepL and does not touch any .e
 test('about: a long multi-paragraph English text is translated as one text and its .es key is written', async () => {
   const f = await fixture({ site_settings: heroRows }); const { page, translation, store } = f;
   try {
-    await page.goto(`${base}/admin/content`);
-    await page.getByRole('button', { name: 'Nosotros / About' }).click();
-    const story = page.getByLabel(/^Historia \(pagina Nosotros\)/);
+    await page.goto(`${base}/admin/sobre-nosotros`);
+    const story = page.getByLabel(/^Historia/);
     await expect(story).toHaveValue('Our story in English.\n\nSecond paragraph.');
     await story.fill('Our new story.\n\nWith two paragraphs.');
-    await page.getByRole('button', { name: 'Guardar Nosotros' }).click();
-    await expect(page.getByText(/Nosotros \/ About actualizado/)).toBeVisible();
+    await page.getByRole('button', { name: 'Guardar', exact: true }).click();
+    await expect(page.getByText(/Sobre Nosotros actualizado/)).toBeVisible();
     assert.deepEqual(translation.calls.map((call) => call.texts), [['Our new story.\n\nWith two paragraphs.']]);
     const settings = Object.fromEntries(store.site_settings.map((row) => [row.key, row.value]));
     assert.equal(settings['about.story.en'], 'Our new story.\n\nWith two paragraphs.');
@@ -291,48 +270,31 @@ test('about: a long multi-paragraph English text is translated as one text and i
 });
 
 // ------------------------------------------------------------------------------------------------------------
-// "Reparar traducciones antiguas" (translate-all-site-content): backfill tool, never part of the daily flow
+// "Reparar traducciones antiguas" (translate-all-site-content) is a maintenance/backfill tool: it is NOT part of Gabriel's
+// normal Admin flow (he writes English, DeepL generates Spanish on save). The screens do not expose it any more; the
+// Edge Function and the service stay in the codebase.
 // ------------------------------------------------------------------------------------------------------------
 
-test('repair button: clearly a backfill tool, asks for confirmation, shows the per-table result, and normal saves never call it', async () => {
+test('the repair/backfill tool is not exposed on Portada or Sobre Nosotros, and normal saves still translate on save without ever calling it', async () => {
   const f = await fixture({ site_settings: heroRows }); const { page, translation } = f;
   const repairCalls = [];
   try {
-    await page.route('https://admin-test.supabase.co/functions/v1/translate-all-site-content', async (route) => {
-      repairCalls.push(route.request().method());
-      return route.fulfill({ json: { results: [{ table: 'tours', label: 'Tours', updated: 2, skipped: 6, errors: 0 }, { table: 'gallery_images', label: 'Galería', updated: 0, skipped: 8, errors: 1 }], totalErrors: 1, hasMore: false } });
-    });
-    await page.goto(`${base}/admin/content`);
-    await expect(page.getByRole('heading', { name: 'Reparar traducciones antiguas' })).toBeVisible();
-    await expect(page.getByText('no necesitas este botón para tus ediciones normales')).toBeVisible();
-    await expect(page.getByText('Traducir todo el sitio')).toHaveCount(0);
-    // A normal save translates through translate-texts and never triggers the repair function.
+    await page.route('https://admin-test.supabase.co/functions/v1/translate-all-site-content', async (route) => { repairCalls.push(route.request().method()); return route.fulfill({ json: { results: [], totalErrors: 0, hasMore: false } }); });
+    for (const path of ['/admin/portada', '/admin/sobre-nosotros']) {
+      await page.goto(`${base}${path}`);
+      await expect(page.locator('.admin-content-section')).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Reparar traducciones antiguas' })).toHaveCount(0);
+      await expect(page.getByRole('button', { name: 'Traducir contenido antiguo' })).toHaveCount(0);
+      await expect(page.getByText('Traducir todo el sitio')).toHaveCount(0);
+      await expect(page.getByText(/no necesitas este botón|Reparar traducciones/)).toHaveCount(0);
+    }
+    // The normal flow is untouched: English is saved and DeepL runs on Guardar.
+    await page.goto(`${base}/admin/portada`);
     await page.getByRole('button', { name: 'Textos', exact: true }).click();
     await page.getByLabel('Titulo principal', { exact: true }).fill('Experience the Pacific');
-    await page.getByRole('button', { name: 'Guardar hero' }).click();
-    await expect(page.getByText(/Hero Section actualizado/)).toBeVisible();
+    await page.getByRole('button', { name: 'Guardar', exact: true }).click();
+    await expect(page.getByText(/Portada actualizada/)).toBeVisible();
     assert.equal(translation.calls.length, 1);
     assert.equal(repairCalls.length, 0);
-    // The repair button asks first; nothing runs until confirmed.
-    await page.getByRole('button', { name: 'Traducir contenido antiguo' }).click();
-    await expect(page.getByRole('heading', { name: 'Reparar traducciones antiguas', level: 2 }).last()).toBeVisible();
-    assert.equal(repairCalls.length, 0);
-    await page.getByRole('button', { name: 'Traducir', exact: true }).click();
-    await expect(page.getByText('Traducción completada')).toBeVisible();
-    await expect(page.getByText('Tours: 2 actualizados, 6 sin cambios')).toBeVisible();
-    await expect(page.getByText('Galería: 0 actualizados, 8 sin cambios, 1 con errores')).toBeVisible();
-    assert.equal(repairCalls.length, 1);
-  } finally { await f.browser.close(); }
-});
-
-test('repair button: a server error is reported clearly and nothing is shown as completed', async () => {
-  const f = await fixture({ site_settings: heroRows }); const { page } = f;
-  try {
-    await page.route('https://admin-test.supabase.co/functions/v1/translate-all-site-content', (route) => route.fulfill({ status: 503, json: { message: 'La traducción automática todavía no está configurada (falta el secret DEEPL_API_KEY en Supabase).' } }));
-    await page.goto(`${base}/admin/content`);
-    await page.getByRole('button', { name: 'Traducir contenido antiguo' }).click();
-    await page.getByRole('button', { name: 'Traducir', exact: true }).click();
-    await expect(page.getByText('todavía no está configurada')).toBeVisible();
-    await expect(page.getByText('Traducción completada')).toHaveCount(0);
   } finally { await f.browser.close(); }
 });

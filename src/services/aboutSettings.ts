@@ -35,14 +35,14 @@ export const DEFAULT_ABOUT_SETTINGS = {
   'about.image_alt.es': 'Tripulacion con pesca en aguas de Guanacaste',
   'about.image_alt.en': 'Crew with a catch in Guanacaste waters',
   'about.image': '',
-  // Backs the small contact CTA card in AboutPreview.tsx — previously
-  // hardcoded there with the exact same copy, so this fallback keeps the
-  // public page unchanged until an admin actually edits it.
-  'about.cta_title.es': '¿Quieres hablar con nosotros?',
-  'about.cta_title.en': 'Want to talk with us?',
-  'about.cta_text.es': 'Escríbenos y con gusto te ayudamos.',
-  'about.cta_text.en': "Send us a message and we'll be happy to help.",
 };
+
+// The small contact card under the About section ("Want to talk with us?") is fixed copy, not editable content: it lives here
+// (not in site_settings) so the Admin has nothing to edit and the public page always shows exactly these texts.
+export const ABOUT_CONTACT_CTA = {
+  es: { title: '¿Quieres hablar con nosotros?', text: 'Escríbenos y con gusto te ayudamos.' },
+  en: { title: 'Want to talk with us?', text: "Send us a message and we'll be happy to help." },
+} as const;
 
 export type AboutSettings = typeof DEFAULT_ABOUT_SETTINGS;
 

@@ -1,4 +1,4 @@
-import { Check, Eye, EyeOff, Loader2, Pencil, Plus, Trash2, X } from 'lucide-react';
+import { Pencil, Plus, Trash2, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import {
@@ -14,7 +14,7 @@ import {
   type PackageInput,
 } from '../../services/adminBoatToursService';
 import AdminConfirmDialog from './AdminConfirmDialog';
-import { AdminBadge } from './AdminPrimitives';
+import { AdminBadge, AdminVisibilityButton } from './AdminPrimitives';
 import { friendlyDeleteError } from '../../utils/adminErrors';
 import { translateTextsToSpanish, TranslationError } from '../../services/translationService';
 import { cleanList, editableList, editableText, textColumns, textsToTranslate, type BilingualColumns } from '../../utils/bilingualContent';
@@ -230,7 +230,6 @@ function PackageDraftEditor({ draft, boatName, tourTitle, fieldErrors, busy, boa
       <header className="admin-package-editor__head">
         <p className="admin-package-context" aria-label="Ubicación del paquete">{boatName || 'Bote'} / {tourTitle}</p>
         <h3>{draft.isNew ? 'Nuevo paquete' : `Editar ${draft.name || 'paquete'}`}</h3>
-        <p className="admin-field-help">Escribe los textos del paquete en inglés: el español se genera al guardar.</p>
       </header>
 
       <section className="admin-package-section" aria-labelledby={`${key}-s-info`}>
@@ -311,7 +310,7 @@ function PackageDraftEditor({ draft, boatName, tourTitle, fieldErrors, busy, boa
             {fieldError('included')}
           </label>
           <label className="admin-field">
-            <span className="admin-field__label">Máximo del paquete</span>
+            <span className="admin-field__label">Máximo de personas</span>
             <input
               className="admin-input"
               type="number"
@@ -375,7 +374,6 @@ function PackageDraftEditor({ draft, boatName, tourTitle, fieldErrors, busy, boa
             <label className="admin-field">
               <span className="admin-field__label">Elementos incluidos, uno por línea</span>
               <textarea className="admin-input admin-textarea-list" rows={4} placeholder={'Fishing equipment\nDrinks\nSnacks'} value={draft.packageIncluded} onChange={(event) => onChange({ packageIncluded: event.target.value })} />
-              <span className="admin-field-help">Escríbelos en inglés: el español se genera al guardar.</span>
             </label>
           ) : (
             <span className="admin-field-help">Se usa la lista de lo incluido en el tour.</span>
@@ -384,7 +382,7 @@ function PackageDraftEditor({ draft, boatName, tourTitle, fieldErrors, busy, boa
         </fieldset>
         <fieldset className="admin-package-fieldset" disabled={busy}>
           <legend className="admin-package-subtitle">Comidas para elegir <span className="admin-muted">(opcional)</span></legend>
-          <span className="admin-field-help">{draft.mealOptions.length === 0 ? 'Sin comidas, el cliente no verá selector de comida. ' : ''}Escríbelas en inglés: el español se genera al guardar.</span>
+          {draft.mealOptions.length === 0 ? <span className="admin-field-help">Sin comidas, el cliente no verá selector de comida.</span> : null}
           {draft.mealOptions.map((meal, index) => (
             <div className="admin-package-meal" key={index}>
               <label className="admin-field"><span className="admin-field__label">Comida {index + 1}</span><input className="admin-input" maxLength={120} placeholder="e.g. Fish casado" value={meal.en} onChange={(event) => onChange({ mealOptions: draft.mealOptions.map((item, position) => position === index ? { ...item, en: event.target.value } : item) })} /></label>
@@ -402,32 +400,25 @@ function PackageDraftEditor({ draft, boatName, tourTitle, fieldErrors, busy, boa
         <h4 id={`${key}-s-visibility`}>Visibilidad</h4>
         <div className="admin-package-visibility__row">
           <div>
-            <AdminBadge value={draft.active ? true : 'Inactivo'} label={draft.active ? 'Activo' : 'Inactivo'} />
+            <AdminBadge value={draft.active ? 'active' : 'inactive'} />
             <span className="admin-muted">{draft.active ? 'Visible y reservable.' : 'Oculto y no reservable.'}</span>
           </div>
-          <button
-            className={`admin-btn ${draft.active ? 'admin-btn--secondary' : ''}`}
-            type="button"
-            onClick={() => onChange({ active: !draft.active })}
-          >
-            {draft.active ? <EyeOff size={15} /> : <Eye size={15} />}
-            {draft.active ? 'Desactivar paquete' : 'Activar paquete'}
-          </button>
+          <AdminVisibilityButton visible={draft.active} actionLabel={draft.active ? 'Ocultar paquete' : 'Mostrar paquete'} onClick={() => onChange({ active: !draft.active })} />
         </div>
       </section>
 
       <footer className="admin-package-editor__footer">
+        <div className="admin-package-editor__actions">
+          <button className="admin-btn" type="button" disabled={busy} onClick={onSave}>
+            {busy ? 'Guardando...' : 'Guardar'}
+          </button>
+          <button className="admin-btn admin-btn--secondary" type="button" onClick={onCancel}>Cancelar</button>
+        </div>
         {!draft.isNew ? (
           <button className="admin-btn admin-btn--ghost admin-package-editor__delete" type="button" disabled={busy} onClick={() => setConfirmDeleteOpen(true)}>
             <Trash2 size={15} /> Eliminar paquete
           </button>
         ) : <span />}
-        <div className="admin-package-editor__actions">
-          <button className="admin-btn admin-btn--secondary" type="button" onClick={onCancel}>Cancelar</button>
-          <button className="admin-btn" type="button" disabled={busy} onClick={onSave}>
-            {busy ? <Loader2 className="animate-spin" size={15} /> : <Check size={15} />} Guardar paquete
-          </button>
-        </div>
       </footer>
 
       <AdminConfirmDialog
@@ -675,7 +666,7 @@ export default function BoatToursPackagesEditor({ boatId, boatName, boatMaxGuest
                 <p className="admin-muted">{list.length === 0 ? 'Sin paquetes todavía' : `${list.length} ${list.length === 1 ? 'paquete' : 'paquetes'}${fromPrice !== null ? ` · Desde ${money(fromPrice)}` : ''}`}</p>
               </div>
               <div className="admin-boat-tour-card__head-actions">
-                <AdminBadge value={true} label="Activo" />
+                <AdminBadge value="active" />
                 <button
                   className="admin-icon-btn admin-boat-tour-card__remove"
                   type="button"

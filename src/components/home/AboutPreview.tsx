@@ -5,7 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Container } from '../common/Container';
 import { Button, Chip, GlassPanel, SectionHeader } from '../ui';
 import { useLanguage } from '../../i18n/LanguageContext';
-import { buildAboutCarouselImages, DEFAULT_ABOUT_SETTINGS, getAboutSettings, splitParagraphs, type AboutSettings } from '../../services/aboutSettings';
+import { ABOUT_CONTACT_CTA, buildAboutCarouselImages, DEFAULT_ABOUT_SETTINGS, getAboutSettings, splitParagraphs, type AboutSettings } from '../../services/aboutSettings';
 
 // The shoreline photo starts appearing behind the contact card, tablet/
 // desktop only (mobile owns its own separate shoreline scene inside
@@ -136,10 +136,10 @@ export function AboutPreview() {
             </GlassPanel>
             <div className="min-w-0">
               <h3 className="text-[0.88rem] font-extrabold leading-tight text-white">
-                {about[`about.cta_title.${locale}` as keyof AboutSettings]}
+                {ABOUT_CONTACT_CTA[locale].title}
               </h3>
               <p className="mt-0.5 truncate text-[0.78rem] text-ocean-100/80">
-                {about[`about.cta_text.${locale}` as keyof AboutSettings]}
+                {ABOUT_CONTACT_CTA[locale].text}
               </p>
             </div>
           </div>

@@ -31,10 +31,10 @@ export function AdminConfirmDialog({ open, onClose, onConfirm, titleId, title, m
         <h2 id={titleId} className="admin-card__title"><Icon size={18} /> {title}</h2>
         <div className="admin-muted mt-2">{message}</div>
         <div className="admin-actions mt-5">
-          <button className="admin-btn admin-btn--secondary" type="button" disabled={loading} onClick={onClose}>{cancelLabel}</button>
           <button className={tone === 'primary' ? 'admin-btn' : 'admin-btn admin-btn--danger'} type="button" disabled={loading} onClick={() => void onConfirm()}>
             {loading ? <Loader2 className="animate-spin" size={16} /> : <Icon size={16} />} {confirmLabel}
           </button>
+          <button className="admin-btn admin-btn--secondary" type="button" disabled={loading} onClick={onClose}>{cancelLabel}</button>
         </div>
       </div>
     </Modal>

@@ -78,7 +78,7 @@ test('hero section does not expose CTA button configuration', async () => {
   const f = await loggedInFixture();
   const { page } = f;
   try {
-    await page.goto(`${base}/admin/content`);
+    await page.goto(`${base}/admin/portada`);
     await page.getByRole('button', { name: 'Textos' }).click();
     for (const label of [/Boton principal/i, /Enlace boton principal/i, /Activar boton principal/i, /Boton secundario/i, /Enlace boton secundario/i, /Activar boton secundario/i]) {
       await expect(page.getByText(label)).toHaveCount(0);

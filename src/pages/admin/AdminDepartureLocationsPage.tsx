@@ -1,7 +1,8 @@
-import { Edit2, MapPin, Plus, Save, X } from 'lucide-react';
+import { Edit2, MapPin, Plus, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 
-import { AdminBadge, AdminFilterMenu, AdminListToolbar, AdminModuleSurface, AdminPageHeader, AdminReorderHandle, AdminReorderToolbar, AdminTable } from '../../components/admin/AdminPrimitives';
+import AdminStatusSection from '../../components/admin/AdminStatusSection';
+import { AdminBadge, AdminCreateButton, AdminFilterMenu, AdminListToolbar, AdminModuleSurface, AdminPageHeader, AdminReorderHandle, AdminTable } from '../../components/admin/AdminPrimitives';
 import ModalFooter from '../../components/admin/ModalFooter';
 import { Modal } from '../../components/common/Modal';
 import { useAdminReorder } from '../../hooks/useAdminReorder';
@@ -9,6 +10,7 @@ import { supabase } from '../../lib/supabase';
 import type { DepartureLocation } from '../../services/bookingService';
 import { translateTextsToSpanish } from '../../services/translationService';
 import { editableText, textColumns, textsToTranslate, type BilingualColumns } from '../../utils/bilingualContent';
+import { normalizeDepartureLocationOrder, sortDepartureLocations } from '../../utils/departureLocations';
 import { money } from '../../utils/format';
 
 // The description is public (departure location card in the booking flow). The admin writes it in ENGLISH
@@ -29,7 +31,6 @@ const emptyForm: FormState = {
   currency: 'USD',
   active: true,
   sort_order: 0,
-  is_default: false,
 };
 
 export default function AdminDepartureLocationsPage() {
@@ -46,7 +47,9 @@ export default function AdminDepartureLocationsPage() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
 
-  const sortedLocations = useMemo(() => [...locations].sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name)), [locations]);
+  const sortedLocations = useMemo(() => sortDepartureLocations(locations), [locations]);
+  // Position is the rank in the full list (position 1 is the public default), so a search/filter never renumbers rows.
+  const positionById = useMemo(() => new Map(sortedLocations.map((location, index) => [location.id, index + 1])), [sortedLocations]);
   const visibleLocations = useMemo(
     () => sortedLocations
       .filter((location) => statusFilter === 'all' || (statusFilter === 'active') === location.active)
@@ -57,14 +60,26 @@ export default function AdminDepartureLocationsPage() {
   const reorder = useAdminReorder(sortedLocations);
   const canReorder = search.trim() === '' && statusFilter === 'all';
 
-  async function persistOrder(updates: Array<{ id: string; sort_order: number }>) {
-    setError('');
+  async function writeOrder(updates: Array<{ id: string; sort_order: number }>) {
     for (const update of updates) {
       const { error } = await db.from('departure_locations').update({ sort_order: update.sort_order }).eq('id', update.id);
       if (error) { setError(error.message); throw new Error(error.message); }
     }
+  }
+
+  async function persistOrder(updates: Array<{ id: string; sort_order: number }>) {
+    setError('');
+    await writeOrder(updates);
     setNotice('Orden actualizado.');
     await loadLocations();
+  }
+
+  // After a create/edit the persisted sort_order is made contiguous 1..N again (only rows that differ are written),
+  // from a fresh read so a concurrent change is not overwritten with stale numbers.
+  async function normalizePersistedOrder() {
+    const { data, error } = await db.from('departure_locations').select('id, name, sort_order');
+    if (error) throw new Error(error.message);
+    await writeOrder(normalizeDepartureLocationOrder((data ?? []) as DepartureLocation[]));
   }
 
   async function loadLocations() {
@@ -72,7 +87,7 @@ export default function AdminDepartureLocationsPage() {
     setError('');
     const { data, error } = await db
       .from('departure_locations')
-      .select('id, name, slug, description, description_es, description_en, surcharge_amount, currency, active, sort_order, is_default')
+      .select('id, name, slug, description, description_es, description_en, surcharge_amount, currency, active, sort_order')
       .order('sort_order', { ascending: true })
       .order('name', { ascending: true });
     setLoading(false);
@@ -98,7 +113,7 @@ export default function AdminDepartureLocationsPage() {
 
   function openCreate() {
     resetForm();
-    setForm((value) => ({ ...value, sort_order: locations.length + 1 }));
+    setForm((value) => ({ ...value, sort_order: Math.max(0, ...locations.map((location) => Number(location.sort_order))) + 1 }));
     setModalOpen(true);
   }
 
@@ -144,8 +159,8 @@ export default function AdminDepartureLocationsPage() {
       surcharge_amount: Number(form.surcharge_amount),
       currency: form.currency || 'USD',
       active: form.active,
-      sort_order: Number(form.sort_order),
-      is_default: form.is_default,
+      // New locations go last; an edit never rewrites the position (that is only done by Reordenar).
+      ...(editingId ? {} : { sort_order: Number(form.sort_order) }),
     };
     const request = editingId
       ? db.from('departure_locations').update(payload).eq('id', editingId)
@@ -156,9 +171,14 @@ export default function AdminDepartureLocationsPage() {
       setError(error.message);
       return;
     }
-    setNotice(editingId ? 'Lugar actualizado.' : 'Lugar creado.');
     setModalOpen(false);
     resetForm();
+    try {
+      await normalizePersistedOrder();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'No se pudo normalizar el orden.');
+    }
+    setNotice(editingId ? 'Lugar actualizado.' : 'Lugar creado.');
     await loadLocations();
   }
 
@@ -183,17 +203,15 @@ export default function AdminDepartureLocationsPage() {
               </label>
             </AdminFilterMenu>
           }
-          primaryAction={<button className="admin-btn" type="button" onClick={openCreate} disabled={reorder.reordering}><Plus size={16} /> Nuevo lugar</button>}
-          secondaryActions={
-            <AdminReorderToolbar
-              reordering={reorder.reordering}
-              saving={reorder.saving}
-              onStart={() => reorder.start()}
-              onCancel={reorder.cancel}
-              onSave={() => void reorder.save(persistOrder)}
-              disabledReason={canReorder ? undefined : 'Limpia la búsqueda y el filtro de estado para reordenar.'}
-            />
-          }
+          primaryAction={<AdminCreateButton label="Nuevo lugar" onClick={openCreate} disabled={reorder.reordering} />}
+          reorder={{
+            reordering: reorder.reordering,
+            saving: reorder.saving,
+            onStart: () => reorder.start(),
+            onCancel: reorder.cancel,
+            onSave: () => void reorder.save(persistOrder),
+            disabledReason: canReorder ? undefined : 'Limpia la búsqueda y el filtro de estado para reordenar.',
+          }}
         />
 
         {error && !modalOpen ? <div className="admin-alert admin-alert--danger">{error}</div> : null}
@@ -202,7 +220,7 @@ export default function AdminDepartureLocationsPage() {
         {loading ? (
           <p className="admin-muted">Cargando lugares...</p>
         ) : (
-          <AdminTable embedded headers={['Lugar', 'Cargo', 'Orden', 'Estado', 'Predeterminado', 'Acciones']}>
+          <AdminTable embedded headers={['Lugar', 'Cargo', 'Posición', 'Estado', 'Acciones']}>
             {(reorder.reordering ? reorder.order : visibleLocations).map((location, index) => (
               <tr
                 key={location.id}
@@ -228,10 +246,9 @@ export default function AdminDepartureLocationsPage() {
                       onMoveUp={() => reorder.moveBy(location.id, -1)}
                       onMoveDown={() => reorder.moveBy(location.id, 1)}
                     />
-                  ) : location.sort_order}
+                  ) : <span className="admin-position">{positionById.get(location.id)}</span>}
                 </td>
                 <td><AdminBadge value={location.active ? 'active' : 'inactive'} /></td>
-                <td>{location.is_default ? 'Si' : '-'}</td>
                 <td>
                   <div className="admin-row-actions">
                     <button className="admin-icon-action" type="button" title="Editar lugar de salida" aria-label={`Editar lugar de salida ${location.name}`} disabled={reorder.reordering} onClick={() => editLocation(location)}><Edit2 size={17} /></button>
@@ -239,7 +256,7 @@ export default function AdminDepartureLocationsPage() {
                 </td>
               </tr>
             ))}
-            {visibleLocations.length === 0 ? <tr><td colSpan={6} className="admin-muted">No hay lugares para este filtro.</td></tr> : null}
+            {visibleLocations.length === 0 ? <tr><td colSpan={5} className="admin-muted">No hay lugares para este filtro.</td></tr> : null}
           </AdminTable>
         )}
       </AdminModuleSurface>
@@ -263,16 +280,22 @@ export default function AdminDepartureLocationsPage() {
                 <input className="admin-input" min={0} step="0.01" type="number" value={form.surcharge_amount} onChange={(event) => setForm((value) => ({ ...value, surcharge_amount: Number(event.target.value) }))} />
               </label>
               <label className="admin-field admin-field--wide">
-                <span className="admin-field__label">Descripcion (en inglés: el español se genera al guardar)</span>
+                <span className="admin-field__label">Descripción</span>
                 <textarea className="admin-input" rows={3} value={form.description ?? ''} onChange={(event) => setForm((value) => ({ ...value, description: event.target.value }))} />
               </label>
-              <label className="admin-check"><input type="checkbox" checked={form.active} onChange={(event) => setForm((value) => ({ ...value, active: event.target.checked }))} /> Activo</label>
-              <label className="admin-check"><input type="checkbox" checked={form.is_default} onChange={(event) => setForm((value) => ({ ...value, is_default: event.target.checked }))} /> Seleccionado por defecto</label>
             </div>
-            <p className="admin-field-help">Orden actual: {form.sort_order}. Se reordena desde la lista con el botón "Reordenar".</p>
+            <AdminStatusSection
+              description="Controla si este lugar se ofrece al reservar."
+              active={form.active}
+              visibleHint="Activo: se ofrece como lugar de salida al reservar."
+              hiddenHint="Inactivo: no se ofrece como lugar de salida."
+              hideLabel="Desactivar lugar"
+              showLabel="Activar lugar"
+              onToggle={() => setForm((value) => ({ ...value, active: !value.active }))}
+            />
           </div>
           <ModalFooter>
-            <button className="admin-btn" type="button" disabled={saving} onClick={() => void saveLocation()}><Save size={16} /> {saving ? 'Guardando...' : 'Guardar'}</button>
+            <button className="admin-btn" type="button" disabled={saving} onClick={() => void saveLocation()}>{saving ? 'Guardando...' : 'Guardar'}</button>
             <button className="admin-btn admin-btn--secondary" type="button" onClick={closeModal}>Cancelar</button>
           </ModalFooter>
         </div>

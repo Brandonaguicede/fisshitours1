@@ -1,6 +1,7 @@
-import { Loader2, Trash2, UploadCloud, Video as VideoIcon } from 'lucide-react';
+import { Loader2, Trash2 } from 'lucide-react';
 import { useRef, useState } from 'react';
 
+import { AdminFilePicker, AdminMediaPreview } from './AdminMediaKit';
 import { deleteStorageImage, ImageSessionExpiredError, uploadStorageImageWithProgress, type StorageImage } from '../../services/imageService';
 import { isSupabaseConfigured, supabase } from '../../lib/supabase';
 import { formatBytes } from '../../utils/format';
@@ -188,40 +189,22 @@ export default function AdminVideoManager({
 
   return (
     <div className="admin-image-manager">
-      <div className="admin-image-manager__preview" aria-disabled={disabled || undefined}>
-        {videoUrl ? (
-          <video src={videoUrl} controls muted loop playsInline aria-label={label ?? 'Video actual'} />
-        ) : (
-          <div className="admin-image-manager__empty">
-            <VideoIcon size={28} />
-            <span>Elige un archivo de video (MP4 o WebM)</span>
-          </div>
-        )}
-        {uploading ? <div className="admin-image-manager__overlay"><Loader2 className="animate-spin" size={22} />Subiendo {progress}%</div> : null}
-      </div>
+      <AdminMediaPreview kind="video" emptyText="Elige un archivo de video (MP4 o WebM)" disabled={disabled} uploadingProgress={uploading ? progress : null}>
+        {videoUrl ? <video src={videoUrl} controls muted loop playsInline aria-label={label ?? 'Video actual'} /> : undefined}
+      </AdminMediaPreview>
 
       {videoUrl && storagePath ? <p className="admin-image-manager__path" title={storagePath}>{storagePath}</p> : null}
 
       <div className="admin-image-manager__actions">
-        <label className="admin-btn admin-btn--secondary admin-image-manager__pick" role="button" tabIndex={disabled ? -1 : 0} aria-disabled={disabled || undefined}
-          onKeyDown={(event) => {
-            if (!disabled && (event.key === 'Enter' || event.key === ' ')) {
-              event.preventDefault();
-              inputRef.current?.click();
-            }
-          }}
-        >
-          <UploadCloud size={16} /> {videoUrl ? 'Reemplazar video' : 'Subir video'}
-          <input
-            ref={inputRef}
-            type="file"
-            accept="video/mp4,video/webm"
-            className="sr-only"
-            aria-label="Elegir archivo de video"
-            disabled={disabled}
-            onChange={(event) => void acceptFile(event.target.files?.[0] ?? null)}
-          />
-        </label>
+        <AdminFilePicker
+          hasMedia={Boolean(videoUrl)}
+          accept="video/mp4,video/webm"
+          inputRef={inputRef}
+          inputLabel="Elegir archivo de video"
+          uploadLabel="Subir video"
+          disabled={disabled}
+          onFile={(file) => void acceptFile(file)}
+        />
         {videoUrl && storagePath && !isManualUrl ? (
           <button className="admin-btn admin-btn--danger admin-image-manager__delete" type="button" onClick={() => void handleDelete()} disabled={deleting || uploading}>
             {deleting ? <Loader2 className="animate-spin" size={16} /> : <Trash2 size={16} />}
@@ -234,10 +217,9 @@ export default function AdminVideoManager({
       <div className="admin-video-manager__r2">
         <label className="admin-muted" htmlFor={`${resourceId}-r2-url`}>O usa un video ya subido a R2</label>
         <div className="admin-video-manager__r2-row">
-          <input id={`${resourceId}-r2-url`} className="admin-input" type="url" placeholder="https://pub-...r2.dev/videos/hero.mp4" value={manualUrl} onChange={(event) => setManualUrl(event.target.value)} disabled={disabled || uploading} />
+          <input id={`${resourceId}-r2-url`} className="admin-input" type="url" placeholder="https://pub-...r2.dev/videos/portada.mp4" value={manualUrl} onChange={(event) => setManualUrl(event.target.value)} disabled={disabled || uploading} />
           <button className="admin-btn admin-btn--secondary" type="button" onClick={() => void saveR2Url()} disabled={disabled || !manualUrl.trim()}>Usar URL</button>
         </div>
-        <p className="admin-muted">Sube primero el archivo en R2 y pega aquí su URL pública. Esto evita pasar archivos grandes por la función.</p>
       </div>
 
       {message ? (

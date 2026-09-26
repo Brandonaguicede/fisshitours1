@@ -1,11 +1,13 @@
 import AdminPagination from '../../components/admin/AdminPagination';
 import { useAdminPagedList } from '../../hooks/useAdminPagedList';
 import { adminSearchFilter, getAdminTablePage } from '../../services/adminListService';
-import { Check, EyeOff, Star, Trash2, X } from 'lucide-react';
-import { useState } from 'react';
+import { Check, MessageSquare, Pencil, Star, X } from 'lucide-react';
+import { useEffect, useState } from 'react';
 
 import AdminConfirmDialog from '../../components/admin/AdminConfirmDialog';
-import { AdminBadge, AdminFilterMenu, AdminListToolbar, AdminModuleSurface, AdminPageHeader, AdminReorderHandle, AdminReorderToolbar, AdminTable } from '../../components/admin/AdminPrimitives';
+import AdminStatusSection, { AdminStatusRow } from '../../components/admin/AdminStatusSection';
+import FormSection from '../../components/admin/FormSection';
+import { AdminAvatar, AdminBadge, AdminFilterMenu, AdminListToolbar, AdminModuleSurface, AdminPageHeader, AdminReorderHandle, AdminTable } from '../../components/admin/AdminPrimitives';
 import { Modal } from '../../components/common/Modal';
 import { useAdminReorder } from '../../hooks/useAdminReorder';
 import { supabase } from '../../lib/supabase';
@@ -45,6 +47,8 @@ export default function AdminReviewsPage() {
   const [filter, setFilter] = useState('all');
   const [search, setSearch] = useState('');
   const [pendingDelete, setPendingDelete] = useState<AdminReview | null>(null);
+  // The comment being edited: everything beyond the first approval (visibility, featured, delete) is managed in its editor.
+  const [editing, setEditing] = useState<AdminReview | null>(null);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
 
@@ -103,6 +107,7 @@ export default function AdminReviewsPage() {
       return;
     }
     setPendingDelete(null);
+    setEditing(null);
     setNotice('Comentario eliminado.');
     await loadReviews();
   }
@@ -115,6 +120,13 @@ export default function AdminReviewsPage() {
   const reorder = useAdminReorder<AdminReview>(pagination.rows);
   const [reorderLoading, setReorderLoading] = useState(false);
   const canReorder = filter === 'all' && search.trim() === '';
+
+  // Keep the open editor in step with the refreshed list after each action (it may even fall out of the current filter).
+  useEffect(() => {
+    if (!editing) return;
+    const fresh = pagination.rows.find((row) => row.id === editing.id);
+    if (fresh && fresh !== editing) setEditing(fresh);
+  }, [pagination.rows, editing]);
 
   async function startReorder() {
     setReorderLoading(true);
@@ -156,19 +168,14 @@ export default function AdminReviewsPage() {
               </label>
             </AdminFilterMenu>
           }
-          secondaryActions={
-            // Old comments needing translation are covered by the single
-            // "Reparar traducciones antiguas" button in Admin → Contenido, not a
-            // separate one here.
-            <AdminReorderToolbar
-              reordering={reorder.reordering}
-              saving={reorder.saving || reorderLoading}
-              onStart={() => void startReorder()}
-              onCancel={reorder.cancel}
-              onSave={() => void reorder.save(persistOrder)}
-              disabledReason={canReorder ? undefined : 'Limpia la búsqueda y el filtro de estado para reordenar.'}
-            />
-          }
+          reorder={{
+            reordering: reorder.reordering,
+            saving: reorder.saving || reorderLoading,
+            onStart: () => void startReorder(),
+            onCancel: reorder.cancel,
+            onSave: () => void reorder.save(persistOrder),
+            disabledReason: canReorder ? undefined : 'Limpia la búsqueda y el filtro de estado para reordenar.',
+          }}
         />
 
       {error || queryError ? (
@@ -202,14 +209,8 @@ export default function AdminReviewsPage() {
                 </td>
               ) : null}
               <td>
-                <div className="flex items-center gap-3">
-                  {review.image_url ? (
-                    <img className="h-10 w-10 rounded-full object-cover" src={review.image_url} alt="" loading="lazy" decoding="async" />
-                  ) : (
-                    <span className="grid h-10 w-10 place-items-center rounded-full bg-ocean-100 font-bold text-ocean-700" aria-hidden="true">
-                      {review.name.charAt(0).toUpperCase()}
-                    </span>
-                  )}
+                <div className="admin-person">
+                  <AdminAvatar name={review.name} imageUrl={review.image_url} />
                   <span>{review.name}</span>
                 </div>
               </td>
@@ -224,20 +225,14 @@ export default function AdminReviewsPage() {
               {reorder.reordering ? null : (
                 <td>
                   <div className="admin-row-actions">
-                    <button className="admin-icon-action admin-icon-action--success" type="button" disabled={loading || review.status === 'approved'} title="Aprobar comentario" aria-label={`Aprobar comentario de ${review.name}`} onClick={() => void setStatus(review.id, 'approved')}>
-                      <Check size={17} />
-                    </button>
-                    <button className="admin-icon-action admin-icon-action--danger" type="button" disabled={loading || review.status === 'rejected'} title="Rechazar comentario" aria-label={`Rechazar comentario de ${review.name}`} onClick={() => void setStatus(review.id, 'rejected')}>
-                      <X size={17} />
-                    </button>
-                    <button className="admin-icon-action" type="button" disabled={loading} title={review.active ? 'Ocultar comentario' : 'Mostrar comentario'} aria-label={review.active ? `Ocultar comentario de ${review.name}` : `Mostrar comentario de ${review.name}`} onClick={() => void setActive(review.id, !review.active)}>
-                      <EyeOff size={17} />
-                    </button>
-                    <button className="admin-icon-action admin-icon-action--warning" type="button" disabled={loading} title={review.featured ? 'Quitar de destacados' : 'Destacar comentario'} aria-label={review.featured ? `Quitar de destacados el comentario de ${review.name}` : `Destacar comentario de ${review.name}`} onClick={() => void setFeatured(review.id, !review.featured)}>
-                      <Star size={17} />
-                    </button>
-                    <button className="admin-icon-action admin-icon-action--danger" type="button" disabled={loading} title="Eliminar comentario" aria-label={`Eliminar comentario de ${review.name}`} onClick={() => setPendingDelete(review)}>
-                      <Trash2 size={17} />
+                    {/* A comment that just arrived can be approved right here (the first decision); everything else lives in its editor. */}
+                    {review.status === 'pending' ? (
+                      <button className="admin-icon-action admin-icon-action--success" type="button" disabled={loading} title="Aprobar comentario" aria-label={`Aprobar comentario de ${review.name}`} onClick={() => void setStatus(review.id, 'approved')}>
+                        <Check size={17} />
+                      </button>
+                    ) : null}
+                    <button className="admin-icon-action" type="button" disabled={loading} title="Editar comentario" aria-label={`Editar comentario de ${review.name}`} onClick={() => setEditing(review)}>
+                      <Pencil size={17} />
                     </button>
                   </div>
                 </td>
@@ -253,6 +248,67 @@ export default function AdminReviewsPage() {
       </div>
       {reorder.reordering ? null : <AdminPagination {...pagination} noun="reseñas" loading={loading} />}
       </AdminModuleSurface>
+
+      <Modal open={Boolean(editing)} onClose={() => setEditing(null)} titleId="review-edit-title" className="max-w-2xl">
+        {editing ? (
+          <div className="admin-modal-shell">
+            <header className="admin-modal-header">
+              <h2 id="review-edit-title" className="admin-card__title"><Pencil size={18} /> Editar comentario</h2>
+              <button className="admin-icon-btn" type="button" aria-label="Cerrar" onClick={() => setEditing(null)}><X size={18} /></button>
+            </header>
+            <div className="admin-modal-body">
+              {error ? <div className="admin-alert admin-alert--danger" role="alert">{error}</div> : null}
+              {notice ? <div className="admin-alert admin-alert--success" role="status">{notice}</div> : null}
+              <section className="admin-review-summary" aria-label="Comentario">
+                <div className="admin-review-summary__who">
+                  <AdminAvatar name={editing.name} imageUrl={editing.image_url} />
+                  <div>
+                    <strong>{editing.name}</strong>
+                    <p className="admin-muted">{editing.country ?? '-'} · {editing.rating} <Star size={12} className="inline fill-amber-400 text-amber-400" aria-hidden="true" /></p>
+                  </div>
+                </div>
+                <blockquote className="admin-review-summary__quote">"{editing.quote}"</blockquote>
+              </section>
+              <FormSection title="Moderación" description="Decide si este comentario se publica." icon={<MessageSquare size={16} />}>
+                <div className="admin-tour-config-row admin-tour-config-row--tour">
+                  <div className="admin-tour-config-row__status">
+                    <p className="admin-config-row__label">Estado del comentario</p>
+                    <AdminBadge value={editing.status} />
+                    <p className="admin-muted">{editing.status === 'approved' ? 'Aprobado: puede mostrarse en el sitio.' : editing.status === 'rejected' ? 'Rechazado: no se muestra en el sitio.' : 'Pendiente: todavía no se muestra en el sitio.'}</p>
+                  </div>
+                  <div className="admin-actions">
+                    <button className="admin-btn" type="button" disabled={loading || editing.status === 'approved'} aria-label={`Aprobar comentario de ${editing.name}`} onClick={() => void setStatus(editing.id, 'approved')}><Check size={15} /> Aprobar</button>
+                    <button className="admin-btn admin-btn--secondary" type="button" disabled={loading || editing.status === 'rejected'} aria-label={`Rechazar comentario de ${editing.name}`} onClick={() => void setStatus(editing.id, 'rejected')}><X size={15} /> Rechazar</button>
+                  </div>
+                </div>
+              </FormSection>
+              <AdminStatusSection
+                description="Controla si este comentario se muestra en el sitio público."
+                active={editing.active}
+                visibleHint="Visible: aparece en el sitio público (si está aprobado)."
+                hiddenHint="Oculto: no aparece en el sitio público, aunque esté aprobado."
+                hideLabel="Ocultar comentario"
+                showLabel="Mostrar comentario"
+                busy={loading}
+                onToggle={() => void setActive(editing.id, !editing.active)}
+                deleteAction={{ title: 'Eliminar comentario', description: 'Se quita del panel y del sitio público. No se puede deshacer.', label: 'Eliminar comentario', onDelete: () => setPendingDelete(editing) }}
+              >
+                <AdminStatusRow
+                  label="Destacado"
+                  badge={<AdminBadge value={editing.featured ? 'featured' : 'not_featured'} label={editing.featured ? 'Destacado' : 'No destacado'} />}
+                  hint={editing.featured ? 'Aparece primero entre los comentarios.' : 'Se muestra en su orden normal.'}
+                  button={(
+                    <button className={`admin-btn ${editing.featured ? 'admin-btn--secondary' : ''}`} type="button" disabled={loading} onClick={() => void setFeatured(editing.id, !editing.featured)}>
+                      <Star size={15} className={editing.featured ? 'fill-amber-400 text-amber-400' : undefined} />
+                      {editing.featured ? 'Quitar de destacados' : 'Destacar comentario'}
+                    </button>
+                  )}
+                />
+              </AdminStatusSection>
+            </div>
+          </div>
+        ) : null}
+      </Modal>
 
       <AdminConfirmDialog
         open={Boolean(pendingDelete)}

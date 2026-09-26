@@ -1,4 +1,4 @@
-import { Download, Eye, Loader2 } from 'lucide-react';
+import { FileText } from 'lucide-react';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
@@ -7,7 +7,9 @@ import { AdminBadge, AdminFilterMenu, AdminListToolbar, AdminModuleSurface, Admi
 import PackageDetailModal, { formatDuration, packageDisplayName, packageEditPath, type PackageDetail } from '../../components/admin/PackageDetailModal';
 import { supabase } from '../../lib/supabase';
 import { money } from '../../utils/format';
-import { createPackagesPdf, loadLogoDataUrl, packagesPdfFileName, type PackagePdfRow } from '../../utils/packagesPdf';
+import { formatUsd, loadLogoDataUrl } from '../../utils/exportBrand';
+import { createPackagesPdf, packagesPdfFileName, type PackagePdfRow } from '../../utils/packagesPdf';
+import { AdminExportMenu } from '../../components/admin/AdminExportMenu';
 import AdminPagination from '../../components/admin/AdminPagination';
 import { useAdminPagedList } from '../../hooks/useAdminPagedList';
 import { getAdminTablePage } from '../../services/adminListService';
@@ -98,7 +100,7 @@ export default function AdminBoatToursPage() {
         name: packageDisplayName(item),
         boat: item.boat_tours?.boats?.name ?? '-',
         tour: item.boat_tours?.tours?.title ?? '-',
-        price: item.custom_quote ? 'Cotizar' : money(Number(item.base_price)),
+        price: item.custom_quote ? 'Cotizar' : formatUsd(Number(item.base_price)),
         capacity: `${item.included_guests} / ${item.max_guests}`,
         duration: formatDuration(item.duration_minutes),
         status: item.active ? 'Activo' : 'Inactivo',
@@ -148,9 +150,11 @@ export default function AdminBoatToursPage() {
             </AdminFilterMenu>
           }
           secondaryActions={
-            <button className="admin-btn admin-btn--secondary" type="button" disabled={exporting || loading || Boolean(error)} onClick={() => void exportPdf()} title="Descarga en PDF los paquetes que ves con la búsqueda y los filtros actuales">
-              {exporting ? <Loader2 className="animate-spin" size={16} /> : <Download size={16} />} {exporting ? 'Generando PDF...' : 'Descargar PDF'}
-            </button>
+            <AdminExportMenu
+              disabled={loading || Boolean(error)}
+              busy={exporting ? 'pdf' : false}
+              options={[{ key: 'pdf', label: 'PDF (.pdf)', icon: FileText, title: 'Descarga en PDF los paquetes que ves con la búsqueda y los filtros actuales', onSelect: exportPdf }]}
+            />
           }
         />
         {error ? <div className="admin-alert admin-alert--danger">{error}</div> : null}
@@ -169,7 +173,7 @@ export default function AdminBoatToursPage() {
                 <td><AdminBadge value={item.active} /></td>
                 <td>
                   <div className="admin-row-actions">
-                    <button className="admin-action-btn" type="button" disabled={loading} title="Ver el detalle de este paquete (solo lectura)" aria-label={`Ver detalles del paquete ${packageDisplayName(item)}`} onClick={() => setSelected(item)}><Eye size={14} /> Ver detalles</button>
+                    <button className="admin-inline-action" type="button" disabled={loading} title="Ver el detalle de este paquete (solo lectura)" aria-label={`Ver detalles del paquete ${packageDisplayName(item)}`} onClick={() => setSelected(item)}><FileText size={15} aria-hidden="true" /> Ver detalles</button>
                   </div>
                 </td>
               </tr>

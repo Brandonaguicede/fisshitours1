@@ -51,6 +51,32 @@ body:has(.admin-login) {
   --admin-shadow: 0 1px 3px rgba(11, 40, 66, 0.08), 0 12px 28px -22px rgba(11, 40, 66, 0.42);
   --admin-shadow-elevated: 0 18px 42px -22px rgba(11, 40, 66, 0.45);
   --admin-control-height: 2.5rem;
+  --admin-control-height-sm: 2rem;
+  --admin-hit-target: 2.5rem;
+  --admin-hit-target-sm: 2rem;
+  /* Shared keyboard-focus ring. --admin-focus (softer) still tints field glows;
+     the ring itself needs >=3:1 against its surface, so it has its own token. */
+  --admin-focus-ring: #1f6f9a;
+  --admin-focus-outline: 2px solid var(--admin-focus-ring);
+  --admin-focus-offset: 2px;
+  /* Solid fills for success/danger buttons: white text stays >=4.5:1 in both themes. */
+  --admin-success-solid: #047857;
+  --admin-success-solid-hover: #065f46;
+  --admin-danger-solid: #dc2626;
+  --admin-danger-solid-hover: #b91c1c;
+  /* Select caret is a data-URI (can't read CSS vars), so each theme carries its own. */
+  --admin-select-caret: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23357294' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+}
+
+/* Touch / phone: controls and icon-only hit targets grow toward the 44px guideline. */
+@media (pointer: coarse), (max-width: 640px) {
+  body:has(.admin-shell),
+  body:has(.admin-login) {
+    --admin-control-height: 2.75rem;
+    --admin-hit-target: 2.75rem;
+    --admin-hit-target-sm: 2.5rem;
+    --admin-control-height-sm: 2.25rem;
+  }
 }
 
 /*
@@ -99,6 +125,10 @@ html[data-theme='dark'] body:has(.admin-login) {
   --admin-on-primary: #ffffff;
   --admin-shadow: 0 1px 3px rgba(0, 0, 0, 0.4), 0 16px 32px -20px rgba(0, 0, 0, 0.65);
   --admin-shadow-elevated: 0 24px 48px -20px rgba(0, 0, 0, 0.75);
+  --admin-focus-ring: #5cc3e4;
+  --admin-danger-solid: #b91c1c;
+  --admin-danger-solid-hover: #991b1b;
+  --admin-select-caret: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%237fa0b8' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
 }
 
 .admin-shell {
@@ -266,23 +296,34 @@ body:has(.admin-shell) {
   opacity: 1;
 }
 
+/* The collapse control lives at the very bottom of the sidebar (below the scrolling nav), not under the logo. */
+.admin-sidebar__footer {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  padding: 0.5rem 0.75rem;
+  border-top: 1px solid color-mix(in srgb, var(--admin-line) 24%, transparent);
+}
+
+/* Just the arrow, centered: no box or bubble around it (the hit area is still 2.5rem; hover brightens it, focus draws the ring). */
 .admin-sidebar__toggle {
   display: grid;
-  width: 2.25rem;
-  height: 2.25rem;
+  width: 2.5rem;
+  height: 2.5rem;
   flex: 0 0 auto;
   place-items: center;
-  border: 1px solid rgba(255, 255, 255, 0.18);
+  border: 0;
   border-radius: var(--admin-radius-sm);
-  background: rgba(255, 255, 255, 0.06);
-  color: var(--admin-sidebar-icon);
+  background: transparent;
+  color: var(--admin-sidebar-muted);
   cursor: pointer;
+  transition: color 0.16s ease;
 }
 
 .admin-sidebar__toggle:hover {
-  border-color: rgba(255, 255, 255, 0.34);
-  background: rgba(255, 255, 255, 0.14);
-  color: var(--admin-sidebar-ink);
+  background: transparent;
+  color: #fff;
 }
 
 .admin-sidebar__caption {
@@ -339,6 +380,7 @@ body:has(.admin-shell) {
     display: none;
   }
 
+
   .admin-shell--sidebar-closed .admin-sidebar__scroll {
     padding-inline: 0.55rem;
   }
@@ -385,34 +427,93 @@ body:has(.admin-shell) {
   backdrop-filter: blur(12px);
 }
 
+/*
+ * Icon-only button base. Flex (not grid `place-items`) so the glyph is centred
+ * even when the content box is smaller than the glyph, and the svg is forced to
+ * `display: block` so no inline baseline gap shifts it off-centre. Every
+ * icon-only control must carry `aria-label` + `title`; size comes from the
+ * --admin-hit-target tokens (grows on touch), with `--sm` for dense rows.
+ */
 .admin-topbar__menu,
 .admin-icon-btn,
 .admin-account__trigger {
-  display: grid;
-  width: 2.35rem;
-  height: 2.35rem;
-  place-items: center;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: var(--admin-hit-target);
+  height: var(--admin-hit-target);
+  min-width: var(--admin-hit-target);
+  padding: 0;
   border: 1px solid transparent;
   border-radius: var(--admin-radius-sm);
   background: transparent;
   color: var(--admin-muted);
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.16s ease, border-color 0.16s ease, color 0.16s ease;
+}
+
+.admin-topbar__menu svg,
+.admin-icon-btn svg,
+.admin-account__trigger svg {
+  display: block;
+  flex: 0 0 auto;
+}
+
+.admin-icon-btn--sm {
+  width: var(--admin-hit-target-sm);
+  height: var(--admin-hit-target-sm);
+  min-width: var(--admin-hit-target-sm);
+}
+
+/* Outlined variant for icon buttons that sit on a surface (filters, reorder). */
+.admin-icon-btn--bordered {
+  border-color: var(--admin-line);
+  background: var(--admin-surface);
+  color: var(--admin-ink);
 }
 
 .admin-topbar__menu:hover,
-.admin-icon-btn:hover,
+.admin-icon-btn:hover:not(:disabled),
 .admin-account__trigger:hover {
   background: var(--admin-primary-soft);
   color: var(--admin-ink);
 }
 
+.admin-icon-btn--bordered:hover:not(:disabled) {
+  border-color: var(--admin-primary);
+}
+
+.admin-icon-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* One focus-visible treatment for every interactive admin control. */
 .admin-topbar__menu:focus-visible,
 .admin-icon-btn:focus-visible,
 .admin-account__trigger:focus-visible,
 .admin-account__signout:focus-visible,
+.admin-icon-action:focus-visible,
+.admin-action-btn:focus-visible,
+.admin-inline-action:focus-visible,
+.admin-btn:focus-visible,
+.admin-tab:focus-visible,
+.admin-segmented button:focus-visible,
+.admin-stepper__item button:focus-visible,
+.admin-location-chip button:focus-visible,
+.admin-table-wrap:focus-visible {
+  outline: var(--admin-focus-outline);
+  outline-offset: var(--admin-focus-offset);
+}
+
+/* The sidebar is navy in both themes, so its ring is a fixed light tone. */
 .admin-sidebar__toggle:focus-visible,
 .admin-sidebar__link:focus-visible {
-  outline: 2px solid var(--admin-focus);
-  outline-offset: 3px;
+  outline: 2px solid #b6e3f2;
+  outline-offset: 2px;
 }
 
 .admin-icon-action {
@@ -429,11 +530,6 @@ body:has(.admin-shell) {
 .admin-icon-action:hover {
   color: var(--admin-ink);
   background: var(--admin-primary-soft);
-}
-
-.admin-icon-action:focus-visible {
-  outline: 2px solid var(--admin-focus);
-  outline-offset: 2px;
 }
 
 .admin-icon-action--success {
@@ -468,12 +564,38 @@ body:has(.admin-shell) {
   background: var(--admin-primary-soft);
 }
 
-.admin-action-btn:focus-visible {
-  outline: 2px solid var(--admin-focus);
-  outline-offset: 2px;
+.admin-action-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
-.admin-action-btn:disabled {
+/* Lightweight inline row action (Eye + "Ver detalles"): plain text with an icon,
+   no border, card or box; the affordance comes from colour, underline on hover
+   and the shared focus ring. */
+.admin-inline-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.15rem 0.2rem;
+  color: var(--admin-primary);
+  background: transparent;
+  border: 0;
+  border-radius: 0.35rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color 160ms ease, text-decoration-color 160ms ease;
+}
+
+.admin-inline-action:hover:not(:disabled) {
+  color: var(--admin-ink);
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.admin-inline-action:disabled {
   opacity: 0.55;
   cursor: not-allowed;
 }
@@ -523,6 +645,7 @@ body:has(.admin-shell) {
   cursor: grab;
 }
 
+.admin-position,
 .admin-reorder-handle__position {
   display: inline-grid;
   min-width: 1.4rem;
@@ -537,13 +660,8 @@ body:has(.admin-shell) {
 
 .admin-reorder-handle__buttons {
   display: inline-flex;
-  flex-direction: column;
-  gap: 0.1rem;
-}
-
-.admin-reorder-handle__buttons .admin-icon-btn {
-  width: 1.5rem;
-  height: 1.1rem;
+  align-items: center;
+  gap: 0.25rem;
 }
 
 tr.admin-sortable-row {
@@ -553,14 +671,6 @@ tr.admin-sortable-row {
 tr.admin-sortable-row--dragging {
   opacity: 0.5;
   background: var(--admin-selected);
-}
-
-/* Non-interactive visibility indicator (e.g. gallery cards): shows state, never toggles it — toggling lives in the edit form. */
-.admin-visibility-indicator {
-  display: inline-grid;
-  place-items: center;
-  padding: 0.35rem;
-  color: var(--admin-muted);
 }
 
 .admin-cell-with-icon {
@@ -601,19 +711,32 @@ tr.admin-sortable-row--dragging {
   position: relative;
 }
 
+/*
+ * Avatar centring: the trigger is a fixed square (hit target) with zero padding
+ * and a flex-centred, fixed-size avatar inside. Previously padding + border ate
+ * the content box (2.35rem - 0.3rem - 2px < the 2rem avatar), so the avatar
+ * overflowed its track and sat off-centre.
+ */
 .admin-account__trigger {
-  padding: 0.15rem;
   border-color: var(--admin-line);
   border-radius: 999px;
   background: var(--admin-surface);
 }
 
+.admin-account__trigger:hover {
+  border-color: var(--admin-primary);
+}
+
 .admin-account__avatar {
-  display: grid;
-  width: 2rem;
-  height: 2rem;
-  place-items: center;
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: calc(var(--admin-hit-target) - 0.5rem);
+  height: calc(var(--admin-hit-target) - 0.5rem);
   border-radius: 50%;
+  line-height: 1;
   background: var(--admin-primary);
   color: var(--admin-on-primary);
   font-size: 0.72rem;
@@ -726,19 +849,33 @@ tr.admin-sortable-row--dragging {
   gap: 0.5rem;
 }
 
+/*
+ * Button system. One structural rule + per-variant custom properties, so
+ * primary / secondary / ghost / danger / success only declare their colors
+ * (rest, hover) instead of re-stating hover/disabled/`.admin-shell button`
+ * overrides for each. The state rules below read the variables, so a new
+ * variant is just a new set of --btn-* values.
+ */
 .admin-btn {
+  --btn-bg: var(--admin-primary);
+  --btn-fg: var(--admin-on-primary);
+  --btn-border: color-mix(in srgb, var(--admin-primary) 18%, transparent);
+  --btn-bg-hover: var(--admin-primary-hover);
+  --btn-fg-hover: var(--admin-on-primary);
+  --btn-border-hover: var(--admin-primary-hover);
   appearance: none;
   -webkit-appearance: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 0.45rem;
+  box-sizing: border-box;
   min-height: var(--admin-control-height);
   padding: 0.55rem 0.85rem;
-  border: 1px solid color-mix(in srgb, var(--admin-primary) 18%, transparent);
+  border: 1px solid var(--btn-border);
   border-radius: var(--admin-radius-sm);
-  background: var(--admin-primary);
-  color: var(--admin-on-primary);
+  background: var(--btn-bg);
+  color: var(--btn-fg);
   font-size: 0.84rem;
   font-weight: 600;
   line-height: 1.1;
@@ -748,11 +885,48 @@ tr.admin-sortable-row--dragging {
   transition: background 0.16s ease, border-color 0.16s ease, color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
 }
 
+.admin-btn--secondary {
+  --btn-bg: var(--admin-surface);
+  --btn-fg: var(--admin-ink);
+  --btn-border: var(--admin-line);
+  --btn-bg-hover: var(--admin-primary-soft);
+  --btn-fg-hover: var(--admin-ink);
+  --btn-border-hover: var(--admin-primary);
+}
+
+.admin-btn--ghost {
+  --btn-bg: var(--admin-selected);
+  --btn-fg: var(--admin-ink);
+  --btn-border: var(--admin-line);
+  --btn-bg-hover: var(--admin-primary);
+  --btn-fg-hover: var(--admin-on-primary);
+  --btn-border-hover: var(--admin-primary);
+}
+
+.admin-btn--success {
+  --btn-bg: var(--admin-success-solid);
+  --btn-fg: #fff;
+  --btn-border: var(--admin-success-solid);
+  --btn-bg-hover: var(--admin-success-solid-hover);
+  --btn-fg-hover: #fff;
+  --btn-border-hover: var(--admin-success-solid-hover);
+}
+
+.admin-btn--danger {
+  --btn-bg: var(--admin-danger-solid);
+  --btn-fg: #fff;
+  --btn-border: var(--admin-danger-solid-hover);
+  --btn-bg-hover: var(--admin-danger-solid-hover);
+  --btn-fg-hover: #fff;
+  --btn-border-hover: var(--admin-danger-solid-hover);
+}
+
+/* Same colors, but with enough specificity to beat element/rule resets inside the shell. */
 .admin-shell button.admin-btn,
 .admin-shell a.admin-btn,
 .admin-shell label.admin-btn {
-  background-color: var(--admin-primary);
-  color: var(--admin-on-primary);
+  background-color: var(--btn-bg);
+  color: var(--btn-fg);
 }
 
 .admin-btn svg {
@@ -761,151 +935,44 @@ tr.admin-sortable-row--dragging {
   stroke: currentColor;
 }
 
-.admin-btn:hover {
-  background: var(--admin-primary-hover);
-  border-color: var(--admin-primary-hover);
-  color: var(--admin-on-primary);
+.admin-btn:hover,
+.admin-shell button.admin-btn:hover,
+.admin-shell a.admin-btn:hover,
+.admin-shell label.admin-btn:hover {
+  border-color: var(--btn-border-hover);
+  background-color: var(--btn-bg-hover);
+  color: var(--btn-fg-hover);
   box-shadow: 0 8px 18px -12px rgba(11, 37, 51, 0.55);
   transform: translateY(-1px);
 }
 
-.admin-btn:focus-visible {
-  outline: 2px solid var(--admin-focus);
-  outline-offset: 3px;
-}
-
-.admin-btn--secondary {
-  border-color: var(--admin-line);
-  background: var(--admin-surface);
-  color: var(--admin-ink);
-}
-
-.admin-shell button.admin-btn--secondary,
-.admin-shell a.admin-btn--secondary,
-.admin-shell label.admin-btn--secondary {
-  background-color: var(--admin-surface);
-  color: var(--admin-ink);
-}
-
-.admin-btn--secondary:hover {
-  border-color: var(--admin-primary);
-  background: var(--admin-primary-soft);
-  color: var(--admin-ink);
-}
-
-.admin-shell button.admin-btn:hover,
-.admin-shell a.admin-btn:hover,
-.admin-shell label.admin-btn:hover {
-  background-color: var(--admin-primary-hover);
-  color: var(--admin-on-primary);
-}
-
-.admin-shell button.admin-btn--secondary:hover,
-.admin-shell a.admin-btn--secondary:hover,
-.admin-shell label.admin-btn--secondary:hover {
-  background-color: var(--admin-primary-soft);
-  color: var(--admin-ink);
-}
-
-.admin-btn--ghost {
-  border-color: var(--admin-line);
-  background: var(--admin-selected);
-  color: var(--admin-ink);
-}
-
-.admin-shell button.admin-btn--ghost,
-.admin-shell a.admin-btn--ghost,
-.admin-shell label.admin-btn--ghost {
-  background-color: var(--admin-selected);
-  color: var(--admin-ink);
-}
-
-.admin-btn--ghost:hover {
-  border-color: var(--admin-primary);
-  background: var(--admin-primary);
-  color: white;
-}
-
-.admin-shell button.admin-btn--ghost:hover,
-.admin-shell a.admin-btn--ghost:hover,
-.admin-shell label.admin-btn--ghost:hover {
-  background-color: var(--admin-primary);
-  color: #fff;
-}
-
-.admin-btn--success {
-  border-color: var(--admin-success-ink);
-  background: var(--admin-success-ink);
-  color: white;
-}
-
-.admin-btn--danger {
-  border-color: var(--admin-danger-hover);
-  background: var(--admin-danger);
-  color: white;
-}
-
-.admin-shell button.admin-btn--danger,
-.admin-shell a.admin-btn--danger,
-.admin-shell label.admin-btn--danger {
-  background-color: var(--admin-danger);
-  color: #fff;
-}
-
-.admin-shell button.admin-btn--success,
-.admin-shell a.admin-btn--success,
-.admin-shell label.admin-btn--success {
-  background-color: var(--admin-success-ink);
-  color: #fff;
-}
-
-.admin-btn--success:hover {
-  border-color: var(--admin-success-hover);
-  background: var(--admin-success-hover);
-  color: #fff;
-}
-
-.admin-btn--danger:hover {
-  border-color: var(--admin-danger-ink);
-  background: var(--admin-danger-hover);
-  color: #fff;
-}
-
-.admin-btn:disabled {
+.admin-btn:disabled,
+.admin-btn:disabled:hover,
+.admin-shell button.admin-btn:disabled,
+.admin-shell button.admin-btn:disabled:hover {
+  border-color: var(--btn-border);
+  background-color: var(--btn-bg);
+  color: var(--btn-fg);
+  box-shadow: 0 1px 2px rgba(11, 37, 51, 0.08);
   cursor: not-allowed;
   opacity: 0.45;
   transform: none;
 }
 
-.admin-btn:disabled:hover {
-  background: var(--admin-primary);
-  border-color: color-mix(in srgb, var(--admin-primary) 18%, transparent);
-  color: #fff;
-  box-shadow: 0 1px 2px rgba(11, 37, 51, 0.08);
+/* Filter trigger: a funnel icon with no visible button border (the icon-btn base is transparent); the active-filter count is a badge on the corner. */
+.admin-filter-trigger {
+  position: relative;
 }
 
-.admin-btn--secondary:disabled:hover {
-  border-color: var(--admin-line);
-  background: var(--admin-surface);
-  color: var(--admin-ink);
-}
-
-.admin-btn--ghost:disabled:hover {
-  border-color: var(--admin-line);
-  background: var(--admin-primary-soft);
-  color: var(--admin-ink);
-}
-
-.admin-btn--success:disabled:hover {
-  border-color: var(--admin-success-ink);
-  background: var(--admin-success-ink);
-  color: #fff;
-}
-
-.admin-btn--danger:disabled:hover {
-  border-color: var(--admin-danger-hover);
-  background: var(--admin-danger);
-  color: #fff;
+.admin-filter-trigger .admin-badge {
+  position: absolute;
+  top: -0.15rem;
+  right: -0.15rem;
+  min-width: 1.15rem;
+  justify-content: center;
+  padding: 0.05rem 0.3rem;
+  font-size: 0.66rem;
+  line-height: 1.2;
 }
 
 .admin-alert {
@@ -936,17 +1003,22 @@ tr.admin-sortable-row--dragging {
   min-width: 14rem;
 }
 
+/*
+ * Compact KPI cards: label + icon chip on one row, value directly under.
+ * Purely presentational — value/label/icon still come from AdminStatCard props.
+ */
 .admin-stat-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(10.5rem, 1fr));
-  gap: 0.65rem;
+  grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
+  gap: 0.5rem;
 }
 
 .admin-stat-card {
   --stat-color: var(--admin-primary);
   display: grid;
-  gap: 0.4rem;
-  padding: 0.75rem 0.85rem;
+  gap: 0.2rem;
+  min-width: 0;
+  padding: 0.5rem 0.7rem 0.55rem;
   border: 1px solid color-mix(in srgb, var(--stat-color) 18%, var(--admin-surface));
   border-radius: var(--admin-radius-md);
   background: linear-gradient(180deg, color-mix(in srgb, var(--stat-color) 7%, var(--admin-surface)), var(--admin-surface) 78%);
@@ -968,37 +1040,43 @@ tr.admin-sortable-row--dragging {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 1rem;
+  gap: 0.5rem;
 }
 
 .admin-stat-card__label {
+  min-width: 0;
   margin: 0;
   color: var(--admin-muted);
-  font-size: 0.8rem;
+  font-size: 0.76rem;
   font-weight: 600;
+  line-height: 1.25;
 }
 
 .admin-stat-card__icon {
-  display: grid;
-  width: 1.9rem;
-  height: 1.9rem;
-  place-items: center;
-  border-radius: 8px;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  border-radius: 7px;
   background: color-mix(in srgb, var(--stat-color) 12%, var(--admin-surface));
   color: var(--stat-color);
 }
 
 .admin-stat-card__icon svg {
-  width: 15px;
-  height: 15px;
+  display: block;
+  width: 14px;
+  height: 14px;
 }
 
 .admin-stat-card__value {
   color: var(--admin-ink);
-  font-size: 1.4rem;
+  font-size: 1.25rem;
   font-weight: 700;
-  line-height: 1;
+  line-height: 1.1;
   font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
 }
 
 .admin-grid-2 {
@@ -1068,11 +1146,6 @@ tr.admin-sortable-row--dragging {
   color: var(--admin-ink);
 }
 
-.admin-tab:focus-visible {
-  outline: 2px solid var(--admin-focus);
-  outline-offset: 2px;
-}
-
 .admin-tab--active,
 .admin-tab--active:hover {
   background: linear-gradient(120deg, var(--admin-primary), var(--admin-primary-dark));
@@ -1106,11 +1179,6 @@ tr.admin-sortable-row--dragging {
   color: var(--admin-ink);
 }
 
-.admin-segmented button:focus-visible {
-  outline: 2px solid var(--admin-focus);
-  outline-offset: 2px;
-}
-
 .admin-segmented button.admin-segmented__option--active {
   background: var(--admin-primary-dark);
   color: white;
@@ -1119,15 +1187,16 @@ tr.admin-sortable-row--dragging {
 .admin-input,
 .admin-select {
   width: 100%;
-  min-height: 2.35rem;
+  box-sizing: border-box;
+  min-height: var(--admin-control-height);
   border: 1px solid var(--admin-line);
   border-radius: var(--admin-radius-sm);
-  background: var(--admin-primary-soft);
+  background-color: var(--admin-primary-soft);
   color: var(--admin-ink);
   font: inherit;
   font-size: 0.86rem;
   font-weight: 600;
-  transition: background 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease;
+  transition: background-color 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease;
 }
 
 .admin-input {
@@ -1176,11 +1245,6 @@ tr.admin-sortable-row--dragging {
   flex: 0 0 auto;
 }
 
-.admin-filter-trigger .admin-badge {
-  min-width: 1.35rem;
-  justify-content: center;
-}
-
 .admin-filter-panel {
   position: absolute;
   top: calc(100% + 0.55rem);
@@ -1194,6 +1258,75 @@ tr.admin-sortable-row--dragging {
   border-radius: var(--admin-radius-md);
   background: var(--admin-surface);
   box-shadow: var(--admin-shadow-elevated);
+}
+
+.admin-export-menu {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+/* Compact download menu (AdminExportMenu): same surface, border and elevation tokens as the filter popover. */
+.admin-export-panel {
+  position: absolute;
+  top: calc(100% + 0.4rem);
+  right: 0;
+  z-index: 45;
+  display: grid;
+  min-width: 11.5rem;
+  gap: 0.1rem;
+  padding: 0.35rem;
+  border: 1px solid var(--admin-line-soft);
+  border-radius: var(--admin-radius-md);
+  background: var(--admin-surface);
+  box-shadow: var(--admin-shadow-elevated);
+}
+
+.admin-export-panel__title {
+  margin: 0 0 0.2rem;
+  padding: 0.25rem 0.55rem 0.4rem;
+  border-bottom: 1px solid var(--admin-line-soft);
+  color: var(--admin-muted);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.admin-export-panel__item {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  width: 100%;
+  min-height: 2.25rem;
+  padding: 0.4rem 0.55rem;
+  border: 0;
+  border-radius: var(--admin-radius-sm);
+  background: transparent;
+  color: var(--admin-ink);
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.admin-export-panel__item:hover {
+  background: var(--admin-primary-soft);
+}
+
+.admin-export-panel__item:focus-visible {
+  outline: var(--admin-focus-outline);
+  outline-offset: -2px;
+  background: var(--admin-primary-soft);
+}
+
+.admin-export-panel__item svg {
+  flex: 0 0 auto;
+  color: var(--admin-muted);
+}
+
+.admin-export-trigger[aria-disabled='true'] {
+  cursor: progress;
+  opacity: 0.7;
 }
 
 .admin-filter-panel__header,
@@ -1241,22 +1374,62 @@ tr.admin-sortable-row--dragging {
   pointer-events: none;
 }
 
+/*
+ * Select: native chevron is replaced by a themed caret (--admin-select-caret)
+ * pinned inside the right padding. `appearance: none` + reserved right padding
+ * keeps long option text from running under the caret in light, dark and
+ * narrow/mobile layouts; text truncates instead of overflowing the control.
+ * Hover/focus use `background-color` (never the `background` shorthand) so the
+ * caret image isn't wiped on interaction.
+ */
 .admin-select {
-  padding: 0.5rem 0.75rem;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  min-width: 0;
+  max-width: 100%;
+  padding: 0.5rem 2.25rem 0.5rem 0.75rem;
+  background-image: var(--admin-select-caret);
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  background-size: 1rem 1rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.admin-select[multiple],
+.admin-select[size]:not([size='1']) {
+  padding-right: 0.75rem;
+  background-image: none;
+  white-space: normal;
+}
+
+.admin-select option {
+  background: var(--admin-surface-elevated);
+  color: var(--admin-ink);
+}
+
+.admin-select:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
 }
 
 .admin-input:hover,
 .admin-select:hover {
   border-color: var(--admin-muted);
-  background: var(--admin-surface);
+  background-color: var(--admin-surface);
 }
 
+/* Fields keep their glow, plus a solid ring color so focus never relies on a faint shadow alone (and survives forced-colors via the transparent outline). */
 .admin-input:focus,
 .admin-select:focus {
-  border-color: var(--admin-primary);
-  background: var(--admin-surface);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--admin-focus) 24%, transparent);
-  outline: none;
+  border-color: var(--admin-focus-ring);
+  background-color: var(--admin-surface);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--admin-focus-ring) 30%, transparent);
+  outline: 2px solid transparent;
+  outline-offset: 2px;
 }
 
 .admin-input[aria-invalid='true'],
@@ -1352,29 +1525,53 @@ tr.admin-sortable-row--dragging {
 
 .admin-page > * { min-width: 0; max-width: 100%; }
 
+/* Compact, centered paginator: ‹ 1 2 3 … 10 ›. Fixed page size, so nothing else lives in this row. */
 .admin-pagination {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
+  justify-content: center;
   min-width: 0;
-  padding-block: 1rem;
+  padding-block: 0.6rem 0.25rem;
   color: var(--admin-ink);
-  font-size: 0.88rem;
+  font-size: 0.8rem;
   font-variant-numeric: tabular-nums;
 }
 
-.admin-pagination__size,
 .admin-pagination__controls {
   display: flex;
   align-items: center;
+  justify-content: center;
   flex-wrap: wrap;
-  gap: 0.65rem;
+  gap: 0.25rem;
 }
 
-.admin-pagination__size .admin-select { width: auto; }
-.admin-pagination__controls .admin-btn { min-height: 44px; }
+.admin-pagination__button {
+  min-width: 32px;
+  min-height: 32px;
+  padding: 0 0.4rem;
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+  box-shadow: none;
+}
+.admin-pagination__page.is-current,
+.admin-pagination__page.is-current:hover {
+  --btn-bg: var(--admin-primary);
+  --btn-fg: var(--admin-on-primary);
+  --btn-border: var(--admin-primary);
+  --btn-bg-hover: var(--admin-primary);
+  --btn-fg-hover: var(--admin-on-primary);
+  --btn-border-hover: var(--admin-primary);
+  cursor: default;
+}
+.admin-pagination__ellipsis {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.1rem;
+  min-height: 32px;
+  color: var(--admin-muted);
+  user-select: none;
+}
 /*
  * Fits at 1366px without horizontal scroll: 9 data columns get an explicit
  * budget (auto table-layout still lets content nudge them, but truncation —
@@ -1423,10 +1620,6 @@ tr.admin-sortable-row--dragging {
   white-space: nowrap;
 }
 
-.admin-payment-cell .admin-badge {
-  padding: 0.16rem 0.5rem;
-  font-size: 0.68rem;
-}
 .admin-reservations-table th:nth-child(9),
 .admin-reservations-table td:nth-child(9) { width: 8.5rem; }
 /* Acciones: fixed width so "pencil + Confirmar" fits on one line without
@@ -1449,6 +1642,73 @@ tr.admin-sortable-row--dragging {
 .admin-reservation-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
 .admin-reservation-cards { display: none; }
 
+/*
+ * "Crear reserva manual": 12-column grid so every row shares one left/right edge and one gap. Controls keep the shared
+ * --admin-control-height; the "Máximo X" hint lives in the label row, so it never changes a field's height and the four
+ * inputs of the date/time/people/departure row stay on one baseline.
+ */
+.admin-reservation-modal { max-width: 56rem; }
+.admin-reservation-form {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  align-items: start;
+  gap: 1rem;
+}
+.admin-reservation-form .admin-input:not(textarea),
+.admin-reservation-form .admin-select { height: var(--admin-control-height); }
+.admin-reservation-form .admin-textarea-list { min-height: 5.5rem; }
+.admin-reservation-form__full { grid-column: 1 / -1; }
+.admin-reservation-form__half { grid-column: span 6; }
+.admin-reservation-form__quarter { grid-column: span 3; }
+.admin-field__label-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  min-width: 0;
+}
+.admin-field__label-row .admin-field-help {
+  flex: 0 0 auto;
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+.admin-reservation-total {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--admin-line);
+  border-radius: var(--admin-radius-sm);
+  background: var(--admin-primary-soft);
+}
+.admin-reservation-total__copy { display: grid; gap: 0.15rem; min-width: 0; }
+.admin-reservation-total__label {
+  color: var(--admin-ink);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.admin-reservation-total small { color: var(--admin-muted); font-size: 0.76rem; font-weight: 600; line-height: 1.35; }
+.admin-reservation-total__amount {
+  flex: 0 0 auto;
+  color: var(--admin-ink);
+  font-size: 1.6rem;
+  font-weight: 800;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+@media (max-width: 860px) {
+  .admin-reservation-form__quarter { grid-column: span 6; }
+}
+@media (max-width: 560px) {
+  .admin-reservation-form { gap: 0.85rem; }
+  .admin-reservation-form__half,
+  .admin-reservation-form__quarter { grid-column: 1 / -1; }
+  .admin-reservation-total { align-items: flex-start; flex-direction: column; gap: 0.5rem; }
+}
+
 @media (max-width: 767px) {
   .admin-reservations-table { display: none; }
   .admin-reservation-cards { display: grid; gap: 1.25rem; }
@@ -1458,9 +1718,6 @@ tr.admin-sortable-row--dragging {
   .admin-reservation-card dt { color: var(--admin-muted); font-size: 0.8rem; }
   .admin-reservation-card dd { margin: 0.2rem 0 0; color: var(--admin-ink); overflow-wrap: anywhere; }
   .admin-reservation-actions .admin-btn { min-height: 44px; }
-  .admin-pagination { align-items: stretch; }
-  .admin-pagination__controls { width: 100%; justify-content: space-between; }
-  .admin-pagination__controls .admin-btn { flex: 1; }
 }
 
 .admin-muted {
@@ -1697,14 +1954,22 @@ tr.admin-sortable-row--dragging {
 }
 
 .admin-media-card__empty {
+  display: grid;
+  aspect-ratio: 4 / 3;
+  place-items: center;
   background: var(--admin-surface-subtle);
   color: var(--admin-muted);
+  font-size: 0.875rem;
+  font-weight: 600;
 }
 
-.admin-media-card img {
+/* One preview for every media card: 4:3, always cover (Galeria is the reference; Portada and Sobre Nosotros use the same component). */
+.admin-media-card img,
+.admin-media-card video {
   display: block;
   width: 100%;
   aspect-ratio: 4 / 3;
+  background: var(--admin-canvas);
   object-fit: cover;
 }
 
@@ -1712,6 +1977,22 @@ tr.admin-sortable-row--dragging {
   display: grid;
   gap: 0.35rem;
   padding: 0.8rem;
+}
+
+.admin-media-card__body strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-media-card__sub:empty {
+  display: none;
+}
+
+.admin-media-card__body .admin-actions {
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: space-between;
 }
 
 .admin-login {
@@ -2193,6 +2474,7 @@ tr.admin-sortable-row--dragging {
 
 .admin-image-manager {
   display: grid;
+  flex: none;
   gap: 0.7rem;
 }
 
@@ -2214,8 +2496,19 @@ tr.admin-sortable-row--dragging {
   flex: 1;
 }
 
-.admin-image-manager__preview {
+/*
+ * The ONE media preview frame (AdminMediaPreview): Portada, Sobre Nosotros, Galería and the Tours / Botes photo slots all use it.
+ * Same box, same ratio, same border / background, and the media is always contained and centered (never stretched or cut).
+ * The frame is bounded (13rem) so a wide modal or a portrait photo never produces a giant preview.
+ */
+.admin-media-preview {
   position: relative;
+  display: grid;
+  width: 100%;
+  flex: none;
+  aspect-ratio: 16 / 9;
+  max-height: 13rem;
+  place-items: center;
   overflow: hidden;
   border: 1px dashed var(--admin-line);
   border-radius: var(--admin-radius-md);
@@ -2223,36 +2516,37 @@ tr.admin-sortable-row--dragging {
   transition: border-color 0.16s ease, background 0.16s ease;
 }
 
-.admin-image-manager__preview--drag {
+.admin-media-preview--drag {
   border-color: var(--admin-primary);
   background: var(--admin-primary-soft);
 }
 
-.admin-image-manager__preview img,
-.admin-image-manager__preview video {
+.admin-media-preview > img,
+.admin-media-preview > video {
+  position: absolute;
+  inset: 0;
   display: block;
   width: 100%;
-  aspect-ratio: var(--admin-image-preview-aspect, 16 / 9);
-  object-fit: cover;
+  height: 100%;
+  object-fit: contain;
 }
 
-.admin-image-manager__empty {
+.admin-media-preview__empty {
   display: grid;
-  min-height: 9rem;
   place-items: center;
   gap: 0.45rem;
+  padding: 0.75rem;
   color: var(--admin-muted);
   font-size: 0.84rem;
   font-weight: 600;
   text-align: center;
-  padding: 1rem;
 }
 
-.admin-image-manager__empty svg {
-  color: var(--admin-ink);
+.admin-media-preview__empty svg {
+  color: var(--admin-muted);
 }
 
-.admin-image-manager__overlay {
+.admin-media-preview__overlay {
   position: absolute;
   inset: 0;
   display: flex;
@@ -2286,6 +2580,41 @@ tr.admin-sortable-row--dragging {
   cursor: pointer;
 }
 
+/* Main-page "create": the primary icon-only "+" (same fill, hit target and focus ring as every .admin-btn). */
+.admin-create-btn svg {
+  flex: none;
+}
+
+/* Visibility control: always "Visible" / "No visible" (current state), one width so toggling never shifts the layout. */
+.admin-visibility-btn {
+  min-width: 7.5rem;
+}
+
+/* Icon-only button in the primary style (create "+", upload, crop confirm): a square with the shared hit target. */
+.admin-btn--icon {
+  width: var(--admin-hit-target);
+  min-width: var(--admin-hit-target);
+  padding-inline: 0;
+}
+
+/* Trigger variant (Tours / Botes slots): just the picker, filling the slot footer. */
+.admin-image-manager--trigger {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.admin-image-manager--trigger .admin-image-manager__pick {
+  width: 100%;
+}
+
+.admin-image-manager--trigger .admin-alert {
+  padding: 0.35rem 0.5rem;
+  font-size: 0.72rem;
+}
+
 .admin-image-crop {
   position: relative;
   overflow: hidden;
@@ -2295,25 +2624,51 @@ tr.admin-sortable-row--dragging {
 }
 
 .admin-image-crop__meta {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
+  display: grid;
+  justify-items: center;
+  gap: 0.6rem;
   margin-top: 0.7rem;
   color: var(--admin-muted);
   font-size: 0.78rem;
   font-weight: 600;
 }
 
-.admin-image-crop__zoom {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
+.admin-image-crop__meta > span {
+  justify-self: start;
 }
 
-.admin-image-crop__zoom input[type='range'] {
-  width: 9rem;
+/* Zoom: "Zoom 100%" centered above the bar; "-" on the left and "+" on the right of a centered slider. */
+.admin-image-crop__zoom {
+  display: grid;
+  width: 100%;
+  justify-items: center;
+  gap: 0.35rem;
+}
+
+.admin-image-crop__zoom-value {
+  margin: 0;
+  color: var(--admin-ink);
+  font-size: 0.88rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+.admin-image-crop__zoom-value output {
+  margin-left: 0.25rem;
+}
+
+.admin-image-crop__zoom-row {
+  display: flex;
+  width: 100%;
+  max-width: 24rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+}
+
+.admin-image-crop__zoom-row input[type='range'] {
+  flex: 1;
+  min-width: 0;
   accent-color: var(--admin-primary);
 }
 
@@ -2400,15 +2755,22 @@ tr.admin-sortable-row--dragging {
   min-width: 8rem;
 }
 
+/* The primary action of every modal footer (Guardar, Crear, Editar en Botes…) uses the Admin primary fill in both themes — the darkest
+   navy (--admin-primary-dark) is nearly invisible on the dark modal surface, which made primaries read as secondary. */
 .admin-modal-footer .admin-btn:not(.admin-btn--secondary):not(.admin-btn--ghost):not(.admin-btn--danger):not(.admin-btn--success) {
-  border-color: var(--admin-primary-dark);
-  background: var(--admin-primary-dark);
-  color: white;
+  border-color: var(--admin-primary);
+  background: var(--admin-primary);
+  color: var(--admin-on-primary);
+}
+
+.admin-modal-footer .admin-btn:not(.admin-btn--secondary):not(.admin-btn--ghost):not(.admin-btn--danger):not(.admin-btn--success):hover:not(:disabled) {
+  border-color: var(--admin-primary-hover);
+  background: var(--admin-primary-hover);
 }
 
 .admin-shell .admin-modal-footer button.admin-btn:not(.admin-btn--secondary):not(.admin-btn--ghost):not(.admin-btn--danger):not(.admin-btn--success) {
-  background-color: var(--admin-primary-dark);
-  color: #fff;
+  background-color: var(--admin-primary);
+  color: var(--admin-on-primary);
 }
 
 .admin-modal-body {
@@ -2504,11 +2866,6 @@ tr.admin-sortable-row--dragging {
 
 .admin-stepper__item button:hover {
   color: var(--admin-ink);
-}
-
-.admin-stepper__item button:focus-visible {
-  outline: 2px solid var(--admin-focus);
-  outline-offset: 2px;
 }
 
 .admin-stepper__item button span {
@@ -2678,6 +3035,7 @@ tr.admin-sortable-row--dragging {
 
 .admin-tour-image-slot {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   min-width: 0;
   gap: 0.55rem;
   padding: 0.65rem;
@@ -2702,40 +3060,6 @@ tr.admin-sortable-row--dragging {
 .admin-gallery-picker > header,
 .admin-package-preview {
   justify-content: space-between;
-}
-
-.admin-tour-image-slot img,
-.admin-tour-image-slot__empty {
-  width: 100%;
-  aspect-ratio: 3 / 2;
-  border: 1px solid var(--admin-line);
-  border-radius: var(--admin-radius-sm);
-  object-fit: cover;
-}
-
-.admin-tour-image-slot__media {
-  display: block;
-  width: 100%;
-  padding: 0;
-  overflow: hidden;
-  background: transparent;
-  border: 0;
-}
-
-.admin-tour-image-slot--editing {
-  grid-column: span 2;
-}
-
-.admin-tour-image-slot--editing .admin-image-manager {
-  min-width: 0;
-}
-
-.admin-tour-image-slot--editing .admin-image-manager__preview {
-  min-height: 9rem;
-}
-
-.admin-tour-image-slot--editing .admin-image-manager__path {
-  display: none;
 }
 
 .admin-location-chips {
@@ -2772,21 +3096,8 @@ tr.admin-sortable-row--dragging {
   color: var(--admin-danger);
 }
 
-.admin-location-chip button:focus-visible {
-  outline: 2px solid var(--admin-focus);
-  outline-offset: 2px;
-}
-
-.admin-tour-image-slot__empty {
-  display: grid;
-  place-items: center;
-  align-content: center;
-  gap: 0.35rem;
-  background: var(--admin-surface);
-  color: var(--admin-muted);
-  font: inherit;
-  font-size: 0.78rem;
-  cursor: pointer;
+.admin-tour-image-slot footer {
+  align-items: flex-start;
 }
 
 .admin-tour-image-slot footer .admin-btn {
@@ -2904,7 +3215,11 @@ tr.admin-sortable-row--dragging {
 .admin-token button:focus-visible {
   background: var(--admin-primary);
   color: white;
-  outline: none;
+}
+
+.admin-token button:focus-visible {
+  outline: var(--admin-focus-outline);
+  outline-offset: var(--admin-focus-offset);
 }
 
 .admin-dynamic-list,
@@ -3033,10 +3348,6 @@ tr.admin-sortable-row--dragging {
   object-fit: cover;
 }
 
-.admin-boat-modal .admin-image-manager__preview img {
-  max-height: 180px;
-}
-
 @media (max-width: 640px) {
   .admin-content {
     padding-inline: 0.75rem;
@@ -3064,18 +3375,26 @@ tr.admin-sortable-row--dragging {
     align-items: stretch;
   }
 
+  /* The search is the first control. With a primary action it takes the whole first row and the primary + icon controls share the
+     second row; without one, the icon controls sit beside it. */
   .admin-search-field {
     min-width: 0;
+    flex: 1 1 0;
+  }
+
+  .admin-toolbar:has(> .admin-btn) .admin-search-field {
     flex-basis: 100%;
   }
 
-  .admin-filter-menu,
-  .admin-filter-trigger {
-    width: 100%;
+  /* Phone: the search takes the first row; the second row keeps the same order — primary action (grows), then the icon controls
+     (filter, reorder, download). Same DOM order as on desktop, no CSS reordering. */
+  .admin-toolbar > .admin-btn {
+    flex: 1 1 auto;
   }
 
-  .admin-toolbar__actions {
-    width: 100%;
+  /* A group with text buttons (Guardar orden / Cancelar, while reordering) takes the primary slot and grows like the primary. */
+  .admin-toolbar__actions:has(.admin-btn) {
+    flex: 1 1 auto;
   }
 
   .admin-toolbar__actions .admin-btn {
@@ -3112,11 +3431,6 @@ tr.admin-sortable-row--dragging {
   .admin-actions,
   .admin-actions .admin-btn {
     width: 100%;
-  }
-
-  .admin-image-crop__meta {
-    flex-direction: column;
-    align-items: flex-start;
   }
 
   .admin-modal-header,
@@ -3189,10 +3503,6 @@ tr.admin-sortable-row--dragging {
 
   .admin-tour-image-slot {
     padding: 0.5rem;
-  }
-
-  .admin-tour-image-slot footer {
-    align-items: stretch;
   }
 
   .admin-package-preview {
@@ -3528,7 +3838,7 @@ tr.admin-sortable-row--dragging {
   }
 
   .admin-package-editor__footer {
-    flex-direction: column-reverse;
+    flex-direction: column;
     align-items: stretch;
   }
 
@@ -3704,27 +4014,6 @@ tr.admin-sortable-row--dragging {
   gap: 0.15rem;
 }
 
-/* Gallery slots reuse the Tours gallery; boat photos add cover / reorder tools in the slot footer. */
-.admin-boat-slot-tools {
-  display: flex;
-  align-items: center;
-  gap: 0.15rem;
-  margin-inline-start: auto;
-}
-
-.admin-tour-image-slot footer {
-  flex-wrap: wrap;
-}
-
-.admin-tour-image-slot footer .admin-boat-slot-tools {
-  flex: 0 0 auto;
-}
-
-.admin-tour-image-slot__empty:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
 /* Botes > Tours y paquetes: summary, "En este bote" and "Disponibles para agregar". */
 .admin-boat-tours__stats {
   display: flex;
@@ -3791,10 +4080,9 @@ tr.admin-sortable-row--dragging {
   display: none;
 }
 
-/* The panel of tours that can still be added stays in view next to the tours already offered. */
+/* The panel of tours that can still be added sits next to the tours already offered and grows with its content (never sticky/scrollable). */
 .admin-boat-tours__available {
-  position: sticky;
-  top: 0;
+  position: static;
   padding: 0.8rem 0.9rem;
   border: 1px solid var(--admin-line-soft);
   border-radius: var(--admin-radius-md);
@@ -3811,15 +4099,12 @@ tr.admin-sortable-row--dragging {
   font-size: 0.85rem;
 }
 
-/* Compact rows (name + small button). The list only scrolls inside the panel when it is long. */
+/* Compact rows (name + small button). The list grows with its content and the page scrolls: no inner scroll area. */
 .admin-boat-tours__available-list {
   display: grid;
   gap: 0;
-  max-height: min(22rem, 50vh);
   margin: 0;
   padding: 0;
-  overflow-y: auto;
-  overscroll-behavior: contain;
   list-style: none;
 }
 
@@ -3862,7 +4147,7 @@ tr.admin-sortable-row--dragging {
 }
 
 .admin-btn--sm {
-  min-height: 1.9rem;
+  min-height: var(--admin-control-height-sm);
   padding: 0.2rem 0.6rem;
   font-size: 0.8rem;
 }
@@ -3891,9 +4176,6 @@ tr.admin-sortable-row--dragging {
     position: static;
   }
 
-  .admin-boat-tours__available-list {
-    max-height: 16rem;
-  }
 }
 
 /* Resumen de paquetes > "Ver detalles": a compact, read-only summary card. */
@@ -4061,4 +4343,722 @@ tr.admin-sortable-row--dragging {
   .admin-package-detail__grid--metrics {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+}
+
+/* ------------------------------------------------------------------------------------------------------------------
+ * Dashboard: compact "Reservas recientes" + analytics (bars / weekly columns / donut). Dependency-free; every mark has
+ * its number/label as real text, the drawing is aria-hidden. Colours are tokens so light and dark both read.
+ * ---------------------------------------------------------------------------------------------------------------- */
+body:has(.admin-shell) {
+  --admin-chart-0: #2b5f82;
+  --admin-chart-1: #0f9f6e;
+  --admin-chart-2: #d97706;
+  --admin-chart-3: #7c5cc4;
+  --admin-chart-4: #c2418a;
+  --admin-chart-5: #0891b2;
+  --admin-chart-6: #64748b;
+  --admin-chart-7: #a16207;
+  --admin-chart-track: var(--admin-surface-subtle);
+}
+
+html[data-theme='dark'] body:has(.admin-shell) {
+  --admin-chart-0: #4fb6d6;
+  --admin-chart-1: #34d399;
+  --admin-chart-2: #fbbf24;
+  --admin-chart-3: #a78bfa;
+  --admin-chart-4: #f472b6;
+  --admin-chart-5: #22d3ee;
+  --admin-chart-6: #94a3b8;
+  --admin-chart-7: #fb923c;
+}
+
+.admin-dash-recent__header {
+  align-items: center;
+  padding-bottom: 0.25rem;
+}
+
+.admin-dash-recent__header h2 {
+  min-width: 0;
+  margin: 0;
+  font-size: 0.95rem;
+  line-height: 1.25;
+}
+
+/* A secondary summary, not the protagonist of the Dashboard: tight card, header and rows. */
+.admin-dashboard-reservations.admin-module-surface {
+  padding: 0.7rem 0.85rem 0.45rem;
+}
+
+/* Three short columns: the 50rem table minimum would force a sideways scroll on a phone. */
+.admin-dashboard-reservations .admin-table {
+  min-width: 0;
+}
+
+.admin-dashboard-reservations .admin-table th,
+.admin-dashboard-reservations .admin-table td {
+  padding: 0.3rem 0.55rem;
+  font-size: 0.82rem;
+  line-height: 1.25;
+}
+
+.admin-dashboard-reservations .admin-table th {
+  font-size: 0.68rem;
+}
+
+.admin-dashboard-reservations .admin-table th:last-child,
+.admin-dashboard-reservations .admin-table td:last-child {
+  text-align: right;
+}
+
+.admin-dash-analytics__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.admin-dash-chart {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  min-width: 0;
+  padding: 0.85rem;
+  border: 1px solid var(--admin-line-soft);
+  border-radius: var(--admin-radius-md);
+  background: var(--admin-surface);
+}
+
+.admin-dash-chart h3 {
+  margin: 0;
+  color: var(--admin-ink);
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.admin-dash-chart__note {
+  margin: -0.35rem 0 0;
+  color: var(--admin-muted);
+  font-size: 0.76rem;
+}
+
+.admin-dash-empty {
+  margin: 0;
+  padding: 1.25rem 0.5rem;
+  border: 1px dashed var(--admin-line);
+  border-radius: var(--admin-radius-sm);
+  color: var(--admin-muted);
+  font-size: 0.85rem;
+  text-align: center;
+}
+
+/* Horizontal bars: label + number on one line, bar underneath. */
+.admin-dash-bars,
+.admin-dash-weeks,
+.admin-dash-legend {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.admin-dash-bars {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.admin-dash-bars li {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.admin-dash-bars__row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.82rem;
+}
+
+.admin-dash-bars__label {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--admin-ink);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-dash-bars__value {
+  flex: 0 0 auto;
+  color: var(--admin-ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.admin-dash-bars__track {
+  display: block;
+  height: 0.5rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--admin-chart-track);
+}
+
+.admin-dash-bars__fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--admin-chart-0);
+}
+
+/* Weekly columns: 12 equal columns, count above, week start below. */
+.admin-dash-weeks {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 0.2rem;
+  align-items: end;
+}
+
+.admin-dash-weeks__item {
+  position: relative;
+  display: grid;
+  grid-template-rows: 1rem 7rem auto;
+  gap: 0.2rem;
+  min-width: 0;
+  text-align: center;
+}
+
+.admin-dash-weeks__count {
+  color: var(--admin-ink);
+  font-size: 0.72rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.admin-dash-weeks__track {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  border-bottom: 1px solid var(--admin-line);
+}
+
+.admin-dash-weeks__bar {
+  display: block;
+  width: 70%;
+  max-width: 1.5rem;
+  border-radius: 3px 3px 0 0;
+  background: var(--admin-chart-0);
+}
+
+.admin-dash-weeks__item--current .admin-dash-weeks__bar {
+  background: repeating-linear-gradient(135deg, var(--admin-chart-0) 0 4px, color-mix(in srgb, var(--admin-chart-0) 55%, var(--admin-surface)) 4px 8px);
+}
+
+.admin-dash-weeks__label {
+  overflow: hidden;
+  color: var(--admin-muted);
+  font-size: 0.62rem;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+.admin-dash-weeks__item--current .admin-dash-weeks__label {
+  color: var(--admin-ink);
+  font-weight: 700;
+}
+
+/* Donut + legend */
+.admin-dash-highlight {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.15rem 0.5rem;
+  margin: 0;
+  padding: 0.45rem 0.6rem;
+  border-radius: var(--admin-radius-sm);
+  background: var(--admin-surface-subtle);
+  color: var(--admin-muted);
+  font-size: 0.8rem;
+}
+
+.admin-dash-highlight strong {
+  color: var(--admin-ink);
+  font-size: 0.95rem;
+}
+
+.admin-dash-donut {
+  display: grid;
+  grid-template-columns: 6.5rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0.9rem;
+}
+
+.admin-dash-donut__svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  transform: none;
+}
+
+.admin-dash-donut__ring,
+.admin-dash-donut__seg {
+  stroke-width: 6;
+}
+
+.admin-dash-donut__ring {
+  stroke: var(--admin-chart-track);
+}
+
+.admin-dash-donut__seg {
+  stroke: var(--admin-chart-0);
+}
+
+.admin-dash-donut__total {
+  fill: var(--admin-ink);
+  font-size: 7px;
+  font-weight: 700;
+}
+
+.admin-dash-legend {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.admin-dash-legend li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.82rem;
+}
+
+.admin-dash-legend__swatch {
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 3px;
+  background: var(--admin-chart-0);
+}
+
+.admin-dash-legend__label {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--admin-ink);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-dash-legend__value {
+  color: var(--admin-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.admin-dash-legend__value strong {
+  color: var(--admin-ink);
+}
+
+/* One class colours both the donut segment (stroke) and its legend swatch (background); the other property is inert on each. */
+.admin-dash-color-0 { stroke: var(--admin-chart-0); background: var(--admin-chart-0); }
+.admin-dash-color-1 { stroke: var(--admin-chart-1); background: var(--admin-chart-1); }
+.admin-dash-color-2 { stroke: var(--admin-chart-2); background: var(--admin-chart-2); }
+.admin-dash-color-3 { stroke: var(--admin-chart-3); background: var(--admin-chart-3); }
+.admin-dash-color-4 { stroke: var(--admin-chart-4); background: var(--admin-chart-4); }
+.admin-dash-color-5 { stroke: var(--admin-chart-5); background: var(--admin-chart-5); }
+.admin-dash-color-6 { stroke: var(--admin-chart-6); background: var(--admin-chart-6); }
+.admin-dash-color-7 { stroke: var(--admin-chart-7); background: var(--admin-chart-7); }
+
+@media (max-width: 900px) {
+  .admin-dash-analytics__grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Phone: 12 week labels do not fit at 375px, so only every second one is drawn (the current week always is);
+   each column keeps its full text for screen readers and the hover title. */
+@media (max-width: 640px) {
+  .admin-dash-weeks__item:nth-child(odd) .admin-dash-weeks__label {
+    visibility: hidden;
+  }
+
+  /* The visible labels have their hidden neighbours' room, so let them spill over instead of being clipped. */
+  .admin-dash-weeks__label {
+    overflow: visible;
+    width: calc(100% + 1rem);
+    margin-inline: -0.5rem;
+  }
+
+  .admin-dash-weeks__item {
+    grid-template-rows: 1rem 6rem auto;
+  }
+
+  .admin-dash-donut {
+    grid-template-columns: 5.5rem minmax(0, 1fr);
+    gap: 0.7rem;
+  }
+}
+
+/* Touch screens get a slightly larger target; the paginator stays a single centered row (320px: ‹ 1 2 … 8 ›). */
+@media (pointer: coarse) {
+  .admin-pagination__button { min-width: 36px; min-height: 36px; }
+  .admin-pagination__ellipsis { min-height: 36px; }
+}
+
+@media (max-width: 360px) {
+  .admin-pagination__controls { gap: 0.15rem; }
+  .admin-pagination__button { min-width: 30px; min-height: 30px; padding-inline: 0.2rem; }
+  .admin-pagination__ellipsis { min-width: 0.9rem; min-height: 30px; }
+}
+
+/*
+ * Portada / Sobre Nosotros content screens (AdminContentSection). Scoped to .admin-content-section so
+ * nothing else that uses .admin-tabs / .admin-segmented changes. Inside a card the inner tabs, the
+ * Imágenes/Video switch and the preview stay flat (no drop shadow, no white outline, no gradient) so
+ * dark mode reads as one coherent surface; every colour comes from the --admin-* tokens.
+ */
+.admin-card.admin-content-section > p {
+  margin-bottom: 1rem;
+}
+
+.admin-content-section > .admin-alert {
+  margin-bottom: 1rem;
+}
+
+.admin-content-section .admin-tabs {
+  width: fit-content;
+  max-width: 100%;
+  border: 1px solid var(--admin-line);
+  background: var(--admin-surface-subtle);
+  box-shadow: none;
+}
+
+.admin-content-section .admin-tab:hover {
+  background: var(--admin-selected);
+}
+
+.admin-content-section .admin-tab--active,
+.admin-content-section .admin-tab--active:hover {
+  background: var(--admin-primary-hover);
+  color: var(--admin-on-primary);
+}
+
+.admin-content-section .admin-segmented button.admin-segmented__option--active {
+  background: var(--admin-primary-hover);
+  color: var(--admin-on-primary);
+}
+
+.admin-content-section .admin-segmented button:disabled {
+  cursor: progress;
+  opacity: 0.7;
+}
+
+.admin-content-preview {
+  padding: 1rem;
+  border: 1px solid var(--admin-line);
+  border-radius: 1rem;
+  background: #0b2533;
+  color: #ffffff;
+  box-shadow: none;
+}
+
+/* The preview sits inside .admin-card, whose "p" rule (muted colour / 0.88rem) would otherwise win over any utility class. */
+.admin-card .admin-content-preview p {
+  margin: 0;
+  color: rgb(255 255 255 / 0.85);
+  font-size: 1rem;
+}
+
+.admin-card .admin-content-preview .admin-content-preview__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0 0.75rem;
+  color: #9cc6da;
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.admin-card .admin-content-preview .admin-content-preview__eyebrow {
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.admin-card .admin-content-preview .admin-content-preview__lead {
+  max-width: 36rem;
+  margin: 0.5rem auto 0;
+  font-size: 0.95rem;
+  font-weight: 500;
+}
+
+.admin-card .admin-content-preview .admin-content-preview__text {
+  margin: 0.75rem 0 0;
+  font-size: 0.875rem;
+  line-height: 1.5rem;
+}
+
+@media (max-width: 640px) {
+  .admin-content-section .admin-tabs {
+    width: 100%;
+  }
+
+  .admin-content-section .admin-tabs .admin-tab {
+    flex: 1 1 0;
+  }
+}
+
+.admin-content-textarea {
+  min-height: 6.5rem;
+  max-height: 28rem;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+/* Comments editor: who wrote it and the text, above the moderation / visibility cards. */
+.admin-review-summary {
+  display: grid;
+  gap: 0.6rem;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid var(--admin-line-soft);
+  border-radius: var(--admin-radius-md);
+  background: var(--admin-surface-subtle);
+}
+
+/* Person avatar (Comentarios): always a circle, never squeezed or stretched by the row; the initial is centered both ways. */
+.admin-avatar {
+  display: block;
+  flex: none;
+  width: 2.5rem;
+  height: 2.5rem;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.admin-avatar--initial {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f2fafd;
+  color: #214f72;
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1;
+  text-align: center;
+}
+
+.admin-person {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.admin-person > span:not(.admin-avatar) {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.admin-review-summary__who {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+}
+
+.admin-review-summary__who p {
+  margin: 0;
+}
+
+.admin-review-summary__quote {
+  margin: 0;
+  color: var(--admin-ink);
+  font-size: 0.9rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+/* Portada preview: the real background (video or image) with the overlay and the texts, at a small scale. */
+.admin-hero-preview {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.admin-hero-preview__bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.admin-card .admin-content-preview .admin-hero-preview__source {
+  margin: 0;
+  color: rgb(255 255 255 / 0.65);
+  font-size: 0.72rem;
+}
+
+.admin-hero-preview__frame {
+  position: relative;
+  width: 100%;
+  margin-inline: auto;
+  overflow: hidden;
+  border-radius: 0.75rem;
+  background: linear-gradient(180deg, #0b2842 0%, #061b2f 56%, #020b14 100%);
+}
+
+.admin-hero-preview__frame--desktop {
+  width: 27rem;
+  max-width: 100%;
+  aspect-ratio: 16 / 9;
+}
+
+.admin-hero-preview__frame--mobile {
+  width: 12rem;
+  max-width: 100%;
+  aspect-ratio: 4 / 5;
+}
+
+/* The Hero preview is a compact editing tool: the dark container hugs the preview (no wide empty margins). */
+.admin-content-preview:has(.admin-hero-preview) {
+  width: fit-content;
+  max-width: 100%;
+  padding: 0.6rem 0.75rem 0.75rem;
+}
+
+.admin-content-preview:has(.admin-hero-preview) .admin-content-preview__label {
+  margin-bottom: 0.45rem;
+}
+
+.admin-hero-preview__media {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+}
+
+.admin-hero-preview__video {
+  pointer-events: none;
+  transition: opacity 0.15s linear;
+}
+
+.admin-hero-preview__overlay {
+  position: absolute;
+  inset: 0;
+  background: rgb(6 27 47 / 0.45);
+}
+
+.admin-hero-preview__empty {
+  position: absolute;
+  inset: 0.6rem;
+  display: grid;
+  place-items: center;
+  border: 1px dashed rgb(255 255 255 / 0.3);
+  border-radius: 0.5rem;
+  color: rgb(255 255 255 / 0.65);
+  font-size: 0.7rem;
+  text-align: center;
+}
+
+.admin-hero-preview__text {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 0.3rem;
+  padding: 0.75rem 1rem;
+  text-align: center;
+}
+
+.admin-card .admin-content-preview .admin-hero-preview__eyebrow {
+  margin: 0;
+  color: rgb(255 255 255 / 0.78);
+  font-size: 0.56rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.admin-card .admin-content-preview .admin-hero-preview__title {
+  display: grid;
+  margin: 0;
+  color: #fff;
+  font-size: 1.45rem;
+  font-weight: 800;
+  line-height: 1.02;
+}
+
+.admin-card .admin-content-preview .admin-hero-preview__subtitle {
+  display: -webkit-box;
+  max-width: 20rem;
+  margin: 0;
+  overflow: hidden;
+  color: rgb(255 255 255 / 0.85);
+  font-size: 0.66rem;
+  font-weight: 500;
+  line-height: 1.35;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.admin-hero-preview__frame--mobile .admin-hero-preview__text {
+  padding: 0.6rem;
+}
+
+.admin-card .admin-content-preview .admin-hero-preview__frame--mobile .admin-hero-preview__title {
+  font-size: 1.05rem;
+}
+
+.admin-card .admin-content-preview .admin-hero-preview__frame--mobile .admin-hero-preview__subtitle {
+  font-size: 0.58rem;
+}
+
+/* Sobre Nosotros preview: title, first paragraph and small carousel thumbnails. */
+.admin-about-preview {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.admin-card .admin-content-preview .admin-about-preview__title {
+  margin: 0;
+  color: #fff;
+  font-size: 1rem;
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+.admin-card .admin-content-preview .admin-about-preview__copy p {
+  display: -webkit-box;
+  margin: 0.25rem 0 0;
+  overflow: hidden;
+  font-size: 0.8rem;
+  line-height: 1.35;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.admin-about-preview__thumbs {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(4.75rem, 1fr));
+  gap: 0.4rem;
+  max-width: 28rem;
+}
+
+.admin-about-preview__thumbs img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  border-radius: 0.4rem;
+  object-fit: cover;
+}
+
+.admin-about-preview__empty {
+  display: grid;
+  place-items: center;
+  max-width: 28rem;
+  padding: 0.75rem;
+  border: 1px dashed rgb(255 255 255 / 0.25);
+  border-radius: 0.5rem;
+  color: rgb(255 255 255 / 0.65);
+  font-size: 0.72rem;
 }

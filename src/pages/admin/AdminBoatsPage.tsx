@@ -1,11 +1,12 @@
-import { ArrowDown, ArrowUp, Check, ChevronLeft, ChevronRight, Eye, EyeOff, Image as ImageIcon, Info, Loader2, Pencil, Plus, Save, Settings2, Star, Trash2, Users, X } from 'lucide-react';
+import { Check, ChevronLeft, ChevronRight, Image as ImageIcon, Info, Loader2, Pencil, Plus, Settings2, Trash2, Users, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 
 import AdminConfirmDialog from '../../components/admin/AdminConfirmDialog';
 import AdminImageManager from '../../components/admin/AdminImageManager';
+import AdminImageSlots from '../../components/admin/AdminImageSlots';
 import AdminStepper, { type AdminStepperStep } from '../../components/admin/AdminStepper';
-import { AdminBadge, AdminFilterMenu, AdminListToolbar, AdminModuleSurface, AdminPageHeader, AdminReorderHandle, AdminReorderToolbar, AdminTable } from '../../components/admin/AdminPrimitives';
+import { AdminBadge, AdminCreateButton, AdminVisibilityButton, AdminFilterMenu, AdminListToolbar, AdminModuleSurface, AdminPageHeader, AdminReorderHandle, AdminTable } from '../../components/admin/AdminPrimitives';
 import BoatToursPackagesEditor from '../../components/admin/BoatToursPackagesEditor';
 import FormSection from '../../components/admin/FormSection';
 import ModalFooter from '../../components/admin/ModalFooter';
@@ -33,7 +34,7 @@ interface BoatImageRow {
    * true only for synthetic rows computed client-side by fallbackBoatImages() from the
    * legacy boats.images/image_url columns — they do NOT exist in boat_images (their id
    * is a fake "legacy-<boatId>-<n>" string, not a real uuid). Read-only preview only:
-   * never pass one of these to setPrimaryImage / moveImage / deleteBoatImage, which
+   * never pass one of these to replaceBoatImage / deleteBoatImage, which
    * write to boat_images by real id. Real rows never set this flag.
    */
   synthetic?: boolean;
@@ -79,12 +80,25 @@ interface BoatRow {
   image_url: string | null;
   image_public_id: string | null;
   active: boolean;
+  publication_status: BoatStatus;
   sort_order: number;
   boat_images?: BoatImageRow[];
   equipment: BoatEquipmentEditItem[];
 }
 
 type BoatStep = 'info' | 'gallery' | 'tours' | 'config';
+
+/** Same editorial states as Tours (`publication_status`): draft = borrador, published = activo, inactive = oculto. `active` is derived from it by a DB trigger. */
+type BoatStatus = 'draft' | 'published' | 'inactive';
+
+function boatStatus(boat: { publication_status?: string | null; active: boolean }): BoatStatus {
+  return boat.publication_status === 'draft' || boat.publication_status === 'inactive' || boat.publication_status === 'published'
+    ? boat.publication_status
+    : boat.active ? 'published' : 'inactive';
+}
+
+/** The status the row shows in the list / badges. */
+const statusBadge = (status: BoatStatus) => (status === 'published' ? 'active' : status);
 
 const boatSteps: Array<AdminStepperStep<BoatStep>> = [
   { id: 'info', label: 'Información' },
@@ -144,7 +158,7 @@ function publicStoragePath(value: string): string | null {
 // display-only.
 // The synthetic "legacy-<boatId>-<n>" id is not a real uuid; callers must check
 // `.synthetic` and hide/disable edit actions for these rows (see editorImages below) —
-// setPrimaryImage / moveImage / deleteBoatImage write to boat_images by real id and will
+// replaceBoatImage / deleteBoatImage write to boat_images by real id and will
 // fail (or worse, silently no-op) against a synthetic one.
 function fallbackBoatImages(boat: BoatRow): BoatImageRow[] {
   const urls = Array.from(new Set([boat.image_url, ...(boat.images ?? [])].filter(Boolean))) as string[];
@@ -211,7 +225,6 @@ export default function AdminBoatsPage() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [editing, setEditing] = useState<BoatRow | null>(null);
-  const [gallerySlot, setGallerySlot] = useState<number | null>(null);
   const [pendingDelete, setPendingDelete] = useState<BoatImageRow | null>(null);
   const [pendingBoatDelete, setPendingBoatDelete] = useState<BoatRow | null>(null);
   const [boatStep, setBoatStep] = useState<BoatStep>('info');
@@ -231,7 +244,7 @@ export default function AdminBoatsPage() {
   const [fieldErrors, setFieldErrors] = useState<BoatFieldErrors>({});
   const focusBoatName = () => window.requestAnimationFrame(() => document.getElementById('boat-name')?.focus());
   const [search, setSearch] = useState('');
-  const [boatStatusFilter, setBoatStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
+  const [boatStatusFilter, setBoatStatusFilter] = useState<'all' | 'active' | 'draft' | 'inactive'>('all');
   const [equipmentInput, setEquipmentInput] = useState('');
 
   async function loadBoats() {
@@ -239,7 +252,7 @@ export default function AdminBoatsPage() {
     setError('');
     const { data, error } = await supabase
       .from('boats')
-      .select('id, slug, name, images, badge, badge_en, badge_es, length, engine, featured_spec, max_guests, image_url, image_public_id, active, sort_order')
+      .select('id, slug, name, images, badge, badge_en, badge_es, length, engine, featured_spec, max_guests, image_url, image_public_id, active, publication_status, sort_order')
       .order('sort_order', { ascending: true });
 
     if (error) {
@@ -249,7 +262,7 @@ export default function AdminBoatsPage() {
       return;
     }
 
-    const rows = ((data ?? []) as unknown as BoatRow[]).map((boat) => withEditableBadge({ ...boat, images: Array.isArray(boat.images) ? boat.images : [] }));
+    const rows = ((data ?? []) as unknown as BoatRow[]).map((boat) => withEditableBadge({ ...boat, publication_status: boatStatus(boat), images: Array.isArray(boat.images) ? boat.images : [] }));
     const boatIds = rows.map((boat) => boat.id);
     const imagesResult = boatIds.length
       ? await db
@@ -288,7 +301,7 @@ export default function AdminBoatsPage() {
     // Read-only: boat_images rows as-is, or [] when a boat has none yet. NEVER
     // fallbackBoatImages() here — that would put synthetic, unpersisted rows into
     // editing.boat_images, which the write handlers (onGalleryImageSaved,
-    // deleteBoatImage, setPrimaryImage, moveImage) trust as real. The synthetic
+    // deleteBoatImage) trust as real. The synthetic
     // read-only preview is applied only at render time, in editorImages below.
     setBoats(rows.map((boat) => ({ ...boat, boat_images: imagesByBoat.get(boat.id) ?? [], equipment: equipmentByBoat.get(boat.id) ?? [] })));
     setLoading(false);
@@ -350,7 +363,6 @@ export default function AdminBoatsPage() {
     setBoatStep('info');
     setFocusTourId(undefined);
     setFocusPackageId(undefined);
-    setGallerySlot(null);
     setFieldErrors({});
     setEquipmentInput('');
   }
@@ -380,6 +392,7 @@ export default function AdminBoatsPage() {
       image_url: null,
       image_public_id: null,
       active: false,
+      publication_status: 'draft',
       // Placeholder: the real value is max(sort_order)+1, read fresh right before the insert.
       sort_order: 0,
       boat_images: [],
@@ -393,7 +406,6 @@ export default function AdminBoatsPage() {
     setEditing(null);
     setFocusTourId(undefined);
     setFocusPackageId(undefined);
-    setGallerySlot(null);
     setPendingDelete(null);
     setPendingBoatDelete(null);
   }
@@ -418,7 +430,7 @@ export default function AdminBoatsPage() {
     if (!boatId) return;
     const { data } = await supabase
       .from('boats')
-      .select('id, slug, name, images, badge, badge_en, badge_es, length, engine, featured_spec, max_guests, image_url, image_public_id, active, sort_order')
+      .select('id, slug, name, images, badge, badge_en, badge_es, length, engine, featured_spec, max_guests, image_url, image_public_id, active, publication_status, sort_order')
       .eq('id', boatId)
       .single();
     if (!data) return;
@@ -436,7 +448,7 @@ export default function AdminBoatsPage() {
       .order('sort_order', { ascending: true });
     const rawBoat = data as unknown as BoatRow;
     const boat = {
-      ...withEditableBadge(rawBoat),
+      ...withEditableBadge({ ...rawBoat, publication_status: boatStatus(rawBoat) }),
       images: Array.isArray(rawBoat.images) ? rawBoat.images.filter((item): item is string => typeof item === 'string') : [],
       boat_images: (imagesResult.data ?? []) as BoatImageRow[],
       equipment: ((equipmentResult.data ?? []) as Array<{ id: string; label: string; label_es: string | null; label_en: string | null; sort_order: number }>)
@@ -450,14 +462,16 @@ export default function AdminBoatsPage() {
   //  - "Guardar" (last step) is the final save: it requires everything a public boat needs and
   //    makes the boat visible — unless the admin hid it from Configuración in this session, in
   //    which case it only saves the changes and the boat stays hidden.
-  //  - "Guardar borrador" (any step) needs just the name and capacity, saves progress and NEVER
-  //    changes visibility: a new boat is created hidden; a boat that is already visible stays so.
+  //  - "Guardar borrador" (any step) needs just the name and capacity, saves progress and sets the
+  //    boat to draft (publication_status = 'draft', hidden) — exactly what Tours does.
   //  - "advance" (Siguiente from Información) saves the info fields — creating the row the first
-  //    time, exactly once — without touching visibility either.
+  //    time, exactly once, as a draft — without touching the status of an existing boat.
   //  - "Mostrar/Ocultar bote" (Configuración) is the explicit switch: toggleBoatVisibility.
   async function saveEditor(requestedMode: 'draft' | 'publish' | 'advance'): Promise<boolean> {
     if (!editing || saving || savingRef.current) return false;
-    const mode = requestedMode === 'publish' && keepHiddenRef.current ? 'draft' : requestedMode;
+    // Hidden on purpose (Configuración): "Guardar" saves the changes and leaves the status as it is.
+    const keepStatus = requestedMode === 'publish' && keepHiddenRef.current;
+    const mode = keepStatus ? 'draft' : requestedMode;
     const isExisting = Boolean(boats?.some((boat) => boat.id === editing.id));
     const name = editing.name.trim();
     const nextFieldErrors = validateBoat(editing, mode);
@@ -508,8 +522,8 @@ export default function AdminBoatsPage() {
         nextSortOrder = (highest?.sort_order ?? 0) + 1;
       }
       const { error: boatError } = isExisting
-        ? await supabase.from('boats').update(mode === 'publish' ? { ...common, active: true } : common).eq('id', editing.id)
-        : await supabase.from('boats').insert({ ...common, id, active: mode === 'publish', sort_order: nextSortOrder });
+        ? await supabase.from('boats').update(keepStatus || mode === 'advance' ? common : { ...common, publication_status: mode === 'publish' ? 'published' : 'draft' }).eq('id', editing.id)
+        : await supabase.from('boats').insert({ ...common, id, publication_status: mode === 'publish' ? 'published' : 'draft', sort_order: nextSortOrder });
       if (boatError) throw new Error(boatError.message);
 
       for (const item of editing.equipment) {
@@ -556,11 +570,11 @@ export default function AdminBoatsPage() {
         await loadBoats();
       } else {
         setNotice(
-          mode === 'publish'
-            ? (editing.active ? 'Bote guardado.' : 'Bote publicado.')
-            : editing.active ? 'Cambios guardados. El bote sigue visible.'
-            : keepHiddenRef.current ? 'Cambios guardados. El bote sigue oculto.'
-            : 'Borrador guardado.',
+          keepStatus
+            ? 'Cambios guardados. El bote sigue oculto.'
+            : mode === 'publish'
+              ? (editing.active ? 'Bote guardado.' : 'Bote publicado.')
+              : 'Borrador guardado.',
         );
         setEditing(null);
         setFocusTourId(undefined);
@@ -581,7 +595,9 @@ export default function AdminBoatsPage() {
   // like the same control in Tours). Showing re-runs the publication rules; hiding never needs them.
   async function toggleBoatVisibility() {
     if (!editing || saving || savingRef.current || togglingVisibility) return;
-    const nextActive = !editing.active;
+    // Same as Tours: published -> inactive; draft / inactive -> published (which re-runs the publication rules).
+    const nextStatus: BoatStatus = boatStatus(editing) === 'published' ? 'inactive' : 'published';
+    const nextActive = nextStatus === 'published';
     if (nextActive) {
       const errors = validateBoat(editing, 'publish');
       setFieldErrors(errors);
@@ -593,14 +609,14 @@ export default function AdminBoatsPage() {
     setTogglingVisibility(true);
     setError('');
     setNotice('');
-    const { error: toggleError } = await supabase.from('boats').update({ active: nextActive, updated_at: new Date().toISOString() }).eq('id', editing.id);
+    const { error: toggleError } = await supabase.from('boats').update({ publication_status: nextStatus, updated_at: new Date().toISOString() }).eq('id', editing.id);
     setTogglingVisibility(false);
     if (toggleError) {
       setError(toggleError.message);
       return;
     }
     keepHiddenRef.current = !nextActive;
-    setEditing((current) => (current ? { ...current, active: nextActive } : current));
+    setEditing((current) => (current ? { ...current, active: nextActive, publication_status: nextStatus } : current));
     setNotice(nextActive ? 'Bote activado.' : 'Bote oculto.');
     await loadBoats();
   }
@@ -638,27 +654,6 @@ export default function AdminBoatsPage() {
     setEditing({ ...editing, equipment: editing.equipment.map((item) => (item.id === itemId ? { ...item, pendingDelete: true } : item)) });
   }
 
-  // Swaps sort_order with the neighboring visible item — simple, and
-  // consistent with how tour_inclusions/activities order themselves in
-  // this admin (no drag-and-drop elsewhere in these list fields either).
-  function moveEquipmentItem(itemId: string, direction: -1 | 1) {
-    if (!editing) return;
-    const visible = editing.equipment.filter((item) => !item.pendingDelete).sort((a, b) => a.sortOrder - b.sortOrder);
-    const index = visible.findIndex((item) => item.id === itemId);
-    const targetIndex = index + direction;
-    if (index === -1 || targetIndex < 0 || targetIndex >= visible.length) return;
-    const current = visible[index];
-    const target = visible[targetIndex];
-    setEditing({
-      ...editing,
-      equipment: editing.equipment.map((item) => {
-        if (item.id === current.id) return { ...item, sortOrder: target.sortOrder };
-        if (item.id === target.id) return { ...item, sortOrder: current.sortOrder };
-        return item;
-      }),
-    });
-  }
-
   async function deleteBoat(boat: BoatRow) {
     setSaving(true);
     setError('');
@@ -691,7 +686,7 @@ export default function AdminBoatsPage() {
     setSaving(false);
     setPendingBoatDelete(null);
     setEditing(null);
-    if (renumberError) setError(`Bote eliminado, pero no se pudo renumerar el orden: ${renumberError}. Usa Reordenar > Guardar orden.`);
+    if (renumberError) setError(`Bote eliminado, pero no se pudo renumerar el orden: ${renumberError}. Usa Reordenar > Guardar.`);
     else setNotice('Bote eliminado.');
     await loadBoats();
   }
@@ -703,7 +698,7 @@ export default function AdminBoatsPage() {
     const nextImageCount = currentImages.length + 1;
     const deactivatedForImageCount = editing.active && !isValidActiveImageCount(nextImageCount);
     if (deactivatedForImageCount) {
-      const { error: deactivateError } = await supabase.from('boats').update({ active: false, updated_at: new Date().toISOString() }).eq('id', editing.id);
+      const { error: deactivateError } = await supabase.from('boats').update({ publication_status: 'draft', updated_at: new Date().toISOString() }).eq('id', editing.id);
       if (deactivateError) throw new Error(deactivateError.message);
     }
     const shouldBePrimary = currentImages.length === 0;
@@ -755,38 +750,6 @@ export default function AdminBoatsPage() {
     if (cleanup === 'pending') setError('Foto cambiada. La foto anterior no se pudo borrar del almacenamiento y quedó pendiente de limpieza.');
   }
 
-  async function setPrimaryImage(image: BoatImageRow) {
-    if (!editing) return;
-    setError('');
-    const currentImages = editing.boat_images ?? [];
-    await db.from('boat_images').update({ is_primary: false }).eq('boat_id', editing.id);
-    const { error } = await db.from('boat_images').update({ is_primary: true, active: true }).eq('id', image.id);
-    if (error) {
-      setError(error.message);
-      return;
-    }
-    await syncBoatImageFields(editing.id, currentImages.map((item) => ({ ...item, is_primary: item.id === image.id })));
-    await refreshEditing(editing.id);
-  }
-
-  async function moveImage(image: BoatImageRow, direction: -1 | 1) {
-    if (!editing) return;
-    const images = [...(editing.boat_images ?? [])].sort((a, b) => a.sort_order - b.sort_order);
-    const index = images.findIndex((item) => item.id === image.id);
-    const nextIndex = index + direction;
-    if (index < 0 || nextIndex < 0 || nextIndex >= images.length) return;
-    [images[index], images[nextIndex]] = [images[nextIndex], images[index]];
-    const updates = images.map((item, sort_order) => db.from('boat_images').update({ sort_order }).eq('id', item.id));
-    const results = await Promise.all(updates);
-    const firstError = results.find((result) => result.error)?.error;
-    if (firstError) {
-      setError(firstError.message);
-      return;
-    }
-    await syncBoatImageFields(editing.id, images.map((item, sort_order) => ({ ...item, sort_order })));
-    await refreshEditing(editing.id);
-  }
-
   async function deleteBoatImage(image: BoatImageRow) {
     if (!editing) return;
     const currentImages = editing.boat_images ?? [];
@@ -836,7 +799,7 @@ export default function AdminBoatsPage() {
   const publishErrors = editing ? validateBoat(editing, 'publish') : {};
   const publishMissing = [publishErrors.name && 'Nombre del bote', publishErrors.maxGuests && 'Capacidad máxima', publishErrors.images && 'Al menos 3 fotos'].filter(Boolean) as string[];
   const visibleBoats = (boats ?? [])
-    .filter((boat) => boatStatusFilter === 'all' || (boatStatusFilter === 'active') === boat.active)
+    .filter((boat) => boatStatusFilter === 'all' || statusBadge(boatStatus(boat)) === boatStatusFilter)
     .filter((boat) => boat.name.toLowerCase().includes(search.toLowerCase()));
   const reorder = useAdminReorder<BoatRow>(boats ?? []);
   const canReorder = search.trim() === '' && boatStatusFilter === 'all';
@@ -863,25 +826,24 @@ export default function AdminBoatsPage() {
             <AdminFilterMenu panelLabel="Filtros de botes" panelDescription="Refina la lista de botes." activeCount={Number(boatStatusFilter !== 'all')} onReset={() => setBoatStatusFilter('all')}>
               <label className="admin-field">
                 <span className="admin-field__label">Estado</span>
-                <select className="admin-select" value={boatStatusFilter} onChange={(event) => setBoatStatusFilter(event.target.value as 'all' | 'active' | 'inactive')}>
+                <select className="admin-select" value={boatStatusFilter} onChange={(event) => setBoatStatusFilter(event.target.value as 'all' | 'active' | 'draft' | 'inactive')}>
                   <option value="all">Todos</option>
                   <option value="active">Activos</option>
+                  <option value="draft">Borradores</option>
                   <option value="inactive">Inactivos</option>
                 </select>
               </label>
             </AdminFilterMenu>
           }
-          primaryAction={<button className="admin-btn" type="button" disabled={reorder.reordering} onClick={() => void createBoat()}><Plus size={16} /> Crear bote</button>}
-          secondaryActions={
-            <AdminReorderToolbar
-              reordering={reorder.reordering}
-              saving={reorder.saving}
-              onStart={() => reorder.start()}
-              onCancel={reorder.cancel}
-              onSave={() => void reorder.save(persistBoatOrder)}
-              disabledReason={canReorder ? undefined : 'Limpia la búsqueda y el filtro de estado para reordenar.'}
-            />
-          }
+          primaryAction={<AdminCreateButton label="Crear bote" disabled={reorder.reordering} onClick={() => void createBoat()} />}
+          reorder={{
+            reordering: reorder.reordering,
+            saving: reorder.saving,
+            onStart: () => reorder.start(),
+            onCancel: reorder.cancel,
+            onSave: () => void reorder.save(persistBoatOrder),
+            disabledReason: canReorder ? undefined : 'Limpia la búsqueda y el filtro de estado para reordenar.',
+          }}
         />
 
       {error ? (
@@ -918,7 +880,7 @@ export default function AdminBoatsPage() {
                   />
                 ) : boat.sort_order}
               </td>
-              <td><AdminBadge value={boat.active} /></td>
+              <td><AdminBadge value={statusBadge(boatStatus(boat))} /></td>
               <td>
                 <div className="admin-row-actions">
                   <button className="admin-icon-action" type="button" disabled={reorder.reordering} title="Editar bote" aria-label={`Editar bote ${boat.name}`} onClick={() => openEditor(boat)}><Pencil size={17} /></button>
@@ -971,13 +933,11 @@ export default function AdminBoatsPage() {
                       <label className="admin-field">
                         <span className="admin-field__label">Nombre</span>
                         <input id="boat-name" name="name" className="admin-input" aria-required="true" aria-invalid={fieldErrors.name ? true : undefined} aria-describedby={fieldErrors.name ? 'boat-name-error' : undefined} placeholder="Ej. Second Wind" value={editing.name} onChange={(event) => setEditing({ ...editing, name: event.target.value })} />
-                        <span className="admin-field-help">Nombre propio: no se traduce.</span>
                         {fieldErrors.name ? <span id="boat-name-error" className="admin-field-error" role="alert">{fieldErrors.name}</span> : null}
                       </label>
                       <label className="admin-field">
                         <span className="admin-field__label">Etiqueta</span>
                         <input id="boat-badge" name="badge" className="admin-input" value={editing.badge ?? ''} onChange={(event) => setEditing({ ...editing, badge: event.target.value || null })} placeholder="e.g. Luxury meets nature" />
-                        <span className="admin-field-help">En inglés: el español se genera al guardar.</span>
                       </label>
                     </FormSection>
 
@@ -1011,7 +971,7 @@ export default function AdminBoatsPage() {
                     </FormSection>
                   </div>
 
-                  <FormSection title="Equipamiento" description="Lo que ofrece el bote. Escríbelo en inglés: el español se genera al guardar." icon={<Settings2 size={16} />}>
+                  <FormSection title="Equipamiento" description="Lo que ofrece el bote." icon={<Settings2 size={16} />}>
                     <div className="admin-tour-list-field__add">
                       <input
                         id="boat-equipment-input"
@@ -1034,8 +994,6 @@ export default function AdminBoatsPage() {
                               <input className="admin-input" value={item.labelEn} placeholder="e.g. Garmin GPS" onChange={(event) => updateEquipmentLabel(item.id, event.target.value)} aria-label={`Equipamiento ${index + 1}`} />
                             </label>
                             <div className="admin-equipment-row__actions">
-                              <button type="button" className="admin-icon-action" aria-label={`Subir ${item.labelEn || item.label}`} title="Subir" disabled={index === 0} onClick={() => moveEquipmentItem(item.id, -1)}><ArrowUp size={15} /></button>
-                              <button type="button" className="admin-icon-action" aria-label={`Bajar ${item.labelEn || item.label}`} title="Bajar" disabled={index === visibleEquipment.length - 1} onClick={() => moveEquipmentItem(item.id, 1)}><ArrowDown size={15} /></button>
                               <button type="button" className="admin-icon-action admin-icon-action--danger" aria-label={`Eliminar ${item.labelEn || item.label}`} title="Quitar" onClick={() => removeEquipmentItem(item.id)}><Trash2 size={15} /></button>
                             </div>
                           </li>
@@ -1055,64 +1013,35 @@ export default function AdminBoatsPage() {
                       Estas fotos pertenecen al formato anterior y se muestran solo como referencia. Las nuevas imágenes del bote se administran desde esta galería.
                     </p>
                   ) : null}
-                  <div className="admin-tour-image-slots">
-                    {Array.from({ length: 6 }, (_, index) => {
+                  <AdminImageSlots
+                    images={editorImages.map((image) => ({ id: image.id, url: image.image_url, alt: image.alt_text, cover: Boolean(image.is_primary), locked: Boolean(image.synthetic) }))}
+                    onDelete={(item) => setPendingDelete(editorImages.find((image) => image.id === item.id) ?? null)}
+                    fallbackAlt={(index) => `${editing.name} foto ${index + 1}`}
+                    // New photos are appended, so only the first empty slot can be filled.
+                    canFill={(index) => index === editorImages.length}
+                    renderManager={(index, _slotImage, picker) => {
                       const image = editorImages[index];
-                      const selected = gallerySlot === index;
-                      // New photos are appended, so only the first empty slot can be filled.
-                      const canFill = index === editorImages.length;
                       return (
-                        <article className={`admin-tour-image-slot${selected ? ' admin-tour-image-slot--editing' : ''}`} key={image?.id ?? index}>
-                          <header><strong>Foto {index + 1}</strong>{image?.is_primary ? <AdminBadge value="Portada" /> : null}</header>
-                          {selected ? (
-                            <AdminImageManager
-                              resourceTable="boats"
-                              resourceId={editing.id}
-                              folder="boats"
-                              label={`${editing.name || 'Bote'} foto ${index + 1}`}
-                              aspect={16 / 9}
-                              maxWidth={1600}
-                              maxHeight={900}
-                              maxSizeMB={0.6}
-                              retainPreviousOnUpload
-                              {...(image && !image.synthetic ? { currentImageUrl: image.image_url, currentStoragePath: image.storage_path, requireReplacementToDelete: true } : {})}
-                              onImageSaved={async (saved) => {
-                                if (image && !image.synthetic) await replaceBoatImage(saved, image);
-                                else await onGalleryImageSaved(saved);
-                                setGallerySlot(null);
-                              }}
-                            />
-                          ) : image ? (
-                            <button className="admin-tour-image-slot__media" type="button" aria-label={`Cambiar foto ${index + 1}`} disabled={image.synthetic} onClick={() => setGallerySlot(index)}>
-                              <img src={image.image_url} alt={image.alt_text || `${editing.name} foto ${index + 1}`} loading="lazy" decoding="async" />
-                            </button>
-                          ) : (
-                            <button className="admin-tour-image-slot__empty" type="button" disabled={!canFill} onClick={() => setGallerySlot(index)}><Plus size={18} /> Seleccionar</button>
-                          )}
-                          <footer>
-                            {selected ? (
-                              <button className="admin-btn admin-btn--ghost" type="button" onClick={() => setGallerySlot(null)}>Cerrar</button>
-                            ) : image ? (
-                              image.synthetic ? null : (
-                                <>
-                                  <button className="admin-btn admin-btn--ghost" type="button" onClick={() => setGallerySlot(index)}>Cambiar</button>
-                                  <div className="admin-boat-slot-tools">
-                                    {!image.is_primary ? <button className="admin-icon-btn" type="button" aria-label={`Marcar foto ${index + 1} como portada`} title="Marcar como portada" onClick={() => void setPrimaryImage(image)}><Star size={15} /></button> : null}
-                                    <button className="admin-icon-btn" type="button" aria-label={`Mover foto ${index + 1} a la izquierda`} title="Mover a la izquierda" disabled={index === 0} onClick={() => void moveImage(image, -1)}><ChevronLeft size={15} /></button>
-                                    <button className="admin-icon-btn" type="button" aria-label={`Mover foto ${index + 1} a la derecha`} title="Mover a la derecha" disabled={index === editorImages.length - 1} onClick={() => void moveImage(image, 1)}><ChevronRight size={15} /></button>
-                                    <button className="admin-icon-btn" type="button" aria-label={`Eliminar foto ${index + 1}`} title="Eliminar" onClick={() => setPendingDelete(image)}><Trash2 size={15} /></button>
-                                  </div>
-                                </>
-                              )
-                            ) : (
-                              <button className="admin-btn admin-btn--ghost" type="button" disabled={!canFill} onClick={() => setGallerySlot(index)}>Seleccionar</button>
-                            )}
-                          </footer>
-                        </article>
+                        <AdminImageManager
+                          {...picker}
+                          resourceTable="boats"
+                          resourceId={editing.id}
+                          folder="boats"
+                          label={`${editing.name || 'Bote'} foto ${index + 1}`}
+                          aspect={16 / 9}
+                          maxWidth={1600}
+                          maxHeight={900}
+                          maxSizeMB={0.6}
+                          retainPreviousOnUpload
+                          {...(image && !image.synthetic ? { currentImageUrl: image.image_url, currentStoragePath: image.storage_path, requireReplacementToDelete: true } : {})}
+                          onImageSaved={async (saved) => {
+                            if (image && !image.synthetic) await replaceBoatImage(saved, image);
+                            else await onGalleryImageSaved(saved);
+                          }}
+                        />
                       );
-                    })}
-                  </div>
-                  <p className="admin-field-help" aria-live="polite">{editorImages.length} de 6 imágenes.</p>
+                    }}
+                  />
                 </FormSection>
               ) : null}
 
@@ -1125,9 +1054,9 @@ export default function AdminBoatsPage() {
                   <div className="admin-tour-config-row admin-tour-config-row--tour">
                     <div className="admin-tour-config-row__status">
                       <p className="admin-config-row__label">Estado actual</p>
-                      {editing.active ? <AdminBadge value={true} label="Activo" /> : <AdminBadge value="Inactivo" />}
+                      <AdminBadge value={statusBadge(boatStatus(editing))} />
                       <p className="admin-muted">
-                        {editing.active ? 'Visible en el sitio público y disponible para reservas.' : 'No aparece en el sitio público ni puede reservarse.'}
+                        {editing.active ? 'Visible en el sitio público y disponible para reservas.' : boatStatus(editing) === 'draft' ? 'No aparece en el sitio público ni puede reservarse.' : 'Oculto: no aparece en el sitio público ni se puede reservar.'}
                       </p>
                       {!editing.active ? (
                         publishMissing.length ? (
@@ -1139,18 +1068,9 @@ export default function AdminBoatsPage() {
                           <p className="admin-tour-ready"><Check size={14} aria-hidden="true" /> Listo para publicar.</p>
                         )
                       ) : null}
-                      <p className="admin-muted admin-config-position">Posición actual: {editing.sort_order}. Puedes cambiarla usando Reordenar en la lista de Botes.</p>
                     </div>
-                    {/* The icon is the action that will happen: Mostrar -> Eye, Ocultar -> EyeOff. */}
-                    <button
-                      className={`admin-btn ${editing.active ? 'admin-btn--secondary' : ''}`}
-                      type="button"
-                      disabled={togglingVisibility}
-                      onClick={() => void toggleBoatVisibility()}
-                    >
-                      {togglingVisibility ? <Loader2 className="animate-spin" size={15} /> : editing.active ? <EyeOff size={15} /> : <Eye size={15} />}
-                      {editing.active ? 'Ocultar bote' : 'Mostrar bote'}
-                    </button>
+                    {/* Shows the CURRENT state ("Visible" / "No visible"); the accessible name says what pressing does. */}
+                    <AdminVisibilityButton visible={editing.active} busy={togglingVisibility} actionLabel={editing.active ? 'Ocultar bote' : 'Mostrar bote'} onClick={() => void toggleBoatVisibility()} />
                   </div>
                   <div className="admin-tour-config-divider" role="separator" />
                   <div className="admin-tour-danger-row">
@@ -1171,18 +1091,18 @@ export default function AdminBoatsPage() {
                 {boatStep !== 'info' ? <button className="admin-btn admin-btn--ghost admin-wizard-footer__icon-btn" type="button" aria-label="Anterior" title="Anterior" disabled={saving} onClick={() => void goBoatStep(-1)}><ChevronLeft size={18} /></button> : null}
               </div>
               <div className="admin-wizard-footer__actions">
-                <button className="admin-btn admin-btn--secondary" type="button" disabled={saving} onClick={() => void saveEditor('draft')}>
-                  {saving ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />} Guardar borrador
-                </button>
                 {boatStep !== 'config' ? (
                   <button key="next" className="admin-btn admin-wizard-footer__icon-btn" type="button" aria-label="Siguiente" title="Siguiente" disabled={saving} onClick={() => void goBoatStep(1)}>
                     {saving ? <Loader2 size={18} className="animate-spin" /> : <ChevronRight size={18} />}
                   </button>
                 ) : (
                   <button key="save" className="admin-btn" type="submit" disabled={saving} aria-busy={saving}>
-                    {saving ? <><Loader2 size={15} className="animate-spin" /> Guardando...</> : <><Save size={15} /> Guardar</>}
+                    {saving ? 'Guardando...' : 'Guardar'}
                   </button>
                 )}
+                <button className="admin-btn admin-btn--secondary" type="button" disabled={saving} onClick={() => void saveEditor('draft')}>
+                  {saving ? 'Guardando...' : 'Guardar borrador'}
+                </button>
               </div>
             </ModalFooter>
           </form>

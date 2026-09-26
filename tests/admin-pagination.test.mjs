@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
+import ExcelJS from 'exceljs';
 import fs from 'node:fs/promises';
 import test from 'node:test';
 import { chromium, expect } from '@playwright/test';
+import vm from 'node:vm';
+import { loadTs, plain } from './support/load-ts.mjs';
 
 const base = process.env.ADMIN_TEST_BASE_URL ?? 'http://localhost:5174';
 const user = { id: '00000000-0000-4000-8000-000000000001', aud: 'authenticated', role: 'authenticated', email: 'admin@example.com', app_metadata: {}, user_metadata: {}, created_at: new Date().toISOString() };
@@ -85,42 +88,39 @@ test('reservations paginate on the server, preserve filters, export all matches 
   try {
     await page.goto(`${base}/admin/reservations`);
     const nav = page.getByRole('navigation', { name: 'Paginación de reservas' });
-    await expect(nav).toContainText('Mostrando 1–10 de 76 reservas');
+    await expect(nav.locator('[aria-current="page"]')).toHaveText('1');
     await expect(page.locator('.admin-reservations-table tbody tr')).toHaveCount(10);
-    await expect(nav.getByRole('button', { name: 'Anterior' })).toBeDisabled();
-    await nav.getByRole('button', { name: 'Siguiente' }).click();
-    await expect(nav).toContainText('Mostrando 11–20 de 76 reservas');
+    await expect(nav.getByRole('button', { name: 'Página anterior' })).toBeDisabled();
+    await nav.getByRole('button', { name: 'Página siguiente' }).click();
+    await expect(nav.locator('[aria-current="page"]')).toHaveText('2');
     assert.equal(f.requests.filter((r) => r.p_offset !== undefined).at(-1).p_offset, 10);
-    await nav.getByLabel('Registros por página').selectOption('25');
-    await expect(nav).toContainText('Mostrando 1–25 de 76 reservas');
-    await nav.getByLabel('Registros por página').selectOption('50');
-    await expect(nav).toContainText('Mostrando 1–50 de 76 reservas');
-    await nav.getByRole('button', { name: 'Siguiente' }).click();
-    await expect(nav).toContainText('Mostrando 51–76 de 76 reservas');
-    await expect(nav.getByRole('button', { name: 'Siguiente' })).toBeDisabled();
+    assert.equal(f.requests.filter((r) => r.p_offset !== undefined).at(-1).p_limit, 10, 'the page size is fixed at 10');
+    await nav.getByRole('button', { name: 'Ir a la página 8' }).click();
+    await expect(page.locator('.admin-reservations-table tbody tr')).toHaveCount(6);
+    await expect(nav.getByRole('button', { name: 'Página siguiente' })).toBeDisabled();
     await page.getByLabel('Buscar reservas').fill('Second Wind');
-    await expect(nav).toContainText('Mostrando 1–50 de 76 reservas');
-    await nav.getByLabel('Registros por página').selectOption('10');
+    await expect(nav.locator('[aria-current="page"]')).toHaveText('1');
     const downloadPromise = page.waitForEvent('download');
-    await page.getByRole('button', { name: 'Exportar', exact: true }).click();
+    await page.getByRole('button', { name: 'Descargar', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Excel (.xlsx)' }).click();
     const download = await downloadPromise;
-    const csv = await fs.readFile(await download.path(), 'utf8');
-    assert.equal(csv.trim().split('\r\n').length, 77);
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(await fs.readFile(await download.path()));
+    assert.equal(workbook.getWorksheet('Reservas').rowCount, 77, 'header + all 76 matches, not only the visible page');
     await page.getByRole('button', { name: /^Filtros/ }).click();
     await page.getByLabel('Estado de reserva', { exact: true }).selectOption('pending_payment');
     await page.getByRole('button', { name: 'Listo', exact: true }).click();
-    await expect(nav).toContainText('de 50 reservas');
-    await nav.getByRole('button', { name: 'Siguiente' }).click();
-    await expect(nav).toContainText('Mostrando 11–20 de 50 reservas');
+    await expect(nav.getByRole('button', { name: 'Ir a la página 5' })).toBeVisible(); // 50 matches = 5 pages of 10
+    await nav.getByRole('button', { name: 'Página siguiente' }).click();
+    await expect(nav.locator('[aria-current="page"]')).toHaveText('2');
     const request = f.requests.filter((r) => r.p_offset !== undefined).at(-1);
     assert.equal(request.p_booking_status, 'pending_payment'); assert.equal(request.p_search, 'Second Wind');
     await page.getByLabel('Buscar reservas').fill('PFT-002');
-    await expect(nav).toContainText('Mostrando 1–1 de 1 reservas');
+    await expect(page.locator('.admin-reservations-table tbody tr')).toHaveCount(1);
     await page.locator('.admin-reservations-table').getByRole('button', { name: /Editar reserva/ }).click();
     await expect(page.getByRole('heading', { name: 'Editar reserva' })).toBeVisible();
-    // The modal has two "Cerrar" controls: the header's icon-only close button
-    // (aria-label) and the footer's text button — scope to the footer.
-    await page.locator('.admin-modal-footer').getByRole('button', { name: 'Cerrar', exact: true }).click();
+    // The footer's secondary action is "Cancelar" (it cancels the edit); the header X closes too.
+    await page.locator('.admin-modal-footer').getByRole('button', { name: 'Cancelar', exact: true }).click();
     // "Confirmar" abre un diálogo: Cancelar no escribe nada; confirmar sí ejecuta la acción real.
     const confirmButton = page.locator('.admin-reservations-table').getByRole('button', { name: /Confirmar/ });
     await expect(confirmButton).toContainText('Confirmar');
@@ -131,7 +131,7 @@ test('reservations paginate on the server, preserve filters, export all matches 
     assert.equal(f.writes.length, 0);
     await confirmButton.click();
     await page.locator('.admin-modal-card').getByRole('button', { name: 'Confirmar', exact: true }).click();
-    await expect(nav).toContainText('Mostrando 0–0 de 0 reservas');
+    await expect(page.locator('.admin-reservations-table')).toContainText('No hay reservas para este filtro.');
     assert.equal(f.writes[0].bookingId, 'booking-1');
     assert.equal(f.writes.length, 1);
     await page.getByLabel('Buscar reservas').fill('no existen resultados');
@@ -193,7 +193,7 @@ test('Confirmar shows loading, blocks double clicks and the row turns confirmed'
     await expect(page.getByRole('heading', { name: 'Confirmar reserva' })).toHaveCount(0);
     assert.equal(f.writes.filter((w) => w.name === 'confirm').length, 1);
     assert.equal(f.writes[0].bookingId, 'booking-4');
-    await expect(row.locator('.admin-badge').last()).toHaveText('confirmed');
+    await expect(row.locator('.admin-badge').last()).toHaveText('Confirmada');
     await expect(row.getByRole('button', { name: /Confirmar/ })).toHaveCount(0);
     await expect(page.getByRole('status').filter({ hasText: 'Reserva confirmada' })).toBeVisible();
   } finally { await f.browser.close(); }
@@ -203,7 +203,7 @@ test('responsive reservations contain scroll, preserve the sidebar and use cards
   const f = await fixture(); const { page } = f;
   try {
     await page.goto(`${base}/admin/reservations`);
-    await expect(page.getByRole('navigation', { name: 'Paginación de reservas' })).toContainText('de 76 reservas');
+    await expect(page.getByRole('navigation', { name: 'Paginación de reservas' }).getByRole('button', { name: 'Página siguiente' })).toBeEnabled();
     await fs.mkdir('tmp/admin-responsive', { recursive: true });
     for (const width of [1440, 1024, 768, 390, 320]) {
       await page.setViewportSize({ width, height: 1000 });
@@ -230,7 +230,7 @@ test('responsive reservations contain scroll, preserve the sidebar and use cards
     await expect(page.getByRole('heading', { name: 'Editar reserva' })).toBeVisible();
     await page.getByRole('button', { name: 'Cancelar reserva' }).click();
     await page.getByRole('button', { name: 'Sí, cancelar reserva' }).click();
-    await expect(card).toContainText('cancelled');
+    await expect(card).toContainText('Cancelada');
     assert.equal(f.writes[0].p_booking_id, 'booking-1');
   } finally { await f.browser.close(); }
 });
@@ -240,21 +240,21 @@ test('loading retains table structure, failures are explicit and retry recovers'
   try {
     await page.goto(`${base}/admin/reservations`);
     const nav = page.getByRole('navigation', { name: 'Paginación de reservas' });
-    await expect(nav).toContainText('de 76 reservas');
+    await expect(nav.getByRole('button', { name: 'Página siguiente' })).toBeEnabled();
     f.setSlow(true);
-    await nav.getByRole('button', { name: 'Siguiente' }).click();
+    await nav.getByRole('button', { name: 'Página siguiente' }).click();
     await expect(page.getByRole('status')).toContainText('Cargando reservas');
     await expect(page.locator('.admin-reservations-table thead')).toBeVisible();
     await expect(page.locator('.admin-reservations-table tbody tr')).toHaveCount(10);
-    await expect(nav).toContainText('Mostrando 11–20 de 76 reservas');
+    await expect(nav.locator('[aria-current="page"]')).toHaveText('2');
     await expect(nav).toHaveAttribute('aria-busy', 'false');
     f.setFail(true);
-    await nav.getByRole('button', { name: 'Siguiente' }).click();
+    await nav.getByRole('button', { name: 'Página siguiente' }).click();
     await expect(page.getByRole('alert')).toContainText('Simulated pagination failure');
     f.setFail(false);
     await page.getByRole('button', { name: 'Reintentar', exact: true }).click();
     await expect(page.getByRole('alert')).toHaveCount(0);
-    await expect(nav).toContainText('Mostrando 21–30 de 76 reservas');
+    await expect(nav.locator('[aria-current="page"]')).toHaveText('3');
   } finally { await f.browser.close(); }
 });
 
@@ -264,22 +264,23 @@ test('filter round trips reset the page and confirming the last match returns to
   try {
     await page.goto(`${base}/admin/reservations`);
     const nav = page.getByRole('navigation', { name: 'Paginación de reservas' });
-    await expect(nav).toContainText('de 17 reservas');
-    await nav.getByRole('button', { name: 'Siguiente' }).click();
+    await expect(nav.getByRole('button', { name: 'Ir a la página 2' })).toBeVisible(); // 17 rows = 2 pages
+    await nav.getByRole('button', { name: 'Página siguiente' }).click();
     await expect(nav).toHaveAttribute('aria-busy', 'false');
     for (const [filter, total] of [['pending_payment', 11], ['all', 17], ['pending_payment', 11]]) {
       await page.getByRole('button', { name: /^Filtros/ }).click();
       await page.getByLabel('Estado de reserva', { exact: true }).selectOption(filter);
       await page.getByRole('button', { name: 'Listo', exact: true }).click();
-      await expect(nav).toContainText(`Mostrando 1–10 de ${total} reservas`);
-      await nav.getByRole('button', { name: 'Siguiente' }).click();
+      await expect(nav.locator('[aria-current="page"]')).toHaveText('1');
+      await expect(nav.getByRole('button', { name: 'Página siguiente' })).toBeEnabled(); // both totals need a second page
+      await nav.getByRole('button', { name: 'Página siguiente' }).click();
       await expect(nav).toHaveAttribute('aria-busy', 'false');
     }
     await expect(page.locator('.admin-reservations-table tbody tr')).toHaveCount(1);
     await page.locator('.admin-reservations-table').getByRole('button', { name: /Confirmar/ }).click();
     await page.locator('.admin-modal-card').getByRole('button', { name: 'Confirmar', exact: true }).click();
-    await expect(nav).toContainText('Mostrando 1–10 de 10 reservas');
-    await expect(nav.getByRole('button', { name: 'Siguiente' })).toBeDisabled();
+    await expect(page.locator('.admin-reservations-table tbody tr')).toHaveCount(10);
+    await expect(nav.getByRole('button', { name: 'Página siguiente' })).toBeDisabled();
   } finally { await f.browser.close(); }
 });
 
@@ -289,22 +290,191 @@ test('reviews, gallery and package lists use backend ranges and reset filters', 
     for (const [route, noun, table] of [['reviews', 'reseñas', 'reviews'], ['gallery', 'imágenes', 'gallery_images'], ['boat-tours', 'paquetes', 'tour_packages']]) {
       await page.goto(`${base}/admin/${route}`);
       const nav = page.getByRole('navigation', { name: `Paginación de ${noun}` });
-      await expect(nav).toContainText(`Mostrando 1–10 de 76 ${noun}`);
-      await nav.getByRole('button', { name: 'Siguiente' }).click();
-      await expect(nav).toContainText(`Mostrando 11–20 de 76 ${noun}`);
+      await expect(nav.locator('[aria-current="page"]')).toHaveText('1');
+      await nav.getByRole('button', { name: 'Página siguiente' }).click();
+      await expect(nav.locator('[aria-current="page"]')).toHaveText('2');
       assert.equal(f.requests.filter((r) => r.table === table).at(-1).start, 10);
       // Los filtros ahora viven dentro del popover "Filtros", no como <select> suelto en el toolbar.
       await page.getByRole('button', { name: /^Filtros/ }).click();
       if (route === 'reviews') await page.locator('.admin-filter-panel select').selectOption('pending');
       if (route === 'gallery') { await expect(page.locator('.admin-filter-panel select option[value="custom"]')).toHaveCount(1); await page.locator('.admin-filter-panel select').selectOption('custom'); }
       if (route === 'boat-tours') await page.locator('.admin-filter-panel select').first().selectOption('boat-2');
-      await expect(nav).toContainText('Mostrando 1–10');
+      await expect(nav.locator('[aria-current="page"]')).toHaveText('1');
       // The filter request is recorded by the mock a moment after the UI text updates.
       await expect.poll(() => f.requests.filter((r) => r.table === table).at(-1)?.start).toBe(0);
       const request = f.requests.filter((r) => r.table === table).at(-1);
       if (route === 'boat-tours') assert.match(request.select, /boat_tours!inner/);
       await page.setViewportSize({ width: 375, height: 900 });
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+    }
+  } finally { await f.browser.close(); }
+});
+
+const paginationSpecs = [['reservations', 'reservas'], ['boat-tours', 'paquetes'], ['gallery', 'imágenes'], ['reviews', 'reseñas']];
+
+function loadPaginationItems() {
+  const context = vm.createContext({});
+  loadTs('src/components/admin/adminPaginationItems.ts', context);
+  return context;
+}
+
+test('page ranges keep first/last, collapse only 2+ hidden pages with ellipses and clamp out-of-range pages', () => {
+  const { getAdminPaginationItems: items, getAdminPageCount: count, clampAdminPage: clamp } = loadPaginationItems();
+  const S = 'ellipsis-start'; const E = 'ellipsis-end';
+  assert.deepEqual(plain(items(1, 10)), [1, 2, 3, 4, 5, E, 10]);
+  assert.deepEqual(plain(items(3, 10)), [1, 2, 3, 4, 5, E, 10]);
+  assert.deepEqual(plain(items(4, 10)), [1, 2, 3, 4, 5, E, 10], 'an ellipsis never stands in for a single page');
+  assert.deepEqual(plain(items(5, 10)), [1, S, 4, 5, 6, E, 10]);
+  assert.deepEqual(plain(items(6, 10)), [1, S, 5, 6, 7, E, 10]);
+  assert.deepEqual(plain(items(7, 10)), [1, S, 6, 7, 8, 9, 10]);
+  assert.deepEqual(plain(items(10, 10)), [1, S, 6, 7, 8, 9, 10]);
+  assert.deepEqual(plain(items(1, 7)), [1, 2, 3, 4, 5, 6, 7], 'no ellipsis when everything fits');
+  assert.deepEqual(plain(items(1, 1)), [1]);
+  assert.deepEqual(plain(items(99, 10)), plain(items(10, 10)), 'out-of-range pages clamp to the last page');
+  assert.deepEqual(plain(items(0, 10)), plain(items(1, 10)));
+  assert.deepEqual(plain(items(5, 10, 0)), [1, S, 5, E, 10], 'compact layout drops the siblings');
+  assert.deepEqual(plain(items(1, 10, 0)), [1, 2, 3, E, 10]);
+  for (let pages = 1; pages <= 40; pages += 1) for (let page = 1; page <= pages; page += 1) {
+    const result = plain(items(page, pages));
+    assert.ok(result.includes(1) && result.includes(pages) && result.includes(page), `${page}/${pages}`);
+    assert.ok(result.length <= Math.min(pages, 7), `${page}/${pages} keeps a stable slot count`);
+    const numbers = result.filter((item) => typeof item === 'number');
+    assert.deepEqual(numbers, [...numbers].sort((a, b) => a - b));
+  }
+  assert.equal(count(0, 10), 1); assert.equal(count(76, 10), 8); assert.equal(count(76, 50), 2); assert.equal(count(5, 0), 1);
+  assert.equal(clamp(-3, 8), 1); assert.equal(clamp(12, 8), 8); assert.equal(clamp(NaN, 8), 1); assert.equal(clamp(3, 0), 1);
+});
+
+test('Reservas, Resumen de paquetes, Galería and Comentarios all use the one shared AdminPagination', async () => {
+  const pages = ['AdminReservationsPage', 'AdminBoatToursPage', 'AdminGalleryPage', 'AdminReviewsPage'];
+  for (const file of pages) {
+    const source = await fs.readFile(`src/pages/admin/${file}.tsx`, 'utf8');
+    assert.match(source, /import AdminPagination from '\.\.\/\.\.\/components\/admin\/AdminPagination';/, file);
+    assert.equal((source.match(/<AdminPagination\b/g) ?? []).length, 1, `${file} renders the shared paginator exactly once`);
+    assert.doesNotMatch(source, /Registros por página|>Anterior<|>Siguiente</, `${file} must not carry its own paginator`);
+  }
+  const component = await fs.readFile('src/components/admin/AdminPagination.tsx', 'utf8');
+  for (const needle of ['Página anterior', 'Página siguiente', 'aria-current', 'aria-busy']) assert.ok(component.includes(needle), needle);
+  for (const gone of ['Primera página', 'Última página', 'Registros por página', 'Mostrando', 'onPageSizeChange', 'pageSizeOptions', '«', '»']) assert.ok(!component.includes(gone), `AdminPagination must not carry "${gone}"`);
+  assert.doesNotMatch(component, /tabIndex|tabindex/i, 'DOM order is the tab order: no tabindex at all');
+  const hook = await fs.readFile('src/hooks/useAdminPagedList.ts', 'utf8');
+  assert.match(hook, /ADMIN_PAGE_SIZE/, 'the page size is the shared fixed constant');
+  assert.doesNotMatch(hook, /onPageSizeChange|size: 10/, 'no page-size state');
+  assert.match(hook, /Math\.min\(Math\.max\(1, Math\.trunc\(next\)\), lastPage\)/, 'page changes are clamped to the last page');
+  const items = await fs.readFile('src/components/admin/adminPaginationItems.ts', 'utf8');
+  assert.match(items, /ADMIN_PAGE_SIZE = 10/, 'fixed at 10 rows per page');
+  assert.doesNotMatch(items, /ADMIN_PAGE_SIZE_OPTIONS/);
+});
+
+for (const [route, noun] of paginationSpecs) {
+  test(`${route}: shared paginator shows ‹ 1 2 3 … 8 ›, disabled edges, aria-current and keyboard order`, async () => {
+    const f = await fixture(); const { page } = f;
+    try {
+      await page.goto(`${base}/admin/${route}`);
+      const nav = page.getByRole('navigation', { name: `Paginación de ${noun}` });
+      const controls = nav.locator('.admin-pagination__controls');
+      const current = nav.locator('[aria-current="page"]');
+      const labels = () => controls.locator('button').evaluateAll((buttons) => buttons.map((b) => b.getAttribute('aria-label')));
+      await expect(controls).toHaveText('‹12345…8›');
+      assert.deepEqual(await labels(), ['Página anterior', 'Página 1 de 8, página actual', 'Ir a la página 2', 'Ir a la página 3', 'Ir a la página 4', 'Ir a la página 5', 'Ir a la página 8', 'Página siguiente']);
+      await expect(nav.getByRole('button', { name: 'Página anterior' })).toBeDisabled();
+      await expect(nav.getByRole('button', { name: 'Página siguiente' })).toBeEnabled();
+      await expect(current).toHaveCount(1);
+      await expect(current).toHaveText('1');
+      assert.equal(await nav.locator('[tabindex]:not([tabindex="0"]):not([tabindex^="-"])').count(), 0, 'no positive tabindex');
+      // Keyboard: Enter on a page number, then Tab to the next one, then Space on the last page.
+      await nav.getByRole('button', { name: 'Ir a la página 5' }).focus();
+      await page.keyboard.press('Enter');
+      await expect(current).toHaveText('5');
+      await expect(nav).toHaveAttribute('aria-busy', 'false');
+      await expect(controls).toHaveText('‹1…45678›');
+      await expect(current).toBeFocused();
+      await page.keyboard.press('Tab');
+      await expect(nav.getByRole('button', { name: 'Ir a la página 6' })).toBeFocused();
+      await nav.getByRole('button', { name: 'Ir a la página 8' }).focus();
+      await page.keyboard.press('Space');
+      await expect(current).toHaveText('8');
+      await expect(nav).toHaveAttribute('aria-busy', 'false');
+      await expect(nav.getByRole('button', { name: 'Página siguiente' })).toBeDisabled();
+      await expect(current).toBeFocused();
+      await nav.getByRole('button', { name: 'Página anterior' }).click();
+      await expect(current).toHaveText('7');
+      assert.equal((await labels()).length, 8); // ‹ 1 … 4 5 6 7 8 › (the ellipsis is not a button)
+    } finally { await f.browser.close(); }
+  });
+
+  test(`${route}: 10 rows per page, no page-size selector, no "Mostrando…" text, no « » jumps, centered`, async () => {
+    const f = await fixture(); const { page } = f;
+    try {
+      await page.goto(`${base}/admin/${route}`);
+      const nav = page.getByRole('navigation', { name: `Paginación de ${noun}` });
+      await expect(nav.getByRole('button', { name: 'Ir a la página 8' })).toBeVisible();
+      await nav.getByRole('button', { name: 'Ir a la página 3' }).click();
+      await expect(nav.locator('[aria-current="page"]')).toHaveText('3');
+      const last = f.requests.filter((r) => (r.p_limit ?? r.size) !== undefined).at(-1);
+      assert.equal(last.p_limit ?? last.size, 10, 'requests always ask for 10 rows');
+      // Nothing but the controls: no selector, no summary, no first/last jumps, no leftover copy anywhere on the screen.
+      assert.equal(await page.locator('.admin-pagination select').count(), 0);
+      assert.doesNotMatch(await nav.innerText(), /Mostrando|Registros por página|«|»/);
+      assert.doesNotMatch(await page.locator('body').innerText(), /Mostrando \d|Registros por página/);
+      await expect(nav.getByRole('button', { name: /Primera página|Última página/ })).toHaveCount(0);
+      // Centered: the control row sits in the middle of the paginator, which spans the card.
+      const geometry = await nav.evaluate((el) => {
+        const bar = el.getBoundingClientRect(); const row = el.querySelector('.admin-pagination__controls').getBoundingClientRect();
+        return { offset: Math.abs((row.left + row.width / 2) - (bar.left + bar.width / 2)), height: bar.height };
+      });
+      assert.ok(geometry.offset <= 2, `controls are centered (off by ${geometry.offset}px)`);
+      assert.ok(geometry.height <= 52, `compact paginator (${geometry.height}px tall)`);
+    } finally { await f.browser.close(); }
+  });
+}
+
+test('reservations and reviews paginators stay compact, centered and inside the viewport on tablet and phone', async () => {
+  for (const [route, noun] of [['reservations', 'reservas'], ['reviews', 'reseñas']]) {
+    const f = await fixture(); const { page } = f;
+    try {
+      await page.goto(`${base}/admin/${route}`);
+      const nav = page.getByRole('navigation', { name: `Paginación de ${noun}` });
+      await expect(nav.getByRole('button', { name: 'Ir a la página 8' })).toBeVisible();
+      for (const width of [1024, 768, 390, 320]) {
+        await page.setViewportSize({ width, height: 900 });
+        await nav.getByRole('button', { name: 'Página anterior' }).scrollIntoViewIfNeeded();
+        const metrics = await nav.evaluate((el) => {
+          const inside = [...el.querySelectorAll('button')].every((c) => { const r = c.getBoundingClientRect(); return r.left >= -0.5 && r.right <= innerWidth + 0.5; });
+          const bar = el.getBoundingClientRect(); const row = el.querySelector('.admin-pagination__controls').getBoundingClientRect();
+          return { inside, overflow: document.documentElement.scrollWidth <= innerWidth, navFits: el.scrollWidth <= el.clientWidth + 1, centered: Math.abs((row.left + row.width / 2) - (bar.left + bar.width / 2)) <= 2, oneRow: row.height <= 44 };
+        });
+        assert.deepEqual(metrics, { inside: true, overflow: true, navFits: true, centered: true, oneRow: true }, `${route} @${width}`);
+        await fs.mkdir('tmp/admin-responsive', { recursive: true });
+        await nav.screenshot({ path: `tmp/admin-responsive/pagination-${route}-${width}.png` });
+        await expect(nav.locator('.admin-pagination__controls')).toHaveText(width <= 520 ? '‹123…8›' : '‹12345…8›');
+      }
+      await page.setViewportSize({ width: 390, height: 900 });
+      await nav.getByRole('button', { name: 'Página siguiente' }).click();
+      await expect(nav.locator('[aria-current="page"]')).toHaveText('2');
+      await expect(nav).toHaveAttribute('aria-busy', 'false');
+      await expect(nav.getByRole('button', { name: 'Página siguiente' })).toBeFocused();
+    } finally { await f.browser.close(); }
+  }
+});
+
+test('paginator focus ring and current page are visible in light and dark themes', async () => {
+  const f = await fixture(); const { page } = f;
+  try {
+    await page.goto(`${base}/admin/reservations`);
+    const nav = page.getByRole('navigation', { name: 'Paginación de reservas' });
+    await expect(nav.getByRole('button', { name: 'Página siguiente' })).toBeEnabled();
+    for (const theme of ['light', 'dark']) {
+      await page.evaluate((value) => document.documentElement.setAttribute('data-theme', value), theme);
+      await nav.locator('[aria-current="page"]').focus();
+      await page.keyboard.press('Tab');
+      const two = nav.getByRole('button', { name: 'Ir a la página 2' });
+      await expect(two).toBeFocused();
+      const style = await two.evaluate((el) => { const s = getComputedStyle(el); return { outlineStyle: s.outlineStyle, outlineWidth: parseFloat(s.outlineWidth) }; });
+      assert.deepEqual(style, { outlineStyle: 'solid', outlineWidth: 2 }, theme);
+      const currentBg = await nav.locator('[aria-current="page"]').evaluate((el) => getComputedStyle(el).backgroundColor);
+      const other = await nav.getByRole('button', { name: 'Ir a la página 3' }).evaluate((el) => getComputedStyle(el).backgroundColor);
+      assert.notEqual(currentBg, other, `${theme}: current page must look different`);
     }
   } finally { await f.browser.close(); }
 });

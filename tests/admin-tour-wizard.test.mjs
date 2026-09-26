@@ -571,16 +571,16 @@ test('deleting a tour renumbers the remaining ones 1..N automatically (no hole l
 
 const footerButtons = (page) => page.locator('.admin-wizard-footer button').evaluateAll((buttons) => buttons.map((b) => (b.getAttribute('aria-label') || b.textContent || '').trim()));
 
-test('footer: no Cancelar (the X closes), navigation on the left, save actions on the right, per step', async () => {
+test('footer: no Cancelar (the X closes), navigation on the left, primary action before Guardar borrador on the right, per step', async () => {
   const f = await fixture(); const { page } = f;
   try {
     await openExisting(page);
     await expect(page.getByRole('button', { name: 'Cerrar editor' })).toBeVisible();
     const expected = [
-      ['Guardar borrador', 'Siguiente'],
-      ['Anterior', 'Guardar borrador', 'Siguiente'],
-      ['Anterior', 'Guardar borrador', 'Siguiente'],
-      ['Anterior', 'Guardar borrador', 'Guardar'],
+      ['Siguiente', 'Guardar borrador'],
+      ['Anterior', 'Siguiente', 'Guardar borrador'],
+      ['Anterior', 'Siguiente', 'Guardar borrador'],
+      ['Anterior', 'Guardar', 'Guardar borrador'],
     ];
     for (const [index, label] of ['Información', 'Galería', 'Experiencia', 'Configuración'].entries()) {
       await page.locator('.admin-stepper').getByRole('button', { name: label }).click();
@@ -608,10 +608,10 @@ test('footer hierarchy: Anterior is a quiet icon, Guardar borrador is secondary,
     await expect(save).not.toHaveClass(/admin-btn--(secondary|ghost)/);
     const [draftBg, saveBg] = await Promise.all([draft, save].map((b) => b.evaluate((el) => getComputedStyle(el).backgroundColor)));
     assert.notEqual(draftBg, saveBg, 'Guardar must be visually distinct from Guardar borrador');
-    // Layout: [←] on the left, [Guardar borrador] [Guardar] on the right, nothing overlapping.
+    // Layout: [←] on the left (directional), then the primary [Guardar] BEFORE [Guardar borrador] on the right, nothing overlapping.
     const [p, d, g, bar] = await Promise.all([prev, draft, save, page.locator('.admin-wizard-footer')].map((l) => l.evaluate((el) => { const r = el.getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top }; })));
-    assert.ok(p.right < d.left - 24, 'navigation is separated from the save actions');
-    assert.ok(d.right <= g.left, 'Guardar borrador sits before Guardar');
+    assert.ok(p.right < g.left - 24, 'navigation is separated from the save actions');
+    assert.ok(g.right <= d.left, 'the primary Guardar sits before Guardar borrador (DOM order = visual order)');
     assert.ok(g.right <= bar.right && p.left >= bar.left);
   } finally { await f.browser.close(); }
 });
@@ -629,7 +629,7 @@ test('footer on a phone: navigation and save actions keep their order without ov
       assert.ok(a.l >= bar.l && a.r <= bar.r, `button ${i} inside the footer`);
       for (const b of boxes.slice(i + 1)) assert.ok(a.r <= b.l || b.r <= a.l || a.b <= b.t || b.b <= a.t, 'buttons must not overlap');
     }
-    assert.ok(boxes[0].l < boxes[1].l && boxes[1].l < boxes[2].l, 'order: Anterior, Guardar borrador, Guardar');
+    assert.ok(boxes[0].l < boxes[1].l && boxes[1].l < boxes[2].l, 'order: Anterior, Guardar, Guardar borrador');
   } finally { await f.browser.close(); }
 });
 
@@ -664,14 +664,14 @@ test('Configuración is ONE card: "Estado y visibilidad" with the delete section
   } finally { await f.browser.close(); }
 });
 
-test('the visibility button icon is the action: Mostrar tour -> Eye, Ocultar tour -> EyeOff', async () => {
+test('the visibility button icon is the current state: hidden tour -> EyeOff, visible tour -> Eye', async () => {
   const draft = await fixture({ publicationStatus: 'draft', imageCount: 3 });
   try {
     await openExisting(draft.page);
     await draft.page.locator('.admin-stepper').getByRole('button', { name: 'Configuración' }).click();
     const show = draft.page.getByRole('button', { name: 'Mostrar tour' });
-    await expect(show.locator('svg')).toHaveClass(/lucide-eye(?!-off)/);
-    await expect(show.locator('svg')).not.toHaveClass(/lucide-eye-off/);
+    await expect(show.locator('svg')).toHaveClass(/lucide-eye-off/); // hidden draft: EyeOff
+    await expect(show.locator('svg')).not.toHaveClass(/lucide-eye(?!-off)/);
   } finally { await draft.browser.close(); }
 
   const active = await fixture({ publicationStatus: 'published' });
@@ -679,8 +679,85 @@ test('the visibility button icon is the action: Mostrar tour -> Eye, Ocultar tou
     await openExisting(active.page);
     await active.page.locator('.admin-stepper').getByRole('button', { name: 'Configuración' }).click();
     const hide = active.page.getByRole('button', { name: 'Ocultar tour' });
-    await expect(hide.locator('svg')).toHaveClass(/lucide-eye-off/);
+    await expect(hide.locator('svg')).toHaveClass(/lucide-eye(?!-off)/); // visible tour: Eye
+    await expect(hide.locator('svg')).not.toHaveClass(/lucide-eye-off/);
   } finally { await active.browser.close(); }
+});
+
+
+// The photo gallery of Tours and Botes is ONE component (AdminImageSlots): both screens must produce exactly this structure.
+const GALLERY_SIGNATURE = {
+  slots: ['Foto 1', 'Foto 2', 'Foto 3', 'Foto 4', 'Foto 5', 'Foto 6'],
+  badges: ['Portada', '', '', '', '', ''],
+  // The primary picker of every slot: "Cambiar" once the slot has a photo, icon-only Upload while it is empty (named by aria-label).
+  pickers: ['Cambiar foto 1', 'Cambiar foto 2', 'Cambiar foto 3', 'Subir foto 4', 'Subir foto 5', 'Subir foto 6'],
+  pickerText: ['Cambiar', 'Cambiar', 'Cambiar', '', '', ''],
+  deletes: ['Eliminar foto 1', 'Eliminar foto 2', 'Eliminar foto 3', '', '', ''],
+  frames: [1, 1, 1, 1, 1, 1],
+};
+const gallerySignature = (page) => page.locator('.admin-tour-image-slot').evaluateAll((slots) => ({
+  slots: slots.map((slot) => slot.querySelector('header strong').textContent.trim()),
+  badges: slots.map((slot) => slot.querySelector('header .admin-badge')?.textContent.trim() ?? ''),
+  pickers: slots.map((slot) => slot.querySelector('footer .admin-image-manager__pick')?.getAttribute('aria-label') ?? ''),
+  pickerText: slots.map((slot) => slot.querySelector('footer .admin-image-manager__pick')?.textContent.trim() ?? ''),
+  deletes: slots.map((slot) => slot.querySelector('footer button.admin-icon-btn')?.getAttribute('aria-label') ?? ''),
+  frames: slots.map((slot) => slot.querySelectorAll('.admin-media-preview').length),
+}));
+
+
+const slotMetrics = (page) => page.locator('.admin-tour-image-slot').evaluateAll((slots) => slots.map((slot) => {
+  const box = slot.getBoundingClientRect();
+  const frame = slot.querySelector('.admin-media-preview').getBoundingClientRect();
+  const picker = slot.querySelector('footer .admin-image-manager__pick');
+  const style = getComputedStyle(picker);
+  return { h: Math.round(box.height), w: Math.round(box.width), top: Math.round(box.top), frameH: Math.round(frame.height), frameW: Math.round(frame.width), picker: { className: picker.className, text: picker.textContent.trim(), icons: picker.querySelectorAll('svg').length, w: Math.round(picker.getBoundingClientRect().width), h: Math.round(picker.getBoundingClientRect().height), bg: style.backgroundColor, title: picker.getAttribute('title') } };
+}));
+
+async function checkSlotPickers(page, name) {
+  const before = await slotMetrics(page);
+  // Same frame everywhere, and every card of a row has the same height (empty or filled).
+  assert.equal(new Set(before.map((slot) => slot.frameH)).size, 1, `${name}: one frame height ${JSON.stringify(before.map((slot) => slot.frameH))}`);
+  assert.equal(new Set(before.map((slot) => slot.h)).size, 1, `${name}: equal card heights ${JSON.stringify(before.map((slot) => slot.h))}`);
+  // Filled slots: "Cambiar" is the PRIMARY button. Empty slots: the icon-only primary Upload with an accessible name.
+  before.forEach((slot, index) => {
+    assert.doesNotMatch(slot.picker.className, /secondary|ghost/, `${name}: slot ${index + 1} picker is primary`);
+    assert.notEqual(slot.picker.bg, 'rgba(0, 0, 0, 0)', `${name}: slot ${index + 1} is filled`);
+    if (index < 3) assert.deepEqual([slot.picker.text, slot.picker.icons, slot.picker.title], ['Cambiar', 0, `Cambiar foto ${index + 1}`], `${name}: filled slot ${index + 1}`);
+    else assert.deepEqual([slot.picker.text, slot.picker.icons, slot.picker.title, slot.picker.w >= 40 && slot.picker.h >= 40], ['', 1, `Subir foto ${index + 1}`, true], `${name}: empty slot ${index + 1} is icon-only`);
+  });
+  await expect(page.locator('.admin-tour-image-slot').getByRole('button', { name: /^(Cerrar|Cancelar|Seleccionar|Subir imagen)$/ })).toHaveCount(0);
+  // Picking a file opens the crop dialog on its own: nothing grows inside the slots.
+  await page.locator('.admin-tour-image-slot').nth(3).locator('input[type="file"][aria-label="Elegir archivo de imagen"]').setInputFiles({ name: 'foto.png', mimeType: 'image/png', buffer: makePng() });
+  const crop = page.getByRole('dialog').filter({ hasText: 'Ajustar imagen' });
+  await expect(crop.getByRole('heading', { name: 'Ajustar imagen' })).toBeVisible();
+  assert.deepEqual((await slotMetrics(page)).map((slot) => [slot.h, slot.frameH]), before.map((slot) => [slot.h, slot.frameH]), `${name}: the slots did not change size`);
+  await crop.getByRole('button', { name: 'Cerrar', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Ajustar imagen' })).toHaveCount(0);
+  assert.deepEqual((await slotMetrics(page)).map((slot) => [slot.h, slot.frameH]), before.map((slot) => [slot.h, slot.frameH]), `${name}: still the same after closing`);
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, `${name}: no horizontal overflow`);
+}
+
+test('Tours gallery slots: the picker never enlarges a card (desktop and phone), Cambiar is primary, empty slots have the icon-only primary Upload, the crop dialog closes with its X', async () => {
+  const f = await fixture({ imageCount: 3 }); const { page } = f;
+  try {
+    await openExisting(page);
+    await page.locator('.admin-stepper').getByRole('button', { name: 'Galería' }).click();
+    await expect(page.locator('.admin-tour-image-slot')).toHaveCount(6);
+    await checkSlotPickers(page, 'tours desktop');
+    await page.setViewportSize({ width: 390, height: 900 });
+    await checkSlotPickers(page, 'tours phone');
+  } finally { await f.browser.close(); }
+});
+
+test('Tours gallery = Botes gallery: the shared six-slot structure (Portada, Cambiar + delete icon, Seleccionar for empty slots)', async () => {
+  const f = await fixture({ imageCount: 3 }); const { page } = f;
+  try {
+    await openExisting(page);
+    await page.locator('.admin-stepper').getByRole('button', { name: 'Galería' }).click();
+    assert.deepEqual(await gallerySignature(page), GALLERY_SIGNATURE);
+    await expect(page.locator('.admin-tour-image-slot').getByRole('button', { name: /^(Cerrar|Cancelar|Seleccionar)$/ })).toHaveCount(0);
+    assert.deepEqual(await page.locator('.admin-tour-image-slot footer .admin-image-manager__pick').evaluateAll((nodes) => nodes.map((node) => node.className.includes('admin-btn--icon'))), [false, false, false, true, true, true]);
+  } finally { await f.browser.close(); }
 });
 
 test('Galería only says "Mínimo 3 imágenes para continuar." (no "Para finalizar", no "Máximo 6")', async () => {
@@ -757,9 +834,8 @@ async function replaceTourPhoto(page) {
   await openExisting(page);
   await page.locator('.admin-stepper').getByRole('button', { name: 'Galería' }).click();
   await expect(activeStep(page)).toContainText('Galería');
-  await page.getByRole('button', { name: 'Cambiar foto 1' }).click();
-  await page.locator('input[type="file"][aria-label="Elegir archivo de imagen"]').setInputFiles({ name: 'nueva.png', mimeType: 'image/png', buffer: makePng() });
-  const go = page.getByRole('button', { name: 'Continuar y subir' });
+  await page.locator('.admin-tour-image-slot').first().locator('input[type="file"][aria-label="Elegir archivo de imagen"]').setInputFiles({ name: 'nueva.png', mimeType: 'image/png', buffer: makePng() });
+  const go = page.getByRole('dialog').getByRole('button', { name: 'Subir imagen', exact: true });
   await expect(go).toBeEnabled({ timeout: 15000 });
   await go.click();
 }
