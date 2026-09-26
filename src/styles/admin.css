@@ -5062,3 +5062,34 @@ html[data-theme='dark'] body:has(.admin-shell) {
   color: rgb(255 255 255 / 0.65);
   font-size: 0.72rem;
 }
+
+/* Reservations: compact Google Calendar state inside the reservation editor (no card, no table button). */
+.admin-calendar-sync {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  margin-top: 0.85rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--admin-line-soft);
+}
+
+.admin-calendar-sync__label {
+  color: var(--admin-muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.admin-calendar-sync__state {
+  color: var(--admin-ink);
+  font-size: 0.84rem;
+  font-weight: 600;
+}
+
+.admin-calendar-sync__state--synced {
+  color: var(--admin-success, #15803d);
+}
+
+.admin-calendar-sync__state--failed {
+  color: var(--admin-danger, #b91c1c);
+}

@@ -529,6 +529,10 @@ export type Database = {
           extra_guests_snapshot: number
           extra_guests_total_snapshot: number
           extras_total_snapshot: number
+          google_calendar_event_id: string | null
+          google_calendar_sync_error: string | null
+          google_calendar_sync_status: string | null
+          google_calendar_synced_at: string | null
           guests: number
           id: string
           included_guests_snapshot: number
@@ -564,6 +568,10 @@ export type Database = {
           extra_guests_snapshot?: number
           extra_guests_total_snapshot?: number
           extras_total_snapshot?: number
+          google_calendar_event_id?: string | null
+          google_calendar_sync_error?: string | null
+          google_calendar_sync_status?: string | null
+          google_calendar_synced_at?: string | null
           guests: number
           id?: string
           included_guests_snapshot: number
@@ -599,6 +607,10 @@ export type Database = {
           extra_guests_snapshot?: number
           extra_guests_total_snapshot?: number
           extras_total_snapshot?: number
+          google_calendar_event_id?: string | null
+          google_calendar_sync_error?: string | null
+          google_calendar_sync_status?: string | null
+          google_calendar_synced_at?: string | null
           guests?: number
           id?: string
           included_guests_snapshot?: number
