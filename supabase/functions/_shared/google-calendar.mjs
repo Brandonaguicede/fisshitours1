@@ -232,3 +232,24 @@ export async function handleSyncRequest(req, deps, headers) {
     return json({ message: 'Calendar sync could not be completed' }, 500);
   }
 }
+
+// --- Automatic confirmations (PayPal capture / webhook, any server-side flow) -----------------------------------------------------
+
+/**
+ * Called right AFTER a booking was confirmed by a payment flow. The booking and the payment are already saved and final, so this can
+ * never fail them: it never throws, it does not return anything the customer could see, and a Google problem only leaves the calendar
+ * state `failed` (the Admin shows "No sincronizada" + Reintentar). Repeated calls (capture + webhook + retries) converge on ONE event:
+ * an already synced booking is left alone, and two calls racing each other share the deterministic event id (see upsertEvent).
+ */
+export async function syncConfirmedBookingSafely({ db, env, fetchImpl = fetch, bookingId, log = () => {} }) {
+  try {
+    const { data: current } = await db.from('bookings').select('booking_status, google_calendar_event_id, google_calendar_sync_status').eq('id', bookingId).maybeSingle();
+    if (current?.booking_status === 'confirmed' && current.google_calendar_sync_status === 'synced' && current.google_calendar_event_id) {
+      return { status: 'skipped', reason: 'already_synced' };
+    }
+    return await syncBookingToCalendar({ db, env, fetchImpl, bookingId, log });
+  } catch (error) {
+    log('error', 'automatic calendar sync failed', { bookingId, message: shortError(error) });
+    return { status: 'failed', error: shortError(error) };
+  }
+}

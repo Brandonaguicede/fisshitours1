@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import test from 'node:test';
 
-import { buildEvent, eventIdForBooking, handleSyncRequest, localDateTime, resetTokenCache, syncBookingToCalendar } from '../supabase/functions/_shared/google-calendar.mjs';
+import { buildEvent, eventIdForBooking, handleSyncRequest, localDateTime, resetTokenCache, syncBookingToCalendar, syncConfirmedBookingSafely } from '../supabase/functions/_shared/google-calendar.mjs';
 
 const { privateKey } = crypto.generateKeyPairSync('rsa', { modulusLength: 2048, privateKeyEncoding: { type: 'pkcs8', format: 'pem' }, publicKeyEncoding: { type: 'spki', format: 'pem' } });
 const ENV = { calendarId: 'cal@group.calendar.google.com', email: 'sa@project.iam.gserviceaccount.com', privateKey };
@@ -300,4 +300,90 @@ test('a Google failure inside the handler is still HTTP 200 with status failed (
   const body = await response.json();
   assert.equal(body.status, 'failed');
   assert.equal(fake.store.booking.booking_status, 'confirmed');
+});
+
+// ---- automatic confirmations (PayPal capture / webhook) ---------------------------------------------------------------------------------
+
+const auto = (google, fake, extra = {}) => syncConfirmedBookingSafely({ db: fake.db, env: ENV, fetchImpl: google.fetchImpl, bookingId: BOOKING_ID, ...extra });
+// What the database does when a payment flow confirms a booking (trigger mark_calendar_pending_on_confirm).
+const paidByPayPal = (changes = {}) => baseBooking({ google_calendar_sync_status: 'pending', ...changes });
+
+test('PayPal capture confirming a booking creates its Calendar event through the SAME sync as the Admin (one event, event id stored, synced)', async () => {
+  const google = fakeGoogle(); const fake = fakeDb({ booking: paidByPayPal() });
+  const result = await auto(google, fake);
+  assert.deepEqual([result.status, result.operation], ['synced', 'create']);
+  assert.equal(only(google).length, 1);
+  assert.equal(fake.store.booking.google_calendar_event_id, eventIdForBooking(BOOKING_ID));
+  assert.equal(fake.store.booking.google_calendar_sync_status, 'synced');
+  assert.equal(fake.store.booking.booking_status, 'confirmed');
+  assert.equal(only(google)[0].summary, 'Fishing Tour — Brandon Aguirre');
+});
+
+test('capture + webhook + retries for the same reservation give ONE event: sequential repeats do not even call Google, parallel ones converge', async () => {
+  const google = fakeGoogle(); const fake = fakeDb({ booking: paidByPayPal() });
+  await auto(google, fake); // capture
+  const callsAfterCapture = google.eventCalls().length;
+  const webhook = await auto(google, fake); // webhook
+  const repeated = await Promise.all([auto(google, fake), auto(google, fake), auto(google, fake)]); // webhook retries
+  assert.equal(webhook.status, 'skipped');
+  assert.ok(repeated.every((item) => item.status === 'skipped'));
+  assert.equal(google.eventCalls().length, callsAfterCapture, 'an already synced booking is not sent to Google again');
+  assert.equal(only(google).length, 1);
+  // Capture and webhook arriving AT THE SAME TIME (both see "pending"): still one event.
+  const raceGoogle = fakeGoogle(); const captureSide = fakeDb({ booking: paidByPayPal() }); const webhookSide = fakeDb({ booking: paidByPayPal() });
+  const results = await Promise.all([auto(raceGoogle, captureSide), auto(raceGoogle, webhookSide)]);
+  assert.equal(only(raceGoogle).length, 1);
+  assert.ok(results.every((item) => item.status === 'synced'));
+  assert.equal(captureSide.store.booking.google_calendar_event_id, webhookSide.store.booking.google_calendar_event_id);
+});
+
+test('Calendar failing after a PayPal confirmation never fails the payment: nothing is thrown, the booking stays confirmed and paid, sync is failed, and a later retry reaches synced', async () => {
+  const google = fakeGoogle(); const fake = fakeDb({ booking: paidByPayPal() });
+  google.state.failNext = 500;
+  const result = await auto(google, fake);
+  assert.equal(result.status, 'failed');
+  assert.equal(fake.store.booking.booking_status, 'confirmed');
+  assert.equal(fake.store.booking.payment_status, 'paid');
+  assert.equal(fake.store.booking.google_calendar_sync_status, 'failed');
+  assert.match(fake.store.booking.google_calendar_sync_error, /Google Calendar respondió 500/);
+  // The Admin "Reintentar" (or the next webhook retry) settles it.
+  const retried = await sync(google, fake);
+  assert.deepEqual([retried.status, retried.operation], ['synced', 'create']);
+  assert.equal(fake.store.booking.google_calendar_sync_status, 'synced');
+  assert.equal(only(google).length, 1);
+});
+
+test('even if the database or the network blows up, the automatic sync only reports failed: it never throws into the payment flow and returns no Google detail to expose', async () => {
+  const boom = { from: () => { throw new Error('db down'); } };
+  const result = await syncConfirmedBookingSafely({ db: boom, env: ENV, fetchImpl: fakeGoogle().fetchImpl, bookingId: BOOKING_ID });
+  assert.equal(result.status, 'failed');
+  const google = fakeGoogle(); const fake = fakeDb({ booking: paidByPayPal() });
+  google.state.tokenFails = true;
+  const failed = await auto(google, fake);
+  assert.equal(failed.status, 'failed');
+  assert.doesNotMatch(JSON.stringify(failed), /BEGIN PRIVATE KEY|fake-access-token|eyJ/);
+});
+
+test('cancelling after the automatic confirmation updates the SAME event to [CANCELADA]', async () => {
+  const google = fakeGoogle(); const fake = fakeDb({ booking: paidByPayPal() });
+  await auto(google, fake);
+  const id = fake.store.booking.google_calendar_event_id;
+  fake.store.booking = { ...fake.store.booking, booking_status: 'cancelled' };
+  const cancelled = await sync(google, fake);
+  assert.deepEqual([cancelled.status, cancelled.eventId], ['synced', id]);
+  assert.equal(google.events.get(id).summary, '[CANCELADA] Fishing Tour — Brandon Aguirre');
+  assert.equal(only(google).length, 1);
+});
+
+test('a NEW booking on the slot of a cancelled one gets its own event without touching the cancelled one', async () => {
+  const google = fakeGoogle(); const fake = fakeDb({ booking: paidByPayPal() });
+  await auto(google, fake);
+  fake.store.booking = { ...fake.store.booking, booking_status: 'cancelled' };
+  await sync(google, fake);
+  const otherId = '99999999-2222-4333-8444-555555555555';
+  const other = fakeDb({ booking: paidByPayPal({ id: otherId, booking_reference: 'PFT-000124', customers: { full_name: 'Nueva Persona', email: 'n@example.com', whatsapp: '1' } }) });
+  const result = await syncConfirmedBookingSafely({ db: other.db, env: ENV, fetchImpl: google.fetchImpl, bookingId: otherId });
+  assert.equal(result.status, 'synced');
+  assert.equal(only(google).length, 2);
+  assert.deepEqual(only(google).map((event) => event.summary).sort(), ['Fishing Tour — Nueva Persona', '[CANCELADA] Fishing Tour — Brandon Aguirre']);
 });
