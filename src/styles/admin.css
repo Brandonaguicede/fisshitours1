@@ -1626,8 +1626,10 @@ tr.admin-sortable-row--dragging {
    widening the table; the rarer "pencil + Reenviar correo" wraps to a second
    line instead of clipping. Left-aligned so pencils line up row to row. */
 .admin-reservations-table th:last-child,
-.admin-reservations-table td:last-child { width: 8.25rem; max-width: 8.25rem; text-align: left; }
-.admin-reservations-table td:last-child .admin-reservation-actions { flex-wrap: wrap; justify-content: flex-start; gap: 0.3rem 0.25rem; }
+.admin-reservations-table td:last-child { width: 8.25rem; max-width: 8.25rem; text-align: center; }
+/* Everything in "Acciones" is centered under its header: a lone pencil sits in the middle; "Confirmar" + pencil share one centered line, and the wider
+   "Reenviar correo" takes its own line with the pencil centered below it. Same column width as before, nothing overflows. */
+.admin-reservations-table td:last-child .admin-reservation-actions { flex-wrap: wrap; justify-content: center; gap: 0.3rem 0.25rem; }
 .admin-reservations-table td:last-child .admin-icon-action { padding: 0.3rem; }
 /*
  * `table-layout: auto` still measures a truncated div's *unwrapped* text
