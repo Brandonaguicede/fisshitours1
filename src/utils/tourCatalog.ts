@@ -1,5 +1,6 @@
 import type { Boat } from '../types/boat';
 import type { BoatTour } from '../types/boatTour';
+import { isPackageReady, type PackageFacts } from './packageRequirements';
 
 export interface TourBoatOption {
   boat: Boat;
@@ -17,9 +18,25 @@ export interface TourCatalogItem {
 
 // Matches the existing booking flow: a priced package and at least one departure.
 // Date-specific availability is still checked by the booking availability API.
+// The requirements live in one place (utils/packageRequirements.ts): a package whose duration, departures, price or capacities
+// cannot support a booking is never offered, so the customer cannot reach a step that would fail.
+export function bookableFacts(item: BoatTour): PackageFacts {
+  return {
+    name: item.name,
+    customQuote: item.customQuote,
+    basePrice: item.basePrice,
+    includedGuests: item.includedGuests,
+    maxGuests: item.maxGuests,
+    extraGuestPrice: item.extraGuestPrice,
+    durationMinutes: item.duration == null ? null : Math.round(item.duration * 60),
+    // `timeSlots` is already resolved (own list, or the shared schedule when the package inherits it).
+    departureTimes: item.timeSlots.map((slot) => slot.time),
+    sharedTimeCount: 0,
+  };
+}
+
 export function isBookableCatalogPackage(item: BoatTour) {
-  return item.catalogActive !== false && !item.customQuote && Number.isFinite(item.basePrice)
-    && item.basePrice > 0 && item.timeSlots.length > 0;
+  return item.catalogActive !== false && !item.customQuote && isPackageReady(bookableFacts(item));
 }
 
 export function groupTourCatalog(packages: BoatTour[], boats: Boat[]): TourCatalogItem[] {

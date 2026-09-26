@@ -7,6 +7,7 @@ import {
   enableTourForBoat,
   loadBoatToursPackages,
   packageSlug,
+  packageRowIssues,
   savePackageForBoatTour,
   type AdminPackageRow,
   type AdminTourOption,
@@ -15,6 +16,7 @@ import {
 } from '../../services/adminBoatToursService';
 import AdminConfirmDialog from './AdminConfirmDialog';
 import { AdminBadge, AdminVisibilityButton } from './AdminPrimitives';
+import { describePackageIssues, findPackageIssues, type PackageFacts } from '../../utils/packageRequirements';
 import { friendlyDeleteError } from '../../utils/adminErrors';
 import { translateTextsToSpanish, TranslationError } from '../../services/translationService';
 import { cleanList, editableList, editableText, textColumns, textsToTranslate, type BilingualColumns } from '../../utils/bilingualContent';
@@ -122,12 +124,34 @@ function newDraft(tourId: string, boatMaxGuests: number, sortOrder: number, defa
   };
 }
 
-function validateDraft(draft: DraftPackage, boatMaxGuests: number): FieldErrors {
+const parsedDurationMinutes = (draft: DraftPackage) => {
+  const value = Number(draft.durationHours);
+  return draft.durationHours.trim() && Number.isFinite(value) ? Math.round(value * 60) : null;
+};
+
+/** The same facts the public booking flow and the service layer judge (utils/packageRequirements.ts). */
+function draftFacts(draft: DraftPackage, sharedTimeCount: number): PackageFacts {
+  return {
+    name: draft.name,
+    customQuote: draft.customQuote,
+    basePrice: draft.basePrice.trim() ? Number(draft.basePrice) : null,
+    includedGuests: draft.includedGuests.trim() ? Number(draft.includedGuests) : null,
+    maxGuests: draft.maxGuests.trim() ? Number(draft.maxGuests) : null,
+    extraGuestPrice: draft.extraGuestPrice.trim() ? Number(draft.extraGuestPrice) : null,
+    durationMinutes: parsedDurationMinutes(draft),
+    departureTimes: draft.inheritTimes ? null : draft.departureTimes,
+    sharedTimeCount,
+  };
+}
+
+// A package that is visible must be bookable, so while it is "Visible" the booking requirements are enforced field by field; a package
+// that is left hidden can still be saved incomplete (it is never offered to customers).
+function validateDraft(draft: DraftPackage, boatMaxGuests: number, sharedTimeCount: number): FieldErrors {
   const errors: FieldErrors = {};
   const key = `pkg-${draft.id}`;
   if (!draft.name.trim()) errors[`${key}-name`] = 'El nombre es obligatorio.';
   if (draft.durationHours.trim() && (!Number.isFinite(Number(draft.durationHours)) || Math.round(Number(draft.durationHours) * 60) < 1)) {
-    errors[`${key}-duration`] = 'Indica una duración válida de al menos un minuto o deja el campo vacío.';
+    errors[`${key}-duration`] = 'Indica una duración válida, mayor a 0.';
   }
   if (!draft.basePrice.trim() || !Number.isFinite(Number(draft.basePrice)) || Number(draft.basePrice) < 0) {
     errors[`${key}-price`] = 'Ingresa un precio válido.';
@@ -144,6 +168,15 @@ function validateDraft(draft: DraftPackage, boatMaxGuests: number): FieldErrors 
     errors[`${key}-extra`] = 'El extra no puede ser negativo.';
   }
   if (!draft.inheritTimes && (draft.departureTimes.length > 48 || draft.departureTimes.some((time) => !/^([01]\d|2[0-3]):[0-5]\d$/.test(time)))) errors[`${key}-times`] = 'Revisa los horarios (máximo 48).';
+  const maxGuests = Number(draft.maxGuests);
+  if (!draft.maxGuests.trim() || !Number.isFinite(maxGuests) || maxGuests < 1) errors[`${key}-max`] = 'Ingresa el máximo de personas.';
+  else if (Number.isFinite(includedGuests) && maxGuests < includedGuests) errors[`${key}-max`] = 'El máximo de personas no puede ser menor que las personas incluidas.';
+  if (draft.active && !draft.customQuote) {
+    const issues = findPackageIssues(draftFacts(draft, sharedTimeCount));
+    if (issues.includes('duration') && !errors[`${key}-duration`]) errors[`${key}-duration`] = 'Ingresa la duración del paquete.';
+    if (issues.includes('schedule') && !errors[`${key}-times`]) errors[`${key}-times`] = draft.inheritTimes ? 'No hay horarios generales configurados. Agrega al menos un horario de salida.' : 'Agrega al menos un horario de salida.';
+    if (issues.includes('price') && !errors[`${key}-price`]) errors[`${key}-price`] = 'Ingresa un precio mayor a 0.';
+  }
   if (draft.mealOptions.length > 30 || draft.mealOptions.some((meal) => !meal.en.trim() || meal.en.trim().length > 120)) errors[`${key}-meals`] = 'Cada comida necesita un nombre (máximo 120 caracteres).';
   const included = draft.packageIncluded.split('\n').map((item) => item.trim()).filter(Boolean);
   if (draft.overrideIncluded && (included.length > 50 || included.some((item) => item.length > 300))) errors[`${key}-contents`] = 'Máximo 50 elementos de 300 caracteres.';
@@ -245,7 +278,7 @@ function PackageDraftEditor({ draft, boatName, tourTitle, fieldErrors, busy, boa
             {fieldError('name')}
           </label>
           <label className="admin-field">
-            <span className="admin-field__label">Duración (horas, opcional)</span>
+            <span className="admin-field__label">{draft.customQuote ? 'Duración (horas, opcional)' : 'Duración (horas)'}</span>
             <input
               className="admin-input"
               type="text"
@@ -254,7 +287,7 @@ function PackageDraftEditor({ draft, boatName, tourTitle, fieldErrors, busy, boa
               value={draft.durationHours}
               onChange={(event) => onChange({ durationHours: event.target.value.replace(',', '.') })}
             />
-            <span className="admin-field-help">Vacío si la duración se acuerda con el cliente.</span>
+            <span className="admin-field-help">{draft.customQuote ? 'Puede quedar vacía en una cotización personalizada.' : 'Se usa para calcular la disponibilidad del bote.'}</span>
             {fieldError('duration')}
           </label>
         </div>
@@ -320,6 +353,7 @@ function PackageDraftEditor({ draft, boatName, tourTitle, fieldErrors, busy, boa
               onChange={(event) => onChange({ maxGuests: event.target.value })}
             />
             <span className="admin-field-help">Techo físico del bote: {boatMaxGuests}.</span>
+            {fieldError('max')}
           </label>
         </div>
         <label className="admin-package-check">
@@ -506,19 +540,26 @@ export default function BoatToursPackagesEditor({ boatId, boatName, boatMaxGuest
     [catalogTours, linkByTour],
   );
 
-  async function run(action: () => Promise<void>, okMessage?: string) {
+  async function run(action: () => Promise<void>, okMessage?: string | (() => string)) {
     setBusy(true);
     setError('');
     setNotice('');
     try {
       await action();
-      if (okMessage) setNotice(okMessage);
+      if (okMessage) setNotice(typeof okMessage === 'function' ? okMessage() : okMessage);
       await reload();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'La operación no se pudo completar.');
     } finally {
       setBusy(false);
     }
+  }
+
+  async function addTour(tour: AdminTourOption) {
+    let skipped: Array<{ id: string; name: string }> = [];
+    await run(async () => { skipped = (await enableTourForBoat(boatId, tour.id, tour.sort_order)).skipped; }, () => (skipped.length
+      ? `${tour.title} agregado a ${boatLabel}. ${skipped.length === 1 ? 'Un paquete incompleto sigue oculto' : `${skipped.length} paquetes incompletos siguen ocultos`} (${skipped.map((item) => item.name).join(', ')}): complétalos para mostrarlos.`
+      : `${tour.title} agregado a ${boatLabel}.`));
   }
 
   function closeEditor() {
@@ -551,7 +592,7 @@ export default function BoatToursPackagesEditor({ boatId, boatName, boatMaxGuest
 
   async function persistDraft() {
     if (!draft) return;
-    const errors = validateDraft(draft, boatMaxGuests);
+    const errors = validateDraft(draft, boatMaxGuests, defaultTimes.length);
     setFieldErrors(errors);
     if (Object.keys(errors).length) return;
 
@@ -692,6 +733,11 @@ export default function BoatToursPackagesEditor({ boatId, boatName, boatMaxGuest
                         {row.name || 'Paquete sin nombre'}
                         {!row.active ? <span className="admin-muted"> · inactivo</span> : null}
                       </strong>
+                      {(() => {
+                        // An old package that went live without what a booking needs: flagged so it gets fixed (customers never see it meanwhile).
+                        const issues = row.active ? packageRowIssues(row, defaultTimes.length) : [];
+                        return issues.length ? <span className="admin-field-error" role="status">Incompleto: falta {describePackageIssues(issues)}. No se ofrece a los clientes hasta completarlo.</span> : null;
+                      })()}
                       <span className="admin-muted">{row.included_guests} incluidos / {row.max_guests} máximo</span>
                     </div>
                     <span className="admin-boat-package-row__price">{row.custom_quote ? 'Cotizar' : money(Number(row.base_price))}</span>
@@ -781,7 +827,7 @@ export default function BoatToursPackagesEditor({ boatId, boatName, boatMaxGuest
                     type="button"
                     disabled={busy}
                     aria-label={`Agregar al bote: ${tour.title}`}
-                    onClick={() => void run(() => enableTourForBoat(boatId, tour.id, tour.sort_order), `${tour.title} agregado a ${boatLabel}.`)}
+                    onClick={() => void addTour(tour)}
                   >
                     <Plus size={14} /> Agregar
                   </button>

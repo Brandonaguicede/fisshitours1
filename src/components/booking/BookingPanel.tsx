@@ -7,7 +7,7 @@ import { useLanguage } from '../../i18n/LanguageContext';
 import { text, tr } from '../../i18n/translations';
 import { MOCK_TURNSTILE_TOKEN, USE_LOCAL_TURNSTILE_MOCK } from '../../lib/turnstile';
 import { cancelPayPalOrder, capturePayPalOrder, createPayPalOrder, getPayPalErrorMessage, loadPayPalSdk, type PayPalCaptureResult } from '../../services/paypalService';
-import { getBookingAvailability, type AvailabilitySlot } from '../../services/availabilityService';
+import { AvailabilityError, getBookingAvailability, type AvailabilitySlot } from '../../services/availabilityService';
 import { calculateBookingPrice, createBooking, getActiveDepartureLocations, type BookingResult, type DepartureLocation, type PriceResult } from '../../services/bookingService';
 import { getActivePaymentMethods } from '../../services/paymentService';
 import type { Boat } from '../../types/boat';
@@ -141,7 +141,19 @@ export function BookingPanel({ selectedBoat, selectedTour: requestedTour, boats,
     queryKey: ['availability', selectedBoat.id, selectedTour?.tourId, selectedTour?.id, date, selectedTour?.boatTourId],
     queryFn: ({ signal }) => getBookingAvailability(selectedBoat.id, selectedTour!.tourId!, selectedTour!.id, date, signal),
     enabled: selectionReady && Boolean(date),
+    // A package that cannot be booked will not fix itself in a few seconds: answer at once. Real network / backend failures keep the default retries.
+    retry: (failureCount, error) => !(error instanceof AvailabilityError && error.kind === 'package_unavailable') && failureCount < 3,
   });
+  // Internal diagnosis only (the customer just sees the friendly message): which package / link / requirement could not be booked.
+  const loggedPackageProblem = useRef('');
+  useEffect(() => {
+    const error = availabilityQuery.error;
+    if (!(error instanceof AvailabilityError) || error.kind !== 'package_unavailable' || !selectedTour) return;
+    const marker = `${selectedTour.id}|${selectedTour.boatTourId}`;
+    if (loggedPackageProblem.current === marker) return;
+    loggedPackageProblem.current = marker;
+    console.warn('[booking] package cannot be booked', { operation: 'get-booking-availability', packageId: selectedTour.id, boatTourId: selectedTour.boatTourId, boatId: selectedBoat.id, tourId: selectedTour.tourId, status: error.status, reason: error.message });
+  }, [availabilityQuery.error, selectedBoat.id, selectedTour]);
   const paymentMethodsQuery = useQuery({ queryKey: ['paymentMethods', 'active'], queryFn: getActivePaymentMethods });
   const departureLocationsQuery = useQuery({ queryKey: ['departureLocations', 'active'], queryFn: getActiveDepartureLocations });
   const departureLocations = departureLocationsQuery.data ?? [];
@@ -544,6 +556,7 @@ export function BookingPanel({ selectedBoat, selectedTour: requestedTour, boats,
                 availabilitySlots={currentSlots}
                 availabilityLoading={availabilityQuery.isFetching}
                 availabilityError={availabilityQuery.isError}
+                availabilityPackageUnavailable={availabilityQuery.error instanceof AvailabilityError && availabilityQuery.error.kind === 'package_unavailable'}
                 mealOption={mealOption}
                 hasCapacityError={hasCapacityError}
                 onTourChange={handleTourChange}
@@ -857,6 +870,8 @@ function TourDetailsStep(props: {
   availabilitySlots: Array<{ id: string; label: string; time: string; available?: boolean }>;
   availabilityLoading: boolean;
   availabilityError: boolean;
+  /** The package itself cannot be booked (not a network / backend hiccup): show the friendly "choose another" message. */
+  availabilityPackageUnavailable: boolean;
   mealOption: string;
   hasCapacityError: boolean;
   onTourChange: (tourId: string) => void;
@@ -1002,7 +1017,8 @@ function TourDetailsStep(props: {
           </div>
           {!props.availabilityLoading && !props.availabilityError && !props.availabilitySlots.length ? <p className="mt-2 text-sm text-ocean-200">{language === 'es' ? 'Este paquete no tiene horas de salida disponibles.' : 'This package has no available departure times.'}</p> : null}
           {props.availabilityLoading ? <p className="mt-2 text-xs font-semibold text-ocean-300">{language === 'es' ? 'Verificando disponibilidad...' : 'Checking availability...'}</p> : null}
-          {props.availabilityError ? <p className="mt-2 text-xs font-semibold text-red-200">{language === 'es' ? 'No pudimos cargar la información de la reserva. Inténtalo de nuevo.' : 'We couldn’t load the booking information. Please try again.'}</p> : null}
+          {props.availabilityError && props.availabilityPackageUnavailable ? <p className="mt-2 text-sm font-semibold text-amber-200" role="status">{tr(text.booking.packageUnavailable, language)}</p> : null}
+          {props.availabilityError && !props.availabilityPackageUnavailable ? <p className="mt-2 text-xs font-semibold text-red-200">{language === 'es' ? 'No pudimos cargar la información de la reserva. Inténtalo de nuevo.' : 'We couldn’t load the booking information. Please try again.'}</p> : null}
         </fieldset>
       ) : null}
     </div>

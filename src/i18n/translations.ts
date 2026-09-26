@@ -28,6 +28,11 @@ export const text = {
       data: { es: 'Tus Datos', en: 'Your Details' },
     },
     badge: { es: 'Reservas', en: 'Bookings' },
+    // A package that cannot be booked (bad configuration, race with an admin change): never a technical message for the customer.
+    packageUnavailable: {
+      es: 'Esta opción no está disponible temporalmente. Elige otro paquete o contáctanos para recibir ayuda.',
+      en: 'This option is temporarily unavailable. Please choose another package or contact us for assistance.',
+    },
     privateFleet: { es: 'Flota privada', en: 'Private fleet' },
     chooseBoat: { es: 'Elige tu Barco', en: 'Choose your boat' },
     people: { es: 'personas', en: 'people' },
