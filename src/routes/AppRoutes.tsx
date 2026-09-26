@@ -9,6 +9,7 @@ const ToursPage = lazy(() => import('../pages/ToursPage'));
 const ContactPage = lazy(() => import('../pages/ContactPage'));
 const NotFoundPage = lazy(() => import('../pages/NotFoundPage'));
 const AdminLoginPage = lazy(() => import('../pages/admin/AdminLoginPage'));
+const UpdatePasswordPage = lazy(() => import('../pages/UpdatePasswordPage'));
 const AdminLayout = lazy(() => import('../components/admin/AdminLayout'));
 const AdminDashboardPage = lazy(() => import('../pages/admin/AdminDashboardPage'));
 const AdminReservationsPage = lazy(() => import('../pages/admin/AdminReservationsPage'));
@@ -36,6 +37,7 @@ function LegacyContentRedirect() {
 export function AppRoutes() {
   return (
     <Routes>
+      <Route path="update-password" element={<UpdatePasswordPage />} />
       <Route path="admin/login" element={<AdminLoginPage />} />
       <Route path="admin" element={<AdminLayout />}>
         <Route index element={<AdminDashboardPage />} />
