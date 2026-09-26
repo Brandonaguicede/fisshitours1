@@ -1,9 +1,11 @@
 import { formatTime, money } from '../../utils/format';
-import { Calendar, Check, CheckCircle2, Clock, FileSpreadsheet, FileText, Loader2, Pencil, Plus, RefreshCw, Trash2, X, XCircle } from 'lucide-react';
+import { Calendar, Check, CheckCircle2, Clock, FileSpreadsheet, FileText, Loader2, Pencil, Plus, RefreshCw, Settings, Trash2, X, XCircle } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { AdminBadge, AdminCreateButton, AdminFilterMenu, AdminListToolbar, AdminModuleSurface, AdminStatCard, AdminTable } from '../../components/admin/AdminPrimitives';
+import { AdminDangerRow } from '../../components/admin/AdminStatusSection';
+import FormSection from '../../components/admin/FormSection';
 import AdminConfirmDialog from '../../components/admin/AdminConfirmDialog';
 import { Modal } from '../../components/common/Modal';
 import { supabase } from '../../lib/supabase';
@@ -746,23 +748,16 @@ export default function AdminReservationsPage() {
           ) : null}
           </div>
           {editingReservation && editingReservation.booking_status !== 'cancelled' ? (
-            <div className="admin-form-section">
-              <header className="admin-form-section__head">
-                <span className="admin-form-section__icon"><Trash2 size={16} /></span>
-                <div>
-                  <h3 className="admin-form-section__title">Zona de peligro</h3>
-                  <p className="admin-form-section__description">Esta acción no se puede deshacer.</p>
-                </div>
-              </header>
-              <div className="admin-form-section__fields">
-                <div className="admin-danger-zone">
-                  <p className="admin-muted">Cancela esta reserva. El bloqueo de disponibilidad del bote se libera.</p>
-                  <button className="admin-btn admin-btn--danger" type="button" onClick={() => setCancelConfirmOpen(true)}>
-                    <Trash2 size={15} /> Cancelar reserva
-                  </button>
+            <FormSection title="Estado de la reserva" description="La cancelación libera el bloqueo de disponibilidad del bote." icon={<Settings size={16} />}>
+              <div className="admin-tour-config-row admin-tour-config-row--tour">
+                <div className="admin-tour-config-row__status">
+                  <p className="admin-config-row__label">Estado actual</p>
+                  <AdminBadge value={editingReservation.booking_status} />
                 </div>
               </div>
-            </div>
+              <div className="admin-tour-config-divider" role="separator" />
+              <AdminDangerRow title="Cancelar reserva" description="Cancela esta reserva y libera el bloqueo de disponibilidad del bote. No se puede deshacer." label="Cancelar reserva" onClick={() => setCancelConfirmOpen(true)} />
+            </FormSection>
           ) : null}
           </div> : null}
           <footer className="admin-modal-footer"><button className="admin-btn" type="submit" disabled={editSaving || !editForm}>{editSaving ? 'Guardando...' : 'Guardar'}</button><button className="admin-btn admin-btn--secondary" type="button" onClick={() => setEditOpen(false)}>Cancelar</button></footer>

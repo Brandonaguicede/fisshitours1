@@ -183,3 +183,30 @@ test('cancelling a confirmed booking syncs the calendar afterwards (the function
     assert.equal(state.bookings[0].booking_status, 'cancelled');
   } finally { await f.browser.close(); }
 });
+
+test('the reservation editor uses the standard destructive row (same as Tours / Botes / Galería): no "Zona de peligro", a card with the state and a red "Cancelar reserva" row; cancelled bookings have none', async () => {
+  const f = await fixture({ bookings: [booking('dz', 'confirmed'), booking('cc', 'cancelled')] }); const { page } = f;
+  try {
+    await openEditor(page, 'dz');
+    const dialog = page.getByRole('dialog');
+    await expect(dialog.getByText('Zona de peligro')).toHaveCount(0);
+    await expect(dialog.locator('.admin-danger-zone')).toHaveCount(0);
+    const card = dialog.locator('.admin-form-section').filter({ has: page.getByRole('heading', { name: 'Estado de la reserva' }) });
+    await expect(card.locator('.admin-badge')).toHaveText('Confirmada');
+    await expect(card.locator('.admin-tour-config-divider')).toHaveCount(1);
+    const danger = card.locator('.admin-tour-danger-row');
+    await expect(danger.locator('strong')).toHaveText('Cancelar reserva');
+    const button = danger.getByRole('button', { name: 'Cancelar reserva' });
+    await expect(button.locator('svg')).toHaveCount(1); // the trash icon
+    assert.match(await button.getAttribute('class'), /admin-btn--danger/);
+    const shape = await button.evaluate((node) => ({ width: Math.round(node.getBoundingClientRect().width), right: Math.round(node.getBoundingClientRect().right), rowRight: Math.round(node.closest('.admin-tour-danger-row').getBoundingClientRect().right) }));
+    assert.ok(shape.width >= 156, `same minimum width as the other delete buttons (${shape.width}px)`);
+    assert.ok(shape.rowRight - shape.right <= 2, 'the button sits at the right edge of the row');
+    await button.click();
+    await expect(page.getByRole('button', { name: /Sí, cancelar reserva/ })).toBeVisible(); // the same confirmation as before
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Escape');
+    await openEditor(page, 'cc');
+    await expect(page.getByRole('dialog').getByRole('heading', { name: 'Estado de la reserva' })).toHaveCount(0);
+  } finally { await f.browser.close(); }
+});

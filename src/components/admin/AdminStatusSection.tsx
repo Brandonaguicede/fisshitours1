@@ -43,6 +43,21 @@ export function AdminStatusRow(props: { label: string; badge?: ReactNode; hint: 
   );
 }
 
+/** The destructive row of every Admin editor: red-tinted title + plain description on the left, the red button (trash icon + label) on the right. */
+export function AdminDangerRow(props: { title: string; description: string; label: string; onClick: () => void; disabled?: boolean }) {
+  return (
+    <div className="admin-tour-danger-row">
+      <div>
+        <strong>{props.title}</strong>
+        <p className="admin-muted">{props.description}</p>
+      </div>
+      <button className="admin-btn admin-btn--danger" type="button" disabled={props.disabled} onClick={props.onClick}>
+        <Trash2 size={15} /> {props.label}
+      </button>
+    </div>
+  );
+}
+
 export default function AdminStatusSection(props: AdminStatusSectionProps) {
   return (
     <FormSection title={props.title ?? 'Estado y visibilidad'} description={props.description} icon={<Settings size={16} />}>
@@ -58,15 +73,7 @@ export default function AdminStatusSection(props: AdminStatusSectionProps) {
       {props.deleteAction ? (
         <>
           <div className="admin-tour-config-divider" role="separator" />
-          <div className="admin-tour-danger-row">
-            <div>
-              <strong>{props.deleteAction.title}</strong>
-              <p className="admin-muted">{props.deleteAction.description}</p>
-            </div>
-            <button className="admin-btn admin-btn--danger" type="button" disabled={props.deleteAction.disabled} onClick={props.deleteAction.onDelete}>
-              <Trash2 size={15} /> {props.deleteAction.label}
-            </button>
-          </div>
+          <AdminDangerRow title={props.deleteAction.title} description={props.deleteAction.description} label={props.deleteAction.label} disabled={props.deleteAction.disabled} onClick={props.deleteAction.onDelete} />
         </>
       ) : null}
     </FormSection>

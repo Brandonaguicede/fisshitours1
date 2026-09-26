@@ -1800,24 +1800,6 @@ tr.admin-sortable-row--dragging {
   font-size: 0.8rem;
 }
 
-/* Destructive action, set apart with its own tinted border so it reads as
-   "handle carefully" without needing a louder red block. */
-.admin-danger-zone {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  flex-wrap: wrap;
-  padding: 0.85rem;
-  border: 1px solid var(--admin-danger-soft-border);
-  border-radius: var(--admin-radius-sm);
-  background: color-mix(in srgb, var(--admin-danger) 6%, var(--admin-surface));
-}
-
-.admin-danger-zone .admin-muted {
-  max-width: 32rem;
-}
-
 .admin-form-columns {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
