@@ -336,3 +336,27 @@ test('after an edit the Calendar is updated (one sync call); if Google fails the
     await expect(calendarRow(page).getByRole('button', { name: 'Reintentar' })).toBeVisible();
   } finally { await f.browser.close(); }
 });
+
+test('Acciones: a lone pencil (or the one below "Reenviar correo") is centered under the header, every group of actions is centered in its cell and nothing overflows', async () => {
+  const f = await fixture({ bookings: [booking('z1', 'cancelled'), booking('z2', 'confirmed'), booking('z3', 'pending_confirmation')] }); const { page } = f;
+  try {
+    const geometry = await page.evaluate(() => {
+      const th = [...document.querySelectorAll('.admin-reservations-table th')].at(-1).getBoundingClientRect();
+      const rows = [...document.querySelectorAll('.admin-reservations-table tbody tr')].map((tr) => {
+        const pencil = tr.querySelector('.admin-icon-action').getBoundingClientRect();
+        const group = tr.querySelector('.admin-reservation-actions').getBoundingClientRect();
+        const cell = tr.lastElementChild.getBoundingClientRect();
+        return { ref: tr.textContent.match(/PFT-[A-Z]\d/)[0], pencilCenter: (pencil.left + pencil.right) / 2, groupCenter: (group.left + group.right) / 2, cellCenter: (cell.left + cell.right) / 2, groupHeight: Math.round(group.height), inside: group.left >= cell.left - 1 && group.right <= cell.right + 1 };
+      });
+      return { header: (th.left + th.right) / 2, rows };
+    });
+    for (const ref of ['PFT-Z1', 'PFT-Z2']) {
+      const single = geometry.rows.find((row) => row.ref === ref);
+      assert.ok(Math.abs(single.pencilCenter - geometry.header) <= 2, `${ref}: the pencil is centered under "Acciones" (${single.pencilCenter} vs ${geometry.header})`);
+    }
+    for (const row of geometry.rows) {
+      assert.ok(Math.abs(row.groupCenter - row.cellCenter) <= 2, `${row.ref}: the group of actions is centered in its cell`);
+      assert.ok(row.inside, `${row.ref}: nothing overflows the cell`);
+    }
+  } finally { await f.browser.close(); }
+});
