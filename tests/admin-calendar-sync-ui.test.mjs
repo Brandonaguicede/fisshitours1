@@ -18,10 +18,10 @@ const catalogPackage = {
   boat_tours: { id: 'bt-1', boat_id: 'boat-1', tour_id: 'tour-1', active: true, boats: { active: true, max_guests: 8 }, tours: { id: 'tour-1', title: 'Fishing Tour', category: 'Fishing', image_url: null, active: true, sort_order: 1, description: '', highlights: [], included: [] } },
 };
 
-async function fixture({ bookings, calendar = {}, sync = () => ({ status: 200, json: { status: 'synced', operation: 'create', eventId: 'evt' } }) }) {
+async function fixture({ bookings, calendar = {}, history = {}, updateReply = null, sync = () => ({ status: 200, json: { status: 'synced', operation: 'create', eventId: 'evt' } }) }) {
   const browser = await chromium.launch({ headless: true, channel: 'msedge' });
   const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
-  const state = { bookings: bookings.map((row) => ({ ...row })), calendar: { ...calendar }, syncCalls: [], calls: [] };
+  const state = { bookings: bookings.map((row) => ({ ...row })), calendar: { ...calendar }, syncCalls: [], calls: [], updates: [] };
   await page.route('https://admin-test.supabase.co/**', async (route) => {
     const request = route.request(); const url = new URL(request.url()); const path = url.pathname;
     if (path.endsWith('/token')) return route.fulfill({ json: { access_token: 'test-admin-token', refresh_token: 'r', token_type: 'bearer', expires_in: 3600, user } });
@@ -38,7 +38,16 @@ async function fixture({ bookings, calendar = {}, sync = () => ({ status: 200, j
       state.bookings = state.bookings.map((row) => (row.id === body.bookingId ? { ...row, booking_status: 'confirmed', payment_status: 'paid' } : row));
       return route.fulfill({ json: { customerEmailPresent: true, emailQueued: true } });
     }
-    if (path.endsWith('/functions/v1/admin-update-booking')) { state.calls.push(['update', request.postDataJSON().bookingId]); return route.fulfill({ json: { booking_id: 'x' } }); }
+    if (path.endsWith('/functions/v1/admin-update-booking')) {
+      const body = request.postDataJSON(); state.calls.push(['update', body.bookingId]); state.updates.push(body);
+      if (updateReply) return route.fulfill(updateReply);
+      return route.fulfill({ json: { booking_id: body.bookingId, changed: Boolean(body.reason) } });
+    }
+    if (path.endsWith('/rest/v1/booking_changes')) {
+      const bookingFilter = url.searchParams.get('booking_id') ?? '';
+      if (bookingFilter.startsWith('eq.')) return route.fulfill({ json: history[bookingFilter.slice(3)] ?? [] });
+      return route.fulfill({ json: Object.entries(history).filter(([, rows]) => rows.length).map(([id]) => ({ booking_id: id })) });
+    }
     if (path.endsWith('/functions/v1/sync-reservation-calendar')) {
       const body = request.postDataJSON(); state.syncCalls.push(body); state.calls.push(['sync', body.reservationId]);
       const planned = sync(state.syncCalls.length, body);
@@ -159,6 +168,7 @@ test('editing a CONFIRMED booking updates the same calendar event (one sync call
   try {
     await openEditor(page, 'ed');
     await page.getByLabel('Personas').fill('5');
+    await reasonBox(page).fill('QA cambio solicitado por cliente');
     await page.getByRole('button', { name: 'Guardar', exact: true }).click();
     await expect(page.getByText(/Cambios guardados/)).toBeVisible();
     await expect.poll(() => state.calls.filter((call) => call[0] === 'sync').length).toBe(1);
@@ -166,6 +176,7 @@ test('editing a CONFIRMED booking updates the same calendar event (one sync call
     assert.deepEqual(state.syncCalls, [{ reservationId: 'ed' }]);
     await openEditor(page, 'pd');
     await page.getByLabel('Personas').fill('4');
+    await reasonBox(page).fill('QA cambio solicitado por cliente');
     await page.getByRole('button', { name: 'Guardar', exact: true }).click();
     await expect(page.getByText(/Cambios guardados/)).toBeVisible();
     assert.equal(state.calls.filter((call) => call[0] === 'sync').length, 1, 'no new sync for a pending booking');
@@ -208,5 +219,120 @@ test('the reservation editor uses the standard destructive row (same as Tours / 
     await page.keyboard.press('Escape');
     await openEditor(page, 'cc');
     await expect(page.getByRole('dialog').getByRole('heading', { name: 'Estado de la reserva' })).toHaveCount(0);
+  } finally { await f.browser.close(); }
+});
+
+
+// ---- audited edits: reason, "Modificada", history -----------------------------------------------------------------------------------
+
+const change = (id, reason, when, who, changes) => ({ id, reason, changed_at: when, changes, profiles: { full_name: who, email: 'admin@example.com' } });
+const reasonBox = (page) => page.getByLabel('Motivo de la modificación *');
+
+test('an operational change (time, date, guests) asks for "Motivo de la modificación *" before saving; without it nothing is sent, with it the reason travels with the edit', async () => {
+  const f = await fixture({ bookings: [booking('m1', 'confirmed')], calendar: { m1: { google_calendar_sync_status: 'synced' } } }); const { page, state } = f;
+  try {
+    await openEditor(page, 'm1');
+    await expect(reasonBox(page)).toHaveCount(0);
+    await page.getByLabel('Personas').fill('5');
+    await expect(reasonBox(page)).toBeVisible();
+    await expect(reasonBox(page)).toHaveAttribute('placeholder', 'Ej. El cliente solicitó cambiar la hora de salida.');
+    await page.getByRole('button', { name: 'Guardar', exact: true }).click();
+    await expect(page.getByText('Indica el motivo de la modificación.')).toBeVisible();
+    assert.equal(state.updates.length, 0, 'nothing is sent without a reason');
+    await reasonBox(page).fill('El cliente solicitó una persona más');
+    await page.getByRole('button', { name: 'Guardar', exact: true }).click();
+    await expect(page.getByText(/Cambios guardados/)).toBeVisible();
+    assert.equal(state.updates.length, 1);
+    assert.deepEqual([state.updates[0].guests, state.updates[0].reason], [5, 'El cliente solicitó una persona más']);
+    // Date asks for it as well, and going back to the original value removes the requirement.
+    await openEditor(page, 'm1');
+    await page.getByLabel('Fecha').fill('2026-11-12');
+    await expect(reasonBox(page)).toBeVisible();
+    await page.getByLabel('Fecha').fill('2026-11-10');
+    await expect(reasonBox(page)).toHaveCount(0);
+  } finally { await f.browser.close(); }
+});
+
+test('a non-operational change (contact details, notes) does NOT ask for a reason and sends none', async () => {
+  const f = await fixture({ bookings: [booking('m2', 'confirmed')], calendar: { m2: { google_calendar_sync_status: 'synced' } } }); const { page, state } = f;
+  try {
+    await openEditor(page, 'm2');
+    await page.getByLabel('Nombre del cliente').fill('Otro Nombre');
+    await page.getByLabel('Notas').fill('Nota interna nueva');
+    await expect(reasonBox(page)).toHaveCount(0);
+    await page.getByRole('button', { name: 'Guardar', exact: true }).click();
+    await expect(page.getByText(/Cambios guardados/)).toBeVisible();
+    assert.equal(state.updates.length, 1);
+    assert.equal(state.updates[0].reason, undefined);
+    // A Confirmed booking stays confirmed after the edit.
+    assert.equal(state.bookings[0].booking_status, 'confirmed');
+    await expect(row(page, 'm2')).toContainText('Confirmada');
+  } finally { await f.browser.close(); }
+});
+
+test('"Modificada" appears next to the status (table and editor) only for reservations with audited changes, with a compact last-modification summary and a simple history', async () => {
+  const history = {
+    m3: [change('c2', 'El cliente pidió otra hora', '2026-09-25T15:00:00Z', 'Gabriel Admin', { departure_time: { before: '07:00', after: '11:30' } }), change('c1', 'Cambio de fecha', '2026-09-24T10:00:00Z', 'Gabriel Admin', { tour_date: { before: '2026-11-09', after: '2026-11-10' } })],
+    m4: [change('c3', 'Solo una vez', '2026-09-25T16:00:00Z', 'Otra Persona', { guests: { before: 2, after: 3 } })],
+  };
+  const f = await fixture({ bookings: [booking('m3', 'confirmed'), booking('m4', 'confirmed'), booking('m5', 'confirmed')], history }); const { page } = f;
+  try {
+    await expect(row(page, 'm3').locator('td').nth(-2)).toContainText('Confirmada');
+    await expect(row(page, 'm3').locator('td').nth(-2)).toContainText('Modificada');
+    await expect(row(page, 'm4')).toContainText('Modificada');
+    await expect(row(page, 'm5')).not.toContainText('Modificada');
+    await openEditor(page, 'm3');
+    const dialog = page.getByRole('dialog');
+    await expect(dialog.locator('.admin-badge').filter({ hasText: 'Modificada' }).first()).toBeVisible();
+    const summary = dialog.getByRole('group', { name: 'Última modificación' });
+    await expect(summary).toContainText('Gabriel Admin');
+    await expect(summary).toContainText('El cliente pidió otra hora');
+    await expect(summary).toContainText('Hora: 07:00 → 11:30');
+    await expect(summary.getByText('Historial (2)')).toBeVisible();
+    await summary.getByText('Historial (2)').click();
+    await expect(summary).toContainText('Cambio de fecha');
+    await dialog.getByRole('button', { name: 'Cerrar', exact: true }).first().click();
+    await openEditor(page, 'm4');
+    await expect(page.getByRole('dialog').getByRole('group', { name: 'Última modificación' }).getByText(/Historial/)).toHaveCount(0);
+    await page.getByRole('dialog').getByRole('button', { name: 'Cerrar', exact: true }).first().click();
+    await openEditor(page, 'm5');
+    await expect(page.getByRole('group', { name: 'Última modificación' })).toHaveCount(0);
+    await expect(page.getByRole('dialog').locator('.admin-badge').filter({ hasText: 'Modificada' })).toHaveCount(0);
+  } finally { await f.browser.close(); }
+});
+
+test('a slot conflict is reported in plain words; a cancelled reservation cannot be edited like an active one', async () => {
+  const conflict = await fixture({ bookings: [booking('m6', 'confirmed')], calendar: { m6: { google_calendar_sync_status: 'synced' } }, updateReply: { status: 409, json: { message: 'BOAT_TIME_CONFLICT: The selected boat is no longer available for this time.' } } });
+  try {
+    await openEditor(conflict.page, 'm6');
+    await conflict.page.getByLabel('Personas').fill('4');
+    await reasonBox(conflict.page).fill('Cambio de prueba');
+    await conflict.page.getByRole('button', { name: 'Guardar', exact: true }).click();
+    await expect(conflict.page.getByText('El bote ya está ocupado en esa fecha y hora. Elige otro horario.')).toBeVisible();
+    assert.doesNotMatch(await conflict.page.locator('body').innerText(), /BOAT_TIME_CONFLICT/);
+  } finally { await conflict.browser.close(); }
+
+  const cancelled = await fixture({ bookings: [booking('m7', 'cancelled')] });
+  try {
+    await openEditor(cancelled.page, 'm7');
+    await expect(cancelled.page.getByText(/ya no se puede editar/)).toBeVisible();
+    await expect(cancelled.page.getByRole('button', { name: 'Guardar', exact: true })).toBeDisabled();
+  } finally { await cancelled.browser.close(); }
+});
+
+test('after an edit the Calendar is updated (one sync call); if Google fails the edit stays saved and the editor offers Reintentar', async () => {
+  const f = await fixture({ bookings: [booking('m8', 'confirmed')], calendar: { m8: { google_calendar_sync_status: 'synced' } }, sync: () => ({ status: 200, json: { status: 'failed', error: 'Google Calendar respondió 500.' } }) }); const { page, state } = f;
+  try {
+    await openEditor(page, 'm8');
+    await page.getByLabel('Personas').fill('6');
+    await reasonBox(page).fill('QA cambio solicitado por cliente');
+    await page.getByRole('button', { name: 'Guardar', exact: true }).click();
+    await expect(page.getByText(/No se pudo actualizar Google Calendar: reintenta desde Editar reserva\./)).toBeVisible();
+    assert.deepEqual(state.calls.map((call) => call[0]), ['update', 'sync']);
+    assert.deepEqual(state.syncCalls, [{ reservationId: 'm8' }]);
+    assert.equal(state.updates[0].reason, 'QA cambio solicitado por cliente');
+    await openEditor(page, 'm8');
+    await expect(calendarRow(page).getByText('No sincronizada')).toBeVisible();
+    await expect(calendarRow(page).getByRole('button', { name: 'Reintentar' })).toBeVisible();
   } finally { await f.browser.close(); }
 });

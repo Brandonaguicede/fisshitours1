@@ -4,6 +4,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2';
 import { z } from 'npm:zod@3.23.8';
 import { areExternalProviderMocksAllowed } from '../_shared/environment.ts';
 import { enqueueBookingConfirmationEmails } from '../_shared/booking-confirmation-email.ts';
+import { syncBookingCalendarAfterConfirmation } from '../_shared/booking-calendar.ts';
 
 const schema = z.object({ bookingId: z.string().uuid(), orderId: z.string().min(1) });
 
@@ -62,6 +63,9 @@ serve(withCors(async (req) => {
       p_raw_response: data,
     });
     if (rpcError) return Response.json({ message: rpcError.message }, { status: 400, headers });
+
+    // The payment is saved and the booking confirmed. Calendar is secondary: it can never fail or change the response of the payment.
+    await syncBookingCalendarAfterConfirmation(supabase, booking.id);
 
     await enqueueBookingConfirmationEmails(supabase, booking.id).catch((emailQueueError) => {
       console.error('Booking confirmation email could not be queued', emailQueueError);

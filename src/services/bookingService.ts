@@ -162,8 +162,10 @@ export function updateBooking(input: {
   timeSlotId: string;
   guests: number;
   specialRequests?: string;
+  /** Required by the database when date, time, package or guests change. */
+  reason?: string;
 }) {
-  return callFunction<{ booking_id: string; booking_status: string; payment_status: string }>('admin-update-booking', input);
+  return callFunction<{ booking_id: string; booking_status: string; payment_status: string; changed?: boolean }>('admin-update-booking', input);
 }
 
 export async function getActiveDepartureLocations() {

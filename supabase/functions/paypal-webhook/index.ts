@@ -3,6 +3,7 @@ import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { areExternalProviderMocksAllowed } from '../_shared/environment.ts';
 import { enqueueBookingConfirmationEmails } from '../_shared/booking-confirmation-email.ts';
+import { syncBookingCalendarAfterConfirmation } from '../_shared/booking-calendar.ts';
 
 serve(withCors(async (req) => {
   if (req.method !== 'POST') return Response.json({ message: 'Method not allowed' }, { status: 405 });
@@ -151,6 +152,8 @@ async function processPayPalEvent(supabase: ReturnType<typeof createClient>, pay
       p_raw_response: payload,
     });
     if (error) throw error;
+    // Confirmed by the webhook: Calendar too (idempotent with the capture call; never throws, never makes PayPal retry).
+    await syncBookingCalendarAfterConfirmation(supabase, payment.booking_id);
     await enqueueBookingConfirmationEmails(supabase, payment.booking_id);
     return;
   }
