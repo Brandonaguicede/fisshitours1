@@ -1,9 +1,11 @@
 import { formatTime, money } from '../../utils/format';
-import { Calendar, Check, CheckCircle2, Clock, FileSpreadsheet, FileText, Loader2, Pencil, Plus, RefreshCw, Trash2, X, XCircle } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { Calendar, Check, CheckCircle2, Clock, FileSpreadsheet, FileText, Loader2, Pencil, Plus, RefreshCw, Settings, Trash2, X, XCircle } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { AdminBadge, AdminCreateButton, AdminFilterMenu, AdminListToolbar, AdminModuleSurface, AdminStatCard, AdminTable } from '../../components/admin/AdminPrimitives';
+import { AdminDangerRow } from '../../components/admin/AdminStatusSection';
+import FormSection from '../../components/admin/FormSection';
 import AdminConfirmDialog from '../../components/admin/AdminConfirmDialog';
 import { Modal } from '../../components/common/Modal';
 import { supabase } from '../../lib/supabase';
@@ -13,7 +15,7 @@ import AdminPagination from '../../components/admin/AdminPagination';
 import { useAdminPagedList } from '../../hooks/useAdminPagedList';
 import { getAdminReservationsPage } from '../../services/adminListService';
 import { getActiveBoatTours, getActiveTimeSlots } from '../../services/boatTourService';
-import { adminCreateBooking, confirmBooking, getActiveDepartureLocations, retryConfirmationEmail, updateBooking, type DepartureLocation } from '../../services/bookingService';
+import { adminCreateBooking, confirmBooking, getActiveDepartureLocations, retryConfirmationEmail, syncReservationCalendar, updateBooking, type DepartureLocation } from '../../services/bookingService';
 import type { BoatTour, TourTimeSlot } from '../../types/boatTour';
 import { loadLogoDataUrl } from '../../utils/exportBrand';
 import {
@@ -96,6 +98,11 @@ export default function AdminReservationsPage() {
   const [editingReservation, setEditingReservation] = useState<AdminReservation | null>(null);
   const [editForm, setEditForm] = useState<EditBookingForm | null>(null);
   const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
+  // Google Calendar state of the reservation open in the editor (read from the booking row; `busy` while a sync is running).
+  const [calendar, setCalendar] = useState<{ status: string | null; error: string | null } | null>(null);
+  const [calendarBusy, setCalendarBusy] = useState(false);
+  // Syncs that never reached the server (network / session): nothing was recorded in the booking, so this session remembers them.
+  const unreachableSyncs = useRef(new Set<string>());
   const [confirmTarget, setConfirmTarget] = useState<AdminReservation | null>(null);
   const [manualSaving, setManualSaving] = useState(false);
   const [manualForm, setManualForm] = useState<ManualBookingForm>(emptyManualBooking);
@@ -201,6 +208,31 @@ export default function AdminReservationsPage() {
     return formatPaymentMethodLabel(reservation.payment_method_key, paymentMethodLabel(reservation.payment_method_key));
   }
 
+  async function loadCalendarState(reservationId: string) {
+    const { data } = await db.from('bookings').select('google_calendar_sync_status, google_calendar_sync_error').eq('id', reservationId).maybeSingle();
+    const status = data?.google_calendar_sync_status ?? (unreachableSyncs.current.has(reservationId) ? 'failed' : null);
+    setCalendar({ status, error: data?.google_calendar_sync_error ?? null });
+  }
+
+  // Google is secondary: the booking is already saved, so this never throws and never changes the booking. Returns whether it ended up synced.
+  async function runCalendarSync(reservationId: string): Promise<boolean> {
+    setCalendarBusy(true);
+    setCalendar((current) => ({ status: 'pending', error: current?.error ?? null }));
+    let synced = false;
+    try {
+      const result = await syncReservationCalendar(reservationId);
+      synced = result.status === 'synced';
+      unreachableSyncs.current.delete(reservationId);
+      setCalendar({ status: result.status === 'skipped' ? null : result.status, error: result.error ?? null });
+    } catch (syncError) {
+      unreachableSyncs.current.add(reservationId);
+      setCalendar({ status: 'failed', error: syncError instanceof Error ? syncError.message : 'No se pudo sincronizar.' });
+    } finally {
+      setCalendarBusy(false);
+    }
+    return synced;
+  }
+
   async function updateReservationStatus(reservation: AdminReservation, nextBookingStatus: 'confirmed' | 'cancelled') {
     setBusyId(reservation.id);
     setNotice('');
@@ -239,8 +271,12 @@ export default function AdminReservationsPage() {
         : emailQueued
           ? 'Reserva confirmada. El correo de confirmación quedó encolado y el bote queda bloqueado.'
           : 'Reserva confirmada, pero el correo no pudo encolarse. El bote queda bloqueado.');
+      // The booking is confirmed and saved; now (and only now) the calendar. A failure leaves it confirmed with "No sincronizada".
+      void runCalendarSync(reservation.id).then((synced) => setNotice((current) => `${current} ${synced ? 'Agendada en Google Calendar.' : 'No se pudo agendar en Google Calendar: reintenta desde Editar reserva.'}`));
     } else {
       setNotice('Reserva cancelada. El bloqueo de disponibilidad fue liberado.');
+      // A cancelled booking that already has an event gets "[CANCELADA]" on the same event (the function skips it otherwise).
+      void runCalendarSync(reservation.id);
     }
     await loadReservations();
   }
@@ -294,6 +330,8 @@ export default function AdminReservationsPage() {
   function openEdit(reservation: AdminReservation) {
     const tour = tours.find((item) => item.id === reservation.tour_package_id);
     setEditingReservation(reservation);
+    setCalendar(null);
+    void loadCalendarState(reservation.id);
     setEditForm({
       fullName: reservation.customers?.full_name ?? '',
       email: reservation.customers?.email ?? '',
@@ -334,10 +372,13 @@ export default function AdminReservationsPage() {
         guests: Number(editForm.guests),
         specialRequests: editForm.specialRequests,
       });
+      const editedId = editingReservation.id;
+      const keepsEvent = ['confirmed', 'completed'].includes(editingReservation.booking_status);
       setEditOpen(false);
       setEditingReservation(null);
       setEditForm(null);
       setNotice('Cambios guardados. El estado y el pago de la reserva se conservaron; no se envió confirmación.');
+      if (keepsEvent) void runCalendarSync(editedId).then((synced) => { if (!synced) setNotice((current) => `${current} No se pudo actualizar Google Calendar: reintenta desde Editar reserva.`); });
       await loadReservations();
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : 'No se pudo guardar la reserva.');
@@ -685,25 +726,38 @@ export default function AdminReservationsPage() {
             <label className="admin-field"><span className="admin-field__label">Hora</span><select className="admin-select" required value={editForm.timeSlotId} onChange={(event) => updateEditForm('timeSlotId', event.target.value)}>{editTimeSlots.map((slot) => <option key={slot.id} value={slot.id}>{formatTime(slot.time)}</option>)}</select></label>
             <label className="admin-field"><span className="admin-field__label">Personas</span><input className="admin-input" required type="number" min={1} value={editForm.guests} onChange={(event) => updateEditForm('guests', Number(event.target.value))} /></label>
             <label className="admin-field admin-field--wide"><span className="admin-field__label">Notas</span><textarea className="admin-input admin-textarea-list" value={editForm.specialRequests} onChange={(event) => updateEditForm('specialRequests', event.target.value)} /></label>
-          </div></div>
+          </div>
+          {editingReservation && ['confirmed', 'completed'].includes(editingReservation.booking_status) && calendar !== null ? (
+            <div className="admin-calendar-sync" role="group" aria-label="Google Calendar">
+              <span className="admin-calendar-sync__label">Google Calendar</span>
+              {calendarBusy || calendar.status === 'pending' ? <span className="admin-calendar-sync__state admin-calendar-sync__state--pending" role="status">Sincronizando...</span> : null}
+              {!calendarBusy && calendar.status === 'synced' ? <span className="admin-calendar-sync__state admin-calendar-sync__state--synced" role="status">Agendada</span> : null}
+              {!calendarBusy && calendar.status === 'failed' ? (
+                <>
+                  <span className="admin-calendar-sync__state admin-calendar-sync__state--failed" role="status">No sincronizada</span>
+                  <button className="admin-btn admin-btn--secondary admin-btn--sm" type="button" onClick={() => void runCalendarSync(editingReservation.id)}>Reintentar</button>
+                </>
+              ) : null}
+              {!calendarBusy && calendar.status === null ? (
+                <>
+                  <span className="admin-calendar-sync__state" role="status">Sin sincronizar</span>
+                  <button className="admin-btn admin-btn--secondary admin-btn--sm" type="button" onClick={() => void runCalendarSync(editingReservation.id)}>Sincronizar</button>
+                </>
+              ) : null}
+            </div>
+          ) : null}
+          </div>
           {editingReservation && editingReservation.booking_status !== 'cancelled' ? (
-            <div className="admin-form-section">
-              <header className="admin-form-section__head">
-                <span className="admin-form-section__icon"><Trash2 size={16} /></span>
-                <div>
-                  <h3 className="admin-form-section__title">Zona de peligro</h3>
-                  <p className="admin-form-section__description">Esta acción no se puede deshacer.</p>
-                </div>
-              </header>
-              <div className="admin-form-section__fields">
-                <div className="admin-danger-zone">
-                  <p className="admin-muted">Cancela esta reserva. El bloqueo de disponibilidad del bote se libera.</p>
-                  <button className="admin-btn admin-btn--danger" type="button" onClick={() => setCancelConfirmOpen(true)}>
-                    <Trash2 size={15} /> Cancelar reserva
-                  </button>
+            <FormSection title="Estado de la reserva" description="La cancelación libera el bloqueo de disponibilidad del bote." icon={<Settings size={16} />}>
+              <div className="admin-tour-config-row admin-tour-config-row--tour">
+                <div className="admin-tour-config-row__status">
+                  <p className="admin-config-row__label">Estado actual</p>
+                  <AdminBadge value={editingReservation.booking_status} />
                 </div>
               </div>
-            </div>
+              <div className="admin-tour-config-divider" role="separator" />
+              <AdminDangerRow title="Cancelar reserva" description="Cancela esta reserva y libera el bloqueo de disponibilidad del bote. No se puede deshacer." label="Cancelar reserva" onClick={() => setCancelConfirmOpen(true)} />
+            </FormSection>
           ) : null}
           </div> : null}
           <footer className="admin-modal-footer"><button className="admin-btn" type="submit" disabled={editSaving || !editForm}>{editSaving ? 'Guardando...' : 'Guardar'}</button><button className="admin-btn admin-btn--secondary" type="button" onClick={() => setEditOpen(false)}>Cancelar</button></footer>

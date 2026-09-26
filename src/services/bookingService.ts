@@ -135,6 +135,19 @@ export function confirmBooking(bookingId: string) {
   return callFunction<AdminConfirmBookingResult>('admin-confirm-booking', { bookingId });
 }
 
+/** Result of syncing a booking with Google Calendar. `failed` never means the booking failed: it stays as it was. */
+export interface CalendarSyncResult {
+  status: 'synced' | 'failed' | 'skipped';
+  operation?: 'create' | 'update';
+  eventId?: string;
+  error?: string;
+}
+
+/** Only the booking id travels: the Edge Function reads everything else from the database. Idempotent (create once, then update). */
+export function syncReservationCalendar(reservationId: string) {
+  return callFunction<CalendarSyncResult>('sync-reservation-calendar', { reservationId });
+}
+
 export function retryConfirmationEmail(bookingId: string) {
   return callFunction<{ customerEmailPresent: boolean; queued: number }>('admin-retry-confirmation-email', { bookingId });
 }
