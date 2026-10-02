@@ -112,7 +112,7 @@ export function BookingPanel({ selectedBoat, selectedTour: requestedTour, boats,
   const [paypalError, setPaypalError] = useState('');
   const [paypalInfo, setPaypalInfo] = useState('');
   const [paypalSuccess, setPaypalSuccess] = useState<PayPalCaptureResult | null>(null);
-  const [successNotice, setSuccessNotice] = useState<{ title: string; message: string; reference?: string } | null>(null);
+  const [successNotice, setSuccessNotice] = useState<{ title: string; message: string; reference?: string; whatsappUrl?: string } | null>(null);
   const [createdBooking, setCreatedBooking] = useState<BookingResult | null>(null);
   const [turnstileToken, setTurnstileToken] = useState('');
   const [turnstileResetKey, setTurnstileResetKey] = useState(0);
@@ -431,13 +431,17 @@ export function BookingPanel({ selectedBoat, selectedTour: requestedTour, boats,
       setPaymentStatus('pending');
       setPaypalVisible(false);
       setSuccessNotice(null);
-      openWhatsAppBooking({ ...bookingPayload, bookingReference: result.booking_reference, basePrice: result.base_price_snapshot, taxRate: result.tax_rate_snapshot, taxAmount: result.tax_amount_snapshot, additionalGuestCharge: result.extra_guests_total_snapshot, extrasTotal: result.extras_total_snapshot, departureSurcharge: Number(result.departure_surcharge_snapshot ?? 0), total: result.total_snapshot, paymentMethod: language === 'es' ? 'Enlace de pago por WhatsApp' : 'WhatsApp payment link', paymentStatus: 'pending' }, 'payment_link');
+      const whatsappUrl = getWhatsAppBookingUrl(createWhatsAppBookingMessage({ ...bookingPayload, bookingReference: result.booking_reference, basePrice: result.base_price_snapshot, taxRate: result.tax_rate_snapshot, taxAmount: result.tax_amount_snapshot, additionalGuestCharge: result.extra_guests_total_snapshot, extrasTotal: result.extras_total_snapshot, departureSurcharge: Number(result.departure_surcharge_snapshot ?? 0), total: result.total_snapshot, paymentMethod: language === 'es' ? 'Enlace de pago por WhatsApp' : 'WhatsApp payment link', paymentStatus: 'pending' }, 'payment_link', language));
       setSuccessNotice({
         title: language === 'es' ? 'Reserva creada' : 'Booking created',
         message: language === 'es' ? 'Recibimos tu reserva. Abre WhatsApp para solicitar el enlace de pago.' : 'We received your booking. Open WhatsApp to request the payment link.',
         reference: result.booking_reference,
+        whatsappUrl,
       });
-    }).catch(() => undefined);
+      window.location.assign(whatsappUrl);
+    }).catch((error: unknown) => {
+      setValidationMessage(error instanceof Error ? error.message : (language === 'es' ? 'No se pudo abrir WhatsApp. Intenta nuevamente.' : 'Unable to open WhatsApp. Please try again.'));
+    });
   }
 
   function handlePayOnDayRequest(key: BookingPaymentMethod) {
@@ -1589,7 +1593,7 @@ function ReviewModal(props: {
 }
 
 function BookingSuccessModal(props: {
-  notice: { title: string; message: string; reference?: string };
+  notice: { title: string; message: string; reference?: string; whatsappUrl?: string };
   onClose: () => void;
 }) {
   const { language } = useLanguage();
@@ -1610,6 +1614,7 @@ function BookingSuccessModal(props: {
           ) : null}
         </div>
       </div>
+      {props.notice.whatsappUrl ? <a className="mt-5 block rounded-lg bg-green-600 px-4 py-3 text-center font-bold text-white" href={props.notice.whatsappUrl}>{language === 'es' ? 'Abrir WhatsApp' : 'Open WhatsApp'}</a> : null}
       <Button className="mt-5" fullWidth type="button" onClick={props.onClose}>{language === 'es' ? 'Cerrar' : 'Close'}</Button>
     </ModalShell>
   );

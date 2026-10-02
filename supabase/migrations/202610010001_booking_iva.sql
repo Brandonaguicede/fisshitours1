@@ -32,11 +32,11 @@ create trigger booking_iva_snapshots before insert or update of base_price_snaps
   on public.bookings for each row execute function public.set_booking_iva_snapshots();
 
 create or replace function public.create_booking_transaction(payload jsonb)
-returns jsonb
-language plpgsql
-security definer
-set search_path = public
-as $$
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
 declare
   v_customer jsonb := payload -> 'customer';
   v_boat_id text := payload ->> 'boatId';
@@ -194,7 +194,7 @@ begin
   select id into v_customer_id
     from public.customers
     where lower(email) = lower(v_customer ->> 'email')
-      and regexp_replace(whatsapp, '\D', '', 'g') = regexp_replace(v_customer ->> 'whatsapp', '\D', '', 'g')
+       or regexp_replace(whatsapp, '\D', '', 'g') = regexp_replace(v_customer ->> 'whatsapp', '\D', '', 'g')
     order by created_at desc
     limit 1;
 
@@ -202,6 +202,13 @@ begin
     insert into public.customers (full_name, email, whatsapp, country)
     values (trim(v_customer ->> 'fullName'), lower(trim(v_customer ->> 'email')), trim(v_customer ->> 'whatsapp'), nullif(trim(coalesce(v_customer ->> 'country', '')), ''))
     returning id into v_customer_id;
+  else
+    update public.customers
+      set full_name = trim(v_customer ->> 'fullName'),
+          email = lower(trim(v_customer ->> 'email')),
+          whatsapp = trim(v_customer ->> 'whatsapp'),
+          country = nullif(trim(coalesce(v_customer ->> 'country', '')), '')
+      where id = v_customer_id;
   end if;
 
   loop
@@ -278,9 +285,8 @@ exception
   when unique_violation then
     raise exception 'selected boat, date and time slot is already reserved' using errcode = '23505';
 end;
-$$;
-
-
+$function$
+;
 -- Read-only pagination and literal search across related reservation fields.
 -- Invoker permissions preserve the existing RLS policies, including viewer access.
 create or replace function public.list_admin_bookings(

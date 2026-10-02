@@ -228,3 +228,25 @@ test('empty remote catalog never falls back to static booking packages', async (
     await expect(summary.getByText('$960.50',{exact:true})).toBeVisible();
   } finally { await f.browser.close(); }
  });
+
+for (const viewport of [{width:1366,height:1200},{width:390,height:844}]) {
+ test('WhatsApp payment link includes IVA and offers a retry without another booking '+viewport.width, async () => {
+  const f=await fixture([{id:'wa',key:'whatsapp-link',name:'WhatsApp',description:'',type:'whatsapp_link',active:true,sort_order:1}]);
+  try {
+   await f.page.setViewportSize(viewport);
+   await f.page.route('https://wa.me/**', route=>route.fulfill({status:204}));
+   const requests=[];f.page.on('request',r=>{if(r.url().startsWith('https://wa.me/'))requests.push(r.url());});
+   await runBookingFlowToPaymentStep(f.page);
+   await f.page.locator('[data-payment-method="whatsapp-link"]').click();
+   await expect.poll(()=>requests.length).toBe(1);
+   const link=f.page.getByRole('link',{name:'Open WhatsApp',exact:true});
+   await expect(link).toBeVisible();
+   const url=new URL(await link.getAttribute('href'));
+   assert.match(url.pathname,/^\/\d+$/);
+   const message=url.searchParams.get('text');
+   assert.match(message,/PFT-TEST01/);assert.match(message,/IVA \(13%\): \$84.50/);assert.match(message,/\$734.50/);
+   await link.click();await expect.poll(()=>requests.length).toBe(2);
+   assert.equal(f.createBookingRequests.length,1);
+  } finally {await f.browser.close();}
+ });
+}
