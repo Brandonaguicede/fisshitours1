@@ -2,7 +2,7 @@ import { ArrowLeft, ArrowRight, Check, CreditCard, Info, Mail, MapPin, Minus, Me
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-import { getBoatText, getPackageLabel, getTourText } from '../../i18n/content';
+import { getBoatText, getIncludedItems, getPackageLabel, getTourText } from '../../i18n/content';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { text, tr } from '../../i18n/translations';
 import { MOCK_TURNSTILE_TOKEN, USE_LOCAL_TURNSTILE_MOCK } from '../../lib/turnstile';
@@ -903,6 +903,7 @@ function TourDetailsStep(props: {
   const activeGroupData = tourGroups.find((group) => group.key === activeGroup);
   const extraGuests = Math.max(0, props.guests - props.includedGuests);
   const showExtraGuestNotice = Boolean(props.selectedTour && !props.selectedTour.customQuote && extraGuests > 0 && props.extraGuestPrice > 0);
+  const includedItems = props.selectedTour ? getIncludedItems(props.selectedTour, language) : [];
 
   return (
     <div className="grid gap-4 text-white">
@@ -946,6 +947,20 @@ function TourDetailsStep(props: {
             ))}
           </div>
         </fieldset>
+      ) : null}
+
+      {includedItems.length > 0 ? (
+        <section aria-labelledby="booking-included-title">
+          <h4 id="booking-included-title" className="text-sm font-bold text-ocean-100">{tr(text.booking.included, language)}</h4>
+          <ul className="mt-2 flex flex-wrap gap-1.5">
+            {includedItems.map((item, index) => (
+              <li key={`${index}-${item}`} className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-bold leading-4 text-ocean-100">
+                <Check aria-hidden="true" className="shrink-0 text-ocean-400" size={12} />
+                {item}
+              </li>
+            ))}
+          </ul>
+        </section>
       ) : null}
 
       {Boolean(props.selectedTour?.mealOptions?.length) ? (
@@ -1495,6 +1510,7 @@ function BookingSummary(props: {
   const selectedTourName = props.selectedTour ? `${getTourText(props.selectedTour, language).title} - ${getPackageLabel(props.selectedTour, language)}` : tr(text.booking.selectTour, language);
   const subtotal = props.selectedTour?.customQuote ? (language === 'es' ? 'Cotización personalizada' : 'Custom quote') : formatCurrency(props.pricing.basePrice);
   const extrasTotal = props.selectedTour?.customQuote ? '-' : formatCurrency(props.pricing.extrasTotal);
+  const includedItems = props.selectedTour ? getIncludedItems(props.selectedTour, language) : [];
 
   return (
     <GlassPanel as="aside" className="h-fit p-2.5" variant="surface">
@@ -1509,6 +1525,7 @@ function BookingSummary(props: {
         <SummaryRow label={tr(text.booking.date, language)} value={formatDisplayDate(props.date)} />
         <SummaryRow label={language === 'es' ? 'Salida' : 'Departure'} value={props.selectedTimeSlot ? formatTime(props.selectedTimeSlot.time) : tr(text.booking.selectTime, language)} />
         <SummaryRow label={tr(text.booking.guests, language)} value={`${props.guests} ${tr(text.booking.people, language)}`} />
+        {includedItems.length > 0 ? <SummaryRow label={tr(text.booking.included, language)} value={summarizeIncluded(includedItems, language)} /> : null}
         {Boolean(props.selectedTour?.mealOptions?.length) ? <SummaryRow label={language === 'es' ? 'Comida' : 'Meal option'} value={props.mealOption || (language === 'es' ? 'No seleccionada' : 'Not selected')} /> : null}
         <SummaryRow label={language === 'es' ? 'Lugar de salida' : 'Departure location'} value={props.departureLocation?.name ?? (language === 'es' ? 'No seleccionado' : 'Not selected')} />
         {props.currentStep >= 3 ? <SummaryRow label={language === 'es' ? 'Método de pago' : 'Payment method'} value={props.selectedPayment} /> : null}
@@ -1618,6 +1635,14 @@ function BookingSuccessModal(props: {
       <Button className="mt-5" fullWidth type="button" onClick={props.onClose}>{language === 'es' ? 'Cerrar' : 'Close'}</Button>
     </ModalShell>
   );
+}
+
+// The right-hand card stays compact: the first few items, then "+N" (the full list is in the step itself).
+const SUMMARY_INCLUDED_LIMIT = 4;
+function summarizeIncluded(items: string[], language: 'es' | 'en') {
+  const shown = items.slice(0, SUMMARY_INCLUDED_LIMIT).join(', ');
+  const hidden = items.length - SUMMARY_INCLUDED_LIMIT;
+  return hidden > 0 ? `${shown} +${hidden} ${language === 'es' ? 'más' : 'more'}` : shown;
 }
 
 function SummaryRow({ label, value }: { label: string; value: string }) {

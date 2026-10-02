@@ -81,6 +81,12 @@ export function getTourText(tour: BoatTour, language: Language): TourText {
   };
 }
 
+// One entry per line the Admin wrote in the package's "Incluye" list, in the visitor's language (EN original, ES stored
+// translation, same fallbacks as getTourText). Empty when the package has nothing configured.
+export function getIncludedItems(tour: BoatTour, language: Language): string[] {
+  return getTourText(tour, language).included.map((item) => item.trim());
+}
+
 export function getBoatText(boat: Boat, language: Language) {
   return {
     badge: pick(language, boat.badgeEs, boat.badge, boat.badgeEn),

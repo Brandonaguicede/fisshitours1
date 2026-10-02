@@ -40,6 +40,7 @@ export const text = {
     tourDetails: { es: 'Detalles del tour', en: 'Tour details' },
     buildReservation: { es: 'Arma tu reserva', en: 'Build your reservation' },
     tourAboard: { es: 'Tour a bordo de', en: 'Tour aboard' },
+    included: { es: 'Incluye', en: 'Included' },
     selectTour: { es: 'Selecciona un tour a bordo de', en: 'Select a tour aboard' },
     date: { es: 'Fecha', en: 'Date' },
     guests: { es: 'Personas', en: 'Guests' },
