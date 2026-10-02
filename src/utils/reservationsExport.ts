@@ -16,6 +16,12 @@ export interface AdminReservation {
   booking_reference: string;
   tour_date: string;
   guests: number;
+  base_price_snapshot?: number | string;
+  tax_rate_snapshot?: number | string;
+  tax_amount_snapshot?: number | string;
+  subtotal_snapshot?: number | string;
+  extra_guests_total_snapshot?: number | string;
+  extras_total_snapshot?: number | string;
   total_snapshot: number;
   departure_location_name_snapshot: string | null;
   departure_surcharge_snapshot: number | null;

@@ -1,4 +1,4 @@
-import { formatTime, money } from '../../utils/format';
+import { formatTime } from '../../utils/format';
 import { Calendar, Check, CheckCircle2, Clock, FileSpreadsheet, FileText, Loader2, Pencil, Plus, RefreshCw, Settings, Trash2, X, XCircle } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -15,7 +15,7 @@ import AdminPagination from '../../components/admin/AdminPagination';
 import { useAdminPagedList } from '../../hooks/useAdminPagedList';
 import { getAdminReservationsPage } from '../../services/adminListService';
 import { getActiveBoatTours, getActiveTimeSlots } from '../../services/boatTourService';
-import { adminCreateBooking, confirmBooking, getActiveDepartureLocations, retryConfirmationEmail, syncReservationCalendar, updateBooking, type DepartureLocation } from '../../services/bookingService';
+import { adminCreateBooking, calculateBookingPrice, confirmBooking, getActiveDepartureLocations, retryConfirmationEmail, syncReservationCalendar, updateBooking, type DepartureLocation } from '../../services/bookingService';
 import type { BoatTour, TourTimeSlot } from '../../types/boatTour';
 import { loadLogoDataUrl } from '../../utils/exportBrand';
 import {
@@ -52,6 +52,8 @@ function friendlyEditError(message: string) {
   if (/already reserved|BOAT_TIME_CONFLICT/i.test(message)) return 'El bote ya está ocupado en esa fecha y hora. Elige otro horario.';
   return message;
 }
+
+const money = (value: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 }).format(value);
 
 const bookingStatusOptions = [
   { value: 'all', label: 'Todos los estados' },
@@ -356,12 +358,13 @@ export default function AdminReservationsPage() {
     if (!selectedTour) return 30;
     return Math.min(selectedTour.maxGuests, selectedTour.boatMaxGuests ?? selectedTour.maxGuests);
   }, [selectedTour]);
-  const manualTotalPreview = useMemo(() => {
-    if (!selectedTour) return 0;
-    const location = departureLocations.find((item) => item.id === manualForm.departureLocationId);
-    const extraGuests = Math.max(0, Number(manualForm.guests) - selectedTour.includedGuests);
-    return selectedTour.basePrice + (extraGuests * selectedTour.extraGuestPrice) + Number(location?.surcharge_amount ?? 0);
-  }, [departureLocations, manualForm.departureLocationId, manualForm.guests, selectedTour]);
+  const manualPriceQuery = useQuery({
+    queryKey: ['manual-booking-price', selectedTour?.id, manualForm.guests, manualForm.departureLocationId],
+    enabled: Boolean(selectedTour && manualForm.departureLocationId),
+    queryFn: () => calculateBookingPrice({ boatId: selectedTour!.boatId, tourId: selectedTour!.tourId ?? '',
+      tourPackageId: selectedTour!.id, guests: Number(manualForm.guests), departureLocationId: manualForm.departureLocationId, extras: [] }),
+  });
+  const manualTotalPreview = manualPriceQuery.data?.total;
 
   function updateManualForm<K extends keyof ManualBookingForm>(key: K, value: ManualBookingForm[K]) {
     setManualForm((current) => ({ ...current, [key]: value }));
@@ -640,7 +643,7 @@ export default function AdminReservationsPage() {
                 <div className="admin-table__truncate" title={reservation.departure_location_name_snapshot ?? '-'}>{reservation.departure_location_name_snapshot ?? '-'}</div>
                 <div className="admin-muted">{Number(reservation.departure_surcharge_snapshot ?? 0) > 0 ? money(Number(reservation.departure_surcharge_snapshot)) : 'Sin costo'}</div>
               </td>
-              <td>{money(Number(reservation.total_snapshot))}</td>
+              <td><div className="admin-muted">Precio del paquete: {money(Number(reservation.base_price_snapshot ?? 0))}</div><div className="admin-muted">IVA ({Math.round(Number(reservation.tax_rate_snapshot ?? 0) * 100)}%): {money(Number(reservation.tax_amount_snapshot ?? 0))}</div><strong>{money(Number(reservation.total_snapshot))}</strong></td>
               <td>
                 <div className="admin-payment-cell">
                   <span className="admin-payment-cell__method">{methodLabel(reservation)}</span>
@@ -672,6 +675,10 @@ export default function AdminReservationsPage() {
               <div><dt>Tour</dt><dd>{reservation.tours?.title ?? '-'}</dd></div>
               <div><dt>Personas</dt><dd>{reservation.guests}</dd></div>
               <div><dt>Lugar de salida</dt><dd>{reservation.departure_location_name_snapshot ?? '-'}<div className="admin-muted">{Number(reservation.departure_surcharge_snapshot ?? 0) > 0 ? money(Number(reservation.departure_surcharge_snapshot)) : 'Sin costo'}</div></dd></div>
+              <div><dt>Precio del paquete</dt><dd>{money(Number(reservation.base_price_snapshot ?? 0))}</dd></div>
+              {Number(reservation.extra_guests_total_snapshot) > 0 && <div><dt>Personas adicionales</dt><dd>{money(Number(reservation.extra_guests_total_snapshot))}</dd></div>}
+              {Number(reservation.extras_total_snapshot) > 0 && <div><dt>Extras</dt><dd>{money(Number(reservation.extras_total_snapshot))}</dd></div>}
+              <div><dt>IVA ({Math.round(Number(reservation.tax_rate_snapshot ?? 0) * 100)}%)</dt><dd>{money(Number(reservation.tax_amount_snapshot ?? 0))}</dd></div>
               <div><dt>Total</dt><dd>{money(Number(reservation.total_snapshot))}</dd></div>
               <div><dt>Método de pago</dt><dd>{methodLabel(reservation)}</dd></div>
               <div><dt>Estado de pago</dt><dd><AdminBadge value={reservation.payment_status} /></dd></div>
@@ -754,9 +761,10 @@ export default function AdminReservationsPage() {
               <div className="admin-reservation-total">
                 <div className="admin-reservation-total__copy">
                   <span className="admin-reservation-total__label">Total estimado</span>
+                  {manualPriceQuery.data && <small>Precio del paquete: {money(Number(manualPriceQuery.data.base_price))} | IVA (13%): {money(Number(manualPriceQuery.data.tax_amount))}</small>}
                   <small>El total definitivo lo recalcula Supabase al guardar.</small>
                 </div>
-                <strong className="admin-reservation-total__amount" aria-live="polite">{money(manualTotalPreview)}</strong>
+                <strong className="admin-reservation-total__amount" aria-live="polite">{manualTotalPreview == null ? 'Calculando' : money(manualTotalPreview)}</strong>
               </div>
             </div>
           </div>

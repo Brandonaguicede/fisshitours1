@@ -3,7 +3,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2';
 import { z } from 'npm:zod@3.23.8';
 import { areExternalProviderMocksAllowed } from '../_shared/environment.ts';
 import { corsHeaders, corsPreflight, withCors } from '../_shared/cors.ts';
-import { buildBookingRequestAdminHtml, buildBookingRequestCustomerHtml } from '../_shared/booking-confirmation-email.ts';
+import { buildBookingRequestAdminHtml, buildBookingRequestCustomerHtml, buildBookingRequestSummary } from '../_shared/booking-confirmation-email.ts';
 
 const schema = z.object({
   customer: z.object({
@@ -169,52 +169,20 @@ async function sendBookingEmails(supabase: ReturnType<typeof createClient>, book
   if (payload.paymentMethodKey === 'paypal') return;
 
   const es = payload.language !== 'en';
-  const summary = es
-    ? [
-        `Reserva: ${booking.booking_reference}`,
-        `Cliente: ${payload.customer.fullName}`,
-        `Correo: ${customerEmail}`,
-        `WhatsApp: ${payload.customer.whatsapp}`,
-        `Bote: ${booking.boat_id}`,
-        `Tour: ${booking.tour_id}`,
-        `Paquete: ${booking.tour_package_id}`,
-        `Fecha: ${booking.tour_date}`,
-        `Hora: ${booking.time_slot_id}`,
-        `Personas: ${booking.guests}`,
-        `Lugar de salida: ${booking.departure_location_name_snapshot ?? '-'}`,
-        `Cargo por salida: ${formatUsd(Number(booking.departure_surcharge_snapshot ?? 0))}`,
-        `Total: ${formatUsd(Number(booking.total_snapshot ?? 0))}`,
-        `Metodo de pago: ${payload.paymentMethodKey}`,
-        `Estado de la reserva: ${booking.booking_status}`,
-        `Estado del pago: ${booking.payment_status}`,
-        `Notas: ${payload.specialRequests ?? 'Ninguna'}`,
-      ].join('\n')
-    : [
-        `Booking: ${booking.booking_reference}`,
-        `Customer: ${payload.customer.fullName}`,
-        `Email: ${customerEmail}`,
-        `WhatsApp: ${payload.customer.whatsapp}`,
-        `Boat: ${booking.boat_id}`,
-        `Tour: ${booking.tour_id}`,
-        `Package: ${booking.tour_package_id}`,
-        `Date: ${booking.tour_date}`,
-        `Time: ${booking.time_slot_id}`,
-        `Guests: ${booking.guests}`,
-        `Departure location: ${booking.departure_location_name_snapshot ?? '-'}`,
-        `Departure surcharge: ${formatUsd(Number(booking.departure_surcharge_snapshot ?? 0))}`,
-        `Total: ${formatUsd(Number(booking.total_snapshot ?? 0))}`,
-        `Payment method: ${payload.paymentMethodKey}`,
-        `Booking status: ${booking.booking_status}`,
-        `Payment status: ${booking.payment_status}`,
-        `Notes: ${payload.specialRequests ?? 'None'}`,
-      ].join('\n');
-  // Admin summary always in Spanish — the business's own operating language,
-  // same reasoning as buildBookingRequestAdminHtml.
-  const adminSummary = es ? summary : summary
-    .replace('Booking:', 'Reserva:').replace('Customer:', 'Cliente:').replace('Boat:', 'Bote:').replace('Package:', 'Paquete:')
-    .replace('Date:', 'Fecha:').replace('Time:', 'Hora:').replace('Guests:', 'Personas:').replace('Departure location:', 'Lugar de salida:')
-    .replace('Departure surcharge:', 'Cargo por salida:').replace('Payment method:', 'Metodo de pago:').replace('Booking status:', 'Estado de la reserva:')
-    .replace('Payment status:', 'Estado del pago:').replace('Notes:', 'Notas:');
+  const summary = [
+    await buildBookingRequestSummary(supabase, booking.booking_id, es ? 'es' : 'en'),
+    `${es ? 'Metodo de pago' : 'Payment method'}: ${payload.paymentMethodKey}`,
+    `${es ? 'Estado de la reserva' : 'Booking status'}: ${booking.booking_status}`,
+    `${es ? 'Estado del pago' : 'Payment status'}: ${booking.payment_status}`,
+    `${es ? 'Notas' : 'Notes'}: ${payload.specialRequests ?? (es ? 'Ninguna' : 'None')}`,
+  ].join('\n');
+  const adminSummary = es ? summary : [
+    await buildBookingRequestSummary(supabase, booking.booking_id, 'es'),
+    `Metodo de pago: ${payload.paymentMethodKey}`,
+    `Estado de la reserva: ${booking.booking_status}`,
+    `Estado del pago: ${booking.payment_status}`,
+    `Notas: ${payload.specialRequests ?? 'Ninguna'}`,
+  ].join('\n');
 
   const messages = [
     payload.paymentMethodKey !== 'whatsapp-link' ? {
@@ -269,8 +237,4 @@ async function recordEmailNotification(
     payload: { to: message.to, subject: message.subject, text: message.text, html: message.html },
     sent_at: sent ? new Date().toISOString() : null,
   });
-}
-
-function formatUsd(value: number) {
-  return `USD ${value.toLocaleString('en-US', { maximumFractionDigits: 2, minimumFractionDigits: 0 })}`;
 }

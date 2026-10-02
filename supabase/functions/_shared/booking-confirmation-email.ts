@@ -35,7 +35,7 @@ export async function refreshBookingConfirmationNotification(supabase: SupabaseC
 
 async function getBookingConfirmationMessages(supabase: SupabaseClient, bookingId: string, language: Language): Promise<ConfirmationMessage[]> {
   const es = language === 'es';
-  const { data: booking, error } = await supabase.from('bookings').select(`id, booking_reference, payment_method_key, payment_status, tour_date, guests, total_snapshot, departure_location_name_snapshot, departure_surcharge_snapshot, customers(full_name, email, whatsapp), boats(name), tours(title), tour_packages(name), time_slots(label)`).eq('id', bookingId).single();
+  const { data: booking, error } = await supabase.from('bookings').select(`id, booking_reference, payment_method_key, payment_status, tour_date, guests, base_price_snapshot, extra_guests_total_snapshot, extras_total_snapshot, departure_surcharge_snapshot, subtotal_snapshot, tax_rate_snapshot, tax_amount_snapshot, total_snapshot, departure_location_name_snapshot, customers(full_name, email, whatsapp), boats(name), tours(title), tour_packages(name), time_slots(starts_at)`).eq('id', bookingId).single();
   if (error) throw error;
   if (!booking?.customers?.email) return [];
   const adminEmail = Deno.env.get('BOOKING_ADMIN_EMAIL');
@@ -43,21 +43,21 @@ async function getBookingConfirmationMessages(supabase: SupabaseClient, bookingI
   const whatsappNumber = String(whatsappSetting?.value ?? '50686105784').replace(/\D/g, '');
   const paid = booking.payment_status === 'paid';
   const dateLabel = formatDate(booking.tour_date, language);
-  const timeLabel = booking.time_slots?.label ?? '';
+  const timeLabel = formatDepartureTime(booking.time_slots?.starts_at);
   const packageName = booking.tour_packages?.name ?? '';
   const paidLabel = es ? (paid ? 'Pagado' : 'Pendiente') : (paid ? 'Paid' : 'Pending');
   const summary = es
-    ? [`Reserva: ${booking.booking_reference}`, `Cliente: ${booking.customers.full_name}`, `Correo: ${booking.customers.email}`, `WhatsApp: ${booking.customers.whatsapp}`, `Bote: ${booking.boats?.name ?? '-'}`, `Tour: ${booking.tours?.title ?? '-'}`, `Paquete: ${packageName || '-'}`, `Fecha: ${dateLabel}`, `Hora: ${timeLabel || '-'}`, `Personas: ${booking.guests}`, `Lugar de salida: ${booking.departure_location_name_snapshot ?? '-'}`, `Cargo por salida: ${formatUsd(Number(booking.departure_surcharge_snapshot ?? 0))}`, `Total: ${formatUsd(Number(booking.total_snapshot ?? 0))}`, `Estado del pago: ${paidLabel}`].join('\n')
-    : [`Reservation: ${booking.booking_reference}`, `Customer: ${booking.customers.full_name}`, `Email: ${booking.customers.email}`, `WhatsApp: ${booking.customers.whatsapp}`, `Boat: ${booking.boats?.name ?? '-'}`, `Tour: ${booking.tours?.title ?? '-'}`, `Package: ${packageName || '-'}`, `Date: ${dateLabel}`, `Time: ${timeLabel || '-'}`, `Guests: ${booking.guests}`, `Departure: ${booking.departure_location_name_snapshot ?? '-'}`, `Departure surcharge: ${formatUsd(Number(booking.departure_surcharge_snapshot ?? 0))}`, `Total: ${formatUsd(Number(booking.total_snapshot ?? 0))}`, `Payment status: ${paidLabel}`].join('\n');
+    ? [`Reserva: ${booking.booking_reference}`, `Cliente: ${booking.customers.full_name}`, `Correo: ${booking.customers.email}`, `WhatsApp: ${booking.customers.whatsapp}`, `Bote: ${booking.boats?.name ?? '-'}`, `Tour: ${booking.tours?.title ?? '-'}`, `Paquete: ${packageName || '-'}`, `Fecha: ${dateLabel}`, ...(timeLabel ? [`Hora de salida: ${timeLabel}`] : []), `Personas: ${booking.guests}`, `Lugar de salida: ${booking.departure_location_name_snapshot ?? '-'}`, `Cargo por salida: ${formatEmailUsd(Number(booking.departure_surcharge_snapshot ?? 0))}`, ...bookingPriceLines(booking, es), `Total: ${formatEmailUsd(Number(booking.total_snapshot ?? 0))}`, `Estado del pago: ${paidLabel}`].join('\n')
+    : [`Reservation: ${booking.booking_reference}`, `Customer: ${booking.customers.full_name}`, `Email: ${booking.customers.email}`, `WhatsApp: ${booking.customers.whatsapp}`, `Boat: ${booking.boats?.name ?? '-'}`, `Tour: ${booking.tours?.title ?? '-'}`, `Package: ${packageName || '-'}`, `Date: ${dateLabel}`, ...(timeLabel ? [`Departure Time: ${timeLabel}`] : []), `Guests: ${booking.guests}`, `Departure: ${booking.departure_location_name_snapshot ?? '-'}`, `Departure surcharge: ${formatEmailUsd(Number(booking.departure_surcharge_snapshot ?? 0))}`, ...bookingPriceLines(booking, es), `Total: ${formatEmailUsd(Number(booking.total_snapshot ?? 0))}`, `Payment status: ${paidLabel}`].join('\n');
   const meetingPointText = booking.departure_location_name_snapshot?.trim() || (es ? 'el punto de encuentro' : 'the meeting point');
   const customerText = es
     ? `Hola ${booking.customers.full_name},\n\n${paid ? (booking.payment_method_key === 'paypal' ? 'Tu pago de PayPal fue recibido correctamente.' : 'Tu pago fue recibido correctamente.') : 'Tu reserva esta confirmada y el pago queda pendiente.'} ${paid ? 'Tu reserva esta confirmada.' : ''} Muchas gracias por reservar con Papagayo Fishing Tours.\n\n${summary}\n\nLlega a ${meetingPointText} 15 minutos antes de la salida.\n\nWhatsApp: https://wa.me/${whatsappNumber}\n\nPura Vida,\nPapagayo Fishing Tours`
-    : `Hi ${booking.customers.full_name},\n\n${paid ? (booking.payment_method_key === 'paypal' ? 'Your PayPal payment was received successfully.' : 'Your payment was received successfully.') : 'Your booking is confirmed and payment is still pending.'} ${paid ? 'Your booking is confirmed.' : ''} Thank you very much for booking with Papagayo Fishing Tours.\n\n${summary}\n\nPlease arrive at ${meetingPointText} 15 minutes before departure.\n\nWhatsApp: https://wa.me/${whatsappNumber}\n\nPura Vida,\nPapagayo Fishing Tours`;
+    : `Hi ${booking.customers.full_name},\n\n${paid ? (booking.payment_method_key === 'paypal' ? 'Your PayPal payment was received successfully.' : 'Your payment was received successfully.') : 'Your booking is confirmed and payment is still pending.'} ${paid ? 'Your booking is confirmed.' : ''} Thank you very much for booking with Papagayo Fishing Tours.\n\n${summary}\n\nPlease arrive 15 minutes before your scheduled departure time.\n\nWhatsApp: https://wa.me/${whatsappNumber}\n\nPura Vida,\nPapagayo Fishing Tours`;
   const messages: ConfirmationMessage[] = [{
     to: booking.customers.email,
     subject: es ? `Pago recibido y reserva confirmada - ${booking.booking_reference}` : `Payment received and booking confirmed - ${booking.booking_reference}`,
     text: customerText,
-    html: buildBookingHtml({ name: booking.customers.full_name, reference: booking.booking_reference, date: dateLabel, time: timeLabel, tour: booking.tours?.title, boat: booking.boats?.name, packageName, guests: booking.guests, departureLocation: booking.departure_location_name_snapshot, total: formatUsd(Number(booking.total_snapshot ?? 0)), paymentStatus: paidLabel, whatsappNumber, language }),
+    html: buildBookingHtml({ name: booking.customers.full_name, reference: booking.booking_reference, date: dateLabel, time: timeLabel, tour: booking.tours?.title, boat: booking.boats?.name, packageName, guests: booking.guests, departureLocation: booking.departure_location_name_snapshot, ...bookingEmailAmounts(booking), total: formatEmailUsd(Number(booking.total_snapshot ?? 0)), paymentStatus: paidLabel, whatsappNumber, language }),
     dedupe: `booking:${booking.id}:paypal-confirmation-customer-email`,
   }];
   if (adminEmail) {
@@ -66,7 +66,7 @@ async function getBookingConfirmationMessages(supabase: SupabaseClient, bookingI
     // language the customer used, per the same rule that keeps internal
     // notifications fixed rather than following the visitor's toggle.
     const adminHeading = paid ? 'Pago confirmado' : 'Reserva confirmada desde el panel';
-    const adminSummary = es ? summary : [`Reserva: ${booking.booking_reference}`, `Cliente: ${booking.customers.full_name}`, `Correo: ${booking.customers.email}`, `WhatsApp: ${booking.customers.whatsapp}`, `Bote: ${booking.boats?.name ?? '-'}`, `Tour: ${booking.tours?.title ?? '-'}`, `Paquete: ${packageName || '-'}`, `Fecha: ${dateLabel}`, `Hora: ${timeLabel || '-'}`, `Personas: ${booking.guests}`, `Lugar de salida: ${booking.departure_location_name_snapshot ?? '-'}`, `Cargo por salida: ${formatUsd(Number(booking.departure_surcharge_snapshot ?? 0))}`, `Total: ${formatUsd(Number(booking.total_snapshot ?? 0))}`, `Estado del pago: ${paid ? 'Pagado' : 'Pendiente'}`].join('\n');
+    const adminSummary = es ? summary : [`Reserva: ${booking.booking_reference}`, `Cliente: ${booking.customers.full_name}`, `Correo: ${booking.customers.email}`, `WhatsApp: ${booking.customers.whatsapp}`, `Bote: ${booking.boats?.name ?? '-'}`, `Tour: ${booking.tours?.title ?? '-'}`, `Paquete: ${packageName || '-'}`, `Fecha: ${dateLabel}`, ...(timeLabel ? [`Hora de salida: ${timeLabel}`] : []), `Personas: ${booking.guests}`, `Lugar de salida: ${booking.departure_location_name_snapshot ?? '-'}`, `Cargo por salida: ${formatEmailUsd(Number(booking.departure_surcharge_snapshot ?? 0))}`, ...bookingPriceLines(booking, true), `Total: ${formatEmailUsd(Number(booking.total_snapshot ?? 0))}`, `Estado del pago: ${paid ? 'Pagado' : 'Pendiente'}`].join('\n');
     messages.push({
       to: adminEmail,
       subject: `${paid ? 'Pago confirmado' : 'Reserva confirmada'} ${booking.booking_reference}`,
@@ -81,7 +81,7 @@ async function getBookingConfirmationMessages(supabase: SupabaseClient, bookingI
         packageName,
         guests: booking.guests,
         departureLocation: booking.departure_location_name_snapshot,
-        total: formatUsd(Number(booking.total_snapshot ?? 0)),
+        ...bookingEmailAmounts(booking), total: formatEmailUsd(Number(booking.total_snapshot ?? 0)),
         paymentStatus: paid ? 'Pagado' : 'Pendiente',
         whatsappNumber: (booking.customers.whatsapp ?? '').replace(/\D/g, '') || whatsappNumber,
         heading: adminHeading,
@@ -104,13 +104,13 @@ export async function buildBookingRequestCustomerHtml(supabase: SupabaseClient, 
     name: booking.customers?.full_name ?? '',
     reference: booking.booking_reference,
     date: formatDate(booking.tour_date, language),
-    time: booking.time_slots?.label ?? '',
+    time: formatDepartureTime(booking.time_slots?.starts_at),
     tour: booking.tours?.title,
     boat: booking.boats?.name,
     packageName: booking.tour_packages?.name,
     guests: booking.guests,
     departureLocation: booking.departure_location_name_snapshot,
-    total: formatUsd(Number(booking.total_snapshot ?? 0)),
+    ...bookingEmailAmounts(booking), total: formatEmailUsd(Number(booking.total_snapshot ?? 0)),
     paymentStatus: es ? 'Pendiente' : 'Pending',
     whatsappNumber,
     heading: es ? 'Solicitud de reserva recibida' : 'Booking request received',
@@ -134,13 +134,13 @@ export async function buildBookingRequestAdminHtml(supabase: SupabaseClient, boo
     name: booking.customers?.full_name ?? '',
     reference: booking.booking_reference,
     date: formatDate(booking.tour_date, 'es'),
-    time: booking.time_slots?.label ?? '',
+    time: formatDepartureTime(booking.time_slots?.starts_at),
     tour: booking.tours?.title,
     boat: booking.boats?.name,
     packageName: booking.tour_packages?.name,
     guests: booking.guests,
     departureLocation: booking.departure_location_name_snapshot,
-    total: formatUsd(Number(booking.total_snapshot ?? 0)),
+    ...bookingEmailAmounts(booking), total: formatEmailUsd(Number(booking.total_snapshot ?? 0)),
     paymentStatus: 'Pendiente',
     whatsappNumber: (booking.customers?.whatsapp ?? '').replace(/\D/g, '') || fallbackWhatsapp,
     heading: 'Nueva reserva recibida',
@@ -153,7 +153,7 @@ export async function buildBookingRequestAdminHtml(supabase: SupabaseClient, boo
 
 async function fetchBookingForEmail(supabase: SupabaseClient, bookingId: string) {
   const { data: booking, error } = await supabase.from('bookings')
-    .select('booking_reference, tour_date, guests, total_snapshot, departure_location_name_snapshot, customers(full_name, email, whatsapp), boats(name), tours(title), tour_packages(name), time_slots(label)')
+    .select('booking_reference, tour_date, guests, base_price_snapshot, extra_guests_total_snapshot, extras_total_snapshot, departure_surcharge_snapshot, subtotal_snapshot, tax_rate_snapshot, tax_amount_snapshot, total_snapshot, departure_location_name_snapshot, customers(full_name, email, whatsapp), boats(name), tours(title), tour_packages(name), time_slots(starts_at)')
     .eq('id', bookingId).single();
   if (error) throw error;
   if (!booking) throw new Error('Booking email details not found');
@@ -166,7 +166,7 @@ async function getBusinessWhatsapp(supabase: SupabaseClient) {
   return String(whatsappSetting?.value ?? '50686105784').replace(/\D/g, '');
 }
 
-function buildBookingHtml(input: { name: string; reference: string; date: string; time: string; tour?: string | null; boat?: string | null; packageName?: string | null; guests: number; departureLocation?: string | null; total: string; paymentStatus: string; whatsappNumber: string; heading?: string; introduction?: string; contact?: { email: string; whatsapp: string } | null; ctaLabel?: string; language: Language }) {
+function buildBookingHtml(input: { name: string; reference: string; date: string; time: string; tour?: string | null; boat?: string | null; packageName?: string | null; guests: number; departureLocation?: string | null; basePrice?: string; taxAmount?: string; taxRate?: number; extraGuestsTotal?: string; extrasTotal?: string; departureSurcharge?: string; total: string; paymentStatus: string; whatsappNumber: string; heading?: string; introduction?: string; contact?: { email: string; whatsapp: string } | null; ctaLabel?: string; language: Language }) {
   const es = input.language === 'es';
   const e = escapeHtml;
   const row = (label: string, value?: string | number | null) => value === undefined || value === null || value === '' ? '' : `<tr><td style="padding:8px 0;color:#64748b;font-size:13px;width:38%">${e(label)}</td><td style="padding:8px 0;color:#0f2742;font-size:14px;font-weight:700">${e(String(value))}</td></tr>`;
@@ -179,12 +179,58 @@ function buildBookingHtml(input: { name: string; reference: string; date: string
   // "Arrive 15 minutes early / contact us" is instructions for the traveler,
   // not the business reading its own admin alert — only show it when there's
   // no contact block (i.e. this is the customer-facing variant).
-  const infoBlock = input.contact ? '' : `<tr><td style="padding:0 30px 18px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f3f8f6;border-radius:12px"><tr><td style="padding:18px 20px"><h2 style="margin:0 0 8px;color:#0f2742;font-size:16px">${es ? 'Información importante' : 'Important information'}</h2><p style="margin:0;color:#475569;font-size:14px;line-height:1.6">${es ? `Llega a ${e(meetingPoint)} 15 minutos antes de la salida.` : `Please arrive at ${e(meetingPoint)} 15 minutes before departure.`}<br><br>${es ? 'Si tienes preguntas o necesitas hacer cambios, contáctanos.' : 'If you have questions or need to make changes, contact us.'}</p></td></tr></table></td></tr>`;
+  const infoBlock = input.contact ? '' : `<tr><td style="padding:0 30px 18px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f3f8f6;border-radius:12px"><tr><td style="padding:18px 20px"><h2 style="margin:0 0 8px;color:#0f2742;font-size:16px">${es ? 'Información importante' : 'Important information'}</h2><p style="margin:0;color:#475569;font-size:14px;line-height:1.6">${es ? `Llega a ${e(meetingPoint)} 15 minutos antes de la salida.` : `Please arrive 15 minutes before your scheduled departure time.`}<br><br>${es ? 'Si tienes preguntas o necesitas hacer cambios, contáctanos.' : 'If you have questions or need to make changes, contact us.'}</p></td></tr></table></td></tr>`;
   const defaultHeading = es ? 'Pago recibido y reserva confirmada' : 'Payment received and booking confirmed';
   const defaultIntro = es ? 'Tu pago fue recibido correctamente.<br>Muchas gracias por reservar con Papagayo Fishing Tours.' : 'Your payment was received successfully.<br>Thank you very much for booking with Papagayo Fishing Tours.';
-  return `<!doctype html><html><body style="margin:0;background:#f1f6f8;color:#0f2742;font-family:Arial,Helvetica,sans-serif"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f1f6f8"><tr><td align="center" style="padding:24px 12px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:620px;background:#fff;border-radius:16px;overflow:hidden"><tr><td align="center" style="background:#082c4c;padding:28px 20px"><img src="https://www.papagayofishingtourcr.com/images/papagayo-logo.png" width="260" alt="Papagayo Fishing Tours" style="display:block;width:260px;max-width:90%;height:auto;border:0"></td></tr><tr><td style="padding:34px 30px 16px"><div style="color:#159a72;font-size:28px;font-weight:700;text-align:center">&#10003;</div><h1 style="margin:8px 0 12px;text-align:center;color:#0f2742;font-size:26px">${e(input.heading ?? defaultHeading)}</h1><p style="margin:0;text-align:center;color:#475569;font-size:15px;line-height:1.6">${input.introduction ? e(input.introduction) : defaultIntro}</p>${input.contact ? '' : `<p style="margin:22px 0 0;color:#0f2742;font-size:16px">${es ? 'Hola' : 'Hi'} ${e(input.name)},</p>`}</td></tr><tr><td style="padding:0 30px 18px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#eaf4f8;border-radius:12px"><tr><td style="padding:18px 20px;width:50%;vertical-align:top"><div style="color:#64748b;font-size:12px">${es ? 'Referencia de reserva' : 'Booking reference'}</div><div style="margin-top:5px;color:#0f2742;font-size:17px;font-weight:700">${e(input.reference)}</div></td><td style="padding:18px 20px;width:50%;vertical-align:top"><div style="color:#64748b;font-size:12px">${es ? 'Fecha del tour' : 'Tour date'}</div><div style="margin-top:5px;color:#0f2742;font-size:15px;font-weight:700">${e(input.date)}</div><div style="margin-top:4px;color:#0f2742;font-size:14px">${e(input.time || '-')}</div></td></tr></table></td></tr>${contactBlock}<tr><td style="padding:0 30px 18px"><h2 style="margin:8px 0 10px;color:#0f2742;font-size:17px">${es ? 'Detalles de la reserva' : 'Booking details'}</h2><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-top:1px solid #e2e8f0">${row(es ? 'Tour' : 'Tour', input.tour)}${row(es ? 'Bote' : 'Boat', input.boat)}${row(es ? 'Paquete' : 'Package', input.packageName)}${row(es ? 'Personas' : 'Guests', input.guests)}${row(es ? 'Punto de encuentro' : 'Meeting point', input.departureLocation)}</table></td></tr><tr><td style="padding:0 30px 18px"><h2 style="margin:8px 0 10px;color:#0f2742;font-size:17px">${es ? 'Resumen del pago' : 'Payment summary'}</h2><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-top:1px solid #e2e8f0">${row(es ? 'Total' : 'Total', input.total)}${row(es ? 'Estado del pago' : 'Payment status', input.paymentStatus)}</table></td></tr>${infoBlock}<tr><td align="center" style="padding:4px 30px 28px"><a href="https://wa.me/${e(input.whatsappNumber)}" style="display:inline-block;background:#159a72;color:#fff;text-decoration:none;border-radius:8px;padding:14px 24px;font-size:15px;font-weight:700">${e(input.ctaLabel ?? (es ? 'Contáctanos por WhatsApp' : 'Contact us on WhatsApp'))}</a></td></tr><tr><td style="padding:0 30px 28px;color:#475569;font-size:14px;line-height:1.6">${es ? 'Estamos listos para ofrecerte una experiencia increíble.' : "We're ready to give you an amazing experience."}<br><br>Pura Vida,<br><strong style="color:#0f2742">Papagayo Fishing Tours</strong></td></tr><tr><td align="center" style="background:#082c4c;padding:18px;color:#dbeafe;font-size:12px;line-height:1.6">Papagayo Fishing Tours<br>Costa Rica<br><a href="https://papagayofishingtourcr.com" style="color:#dbeafe">papagayofishingtourcr.com</a></td></tr></table></td></tr></table></body></html>`;
+  return `<!doctype html><html><body style="margin:0;background:#f1f6f8;color:#0f2742;font-family:Arial,Helvetica,sans-serif"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f1f6f8"><tr><td align="center" style="padding:24px 12px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:620px;background:#fff;border-radius:16px;overflow:hidden"><tr><td align="center" style="background:#082c4c;padding:28px 20px"><img src="https://www.papagayofishingtourcr.com/images/papagayo-logo.png" width="260" alt="Papagayo Fishing Tours" style="display:block;width:260px;max-width:90%;height:auto;border:0"></td></tr><tr><td style="padding:34px 30px 16px"><div style="color:#159a72;font-size:28px;font-weight:700;text-align:center">&#10003;</div><h1 style="margin:8px 0 12px;text-align:center;color:#0f2742;font-size:26px">${e(input.heading ?? defaultHeading)}</h1><p style="margin:0;text-align:center;color:#475569;font-size:15px;line-height:1.6">${input.introduction ? e(input.introduction) : defaultIntro}</p>${input.contact ? '' : `<p style="margin:22px 0 0;color:#0f2742;font-size:16px">${es ? 'Hola' : 'Hi'} ${e(input.name)},</p>`}</td></tr><tr><td style="padding:0 30px 18px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#eaf4f8;border-radius:12px"><tr><td style="padding:18px 20px;width:50%;vertical-align:top"><div style="color:#64748b;font-size:12px">${es ? 'Referencia de reserva' : 'Booking reference'}</div><div style="margin-top:5px;color:#0f2742;font-size:17px;font-weight:700">${e(input.reference)}</div></td><td style="padding:18px 20px;width:50%;vertical-align:top"><div style="color:#64748b;font-size:12px">${es ? 'Fecha del tour' : 'Tour date'}</div><div style="margin-top:5px;color:#0f2742;font-size:15px;font-weight:700">${e(input.date)}</div><div style="margin-top:4px;color:#0f2742;font-size:14px">${input.time ? `${es ? 'Hora de salida' : 'Departure Time'}: ${e(input.time)}` : ''}</div></td></tr></table></td></tr>${contactBlock}<tr><td style="padding:0 30px 18px"><h2 style="margin:8px 0 10px;color:#0f2742;font-size:17px">${es ? 'Detalles de la reserva' : 'Booking details'}</h2><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-top:1px solid #e2e8f0">${row(es ? 'Tour' : 'Tour', input.tour)}${row(es ? 'Bote' : 'Boat', input.boat)}${row(es ? 'Paquete' : 'Package', input.packageName)}${row(es ? 'Personas' : 'Guests', input.guests)}${row(es ? 'Punto de encuentro' : 'Meeting point', input.departureLocation)}</table></td></tr><tr><td style="padding:0 30px 18px"><h2 style="margin:8px 0 10px;color:#0f2742;font-size:17px">${es ? 'Resumen del pago' : 'Payment summary'}</h2><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-top:1px solid #e2e8f0">${row(es ? 'Precio del paquete' : 'Package Price', input.basePrice)}${row(es ? 'Personas adicionales' : 'Additional guests', input.extraGuestsTotal)}${row('Extras', input.extrasTotal)}${row(es ? 'Cargo por salida' : 'Departure surcharge', input.departureSurcharge)}${row(`IVA (${Math.round((input.taxRate ?? 0) * 100)}%)`, input.taxAmount)}${row(es ? 'Total' : 'Total', input.total)}${row(es ? 'Estado del pago' : 'Payment status', input.paymentStatus)}</table></td></tr>${infoBlock}<tr><td align="center" style="padding:4px 30px 28px"><a href="https://wa.me/${e(input.whatsappNumber)}" style="display:inline-block;background:#159a72;color:#fff;text-decoration:none;border-radius:8px;padding:14px 24px;font-size:15px;font-weight:700">${e(input.ctaLabel ?? (es ? 'Contáctanos por WhatsApp' : 'Contact us on WhatsApp'))}</a></td></tr><tr><td style="padding:0 30px 28px;color:#475569;font-size:14px;line-height:1.6">${es ? 'Estamos listos para ofrecerte una experiencia increíble.' : "We're ready to give you an amazing experience."}<br><br>Pura Vida,<br><strong style="color:#0f2742">Papagayo Fishing Tours</strong></td></tr><tr><td align="center" style="background:#082c4c;padding:18px;color:#dbeafe;font-size:12px;line-height:1.6">Papagayo Fishing Tours<br>Costa Rica<br><a href="https://papagayofishingtourcr.com" style="color:#dbeafe">papagayofishingtourcr.com</a></td></tr></table></td></tr></table></body></html>`;
 }
 
 function escapeHtml(value: string) { return value.replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character] ?? character); }
-function formatUsd(value: number) { return `USD ${value.toLocaleString('en-US', { maximumFractionDigits: 2, minimumFractionDigits: 0 })}`; }
+function formatEmailUsd(value: number) { return '$' + value.toLocaleString('en-US', { maximumFractionDigits: 2, minimumFractionDigits: 2 }); }
 function formatDate(value: string, language: Language) { const date = new Date(`${value}T00:00:00Z`); return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString(language === 'es' ? 'es-CR' : 'en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' }); }
+
+export function formatDepartureTime(value?: string | null): string {
+  const match = /^([01]\d|2[0-3]):([0-5]\d)(?::[0-5]\d)?$/.exec(value ?? '');
+  if (!match) return '';
+  const hour = Number(match[1]);
+  return `${hour % 12 || 12}:${match[2]} ${hour >= 12 ? 'PM' : 'AM'}`;
+}
+
+function bookingEmailAmounts(booking: any) {
+  return {
+    basePrice: formatEmailUsd(Number(booking.base_price_snapshot ?? 0)),
+    taxAmount: formatEmailUsd(Number(booking.tax_amount_snapshot ?? 0)),
+    taxRate: Number(booking.tax_rate_snapshot ?? 0),
+    extraGuestsTotal: Number(booking.extra_guests_total_snapshot) > 0 ? formatEmailUsd(Number(booking.extra_guests_total_snapshot)) : undefined,
+    extrasTotal: Number(booking.extras_total_snapshot) > 0 ? formatEmailUsd(Number(booking.extras_total_snapshot)) : undefined,
+    departureSurcharge: Number(booking.departure_surcharge_snapshot) > 0 ? formatEmailUsd(Number(booking.departure_surcharge_snapshot)) : undefined,
+  };
+}
+function bookingPriceLines(booking: any, es: boolean) {
+  return [`${es ? 'Precio del paquete' : 'Package Price'}: ${formatEmailUsd(Number(booking.base_price_snapshot ?? 0))}`,
+    ...(Number(booking.extra_guests_total_snapshot) > 0 ? [`${es ? 'Personas adicionales' : 'Additional guests'}: ${formatEmailUsd(Number(booking.extra_guests_total_snapshot))}`] : []),
+    ...(Number(booking.extras_total_snapshot) > 0 ? [`Extras: ${formatEmailUsd(Number(booking.extras_total_snapshot))}`] : []),
+    `IVA (${Math.round(Number(booking.tax_rate_snapshot ?? 0) * 100)}%): ${formatEmailUsd(Number(booking.tax_amount_snapshot ?? 0))}`];
+}
+
+export async function buildBookingRequestSummary(supabase: SupabaseClient, bookingId: string, language: Language): Promise<string> {
+  const booking = await fetchBookingForEmail(supabase, bookingId);
+  const es = language === 'es';
+  const time = formatDepartureTime(booking.time_slots?.starts_at);
+  return [
+    `${es ? 'Reserva' : 'Reservation'}: ${booking.booking_reference}`,
+    `${es ? 'Cliente' : 'Customer'}: ${booking.customers?.full_name ?? ''}`,
+    `Email: ${booking.customers?.email ?? ''}`,
+    `WhatsApp: ${booking.customers?.whatsapp ?? ''}`,
+    `${es ? 'Bote' : 'Boat'}: ${booking.boats?.name ?? ''}`,
+    `Tour: ${booking.tours?.title ?? ''}`,
+    `${es ? 'Paquete' : 'Package'}: ${booking.tour_packages?.name ?? ''}`,
+    `${es ? 'Fecha' : 'Tour Date'}: ${formatDate(booking.tour_date, language)}`,
+    ...(time ? [`${es ? 'Hora de salida' : 'Departure Time'}: ${time}`] : []),
+    `${es ? 'Personas' : 'Guests'}: ${booking.guests}`,
+    `${es ? 'Lugar de salida' : 'Departure location'}: ${booking.departure_location_name_snapshot ?? '-'}`,
+    `${es ? 'Cargo por salida' : 'Departure surcharge'}: ${formatEmailUsd(Number(booking.departure_surcharge_snapshot ?? 0))}`,
+    ...bookingPriceLines(booking, es),
+    `Total: ${formatEmailUsd(Number(booking.total_snapshot ?? 0))}`,
+  ].join('\n');
+}

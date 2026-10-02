@@ -43,6 +43,8 @@ export interface BookingPaymentPayload {
   departureCurrency: string;
   extras: Array<{ key: string; label: string; quantity: number; unit_price: number; total: number }>;
   extrasTotal: number;
+  taxAmount: number;
+  taxRate: number;
   total: number;
   specialRequests: string;
   paymentMethod?: string;
@@ -88,6 +90,8 @@ export function buildBookingPaymentPayload(input: {
     departureCurrency: input.departureLocation?.currency ?? 'USD',
     extras: input.extras ?? [],
     extrasTotal: input.pricing.extrasTotal,
+    taxAmount: input.pricing.taxAmount,
+    taxRate: input.pricing.taxRate,
     total: input.pricing.total,
     specialRequests: cleanText(input.specialRequests) || (input.language === 'es' ? 'Ninguna' : 'None'),
   };
@@ -131,6 +135,7 @@ export function createWhatsAppBookingMessage(booking: BookingPaymentPayload, var
     `${es ? 'Cargo por salida' : 'Departure surcharge'}: ${booking.departureSurcharge > 0 ? formatMessageCurrency(booking.departureSurcharge) : (es ? 'Sin costo' : 'No cost')}`,
     `${es ? 'Extras' : 'Extras'}: ${booking.extras.length ? booking.extras.map((extra) => `${extra.label} x${extra.quantity}`).join(', ') : (es ? 'Ninguno' : 'None')}`,
     `${es ? 'Cargo de extras' : 'Extras charge'}: ${formatMessageCurrency(booking.extrasTotal)}`,
+    `IVA (${Math.round(booking.taxRate * 100)}%): ${formatMessageCurrency(booking.taxAmount)}`,
     `${es ? 'Total' : 'Total'}: ${formatMessageCurrency(booking.total)}`,
     '',
     es ? 'MÉTODO DE PAGO' : 'PAYMENT METHOD',
@@ -155,7 +160,7 @@ export function sanitizeWhatsAppNumber(value: string) {
 }
 
 export function formatMessageCurrency(value: number) {
-  return `$${value.toLocaleString('en-US', { maximumFractionDigits: 2, minimumFractionDigits: 0 })}`;
+  return `$${value.toLocaleString('en-US', { maximumFractionDigits: 2, minimumFractionDigits: 2 })}`;
 }
 
 function formatMessageDate(value: string, language: 'es' | 'en') {

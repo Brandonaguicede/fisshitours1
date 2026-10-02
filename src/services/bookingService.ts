@@ -25,6 +25,9 @@ export interface PriceResult {
   extras_total?: number;
   departure_location?: DepartureLocation;
   departure_surcharge?: number;
+  subtotal: number | null;
+  tax_rate: number | null;
+  tax_amount: number | null;
   total: number | null;
   currency: string;
 }
@@ -85,6 +88,9 @@ export interface BookingResult {
   guests: number;
   booking_status: string;
   payment_status: string;
+  subtotal_snapshot: number;
+  tax_rate_snapshot: number;
+  tax_amount_snapshot: number;
   total_snapshot: number;
   currency: string;
   base_price_snapshot: number;

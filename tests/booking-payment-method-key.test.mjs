@@ -72,11 +72,11 @@ async function fixture(paymentMethods, options = {}) {
     }
     if (path.endsWith('/functions/v1/calculate-booking-price')) {
       priceRequests.push(request.postDataJSON());
-      return route.fulfill({ json: { custom_quote: false, base_price: 650, included_guests: 4, max_guests: 10, extra_guest_price: 50, extra_guests: 0, extra_guests_total: 0, extras: [], extras_total: 0, total: 650, currency: 'USD' } });
+      return route.fulfill({ json: { custom_quote: false, base_price: 650, included_guests: 4, max_guests: 10, extra_guest_price: 50, extra_guests: 0, extra_guests_total: 0, extras: [], extras_total: 0, subtotal: 650, tax_rate: 0.13, tax_amount: 84.50, total: 734.50, currency: 'USD' } });
     }
     if (path.endsWith('/functions/v1/create-booking')) {
       createBookingRequests.push(request.postDataJSON());
-      return route.fulfill({ json: { booking_id: 'booking-1', booking_reference: 'PFT-TEST01', boat_id: 'second-wind', tour_id: 'fishing', tour_package_id: 'pkg-1', tour_date: '2026-12-01', time_slot_id: 'slot-1', guests: 4, booking_status: 'pending_confirmation', payment_status: 'pending', total_snapshot: 650, currency: 'USD', base_price_snapshot: 650, extra_guests_snapshot: 0, extra_guests_total_snapshot: 0, extras_total_snapshot: 0, departure_location_id: 'loc-1', departure_location_name_snapshot: 'Playas del Coco', departure_surcharge_snapshot: 0, departure_currency_snapshot: 'USD' } });
+      return route.fulfill({ json: { booking_id: 'booking-1', booking_reference: 'PFT-TEST01', boat_id: 'second-wind', tour_id: 'fishing', tour_package_id: 'pkg-1', tour_date: '2026-12-01', time_slot_id: 'slot-1', guests: 4, booking_status: 'pending_confirmation', payment_status: 'pending', subtotal_snapshot: 650, tax_rate_snapshot: 0.13, tax_amount_snapshot: 84.50, total_snapshot: 734.50, currency: 'USD', base_price_snapshot: 650, extra_guests_snapshot: 0, extra_guests_total_snapshot: 0, extras_total_snapshot: 0, departure_location_id: 'loc-1', departure_location_name_snapshot: 'Playas del Coco', departure_surcharge_snapshot: 0, departure_currency_snapshot: 'USD', ...options.savedAmounts } });
     }
     return route.fulfill({ json: [] });
   });
@@ -202,3 +202,29 @@ test('empty remote catalog never falls back to static booking packages', async (
     assert.deepEqual(f.availabilityRequests, []);
   } finally { await f.browser.close(); }
 });
+
+ test('booking summary and checkout display backend IVA and total with two decimals', async () => {
+  const f = await fixture([{ id: 'method-paypal', key: 'paypal', name: 'PayPal', type: 'paypal', description: '', active: true, sort_order: 1 }]);
+  try {
+    await runBookingFlowToPaymentStep(f.page);
+    await expect(f.page.getByRole('complementary').getByText('IVA (13%)', { exact: true }).first()).toBeVisible();
+    await expect(f.page.getByRole('complementary').getByText('$84.50', { exact: true }).first()).toBeVisible();
+    await expect(f.page.getByRole('complementary').getByText('$734.50', { exact: true }).first()).toBeVisible();
+    await expect(f.page.getByRole('complementary').getByText('$650.00', { exact: true }).first()).toBeVisible();
+  } finally { await f.browser.close(); }
+ });
+
+ test('checkout uses saved snapshots when the package price changed after the quote', async () => {
+  const f=await fixture([{id:'1',key:'paypal',name:'PayPal',description:'',type:'paypal',active:true,sort_order:1}], {
+    savedAmounts: {base_price_snapshot:850, subtotal_snapshot:850, tax_rate_snapshot:0.13, tax_amount_snapshot:110.50, total_snapshot:960.50}
+  });
+  try {
+    await runBookingFlowToPaymentStep(f.page);
+    await f.page.locator('[data-payment-method="paypal"]').click();
+    await expect.poll(()=>f.createBookingRequests.length).toBeGreaterThan(0);
+    const summary=f.page.getByRole('complementary');
+    await expect(summary.getByText('$850.00',{exact:true})).toBeVisible();
+    await expect(summary.getByText('$110.50',{exact:true})).toBeVisible();
+    await expect(summary.getByText('$960.50',{exact:true})).toBeVisible();
+  } finally { await f.browser.close(); }
+ });

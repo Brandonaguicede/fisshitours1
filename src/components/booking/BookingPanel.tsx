@@ -19,8 +19,11 @@ import { filterPackageSlots } from '../../utils/packageSettings';
 import { cn } from '../../utils/cn';
 import { getDefaultDepartureLocation } from '../../utils/departureLocations';
 import { formatTime } from '../../utils/format';
-import { formatCurrency } from '../../utils/formatCurrency';
 import { Button, ChoiceCard, Field, FieldError, GlassPanel, Input, ModalShell, TextArea } from '../ui';
+
+function formatCurrency(value: number) {
+  return Number.isFinite(value) ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value) : '\u2026';
+}
 
 interface BookingPanelProps {
   selectedBoat: Boat;
@@ -190,7 +193,17 @@ export function BookingPanel({ selectedBoat, selectedTour: requestedTour, boats,
     enabled: selectionReady && guests > 0 && departureLocationsQuery.isSuccess && !departureLocationsQuery.isFetching && (!departureLocationId || Boolean(selectedDepartureLocation)),
     staleTime: 250,
   });
-  const pricing = mapBackendPricing(selectedBoat, selectedTour, guests, selectedDepartureLocation, priceQuery.data);
+  const quotedPricing = mapBackendPricing(selectedBoat, selectedTour, guests, selectedDepartureLocation, priceQuery.data);
+  // Once created, the saved snapshots are the same amounts PayPal and email read.
+  const pricing = createdBooking && createdBooking.tour_package_id === selectedTour?.id
+    && createdBooking.guests === guests && createdBooking.tour_date === date && createdBooking.time_slot_id === timeSlotId
+    && createdBooking.departure_location_id === selectedDepartureLocation?.id
+    ? { ...quotedPricing, basePrice: Number(createdBooking.base_price_snapshot),
+        extraGuests: Number(createdBooking.extra_guests_snapshot), extraGuestsTotal: Number(createdBooking.extra_guests_total_snapshot),
+        extrasTotal: Number(createdBooking.extras_total_snapshot), departureSurcharge: Number(createdBooking.departure_surcharge_snapshot ?? 0),
+        taxRate: Number(createdBooking.tax_rate_snapshot), taxAmount: Number(createdBooking.tax_amount_snapshot),
+        total: Number(createdBooking.total_snapshot) }
+    : quotedPricing;
   const effectiveMaxGuests = priceQuery.data?.max_guests ?? getEffectiveMaxGuests(selectedBoat, selectedTour);
   const includedGuests = priceQuery.data?.included_guests ?? getTourIncludedGuests(selectedBoat, selectedTour);
   const extraGuestPrice = priceQuery.data?.extra_guest_price ?? getExtraGuestPrice(selectedBoat, selectedTour);
@@ -418,7 +431,7 @@ export function BookingPanel({ selectedBoat, selectedTour: requestedTour, boats,
       setPaymentStatus('pending');
       setPaypalVisible(false);
       setSuccessNotice(null);
-      openWhatsAppBooking({ ...bookingPayload, bookingReference: result.booking_reference, total: result.total_snapshot, paymentMethod: language === 'es' ? 'Enlace de pago por WhatsApp' : 'WhatsApp payment link', paymentStatus: 'pending' }, 'payment_link');
+      openWhatsAppBooking({ ...bookingPayload, bookingReference: result.booking_reference, basePrice: result.base_price_snapshot, taxRate: result.tax_rate_snapshot, taxAmount: result.tax_amount_snapshot, additionalGuestCharge: result.extra_guests_total_snapshot, extrasTotal: result.extras_total_snapshot, departureSurcharge: Number(result.departure_surcharge_snapshot ?? 0), total: result.total_snapshot, paymentMethod: language === 'es' ? 'Enlace de pago por WhatsApp' : 'WhatsApp payment link', paymentStatus: 'pending' }, 'payment_link');
       setSuccessNotice({
         title: language === 'es' ? 'Reserva creada' : 'Booking created',
         message: language === 'es' ? 'Recibimos tu reserva. Abre WhatsApp para solicitar el enlace de pago.' : 'We received your booking. Open WhatsApp to request the payment link.',
@@ -446,7 +459,7 @@ export function BookingPanel({ selectedBoat, selectedTour: requestedTour, boats,
       setBookingStatus('pending_confirmation');
       setPaymentStatus('not_required_yet');
       setIsPayOnDayOpen(false);
-      openWhatsAppBooking({ ...bookingPayload, bookingReference: result.booking_reference, total: result.total_snapshot, paymentMethod: language === 'es' ? 'Pago el día del tour' : 'Pay on the day of the tour', paymentStatus: 'not_required_yet' }, 'pay_on_day');
+      openWhatsAppBooking({ ...bookingPayload, bookingReference: result.booking_reference, basePrice: result.base_price_snapshot, taxRate: result.tax_rate_snapshot, taxAmount: result.tax_amount_snapshot, additionalGuestCharge: result.extra_guests_total_snapshot, extrasTotal: result.extras_total_snapshot, departureSurcharge: Number(result.departure_surcharge_snapshot ?? 0), total: result.total_snapshot, paymentMethod: language === 'es' ? 'Pago el día del tour' : 'Pay on the day of the tour', paymentStatus: 'not_required_yet' }, 'pay_on_day');
       setSuccessNotice({
         title: language === 'es' ? 'Reserva recibida' : 'Booking received',
         message: language === 'es' ? 'Tu solicitud fue creada y queda pendiente de confirmacion.' : 'Your request was created and is pending confirmation.',
@@ -1055,6 +1068,8 @@ function mapBackendPricing(boat: Boat, tour: BoatTour | undefined, guests: numbe
       extraGuestsTotal: 0,
       extrasTotal: 0,
       departureSurcharge: fallbackDepartureSurcharge,
+      taxAmount: 0,
+      taxRate: 0,
       total: 0,
     };
   }
@@ -1067,6 +1082,8 @@ function mapBackendPricing(boat: Boat, tour: BoatTour | undefined, guests: numbe
     extraGuestsTotal: Number(price.extra_guests_total ?? 0),
     extrasTotal: Number(price.extras_total ?? 0),
     departureSurcharge: Number(price.departure_surcharge ?? fallbackDepartureSurcharge),
+    taxAmount: Number(price.tax_amount ?? 0),
+    taxRate: Number(price.tax_rate ?? 0),
     total: Number(price.total ?? 0),
   };
 }
@@ -1325,11 +1342,12 @@ function BookingPaymentSummary({ booking }: { booking: BookingPaymentPayload | n
         <SummaryLine label={language === 'es' ? 'Fecha' : 'Date'} value={formatDisplayDate(booking.date)} />
         <SummaryLine label={language === 'es' ? 'Hora' : 'Time'} value={booking.time || (language === 'es' ? 'Requerido' : 'Required')} />
         <SummaryLine label={language === 'es' ? 'Número de personas' : 'Number of guests'} value={String(booking.guests)} />
-        <SummaryLine label={language === 'es' ? 'Precio base del barco' : 'Boat base price'} value={formatCurrency(booking.basePrice)} />
+        <SummaryLine label={language === 'es' ? 'Precio base del barco' : 'Package Price'} value={formatCurrency(booking.basePrice)} />
         <SummaryLine label={language === 'es' ? 'Personas extra' : 'Additional guests'} value={String(booking.additionalGuests)} />
         <SummaryLine label={language === 'es' ? 'Cargo por persona extra' : 'Additional guest charge'} value={formatCurrency(booking.additionalGuestCharge)} />
         <SummaryLine label={language === 'es' ? 'Lugar de salida' : 'Departure location'} value={booking.departureLocationName || (language === 'es' ? 'Requerido' : 'Required')} />
         <SummaryLine label={language === 'es' ? 'Recargo de salida' : 'Departure surcharge'} value={booking.departureSurcharge > 0 ? formatCurrency(booking.departureSurcharge) : (language === 'es' ? 'Sin costo' : 'No cost')} />
+        <SummaryLine label={`IVA (${Math.round(booking.taxRate * 100)}%)`} value={formatCurrency(booking.taxAmount)} />
         <SummaryLine label={language === 'es' ? 'Precio total' : 'Total price'} value={formatCurrency(booking.total)} />
         <SummaryLine label={language === 'es' ? 'Solicitudes especiales' : 'Special requests'} value={booking.specialRequests || (language === 'es' ? 'Ninguna' : 'None')} />
       </div>
@@ -1472,7 +1490,7 @@ function BookingSummary(props: {
   const coverImage = props.selectedBoat.image;
   const selectedTourName = props.selectedTour ? `${getTourText(props.selectedTour, language).title} - ${getPackageLabel(props.selectedTour, language)}` : tr(text.booking.selectTour, language);
   const subtotal = props.selectedTour?.customQuote ? (language === 'es' ? 'Cotización personalizada' : 'Custom quote') : formatCurrency(props.pricing.basePrice);
-  const extrasTotal = props.selectedTour?.customQuote ? '-' : formatCurrency(Math.max(props.pricing.total - props.pricing.basePrice - props.pricing.extraGuestsTotal - props.pricing.departureSurcharge, 0));
+  const extrasTotal = props.selectedTour?.customQuote ? '-' : formatCurrency(props.pricing.extrasTotal);
 
   return (
     <GlassPanel as="aside" className="h-fit p-2.5" variant="surface">
@@ -1492,11 +1510,12 @@ function BookingSummary(props: {
         {props.currentStep >= 3 ? <SummaryRow label={language === 'es' ? 'Método de pago' : 'Payment method'} value={props.selectedPayment} /> : null}
       </div>
       <GlassPanel className="mt-2 p-2 text-xs" variant="subtle">
-        <SummaryRow label={language === 'es' ? 'Precio base' : 'Base price'} value={subtotal} />
+        <SummaryRow label={language === 'es' ? 'Precio base' : 'Package Price'} value={subtotal} />
         <SummaryRow label={language === 'es' ? 'Incluye hasta' : 'Includes up to'} value={`${getTourIncludedGuests(props.selectedBoat, props.selectedTour)} ${language === 'es' ? 'personas' : 'guests'}`} />
         {props.pricing.extraGuests > 0 ? <SummaryRow label={tr(text.booking.extraPeople, language)} value={`${props.pricing.extraGuests} x ${formatCurrency(props.pricing.extraGuestPrice)}`} /> : null}
         <SummaryRow label={language === 'es' ? 'Cargo por salida' : 'Departure surcharge'} value={props.pricing.departureSurcharge > 0 ? formatCurrency(props.pricing.departureSurcharge) : (language === 'es' ? 'Sin costo' : 'No cost')} />
-        <SummaryRow label={tr(text.booking.taxes, language)} value={extrasTotal} />
+        <SummaryRow label="Extras" value={extrasTotal} />
+        <SummaryRow label={`IVA (${Math.round(props.pricing.taxRate * 100)}%)`} value={formatCurrency(props.pricing.taxAmount)} />
         <div className="mt-2 flex flex-wrap items-end justify-between gap-3 border-t border-white/10 pt-2">
           <span className="text-sm font-extrabold text-white">Total</span>
           <span className="text-lg font-extrabold text-ocean-100">{props.selectedTour?.customQuote ? 'Cotizar' : formatCurrency(props.pricing.total)}</span>
@@ -1543,6 +1562,8 @@ function ReviewModal(props: {
           <SummaryLine label={language === 'es' ? 'Cargos por personas extra' : 'Additional guest charges'} value={props.pricing.extraGuests > 0 ? `${props.pricing.extraGuests} x ${formatCurrency(props.pricing.extraGuestPrice)} = ${formatCurrency(props.pricing.extraGuestsTotal)}` : '$0'} />
           <SummaryLine label={language === 'es' ? 'Lugar de salida' : 'Departure location'} value={props.departureLocation?.name ?? '-'} />
           <SummaryLine label={language === 'es' ? 'Cargo por salida' : 'Departure surcharge'} value={props.pricing.departureSurcharge > 0 ? formatCurrency(props.pricing.departureSurcharge) : (language === 'es' ? 'Sin costo' : 'No cost')} />
+          <SummaryLine label={language === 'es' ? 'Precio del paquete' : 'Package Price'} value={formatCurrency(props.pricing.basePrice)} />
+          <SummaryLine label={`IVA (${Math.round(props.pricing.taxRate * 100)}%)`} value={formatCurrency(props.pricing.taxAmount)} />
           <SummaryLine label="Total" value={props.pricing.isCustomQuote ? (language === 'es' ? 'Cotización personalizada' : 'Custom quote') : formatCurrency(props.pricing.total)} />
           <SummaryLine label={language === 'es' ? 'Nombre' : 'Customer name'} value={props.customerName} />
           <SummaryLine label={language === 'es' ? 'Correo' : 'Email'} value={props.customerEmail} />

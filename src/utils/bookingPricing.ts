@@ -35,6 +35,8 @@ export function calculateBookingTotal(boat: Boat, tour: BoatTour | undefined, gu
       extraGuestsTotal: 0,
       extrasTotal: 0,
       departureSurcharge: 0,
+      taxAmount: 0,
+      taxRate: 0,
       total: 0,
     };
   }
@@ -53,6 +55,9 @@ export function calculateBookingTotal(boat: Boat, tour: BoatTour | undefined, gu
     extraGuestsTotal,
     extrasTotal: 0,
     departureSurcharge,
-    total: tour.basePrice + extraGuestsTotal + departureSurcharge,
+    // Await the authoritative backend quote before displaying a payable total.
+    taxAmount: Number.NaN,
+    taxRate: 0.13,
+    total: Number.NaN,
   };
 }

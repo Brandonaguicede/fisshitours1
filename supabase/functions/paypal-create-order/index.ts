@@ -17,7 +17,7 @@ serve(withCors(async (req) => {
     const supabase = getSupabase();
     const { data: booking, error } = await supabase
       .from('bookings')
-      .select('id, booking_reference, total_snapshot, currency, payment_method_key, payment_status, booking_status, expires_at, boats(name), tour_packages(name)')
+      .select('id, booking_reference, total_snapshot, subtotal_snapshot, tax_amount_snapshot, currency, payment_method_key, payment_status, booking_status, expires_at, boats(name), tour_packages(name)')
       .eq('id', parsed.data.bookingId)
       .single();
 
@@ -44,7 +44,10 @@ serve(withCors(async (req) => {
           custom_id: booking.id,
           invoice_id: booking.booking_reference,
           description: `${booking.boats?.name ?? 'Boat'} - ${booking.tour_packages?.name ?? 'Tour package'}`,
-          amount: { currency_code: booking.currency, value: amount },
+          amount: { currency_code: booking.currency, value: amount, breakdown: {
+            item_total: { currency_code: booking.currency, value: Number(booking.subtotal_snapshot).toFixed(2) },
+            tax_total: { currency_code: booking.currency, value: Number(booking.tax_amount_snapshot).toFixed(2) },
+          } },
         }],
       }),
     });

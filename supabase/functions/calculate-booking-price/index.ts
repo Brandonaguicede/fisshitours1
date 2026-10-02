@@ -86,7 +86,11 @@ serve(withCors(async (req) => {
     pricedExtras.push({ key: extraRecord.key, label: extraRecord.label, quantity: extra.quantity, unit_price: unitPrice, total: lineTotal });
   }
 
-  const total = Number(pkg.base_price) + extraGuestsTotal + extrasTotal + departureSurcharge;
+  const { data: amounts, error: taxError } = await supabase.rpc('calculate_booking_iva', {
+    p_base_amount: Number(pkg.base_price) + extraGuestsTotal + extrasTotal + departureSurcharge,
+  });
+  if (taxError || !amounts) return Response.json({ message: 'Tax calculation failed' }, { status: 500, headers });
+  const total = Number(amounts.total_amount);
 
   return Response.json({
     custom_quote: false,
@@ -100,6 +104,9 @@ serve(withCors(async (req) => {
     extras_total: extrasTotal,
     departure_location: departureLocation,
     departure_surcharge: departureSurcharge,
+    subtotal: Number(amounts.base_amount),
+    tax_rate: Number(amounts.tax_rate),
+    tax_amount: Number(amounts.tax_amount),
     total,
     currency: 'USD',
   }, { headers });
