@@ -894,7 +894,7 @@ test('CREATE: the new tour is translated first and inserted already bilingual (o
   try {
     await page.getByRole('button', { name: 'Crear tour' }).click();
     await page.getByLabel('Nombre del tour').fill('Sunset Cruise');
-    await page.getByLabel('Frase').fill('Private cruise at sunset.');
+    await page.getByLabel('Descripción pública del tour').fill('Private cruise at sunset.');
     await page.getByRole('button', { name: 'Siguiente', exact: true }).click();
     await expect(activeStep(page)).toContainText('Galería');
     assert.equal(translation.calls.length, 1, 'title + phrase go out together, and only once');
@@ -939,7 +939,7 @@ test('NEXT (Información): only the changed English fields are translated; uncha
     assert.equal(tourPatches(writes).every((w) => Object.keys(w.body).every((key) => !/_(es|en)$/.test(key))), true);
     await page.locator('.admin-stepper').getByRole('button', { name: 'Información' }).click();
     // Edit only the long description.
-    await page.getByLabel(/^Descripción/).fill('A relaxed half-day fishing trip with a local captain.');
+    await page.getByLabel(/^Descripción interna/).fill('A relaxed half-day fishing trip with a local captain.');
     await page.getByRole('button', { name: 'Siguiente', exact: true }).click();
     await expect(activeStep(page)).toContainText('Galería');
     assert.deepEqual(translation.calls.map((call) => call.texts), [['A relaxed half-day fishing trip with a local captain.']]);
@@ -949,7 +949,7 @@ test('NEXT (Información): only the changed English fields are translated; uncha
     for (const key of ['title_es', 'title_en', 'description_es', 'description_en']) assert.equal(key in patch.body, false, `${key} must not be written when unchanged`);
     // Clearing a translated field clears both copies (a stale Spanish would keep showing on the landing).
     await page.locator('.admin-stepper').getByRole('button', { name: 'Información' }).click();
-    await page.getByLabel(/^Descripción/).fill('');
+    await page.getByLabel(/^Descripción interna/).fill('');
     await page.getByRole('button', { name: 'Siguiente', exact: true }).click();
     await expect.poll(() => tourPatches(writes).length).toBeGreaterThan(2);
     const cleared = tourPatches(writes).at(-1).body;
@@ -987,7 +987,7 @@ test('SAVE DRAFT and FINAL SAVE translate too; a DeepL failure persists nothing 
   const f = await fixture({ imageCount: 3 }); const { page, writes, translation } = f;
   try {
     await openExisting(page);
-    await page.getByLabel('Frase').fill('Fishing trip with a local captain.');
+    await page.getByLabel('Descripción pública del tour').fill('Fishing trip with a local captain.');
     translation.fails = true;
     await page.getByRole('button', { name: 'Guardar borrador' }).click();
     await expect(page.getByRole('alert').filter({ hasText: SPANISH_ERROR })).toBeVisible();
@@ -1001,7 +1001,7 @@ test('SAVE DRAFT and FINAL SAVE translate too; a DeepL failure persists nothing 
     assert.equal(draftPatch.translatedBefore >= 1, true);
     // Final save (Guardar on the last step).
     await openExisting(page);
-    await page.getByLabel('Frase').fill('Fishing trip with a local captain and lunch.');
+    await page.getByLabel('Descripción pública del tour').fill('Fishing trip with a local captain and lunch.');
     await page.locator('.admin-stepper').getByRole('button', { name: 'Configuración' }).click();
     translation.fails = true;
     const before = writes.length;

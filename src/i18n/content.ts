@@ -87,6 +87,22 @@ export function getIncludedItems(tour: BoatTour, language: Language): string[] {
   return getTourText(tour, language).included.map((item) => item.trim());
 }
 
+// The three content levels of the public tour view, each from its own source with no fallback to another level
+// (getTourText's description keeps its package-then-tour fallback for the other screens that read it).
+//  - tour level:    tours.description        (+ tours.highlights as activities)
+//  - package level: tour_packages.description
+export function getTourLevelText(tour: BoatTour, language: Language) {
+  return {
+    description: pick(language, tour.tourDescriptionEs, tour.tourDescription, tour.tourDescriptionEn),
+    // Only real activities: getTourText substitutes the category name when there are none, which is not content.
+    activities: pickArray(language, tour.activitiesEs, tour.activities, tour.activitiesEn),
+  };
+}
+
+export function getPackageOwnDescription(tour: BoatTour, language: Language) {
+  return pick(language, tour.packageDescriptionEs, tour.packageDescription, tour.packageDescriptionEn);
+}
+
 export function getBoatText(boat: Boat, language: Language) {
   return {
     badge: pick(language, boat.badgeEs, boat.badge, boat.badgeEn),
