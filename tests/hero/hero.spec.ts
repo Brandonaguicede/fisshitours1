@@ -90,3 +90,83 @@ test('admin custom video URLs are preserved',async({page})=>{
   await expect(page.locator('#home video')).toHaveAttribute('src','/videos/custom-admin.mp4');
   await expect(page.locator('#home video')).toHaveCSS('opacity','1');
 });
+
+// Hero social buttons (Instagram / Facebook). On a phone they are part of the actions block, in normal flow right under "View tours"
+// (an absolutely placed block could overlap the buttons above it on short screens); from sm up they keep their corner position over
+// the hero. Exactly one copy is displayed at any width.
+const heroGeometry = (page: import('@playwright/test').Page) => page.evaluate(() => {
+  const box = (el: Element) => { const r = el.getBoundingClientRect(); return { top: r.top, bottom: r.bottom, left: r.left, right: r.right, width: r.width, height: r.height }; };
+  const visible = (el: Element) => el.getClientRects().length > 0;
+  const link = (re: RegExp) => [...document.querySelectorAll('#home a, #home button')].find((el) => re.test(el.textContent ?? ''))!;
+  const socialLinks = [...document.querySelectorAll('#home a')].filter((el) => /instagram|facebook/i.test(el.getAttribute('aria-label') ?? '') && visible(el));
+  const container = document.querySelector('#home > div.relative.grid') as HTMLElement;
+  const group = socialLinks[0]?.parentElement as HTMLElement;
+  const wa = document.querySelector('a[aria-label="WhatsApp"]')!;
+  return {
+    view: box(link(/view tours|ver tours/i)), book: box(link(/book now|reservar/i)), social: socialLinks.map(box), whatsapp: box(wa),
+    socialPosition: getComputedStyle(group).position, padBottom: parseFloat(getComputedStyle(container).paddingBottom),
+    visibleSocialLinks: socialLinks.length, viewportWidth: innerWidth, viewportHeight: innerHeight,
+    overflowX: document.documentElement.scrollWidth - innerWidth, pageHeight: document.documentElement.scrollHeight,
+  };
+});
+const rectDistance = (a: { top: number; bottom: number; left: number; right: number }, b: { top: number; bottom: number; left: number; right: number }) =>
+  Math.hypot(Math.max(0, Math.max(a.left, b.left) - Math.min(a.right, b.right)), Math.max(0, Math.max(a.top, b.top) - Math.min(a.bottom, b.bottom)));
+const socialBox = (social: Array<{ top: number; bottom: number; left: number; right: number }>) => ({
+  top: Math.min(...social.map((s) => s.top)), bottom: Math.max(...social.map((s) => s.bottom)), left: Math.min(...social.map((s) => s.left)), right: Math.max(...social.map((s) => s.right)),
+});
+async function openHero(page: import('@playwright/test').Page, width: number, height: number) {
+  await page.setViewportSize({ width, height });
+  await page.route(/\/rest\/v1\/site_settings/, (route) => route.fulfill({ json: [] }));
+  await page.goto('/tests/hero/fixture.html');
+  await expect(page.getByRole('link', { name: /view tours|ver tours/i })).toBeVisible();
+  await page.waitForTimeout(1200); // entrance animation
+  return heroGeometry(page);
+}
+
+// Page height that must hold at each phone size. 320x568 cannot fit everything (the title wraps to several lines and the buttons stack),
+// the others fit the viewport exactly.
+const PHONES = [[320, 568, 630], [320, 640, 640], [375, 667, 667], [390, 844, 844]] as const;
+for (const [width, height, maxPageHeight] of PHONES) {
+  test(`mobile hero ${width}x${height}: socials flow under "View tours" with a clear fixed gap, centred, no overlap, compact`, async ({ page }, info) => {
+    test.skip(info.project.name !== 'desktop', 'sizes are set explicitly; one project is enough');
+    const m = await openHero(page, width, height);
+    const s = socialBox(m.social);
+    expect(m.visibleSocialLinks, 'one copy of the social buttons').toBe(2);
+    expect(m.socialPosition, 'in normal flow, not absolute').toBe('static');
+    // Clear, constant separation (mt-5 on top of the actions block's gap-3), whatever the viewport height.
+    expect(s.top - m.view.bottom).toBeGreaterThanOrEqual(28); expect(s.top - m.view.bottom).toBeLessThanOrEqual(36);
+    expect(s.top).toBeGreaterThan(m.view.bottom); // no overlap possible
+    // Sizes and alignment are exactly as before.
+    expect(Math.round(m.book.height)).toBe(50); expect(Math.round(m.view.height)).toBe(50);
+    for (const link of m.social) { expect(Math.round(link.width)).toBe(40); expect(Math.round(link.height)).toBe(40); }
+    expect(Math.abs((s.left + s.right) / 2 - m.viewportWidth / 2)).toBeLessThanOrEqual(1);
+    // No padding inflated to reserve room for an absolute element: the original-size reserve is enough.
+    expect(m.padBottom).toBe(80);
+    expect(m.pageHeight, 'hero stays compact').toBeLessThanOrEqual(maxPageHeight);
+    expect(m.overflowX).toBeLessThanOrEqual(0);
+    // WhatsApp keeps its fixed bottom-right spot and stays clear of the socials.
+    expect(Math.round(m.whatsapp.width)).toBe(50);
+    expect(Math.round(m.viewportWidth - m.whatsapp.right)).toBe(16); expect(Math.round(m.viewportHeight - m.whatsapp.bottom)).toBe(16);
+    expect(rectDistance(m.whatsapp, s)).toBeGreaterThanOrEqual(40);
+    console.log(`${width}x${height}: gap ${Math.round(s.top - m.view.bottom)}px, page ${Math.round(m.pageHeight)}px, overflowX ${m.overflowX}, WhatsApp->social ${Math.round(rectDistance(m.whatsapp, s))}px, WhatsApp->View tours ${Math.round(rectDistance(m.whatsapp, m.view))}px`);
+  });
+}
+
+for (const [width, height] of [[768, 1024], [1440, 900]] as const) {
+  test(`tablet/desktop hero ${width}x${height}: socials keep their corner position, the in-flow copy is hidden, sizes unchanged`, async ({ page }, info) => {
+    test.skip(info.project.name !== 'desktop', 'sizes are set explicitly; one project is enough');
+    const m = await openHero(page, width, height);
+    const s = socialBox(m.social);
+    expect(m.visibleSocialLinks, 'one copy of the social buttons').toBe(2);
+    await expect(page.getByTestId('hero-social-mobile')).toBeHidden();
+    expect(m.socialPosition).toBe('absolute');
+    expect(s.left, 'right-aligned, not centred').toBeGreaterThan(m.viewportWidth / 2);
+    expect(Math.round(m.viewportHeight - s.bottom), 'same bottom offset as before (bottom-32)').toBe(128);
+    expect(s.top - m.view.bottom).toBeGreaterThanOrEqual(90);
+    expect(m.padBottom, 'same bottom reserve as before (sm:pb-20)').toBe(80);
+    for (const link of m.social) { expect(Math.round(link.width)).toBe(40); expect(Math.round(link.height)).toBe(40); }
+    expect(m.overflowX).toBeLessThanOrEqual(0);
+    expect(m.pageHeight).toBeLessThanOrEqual(height);
+    expect(rectDistance(m.whatsapp, s)).toBeGreaterThanOrEqual(40);
+  });
+}

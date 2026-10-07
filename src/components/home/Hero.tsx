@@ -253,7 +253,10 @@ export function Hero() {
           two sections read as one continuous depth rather than a hard cut. */}
       <div className="absolute inset-x-0 bottom-0 h-56 bg-gradient-to-t from-ocean-950 via-ocean-950/75 to-transparent sm:h-64" />
 
-      <div className="absolute bottom-32 left-1/2 z-10 flex -translate-x-1/2 gap-3 sm:left-auto sm:right-32 sm:translate-x-0 md:bottom-32 lg:right-40">
+      {/* From sm up the social buttons keep their corner position over the hero. On a phone they are part of the actions block (see
+          below) instead: an absolutely placed block can overlap the buttons above it on short screens. Only one of the two is
+          displayed at any width (the other is display:none, so it is not in the accessibility tree either). */}
+      <div className="absolute bottom-32 right-32 z-10 hidden gap-3 sm:flex lg:right-40">
         <IconButton href={INSTAGRAM_URL} icon={Instagram} label="Instagram" size="md" target="_blank" />
         <IconButton href={FACEBOOK_URL} icon={Facebook} label="Facebook" size="md" target="_blank" />
       </div>
@@ -268,7 +271,7 @@ export function Hero() {
         <img className="block h-[68%] w-[68%] object-contain" src="/images/whatsapp.png" alt="" aria-hidden="true" />
       </a>
 
-      <Container className="relative grid min-h-[100svh] place-items-center px-6 pb-32 pt-24 text-center sm:px-8 sm:pb-20 sm:pt-28 lg:min-h-[100dvh] lg:px-10">
+      <Container className="relative grid min-h-[100svh] place-items-center px-6 pb-20 pt-24 text-center sm:px-8 sm:pt-28 lg:min-h-[100dvh] lg:px-10">
         <div className="mx-auto w-full max-w-[52rem]">
           <motion.p
             className="text-sm font-extrabold uppercase tracking-[0.18em] text-white/75"
@@ -316,6 +319,10 @@ export function Hero() {
             {!primaryEnabled && !secondaryEnabled ? (
               <IconButton icon={ArrowDown} label="Bajar a la flota" size="lg" variant="ghost" onClick={scrollToFleet} />
             ) : null}
+            <div className="mt-5 flex justify-center gap-3 sm:hidden" data-testid="hero-social-mobile">
+              <IconButton href={INSTAGRAM_URL} icon={Instagram} label="Instagram" size="md" target="_blank" />
+              <IconButton href={FACEBOOK_URL} icon={Facebook} label="Facebook" size="md" target="_blank" />
+            </div>
           </motion.div>
         </div>
       </Container>
