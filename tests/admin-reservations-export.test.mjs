@@ -36,6 +36,10 @@ async function fixture({ bookings = Array.from({ length: 14 }, (_, i) => reserva
   const listRequests = [];
   const createRequests = [];
   const statRequests = [];
+  // calculate-booking-price: the manual booking's "Total estimado" is the Edge function's answer (IVA included), not a local estimate.
+  // It mirrors the real response: package 600 + extra guests over 4 at 50 + the departure surcharge, then 13% IVA on top.
+  const priceRequests = [];
+  let priceMode = 'ok';
   await page.route('https://admin-test.supabase.co/**', async (route) => {
     const request = route.request();
     const url = new URL(request.url());
@@ -51,6 +55,14 @@ async function fixture({ bookings = Array.from({ length: 14 }, (_, i) => reserva
         && (!input.p_search || [row.booking_reference, row.customers.full_name, row.customers.email, row.customers.whatsapp, row.boats.name, row.tours.title].join(' ').toLowerCase().includes(input.p_search.toLowerCase())))
         .sort((a, b) => a.tour_date.localeCompare(b.tour_date) || b.created_at.localeCompare(a.created_at) || a.id.localeCompare(b.id));
       return route.fulfill({ json: { rows: rows.slice(input.p_offset, input.p_offset + input.p_limit), total: rows.length } });
+    }
+    if (path.endsWith('/functions/v1/calculate-booking-price')) {
+      const input = request.postDataJSON(); priceRequests.push(input);
+      if (priceMode === 'error') return route.fulfill({ status: 500, json: { message: 'Tax calculation failed' } });
+      if (priceMode === 'quote') return route.fulfill({ json: { custom_quote: true, total: null, currency: 'USD' } });
+      const subtotal = 600 + Math.max(0, input.guests - 4) * 50 + (input.departureLocationId === 'loc-2' ? 25 : 0);
+      const tax = Math.round(subtotal * 0.13 * 100) / 100;
+      return route.fulfill({ json: { custom_quote: false, base_price: 600, included_guests: 4, max_guests: 12, extra_guest_price: 50, subtotal, tax_rate: 0.13, tax_amount: tax, total: subtotal + tax, currency: 'USD' } });
     }
     if (path.endsWith('/functions/v1/admin-create-booking')) {
       createRequests.push(request.postDataJSON());
@@ -75,7 +87,7 @@ async function fixture({ bookings = Array.from({ length: 14 }, (_, i) => reserva
   await page.waitForURL(/\/admin(\/|$)/);
   await page.goto(`${base}/admin/reservations`);
   await expect(page.getByRole('navigation', { name: 'Paginación de reservas' })).toContainText('de');
-  return { browser, page, listRequests, createRequests, statRequests };
+  return { browser, page, listRequests, createRequests, statRequests, priceRequests, setPriceMode: (mode) => { priceMode = mode; } };
 }
 
 // One icon-only "Descargar" trigger opens a menu with the formats: choose one of its menu items ('Excel (.xlsx)' or 'PDF (.pdf)').
@@ -127,6 +139,25 @@ test('KPI cards read past the 1000-row PostgREST cap', async () => {
 
 // --- Crear reserva manual ----------------------------------------------------------------------------------------
 
+test('Reservas table (desktop): every row keeps the Paquete / IVA / Total breakdown visible and the table never overflows its wrapper', async () => {
+  const priced = Array.from({ length: 3 }, (_, i) => reservation(i, { base_price_snapshot: 1000 + i, tax_rate_snapshot: 0.13, tax_amount_snapshot: 130.13 + i * 0.13, total_snapshot: 1130.13 + i * 1.13 }));
+  const f = await fixture({ bookings: priced }); const { page } = f;
+  try {
+    const firstTotal = page.locator('.admin-reservations-table tbody tr').first().locator('td').nth(6);
+    await expect(firstTotal.locator('dt')).toHaveText(['Paquete', 'IVA 13%', 'Total']);
+    await expect(firstTotal.locator('dd')).toHaveText(['$1,000.00', '$130.13', '$1,130.13']);
+    // Not hidden in a tooltip: the three amounts are rendered text, on separate lines, inside the cell.
+    assert.equal(await firstTotal.getAttribute('title'), null);
+    const cell = await firstTotal.boundingBox();
+    const rows = await firstTotal.locator('dt').evaluateAll((nodes) => nodes.map((node) => node.getBoundingClientRect()));
+    assert.equal(new Set(rows.map((row) => Math.round(row.y))).size, 3, 'three separate lines');
+    assert.ok(rows.every((row) => row.x >= cell.x && row.x + row.width <= cell.x + cell.width), 'labels stay inside the cell');
+    const wrap = await page.evaluate(() => { const w = document.querySelector('.admin-table-wrap'); return { scroll: w.scrollWidth, client: w.clientWidth }; });
+    assert.ok(wrap.scroll <= wrap.client, `no horizontal scroll: ${JSON.stringify(wrap)}`);
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+  } finally { await f.browser.close(); }
+});
+
 test('Crear reserva manual: aligned grid, uniform controls, full-width notes, primary action first, unchanged payload and total', async () => {
   const f = await fixture(); const { page } = f;
   try {
@@ -162,10 +193,12 @@ test('Crear reserva manual: aligned grid, uniform controls, full-width notes, pr
     await expect(dialog.locator('.admin-modal-footer button').first()).toHaveClass(/admin-btn(?!--)/);
     await expect(dialog.locator('.admin-modal-footer button').first()).not.toHaveClass(/admin-btn--secondary/);
     await expect(dialog.locator('.admin-modal-footer button').first()).toHaveAttribute('type', 'submit');
-    // Total: 600 + (6 - 4) * 50 + 25 = 725 — the same estimate as before.
+    // Total: 600 + (6 - 4) * 50 + 25 = 725, plus 13% IVA (94.25) = 819.25 — the quote comes from calculate-booking-price.
     await dialog.getByLabel('Personas').fill('6');
     await dialog.getByLabel('Lugar de salida').selectOption('loc-2');
-    await expect(dialog.locator('.admin-reservation-total__amount')).toHaveText('$725');
+    await expect(dialog.locator('.admin-reservation-total__amount')).toHaveText('$819.25');
+    await expect(dialog.locator('.admin-reservation-total')).toContainText('IVA (13%): $94.25');
+    assert.deepEqual(f.priceRequests.at(-1), { boatId: 'boat-1', tourId: 'tour-1', tourPackageId: 'pkg-1', guests: 6, departureLocationId: 'loc-2', extras: [] });
     await expect(dialog.locator('.admin-reservation-total')).toContainText('El total definitivo lo recalcula Supabase al guardar.');
     await dialog.getByLabel('Nombre del cliente').fill('Ana Solano');
     await dialog.getByLabel('WhatsApp').fill('+506 7000 1111');
@@ -180,6 +213,33 @@ test('Crear reserva manual: aligned grid, uniform controls, full-width notes, pr
       paymentMethodKey: 'whatsapp-link', extras: [], specialRequests: 'Celebración',
       adminNote: 'Reserva manual guardada desde WhatsApp/link. Pendiente de confirmación administrativa.',
     });
+  } finally { await f.browser.close(); }
+});
+
+test('Crear reserva manual: "Calculando" is only shown while a quote is in flight — failure, custom quote and an incomplete form each have their own text', async () => {
+  const f = await fixture(); const { page } = f;
+  try {
+    await page.getByRole('button', { name: 'Crear reserva', exact: true }).click();
+    const dialog = page.locator('.admin-reservation-modal');
+    const total = dialog.locator('.admin-reservation-total__amount');
+    await expect(total).toHaveText('$678.00'); // default package, default location, 4 guests: 600 + 13%
+    // An empty guest field is not quoted: nothing is requested and the total shows a dash instead of an endless "Calculando".
+    const before = f.priceRequests.length;
+    await dialog.getByLabel('Personas').fill('');
+    await expect(total).toHaveText('-');
+    assert.equal(f.priceRequests.length, before, 'no request for an invalid guest count');
+    // A custom-quote package has no total.
+    f.setPriceMode('quote');
+    await dialog.getByLabel('Personas').fill('5');
+    await expect(total).toHaveText('A cotizar');
+    // A failing quote ends in an explicit message once the request (and its retries) gave up — never "Calculando" forever.
+    f.setPriceMode('error');
+    await dialog.getByLabel('Personas').fill('6');
+    await expect(total).toHaveText('No disponible', { timeout: 20_000 }); // react-query retries a failed request 3 times (1s + 2s + 4s) before reporting the error
+    // And it recovers by itself when the quote works again.
+    f.setPriceMode('ok');
+    await dialog.getByLabel('Personas').fill('7');
+    await expect(total).toHaveText('$847.50'); // 7 guests: (600 + 3 * 50) * 1.13
   } finally { await f.browser.close(); }
 });
 

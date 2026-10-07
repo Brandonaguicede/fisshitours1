@@ -1,15 +1,29 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import ts from 'typescript';
-const source = await readFile(new URL('../../src/utils/tourCatalog.ts', import.meta.url), 'utf8');
-const js = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2020 } }).outputText;
-const { groupTourCatalog } = await import('data:text/javascript;base64,' + Buffer.from(js).toString('base64'));
+// tourCatalog.ts imports ./packageRequirements at runtime, and a data: module has no base URL to resolve a relative
+// specifier against. So each source file is transpiled to its own data: module and the relative import is pointed at it.
+const toDataModule = async (file, replacements = {}) => {
+  let js = ts.transpileModule(await readFile(new URL('../../src/utils/' + file, import.meta.url), 'utf8'), { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2020 } }).outputText;
+  for (const [specifier, url] of Object.entries(replacements)) {
+    // TypeScript keeps the original quote style, so match either one.
+    const quoted = [`'${specifier}'`, `"${specifier}"`].find((candidate) => js.includes(candidate));
+    assert.ok(quoted, `expected the import ${specifier} in ${file}`);
+    js = js.replace(quoted, () => JSON.stringify(url));
+  }
+  return 'data:text/javascript;base64,' + Buffer.from(js).toString('base64');
+};
+const requirementsUrl = await toDataModule('packageRequirements.ts');
+const { groupTourCatalog } = await import(await toDataModule('tourCatalog.ts', { './packageRequirements': requirementsUrl }));
 const boats = [{id:'a'}, {id:'b'}, {id:'c'}];
-const make = (id,boatId,price,rest={}) => ({id,boatId,boatTourId:boatId+'-tour',tourId:'tour',basePrice:price,customQuote:false,timeSlots:[{id:'am'}],...rest});
+// A package is only offered when it is complete (utils/packageRequirements.ts: name, duration, departure time, price,
+// guests, extra guest price), so the base fixture is a complete package and each case overrides what makes it invalid.
+const make = (id,boatId,price,rest={}) => ({id,boatId,boatTourId:boatId+'-tour',tourId:'tour',name:'Package '+id,basePrice:price,customQuote:false,
+  includedGuests:2,maxGuests:6,extraGuestPrice:0,duration:4,timeSlots:[{id:'am',label:'Morning',time:'08:00'}],...rest});
 const input = [make('b-full','b',1100),make('b-half','b',680),make('a-full','a',950),make('a-half','a',650),
   make('other','a',700,{tourId:'other',category:'Beach'}),make('inactive','c',1,{catalogActive:false}),
   make('no-price','c',null),make('invalid','c',NaN),make('infinite','c',Infinity),make('negative','c',-10),make('zero','c',0),
-  make('quote','c',100,{customQuote:true}),make('no-hours','c',100,{timeSlots:[]}),make('orphan','missing',1),make('no-id','a',1,{tourId:undefined})];
+  make('quote','c',100,{customQuote:true}),make('no-hours','c',100,{timeSlots:[]}),make('no-duration','c',100,{duration:undefined}),make('orphan','missing',1),make('no-id','a',1,{tourId:undefined})];
 const groups=groupTourCatalog(input,boats);
 assert.equal(groups.length,2);
 assert.equal(groups[0].fromPrice,650);

@@ -358,13 +358,22 @@ export default function AdminReservationsPage() {
     if (!selectedTour) return 30;
     return Math.min(selectedTour.maxGuests, selectedTour.boatMaxGuests ?? selectedTour.maxGuests);
   }, [selectedTour]);
+  // The quote needs a package, a departure location and a valid guest count; without them there is nothing to ask for
+  // (an empty / zero guest field used to fire a request the function rejects).
+  const manualGuests = Number(manualForm.guests);
+  const manualPriceReady = Boolean(selectedTour && manualForm.departureLocationId) && Number.isInteger(manualGuests) && manualGuests >= 1;
   const manualPriceQuery = useQuery({
     queryKey: ['manual-booking-price', selectedTour?.id, manualForm.guests, manualForm.departureLocationId],
-    enabled: Boolean(selectedTour && manualForm.departureLocationId),
+    enabled: manualPriceReady,
     queryFn: () => calculateBookingPrice({ boatId: selectedTour!.boatId, tourId: selectedTour!.tourId ?? '',
       tourPackageId: selectedTour!.id, guests: Number(manualForm.guests), departureLocationId: manualForm.departureLocationId, extras: [] }),
   });
-  const manualTotalPreview = manualPriceQuery.data?.total;
+  // Every state of the quote has its own text, so "Calculando" is only ever shown while a request is really in flight
+  // (it used to stay forever on a failed request, a custom-quote package or an incomplete form).
+  const manualTotalLabel = !manualPriceReady ? '-'
+    : manualPriceQuery.isError ? 'No disponible'
+      : manualPriceQuery.data ? (manualPriceQuery.data.total == null ? 'A cotizar' : money(Number(manualPriceQuery.data.total)))
+        : 'Calculando';
 
   function updateManualForm<K extends keyof ManualBookingForm>(key: K, value: ManualBookingForm[K]) {
     setManualForm((current) => ({ ...current, [key]: value }));
@@ -643,7 +652,13 @@ export default function AdminReservationsPage() {
                 <div className="admin-table__truncate" title={reservation.departure_location_name_snapshot ?? '-'}>{reservation.departure_location_name_snapshot ?? '-'}</div>
                 <div className="admin-muted">{Number(reservation.departure_surcharge_snapshot ?? 0) > 0 ? money(Number(reservation.departure_surcharge_snapshot)) : 'Sin costo'}</div>
               </td>
-              <td><div className="admin-muted">Precio del paquete: {money(Number(reservation.base_price_snapshot ?? 0))}</div><div className="admin-muted">IVA ({Math.round(Number(reservation.tax_rate_snapshot ?? 0) * 100)}%): {money(Number(reservation.tax_amount_snapshot ?? 0))}</div><strong>{money(Number(reservation.total_snapshot))}</strong></td>
+              <td>
+                <dl className="admin-total-breakdown" aria-label="Desglose del total">
+                  <dt>Paquete</dt><dd>{money(Number(reservation.base_price_snapshot ?? 0))}</dd>
+                  <dt>IVA {Math.round(Number(reservation.tax_rate_snapshot ?? 0) * 100)}%</dt><dd>{money(Number(reservation.tax_amount_snapshot ?? 0))}</dd>
+                  <dt className="admin-total-breakdown__total">Total</dt><dd className="admin-total-breakdown__total">{money(Number(reservation.total_snapshot))}</dd>
+                </dl>
+              </td>
               <td>
                 <div className="admin-payment-cell">
                   <span className="admin-payment-cell__method">{methodLabel(reservation)}</span>
@@ -764,7 +779,7 @@ export default function AdminReservationsPage() {
                   {manualPriceQuery.data && <small>Precio del paquete: {money(Number(manualPriceQuery.data.base_price))} | IVA (13%): {money(Number(manualPriceQuery.data.tax_amount))}</small>}
                   <small>El total definitivo lo recalcula Supabase al guardar.</small>
                 </div>
-                <strong className="admin-reservation-total__amount" aria-live="polite">{manualTotalPreview == null ? 'Calculando' : money(manualTotalPreview)}</strong>
+                <strong className="admin-reservation-total__amount" aria-live="polite">{manualTotalLabel}</strong>
               </div>
             </div>
           </div>
