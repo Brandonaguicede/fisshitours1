@@ -3,7 +3,7 @@ import type { Boat } from '../../types/boat';
 import type { BoatTour } from '../../types/boatTour';
 import type { TourBoatOption } from '../../utils/tourCatalog';
 import { isBookableCatalogPackage } from '../../utils/tourCatalog';
-import { getPackageLabel, getTourText, pick } from '../../i18n/content';
+import { getPackageLabel, getPackageOwnDescription, getTourLevelText, getTourText, pick } from '../../i18n/content';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { getEffectiveMaxGuests } from '../../utils/bookingPricing';
 import { formatCurrency } from '../../utils/formatCurrency';
@@ -38,8 +38,13 @@ export function TourDetailModal({ boat, boatOptions, onClose, onSelect, open, pa
   const rawGalleryImages = tour.tourDetails?.galleryImages.length ? tour.tourDetails.galleryImages
     : tour.galleryImages?.length ? tour.galleryImages : [{ alt: display.title, src: tour.tourDetails?.image ?? tour.image }];
   const galleryImages = rawGalleryImages.map((image) => ({ ...image, alt: pick(language, image.altEs, image.alt, image.altEn) }));
-  const activities = selectedDisplay?.activities ?? display.activities;
+  // Three levels, each from its own source and rendered once: TOUR (title, description, activities), PACKAGE (own
+  // description, facts, included, meals) and DEPARTURE (the package's resolved time slots).
+  const tourLevel = getTourLevelText(tour, language);
+  const packageDescription = selectedPackage ? getPackageOwnDescription(selectedPackage, language) : '';
+  const showPackageDescription = Boolean(packageDescription) && packageDescription !== tourLevel.description;
   const included = selectedDisplay?.included ?? [];
+  const departureTimes = selectedPackage?.timeSlots.map((slot) => formatTime(slot.time)) ?? [];
 
   return (
     <ModalShell className="!max-h-[92dvh] !max-w-2xl overflow-hidden text-white" onClose={onClose} open={open} titleId="tour-detail-title">
@@ -53,7 +58,8 @@ export function TourDetailModal({ boat, boatOptions, onClose, onSelect, open, pa
         </div>
         <div className="p-4 sm:p-5">
           <h3 id="tour-detail-title" className="font-display text-2xl font-semibold leading-none text-white sm:text-3xl">{display.title}</h3>
-          <p className="mt-4 text-sm leading-6 text-ocean-200">{display.description || display.shortDescription}</p>
+          {tourLevel.description ? <p className="mt-4 text-sm leading-6 text-ocean-200" data-testid="tour-description">{tourLevel.description}</p> : null}
+          {tourLevel.activities.length ? <p className="mt-2 text-xs font-semibold text-ocean-300" data-testid="tour-activities">{tourLevel.activities.join(' · ')}</p> : null}
 
           {options.length > 1 ? <fieldset className="mt-4">
             <legend className="text-sm font-bold text-ocean-100">{language === 'es' ? 'Elige tu bote' : 'Choose your boat'}</legend>
@@ -87,8 +93,8 @@ export function TourDetailModal({ boat, boatOptions, onClose, onSelect, open, pa
           </fieldset> : null}
 
           {selectedPackage && selectedOption ? <div className="mt-4" aria-live="polite" data-testid="selected-package-details">
-            {selectedDisplay?.description ? <p className="text-sm leading-6 text-ocean-200">{selectedDisplay.description}</p> : null}
-            <div className="mt-4 grid gap-2.5 sm:grid-cols-3">
+            {showPackageDescription ? <p className="text-sm leading-6 text-ocean-200" data-testid="package-description">{packageDescription}</p> : null}
+            <div className={`grid gap-2.5 sm:grid-cols-3 ${showPackageDescription ? 'mt-4' : ''}`}>
               <GlassPanel className="p-3" variant="subtle">
                 <p className="text-xs font-bold text-ocean-400">{language === 'es' ? 'Duración' : 'Duration'}</p>
                 <p className="mt-1 text-sm font-extrabold text-white">{selectedPackage.duration ? selectedPackage.duration + (language === 'es' ? ' horas' : ' hours') : (language === 'es' ? 'Consultar' : 'On request')}</p>
@@ -103,21 +109,22 @@ export function TourDetailModal({ boat, boatOptions, onClose, onSelect, open, pa
                 <p className="mt-1 text-sm font-extrabold text-white">{formatCurrency(selectedPackage.extraGuestPrice)}</p>
               </GlassPanel>
             </div>
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              <div>
-                <p className="text-sm font-bold text-ocean-100">{language === 'es' ? 'Incluye' : 'Included'}</p>
-                <ul className="mt-2 grid gap-1 text-sm leading-6 text-ocean-200">{included.map((item) => <li key={item}>{item}</li>)}</ul>
-                {activities.length ? <p className="mt-3 text-sm text-ocean-200">{activities.join(', ')}</p> : null}
-              </div>
-              <div>
-                <p className="text-sm font-bold text-ocean-100">{language === 'es' ? 'Horarios de salida' : 'Departure times'}</p>
-                <p className="mt-2 text-sm text-ocean-200">{selectedPackage.timeSlots.map((slot) => formatTime(slot.time)).join(', ')}</p>
-                {selectedPackage.mealOptions?.length ? <>
-                  <p className="mt-3 text-sm font-bold text-ocean-100">{language === 'es' ? 'Comidas incluidas disponibles' : 'Included meal options'}</p>
+            {included.length || selectedPackage.mealOptions?.length || departureTimes.length ? <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              {included.length || selectedPackage.mealOptions?.length ? <div className="grid content-start gap-3">
+                {included.length ? <section data-testid="package-included">
+                  <p className="text-sm font-bold text-ocean-100">{language === 'es' ? 'Incluye' : 'Included'}</p>
+                  <ul className="mt-2 grid gap-1 text-sm leading-6 text-ocean-200">{included.map((item, index) => <li key={`${index}-${item}`}>{item}</li>)}</ul>
+                </section> : null}
+                {selectedPackage.mealOptions?.length ? <section data-testid="package-meals">
+                  <p className="text-sm font-bold text-ocean-100">{language === 'es' ? 'Comidas incluidas disponibles' : 'Included meal options'}</p>
                   <ul className="mt-2 text-sm text-ocean-200">{selectedPackage.mealOptions.map((meal) => <li key={meal.en}>{meal[language]}</li>)}</ul>
-                </> : null}
-              </div>
-            </div>
+                </section> : null}
+              </div> : null}
+              {departureTimes.length ? <section data-testid="package-departures">
+                <p className="text-sm font-bold text-ocean-100">{language === 'es' ? 'Horarios de salida' : 'Departure times'}</p>
+                <p className="mt-2 text-sm text-ocean-200">{departureTimes.join(', ')}</p>
+              </section> : null}
+            </div> : null}
           </div> : null}
           {!options.length ? <p className="mt-4 text-sm text-ocean-200">{language === 'es' ? 'No hay paquetes disponibles.' : 'No packages available.'}</p> : null}
 

@@ -113,6 +113,13 @@ export function mapBoatTour(
     description: row.description ?? tour.description ?? '',
     descriptionEs: row.description_es ?? tour.description_es ?? undefined,
     descriptionEn: row.description_en ?? tour.description_en ?? undefined,
+    // Strictly one level each (the fields above keep their package-then-tour fallback for existing consumers).
+    tourDescription: tour.description ?? undefined,
+    tourDescriptionEs: tour.description_es ?? undefined,
+    tourDescriptionEn: tour.description_en ?? undefined,
+    packageDescription: row.description ?? undefined,
+    packageDescriptionEs: row.description_es ?? undefined,
+    packageDescriptionEn: row.description_en ?? undefined,
     shortDescription: tour.description ?? row.description ?? '',
     shortDescriptionEs: tour.description_es ?? row.description_es ?? undefined,
     shortDescriptionEn: tour.description_en ?? row.description_en ?? undefined,

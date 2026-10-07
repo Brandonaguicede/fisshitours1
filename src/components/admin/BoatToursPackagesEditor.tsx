@@ -267,6 +267,7 @@ function PackageDraftEditor({ draft, boatName, tourTitle, fieldErrors, busy, boa
 
       <section className="admin-package-section" aria-labelledby={`${key}-s-info`}>
         <h4 id={`${key}-s-info`}>Información del paquete</h4>
+        <p className="admin-field-help" data-testid="package-scope-note">Esto es solo del paquete. El nombre, la descripción general y las actividades del tour se editan en <a href="/admin/tours" target="_blank" rel="noopener noreferrer">Tours (se abre en otra pestaña)</a>.</p>
         <div className="admin-package-grid">
           <label className="admin-field">
             <span className="admin-field__label">Nombre</span>
@@ -292,13 +293,14 @@ function PackageDraftEditor({ draft, boatName, tourTitle, fieldErrors, busy, boa
           </label>
         </div>
         <label className="admin-field">
-          <span className="admin-field__label">Descripción</span>
+          <span className="admin-field__label">Descripción del paquete (opcional)</span>
           <textarea
             className="admin-input admin-textarea-list"
             rows={3}
             value={draft.description}
             onChange={(event) => onChange({ description: event.target.value })}
           />
+          <span className="admin-field-help">Solo se muestra al elegir este paquete, nunca en lugar de la descripción del tour. Si queda vacía no se muestra nada. No escribas aquí lo incluido: va en «Incluye».</span>
         </label>
       </section>
 
@@ -410,7 +412,7 @@ function PackageDraftEditor({ draft, boatName, tourTitle, fieldErrors, busy, boa
               <textarea className="admin-input admin-textarea-list" rows={4} placeholder={'Fishing equipment\nDrinks\nSnacks'} value={draft.packageIncluded} onChange={(event) => onChange({ packageIncluded: event.target.value })} />
             </label>
           ) : (
-            <span className="admin-field-help">Se usa la lista de lo incluido en el tour.</span>
+            <span className="admin-field-help">Se usa la lista de lo incluido en el tour. Esa lista se edita en <a href="/admin/tours" target="_blank" rel="noopener noreferrer">Tours → Actividades e incluye (se abre en otra pestaña)</a>.</span>
           )}
           {fieldErrors[`${key}-contents`] ? <span className="admin-field-error" role="alert">{fieldErrors[`${key}-contents`]}</span> : null}
         </fieldset>
