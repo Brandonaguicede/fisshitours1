@@ -15,3 +15,6 @@ tmp-playwright/
 !.env.example
 .vercel
 .env*
+
+# Scratch output from local tests and diagnostics (screenshots, traces, SQL probes)
+tmp/
