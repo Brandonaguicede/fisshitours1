@@ -1584,7 +1584,7 @@ tr.admin-sortable-row--dragging {
 .admin-reservation-list { min-width: 0; }
 .admin-reservations-table .admin-table { min-width: 0; }
 .admin-reservations-table th,
-.admin-reservations-table td { padding: 0.6rem 0.3rem; }
+.admin-reservations-table td { padding: 0.6rem 0.25rem; }
 .admin-reservations-table th:nth-child(1),
 .admin-reservations-table td:nth-child(1) { width: 6rem; }
 .admin-reservations-table th:nth-child(2),
@@ -1597,19 +1597,24 @@ tr.admin-sortable-row--dragging {
 .admin-reservations-table td:nth-child(5) { width: 3.5rem; text-align: center; }
 .admin-reservations-table th:nth-child(6),
 .admin-reservations-table td:nth-child(6) { width: 6.5rem; max-width: 6.5rem; }
+/* Total: the full breakdown (Paquete / IVA / Total) stays visible as a label + amount grid. Short labels and right-aligned
+   amounts keep it ~115px wide; the column never wraps its amounts. */
 .admin-reservations-table th:nth-child(7),
-.admin-reservations-table td:nth-child(7) { width: 4rem; white-space: nowrap; }
+.admin-reservations-table td:nth-child(7) { width: 7.25rem; white-space: nowrap; }
+.admin-total-breakdown { display: grid; grid-template-columns: auto auto; column-gap: 0.6rem; row-gap: 0.05rem; margin: 0; }
+.admin-total-breakdown dt { color: var(--admin-muted); font-size: 0.78rem; font-weight: 600; }
+.admin-total-breakdown dd { margin: 0; text-align: right; color: var(--admin-muted); font-size: 0.78rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+.admin-total-breakdown .admin-total-breakdown__total { color: var(--admin-ink); font-size: 0.86rem; font-weight: 800; }
 .admin-reservations-table th:nth-child(8),
-.admin-reservations-table td:nth-child(8) { width: 9.5rem; }
+.admin-reservations-table td:nth-child(8) { width: 6.5rem; }
 
-/* "Pago" cell: method and state badge on one line as a single group. The
-   column width (nth-child(8) above) fits "WhatsApp" + the widest badge, so
-   nothing wraps and the rest of the table isn't widened. */
+/* "Pago" cell: method on top, state badge below (same two-line rhythm as Cliente, Fecha, Reserva and Salida). Side by side they needed
+   ~160px; stacked the column is ~95px, which is what pays for the visible Total breakdown without squeezing the text columns. */
 .admin-payment-cell {
   display: flex;
-  flex-wrap: nowrap;
-  align-items: center;
-  gap: 0.5rem;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.25rem;
   min-width: 0;
 }
 
@@ -1621,7 +1626,7 @@ tr.admin-sortable-row--dragging {
 }
 
 .admin-reservations-table th:nth-child(9),
-.admin-reservations-table td:nth-child(9) { width: 8.5rem; }
+.admin-reservations-table td:nth-child(9) { width: 7.5rem; }
 /* Acciones: fixed width so "pencil + Confirmar" fits on one line without
    widening the table; the rarer "pencil + Reenviar correo" wraps to a second
    line instead of clipping. Left-aligned so pencils line up row to row. */

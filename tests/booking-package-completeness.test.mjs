@@ -88,8 +88,8 @@ test('INVALID (no duration): the package is not offered, the page keeps working,
   const f = await fixture({ packages: [packageRow('pkg-good', 'Half Day'), packageRow('pkg-bad', 'Full Day', { duration_minutes: null, base_price: 800 })], availability: okSlots }); const { page } = f;
   try {
     const booking = await openTour(page);
-    // Only the complete package is left, so it is selected for the customer: no chooser, no "Full Day", no USD 800.
-    await expect(booking.getByRole('button', { name: /From USD 650/ }).first()).toBeVisible();
+    // Only the complete package is left, so it is selected for the customer: no chooser, no "Full Day", no $800.
+    await expect(booking.getByRole('button', { name: /From \$650\.00/ }).first()).toBeVisible();
     await expect(page.locator('main label').filter({ hasText: 'Full Day' })).toHaveCount(0);
     const text = await pageText(page);
     assert.match(text, /Fishing - Half Day/);
@@ -113,7 +113,7 @@ test('INVALID (0 duration / no price / no departures): none of them is offered e
   const f = await fixture({ packages: [packageRow('pkg-good', 'Half Day'), ...bad], availability: okSlots }); const { page } = f;
   try {
     await openTour(page);
-    await expect(page.getByRole('button', { name: /From USD 650/ }).first()).toBeVisible();
+    await expect(page.getByRole('button', { name: /From \$650\.00/ }).first()).toBeVisible();
     const text = await pageText(page);
     assert.match(text, /Fishing - Half Day/);
     for (const name of ['Zero Duration', 'Free Trip', 'No Departures']) assert.doesNotMatch(text, new RegExp(name));
