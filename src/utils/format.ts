@@ -13,6 +13,23 @@ export function formatTime(value: string): string {
   return `${hour % 12 || 12}:${match[2]} ${hour >= 12 ? 'PM' : 'AM'}`;
 }
 
+/** Minutes since midnight for "HH:MM[:SS]" (24h, how slots are stored) or "h:MM AM/PM"; null when it is not a time. */
+export function timeToMinutes(value: string): number | null {
+  const twentyFour = /^([01]?\d|2[0-3]):([0-5]\d)(?::[0-5]\d)?$/.exec(value.trim());
+  if (twentyFour) return Number(twentyFour[1]) * 60 + Number(twentyFour[2]);
+  const twelve = /^(0?[1-9]|1[0-2]):([0-5]\d)\s*([AaPp])\.?[Mm]\.?$/.exec(value.trim());
+  if (!twelve) return null;
+  return ((Number(twelve[1]) % 12) + (twelve[3].toLowerCase() === 'p' ? 12 : 0)) * 60 + Number(twelve[2]);
+}
+
+/** Departure slots in chronological order for display (a copy: the stored order is never changed). Ties and non-times keep their relative order. */
+export function sortSlotsChronologically<T extends { time: string }>(slots: readonly T[]): T[] {
+  return slots
+    .map((slot, index) => ({ slot, index, minutes: timeToMinutes(slot.time) }))
+    .sort((a, b) => (a.minutes ?? Infinity) - (b.minutes ?? Infinity) || a.index - b.index)
+    .map((entry) => entry.slot);
+}
+
 export function money(value: number): string {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(value);
 }

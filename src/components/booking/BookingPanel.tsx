@@ -18,7 +18,7 @@ import { isBookableCatalogPackage } from '../../utils/tourCatalog';
 import { filterPackageSlots } from '../../utils/packageSettings';
 import { cn } from '../../utils/cn';
 import { getDefaultDepartureLocation } from '../../utils/departureLocations';
-import { formatTime } from '../../utils/format';
+import { formatTime, sortSlotsChronologically } from '../../utils/format';
 import { Button, ChoiceCard, Field, FieldError, GlassPanel, Input, ModalShell, TextArea } from '../ui';
 
 function formatCurrency(value: number) {
@@ -904,6 +904,10 @@ function TourDetailsStep(props: {
   const extraGuests = Math.max(0, props.guests - props.includedGuests);
   const showExtraGuestNotice = Boolean(props.selectedTour && !props.selectedTour.customQuote && extraGuests > 0 && props.extraGuestPrice > 0);
   const includedItems = props.selectedTour ? getIncludedItems(props.selectedTour, language) : [];
+  const capacityMessage = props.hasCapacityError ? (language === 'es' ? `Este barco tiene capacidad maxima de ${props.effectiveMaxGuests} personas.` : `This boat has a maximum capacity of ${props.effectiveMaxGuests} guests.`) : undefined;
+  // Presentation only: chronological order whatever the order stored in the database / Admin. Ids, availability and the selection
+  // are untouched (the selected slot keeps its id, so it stays selected after the sort).
+  const orderedSlots = sortSlotsChronologically(props.availabilitySlots);
 
   return (
     <div className="grid gap-4 text-white">
@@ -981,64 +985,70 @@ function TourDetailsStep(props: {
         </GlassPanel>
       ) : null}
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        <Field htmlFor="booking-date" label={tr(text.booking.date, language)} labelClassName="text-sm font-bold">
-          <Input id="booking-date" className="min-w-0 max-w-full appearance-none px-3 py-2 text-[0.8rem] tracking-tight sm:px-4 sm:text-sm" tone="ocean" type="date" value={props.date} onChange={(event) => props.onDateChange(event.target.value)} />
-        </Field>
-        <Field error={props.hasCapacityError ? (language === 'es' ? `Este barco tiene capacidad maxima de ${props.effectiveMaxGuests} personas.` : `This boat has a maximum capacity of ${props.effectiveMaxGuests} guests.`) : undefined} errorId="booking-guests-error" htmlFor="booking-guests" label={tr(text.booking.guests, language)} labelClassName="text-sm font-bold">
-          <div className="flex h-10 items-center justify-between rounded-full border border-white/10 bg-ocean-900/70 px-2">
-            <button
-              aria-label={language === 'es' ? 'Restar persona' : 'Decrease guests'}
-              className="glass-focus-ring grid size-8 shrink-0 place-items-center rounded-full text-ocean-200 transition hover:bg-white/10 disabled:opacity-40"
-              disabled={props.guests <= 1}
-              type="button"
-              onClick={() => props.onGuestsChange(clampGuests(props.guests - 1, props.effectiveMaxGuests))}
-            >
-              <Minus aria-hidden="true" size={14} />
-            </button>
-            <input
-              id="booking-guests"
-              aria-describedby={[props.hasCapacityError ? 'booking-guests-error' : '', showExtraGuestNotice ? 'booking-guests-extra' : ''].filter(Boolean).join(' ') || undefined}
-              aria-invalid={props.hasCapacityError}
-              className="w-10 min-w-0 border-0 bg-transparent text-center text-sm font-extrabold text-white outline-none [appearance:textfield]"
-              inputMode="numeric"
-              max={props.effectiveMaxGuests}
-              min={1}
-              type="number"
-              value={props.guests}
-              onChange={(event) => props.onGuestsChange(clampGuests(Number(event.target.value), props.effectiveMaxGuests))}
-            />
-            <button
-              aria-label={language === 'es' ? 'Sumar persona' : 'Increase guests'}
-              className="glass-focus-ring grid size-8 shrink-0 place-items-center rounded-full text-ocean-200 transition hover:bg-white/10 disabled:opacity-40"
-              disabled={props.guests >= props.effectiveMaxGuests}
-              type="button"
-              onClick={() => props.onGuestsChange(clampGuests(props.guests + 1, props.effectiveMaxGuests))}
-            >
-              <Plus aria-hidden="true" size={14} />
-            </button>
-          </div>
-          <div role="status" aria-live="polite" aria-atomic="true">
-            {showExtraGuestNotice ? (
-              <p id="booking-guests-extra" className="mt-2 flex items-start gap-2 rounded-lg border border-amber-200/25 bg-amber-200/10 px-3 py-2 text-xs leading-relaxed text-amber-100">
-                <Info aria-hidden="true" className="mt-0.5 shrink-0" size={15} />
-                <span>
-                  {language === 'es'
-                    ? `El paquete incluye ${props.includedGuests} personas. ${extraGuests} ${extraGuests === 1 ? 'persona extra' : 'personas extra'} × ${formatCurrency(props.extraGuestPrice)}: `
-                    : `This package includes ${props.includedGuests} guests. ${extraGuests} additional ${extraGuests === 1 ? 'guest' : 'guests'} × ${formatCurrency(props.extraGuestPrice)}: `}
-                  <strong>+{formatCurrency(extraGuests * props.extraGuestPrice)}</strong>
-                </span>
-              </p>
-            ) : null}
-          </div>
-        </Field>
+      {/* Date and Guests are one family: same height (h-11), radius (rounded-xl), border and background. On desktop they are only as
+          wide as their content needs (the rest of the row stays empty); on a phone they share the row and grow with the width. */}
+      <div className="grid gap-3">
+        <div className="flex flex-wrap items-start gap-3">
+          <Field className="min-w-[9.5rem] flex-1 sm:min-w-0 sm:w-48 sm:flex-none" htmlFor="booking-date" label={tr(text.booking.date, language)} labelClassName="text-sm font-bold">
+            <Input id="booking-date" className="h-11 min-w-0 max-w-full appearance-none px-3 py-0 text-sm tracking-tight" tone="ocean" type="date" value={props.date} onChange={(event) => props.onDateChange(event.target.value)} />
+          </Field>
+          <Field className="min-w-[9.5rem] flex-1 sm:min-w-0 sm:w-36 sm:flex-none" htmlFor="booking-guests" label={tr(text.booking.guests, language)} labelClassName="text-sm font-bold">
+            <div className={`flex h-11 items-center justify-between rounded-xl border bg-ocean-900/70 px-1.5 ${props.hasCapacityError ? 'border-red-300/50' : 'border-white/10'}`} data-testid="guests-stepper">
+              <button
+                aria-label={language === 'es' ? 'Restar persona' : 'Decrease guests'}
+                className="glass-focus-ring grid size-9 shrink-0 place-items-center rounded-lg text-ocean-200 transition hover:bg-white/10 disabled:opacity-40"
+                disabled={props.guests <= 1}
+                type="button"
+                onClick={() => props.onGuestsChange(clampGuests(props.guests - 1, props.effectiveMaxGuests))}
+              >
+                <Minus aria-hidden="true" size={14} />
+              </button>
+              <input
+                id="booking-guests"
+                aria-describedby={[props.hasCapacityError ? 'booking-guests-error' : '', showExtraGuestNotice ? 'booking-guests-extra' : ''].filter(Boolean).join(' ') || undefined}
+                aria-invalid={props.hasCapacityError}
+                className="w-10 min-w-0 border-0 bg-transparent text-center text-sm font-extrabold text-white outline-none [appearance:textfield]"
+                inputMode="numeric"
+                max={props.effectiveMaxGuests}
+                min={1}
+                type="number"
+                value={props.guests}
+                onChange={(event) => props.onGuestsChange(clampGuests(Number(event.target.value), props.effectiveMaxGuests))}
+              />
+              <button
+                aria-label={language === 'es' ? 'Sumar persona' : 'Increase guests'}
+                className="glass-focus-ring grid size-9 shrink-0 place-items-center rounded-lg text-ocean-200 transition hover:bg-white/10 disabled:opacity-40"
+                disabled={props.guests >= props.effectiveMaxGuests}
+                type="button"
+                onClick={() => props.onGuestsChange(clampGuests(props.guests + 1, props.effectiveMaxGuests))}
+              >
+                <Plus aria-hidden="true" size={14} />
+              </button>
+            </div>
+          </Field>
+        </div>
+        {/* Messages live below the row, at full width, so the compact controls above never squeeze them. */}
+        {capacityMessage ? <FieldError id="booking-guests-error">{capacityMessage}</FieldError> : null}
+        <div role="status" aria-live="polite" aria-atomic="true">
+          {showExtraGuestNotice ? (
+            <p id="booking-guests-extra" className="mt-2 flex items-start gap-2 rounded-lg border border-amber-200/25 bg-amber-200/10 px-3 py-2 text-xs leading-relaxed text-amber-100">
+              <Info aria-hidden="true" className="mt-0.5 shrink-0" size={15} />
+              <span>
+                {language === 'es'
+                  ? `El paquete incluye ${props.includedGuests} personas. ${extraGuests} ${extraGuests === 1 ? 'persona extra' : 'personas extra'} × ${formatCurrency(props.extraGuestPrice)}: `
+                  : `This package includes ${props.includedGuests} guests. ${extraGuests} additional ${extraGuests === 1 ? 'guest' : 'guests'} × ${formatCurrency(props.extraGuestPrice)}: `}
+                <strong>+{formatCurrency(extraGuests * props.extraGuestPrice)}</strong>
+              </span>
+            </p>
+          ) : null}
+        </div>
       </div>
 
       {props.selectedTour ? (
         <fieldset>
           <legend className="text-sm font-bold text-ocean-100">{tr(text.booking.departure, language)}</legend>
           <div className="mt-2.5 flex flex-wrap gap-2">
-            {props.availabilitySlots.map((slot) => (
+            {orderedSlots.map((slot) => (
               <ChoiceCard as="label" key={slot.id} className="relative flex min-h-[44px] cursor-pointer flex-col items-center justify-center py-1 pl-2.5 pr-10 text-center leading-tight has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-50" disabled={slot.available === false} selected={props.timeSlotId === slot.id}>
                 <input className="sr-only" type="radio" name="timeSlot" value={slot.id} checked={props.timeSlotId === slot.id} disabled={slot.available === false} onChange={() => props.onTimeSlotChange(slot.id)} />
                 <ChoiceCheck selected={props.timeSlotId === slot.id} />
@@ -1525,7 +1535,7 @@ function BookingSummary(props: {
         <SummaryRow label={tr(text.booking.date, language)} value={formatDisplayDate(props.date)} />
         <SummaryRow label={language === 'es' ? 'Salida' : 'Departure'} value={props.selectedTimeSlot ? formatTime(props.selectedTimeSlot.time) : tr(text.booking.selectTime, language)} />
         <SummaryRow label={tr(text.booking.guests, language)} value={`${props.guests} ${tr(text.booking.people, language)}`} />
-        {includedItems.length > 0 ? <SummaryRow label={tr(text.booking.included, language)} value={summarizeIncluded(includedItems, language)} /> : null}
+        {includedItems.length > 0 ? <SummaryRow label={tr(text.booking.included, language)} multiline value={summarizeIncluded(includedItems, language)} /> : null}
         {Boolean(props.selectedTour?.mealOptions?.length) ? <SummaryRow label={language === 'es' ? 'Comida' : 'Meal option'} value={props.mealOption || (language === 'es' ? 'No seleccionada' : 'Not selected')} /> : null}
         <SummaryRow label={language === 'es' ? 'Lugar de salida' : 'Departure location'} value={props.departureLocation?.name ?? (language === 'es' ? 'No seleccionado' : 'Not selected')} />
         {props.currentStep >= 3 ? <SummaryRow label={language === 'es' ? 'Método de pago' : 'Payment method'} value={props.selectedPayment} /> : null}
@@ -1639,17 +1649,22 @@ function BookingSuccessModal(props: {
 
 // The right-hand card stays compact: the first few items, then "+N" (the full list is in the step itself).
 const SUMMARY_INCLUDED_LIMIT = 4;
+
+// The list the Admin wrote, as one right-aligned value that may wrap onto several lines (see SummaryRow `multiline`): the first few
+// items separated by bullets, then "+N more" (the whole list is in the Tour Details step).
 function summarizeIncluded(items: string[], language: 'es' | 'en') {
-  const shown = items.slice(0, SUMMARY_INCLUDED_LIMIT).join(', ');
+  const shown = items.slice(0, SUMMARY_INCLUDED_LIMIT);
   const hidden = items.length - SUMMARY_INCLUDED_LIMIT;
-  return hidden > 0 ? `${shown} +${hidden} ${language === 'es' ? 'más' : 'more'}` : shown;
+  return (hidden > 0 ? [...shown, `+${hidden} ${language === 'es' ? 'más' : 'more'}`] : shown).join(' • ');
 }
 
-function SummaryRow({ label, value }: { label: string; value: string }) {
+// label | value. `multiline` is for values that are a list (Included): the label stays on the left, the value keeps the right-hand
+// column (capped so the label always has room), right-aligned like every other row, and wraps naturally onto as many lines as it needs.
+function SummaryRow({ label, value, multiline = false }: { label: string; value: string; multiline?: boolean }) {
   return (
-    <div className="flex flex-wrap justify-between gap-x-4 gap-y-0.5 border-b border-white/10 pb-0.5 last:border-b-0 last:pb-0">
-      <span className="text-ocean-300">{label}</span>
-      <span className="text-right font-bold text-white">{value}</span>
+    <div className={cn('flex justify-between gap-x-4 border-b border-white/10 pb-0.5 last:border-b-0 last:pb-0', multiline ? 'items-start' : 'flex-wrap gap-y-0.5')}>
+      <span className={cn('text-ocean-300', multiline && 'shrink-0')}>{label}</span>
+      <span className={cn('text-right font-bold text-white', multiline && 'min-w-0 max-w-[72%] leading-5 [overflow-wrap:break-word]')}>{value}</span>
     </div>
   );
 }

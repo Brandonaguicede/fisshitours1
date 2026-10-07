@@ -7,7 +7,7 @@ import { getPackageLabel, getPackageOwnDescription, getTourLevelText, getTourTex
 import { useLanguage } from '../../i18n/LanguageContext';
 import { getEffectiveMaxGuests } from '../../utils/bookingPricing';
 import { formatCurrency } from '../../utils/formatCurrency';
-import { formatTime } from '../../utils/format';
+import { formatTime, sortSlotsChronologically } from '../../utils/format';
 import { Button, ChoiceCard, CloseButton, GlassPanel, MediaGallery, ModalShell } from '../ui';
 
 interface TourDetailModalProps {
@@ -44,7 +44,7 @@ export function TourDetailModal({ boat, boatOptions, onClose, onSelect, open, pa
   const packageDescription = selectedPackage ? getPackageOwnDescription(selectedPackage, language) : '';
   const showPackageDescription = Boolean(packageDescription) && packageDescription !== tourLevel.description;
   const included = selectedDisplay?.included ?? [];
-  const departureTimes = selectedPackage?.timeSlots.map((slot) => formatTime(slot.time)) ?? [];
+  const departureTimes = sortSlotsChronologically(selectedPackage?.timeSlots ?? []).map((slot) => formatTime(slot.time)); // chronological, display only
 
   return (
     <ModalShell className="!max-h-[92dvh] !max-w-2xl overflow-hidden text-white" onClose={onClose} open={open} titleId="tour-detail-title">
