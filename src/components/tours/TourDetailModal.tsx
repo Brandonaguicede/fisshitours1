@@ -7,7 +7,7 @@ import { getPackageLabel, getTourText, pick } from '../../i18n/content';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { getEffectiveMaxGuests } from '../../utils/bookingPricing';
 import { formatCurrency } from '../../utils/formatCurrency';
-import { formatTime } from '../../utils/format';
+import { formatTime, sortSlotsChronologically } from '../../utils/format';
 import { Button, ChoiceCard, CloseButton, GlassPanel, MediaGallery, ModalShell } from '../ui';
 
 interface TourDetailModalProps {
@@ -111,7 +111,7 @@ export function TourDetailModal({ boat, boatOptions, onClose, onSelect, open, pa
               </div>
               <div>
                 <p className="text-sm font-bold text-ocean-100">{language === 'es' ? 'Horarios de salida' : 'Departure times'}</p>
-                <p className="mt-2 text-sm text-ocean-200">{selectedPackage.timeSlots.map((slot) => formatTime(slot.time)).join(', ')}</p>
+                <p className="mt-2 text-sm text-ocean-200">{sortSlotsChronologically(selectedPackage.timeSlots).map((slot) => formatTime(slot.time)).join(', ')}</p>
                 {selectedPackage.mealOptions?.length ? <>
                   <p className="mt-3 text-sm font-bold text-ocean-100">{language === 'es' ? 'Comidas incluidas disponibles' : 'Included meal options'}</p>
                   <ul className="mt-2 text-sm text-ocean-200">{selectedPackage.mealOptions.map((meal) => <li key={meal.en}>{meal[language]}</li>)}</ul>
