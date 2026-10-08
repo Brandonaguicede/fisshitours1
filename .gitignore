@@ -8,13 +8,29 @@ dist/
 *.local
 .env
 .env.*
+!.env.example
 test-results/
 playwright-report/
 tmp-playwright/
 
-!.env.example
-.vercel
-.env*
-
 # Scratch output from local tests and diagnostics (screenshots, traces, SQL probes)
 tmp/
+
+# Build / tooling caches and coverage
+coverage/
+.vite/
+
+# Manual backups
+*.bak
+
+# Credentials that must never be versioned (service account keys saved by accident)
+*service-account*.json
+*credential*.json
+# Default Google key file names (<project-id>-<hash>.json) of the current and previous Calendar projects
+calendariopapagayo-*.json
+papagayo-fishing-tours-*.json
+
+# Local tool configuration (not part of the project)
+.claude/
+.impeccable/
+.mcp.json
