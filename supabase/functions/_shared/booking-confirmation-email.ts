@@ -171,8 +171,10 @@ async function getBusinessWhatsapp(supabase: SupabaseClient) {
 // Mail via prefers-color-scheme; Outlook.com via [data-ogsc] / [data-ogsb]). Gmail applies its own automatic inversion, so every element also
 // carries explicit inline colours + bgcolor (no inherited / transparent / semi-transparent colours) to keep that inversion predictable.
 const EMAIL_PALETTE = {
-  light: { page: '#f1f6f8', card: '#ffffff', box: '#eaf4f8', note: '#f3f8f6', head: '#082c4c', foot: '#082c4c', text: '#0f2742', muted: '#51647a', line: '#dbe4ec', link: '#0b6e99', footText: '#dbeafe', cta: '#0e7f5d', ctaText: '#ffffff' },
-  dark: { page: '#061625', card: '#0e2539', box: '#143550', note: '#123a36', head: '#082c4c', foot: '#041320', text: '#e8f1f8', muted: '#a9bdcf', line: '#27465f', link: '#7cc4e8', footText: '#c9dcee', cta: '#0e7f5d', ctaText: '#ffffff' },
+  light: { page: '#f1f6f8', card: '#ffffff', box: '#eaf4f8', note: '#e3f0fa', head: '#082c4c', foot: '#082c4c', text: '#0f2742', muted: '#51647a', line: '#dbe4ec', link: '#0b6e99', footText: '#dbeafe', cta: '#0e7f5d', ctaText: '#ffffff' },
+  // Dark keeps the brand navy (the header / logo blue family), not a neutral grey: deep navy page, brand-navy card, lighter navy highlight
+  // blocks, and an "Important information" block that is the sky blue of the brand at ~18% over the card (a translucent-looking blue).
+  dark: { page: '#061b2f', card: '#0b2842', box: '#12395f', note: '#173d5c', head: '#082c4c', foot: '#041a2e', text: '#eaf3fb', muted: '#b3c8dc', line: '#2a5683', link: '#8fd0f5', footText: '#c9dcee', cta: '#0e7f5d', ctaText: '#ffffff' },
 } as const;
 function emailPalette() { return EMAIL_PALETTE; }
 
