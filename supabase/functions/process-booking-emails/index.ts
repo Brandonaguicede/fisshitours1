@@ -19,6 +19,8 @@ serve(withCors(async (req) => {
     const supabase = getSupabase();
     const apiKey = Deno.env.get('RESEND_API_KEY');
     const from = Deno.env.get('BOOKING_EMAIL_FROM');
+    // Where a reply to a booking email goes (the official reservations mailbox). Read from the secret, never hardcoded; optional.
+    const replyTo = Deno.env.get('BOOKING_REPLY_TO')?.trim() || undefined;
     if (!apiKey || !from) return Response.json({ message: 'Email provider is not configured' }, { status: 500 });
 
     let processed = 0;
@@ -66,7 +68,7 @@ serve(withCors(async (req) => {
         continue;
       }
 
-      const response = await sendEmail(apiKey, from, message, notification.id);
+      const response = await sendEmail(apiKey, from, message, notification.id, replyTo);
       if (!response.ok) {
         failed += 1;
         console.error('Queued booking email failed', notification.id, await response.text());
@@ -116,6 +118,7 @@ async function sendEmail(
   from: string,
   message: { to: string; subject: string; text: string; html: string },
   idempotencyKey: string,
+  replyTo?: string,
 ) {
   return fetch('https://api.resend.com/emails', {
     method: 'POST',
@@ -124,7 +127,7 @@ async function sendEmail(
       'Content-Type': 'application/json',
       'Idempotency-Key': idempotencyKey,
     },
-    body: JSON.stringify({ from, to: message.to, subject: message.subject, text: message.text, html: message.html }),
+    body: JSON.stringify({ from, to: message.to, subject: message.subject, text: message.text, html: message.html, ...(replyTo ? { reply_to: replyTo } : {}) }),
   });
 }
 

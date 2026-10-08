@@ -20,10 +20,11 @@ serve(withCors(async (req) => {
   const parsed = schema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return Response.json({ message: 'Invalid contact form' }, { status: 400, headers });
 
-  const adminEmail = Deno.env.get('BOOKING_ADMIN_EMAIL') ?? 'papagayofishingtourcr@gmail.com';
-  const from = Deno.env.get('BOOKING_EMAIL_FROM') ?? 'Papagayo Fishing Tours <onboarding@resend.dev>';
-  const resendApiKey = Deno.env.get('RESEND_API_KEY');
-  if (!resendApiKey) return Response.json({ message: 'Email service is not configured' }, { status: 500, headers });
+  // Fail closed: no built-in recipient or sender. Without the official configuration nothing is sent from an unexpected address.
+  const adminEmail = Deno.env.get('BOOKING_ADMIN_EMAIL')?.trim();
+  const from = Deno.env.get('BOOKING_EMAIL_FROM')?.trim();
+  const resendApiKey = Deno.env.get('RESEND_API_KEY')?.trim();
+  if (!resendApiKey || !adminEmail || !from) return Response.json({ message: 'Email service is not configured' }, { status: 500, headers });
 
   const { name, email, phone, tourType, departureTime, message, language } = parsed.data;
   const subject = language === 'es' ? `Nuevo mensaje de contacto - ${name}` : `New contact message - ${name}`;

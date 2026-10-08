@@ -173,6 +173,8 @@ async function sendBookingEmails(supabase: ReturnType<typeof createClient>, book
   const apiKey = Deno.env.get('RESEND_API_KEY');
   const from = Deno.env.get('BOOKING_EMAIL_FROM');
   const adminEmail = Deno.env.get('BOOKING_ADMIN_EMAIL');
+  // Where a reply to a booking email goes (the official reservations mailbox). Read from the secret, never hardcoded; optional.
+  const replyTo = Deno.env.get('BOOKING_REPLY_TO')?.trim();
   const customerEmail = payload.customer.email;
   if (!booking?.booking_id || !customerEmail) return;
   // PayPal reservations are notified only after capture succeeds. The capture
@@ -217,7 +219,7 @@ async function sendBookingEmails(supabase: ReturnType<typeof createClient>, book
         Authorization: `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ from, to: message.to, subject: message.subject, text: message.text, html: message.html }),
+      body: JSON.stringify({ from, to: message.to, subject: message.subject, text: message.text, html: message.html, ...(replyTo ? { reply_to: replyTo } : {}) }),
     });
 
     await recordEmailNotification(supabase, booking.booking_id, message, response.ok);

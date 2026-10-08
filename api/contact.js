@@ -21,8 +21,9 @@ export default async function handler(request, response) {
     let emailDelivered = false;
     const resendApiKey = process.env.RESEND_API_KEY;
     const to = process.env.CONTACT_EMAIL_TO;
+    const from = process.env.CONTACT_EMAIL_FROM; // required: there is no built-in sender
 
-    if (resendApiKey && to) {
+    if (resendApiKey && to && from) {
       try {
         const resendResponse = await fetch('https://api.resend.com/emails', {
           method: 'POST',
@@ -31,7 +32,7 @@ export default async function handler(request, response) {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            from: process.env.CONTACT_EMAIL_FROM || 'Papagayo Website <onboarding@resend.dev>',
+            from,
             to: [to],
             subject: `[Web] New contact request from ${name}`,
             text: [
