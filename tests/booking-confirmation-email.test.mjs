@@ -212,10 +212,10 @@ test('dark mode: colour-scheme meta + explicit dark palette (prefers-color-schem
   assert.match(html, /<meta name="supported-color-schemes" content="light dark">/);
   const css = /<style>([\s\S]*?)<\/style>/.exec(html)[1];
   assert.match(css, /:root\{color-scheme:light dark/);
-  const used = new Set([...html.replace(/<style[\s\S]*?<\/style>/, '').matchAll(/class="([^"]+)"/g)].flatMap((match) => match[1].split(/\s+/)).filter((name) => /^em-(page|card|box|note|foot|text|muted|link|foottext|line)$/.test(name)));
+  const used = new Set([...html.replace(/<style[\s\S]*?<\/style>/, '').matchAll(/class="([^"]+)"/g)].flatMap((match) => match[1].split(/\s+/)).filter((name) => /^em-(page|card|box|note|head|foot|text|muted|link|foottext|line)$/.test(name)));
   for (const name of used) {
     assert.ok(css.includes(`.${name}{`), `dark override for .${name}`);
-    if (name !== 'em-line') assert.ok(/em-(page|card|box|note|foot)$/.test(name) ? css.includes(`[data-ogsb] .${name}{`) : css.includes(`[data-ogsc] .${name}{`), `Outlook.com override for .${name}`);
+    if (name !== 'em-line') assert.ok(/em-(page|card|box|note|head|foot)$/.test(name) ? css.includes(`[data-ogsb] .${name}{`) : css.includes(`[data-ogsc] .${name}{`), `Outlook.com override for .${name}`);
   }
   // Every coloured container also carries bgcolor + an inline background (clients that ignore <style>, Gmail's own inversion).
   for (const tag of html.match(/<(td|table|body)[^>]*(background-color:#[0-9a-f]{6})[^>]*>/gi)) assert.match(tag, /bgcolor="#[0-9a-f]{6}"/i, tag.slice(0, 80));
@@ -229,6 +229,11 @@ test('dark mode: colour-scheme meta + explicit dark palette (prefers-color-schem
   }
   assert.ok(contrast(palette.light.text, palette.light.card) >= 12);
   assert.notEqual(palette.light.card, palette.dark.card);
+  // The logo header stays the brand navy in dark mode (explicit override, never a light/pastel blue), with the logo readable on it.
+  assert.equal(palette.dark.head, '#082c4c');
+  assert.ok(luminance(palette.dark.head) < 0.03 && contrast('#ffffff', palette.dark.head) >= 12);
+  assert.match(html, /class="em-head"[^>]*background-color:#082c4c;background-image:linear-gradient\(#082c4c,#082c4c\)/);
+  assert.ok(css.includes('.em-head{background-color:#082c4c !important}') && css.includes('[data-ogsb] .em-head{background-color:#082c4c !important}'));
 });
 
 test('the reference / date block stacks on a phone without media queries (fluid inline-block columns), keeps two columns where there is room, and cannot overflow', async () => {
