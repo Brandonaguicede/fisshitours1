@@ -3,7 +3,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2';
 import { corsHeaders, corsPreflight, withCors } from '../_shared/cors.ts';
 import { handleSyncRequest } from '../_shared/google-calendar.mjs';
 
-// Syncs ONE confirmed / cancelled booking with the shared Google Calendar. Body: { reservationId } — nothing else is trusted from the
+// Syncs ONE booking with the shared Google Calendar: confirmed -> create / update its event, cancelled -> delete it for real. Body: { reservationId } — nothing else is trusted from the
 // client; the booking, customer, boat, tour, package, departure and payment data are read from the database. Admin / editor only.
 // Secrets (Supabase): GOOGLE_CALENDAR_ID, GOOGLE_SERVICE_ACCOUNT_EMAIL, GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY.
 serve(withCors(async (req) => {

@@ -1,6 +1,7 @@
 // Reservas + Google Calendar: what the Admin does and shows. The booking is confirmed / edited / cancelled first (source of truth); the
 // calendar is synced afterwards through `sync-reservation-calendar` with ONLY the reservation id. A Google problem never changes the
-// booking: the editor shows "No sincronizada" with "Reintentar". Supabase and the Edge Functions are mocked (no real Google).
+// booking: the editor shows "No sincronizada" with "Reintentar". Cancelling deletes the event (the editor then says "Sin evento", never
+// "Agendada"). Supabase and the Edge Functions are mocked (no real Google).
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { chromium, expect } from '@playwright/test';
@@ -18,20 +19,26 @@ const catalogPackage = {
   boat_tours: { id: 'bt-1', boat_id: 'boat-1', tour_id: 'tour-1', active: true, boats: { active: true, max_guests: 8 }, tours: { id: 'tour-1', title: 'Fishing Tour', category: 'Fishing', image_url: null, active: true, sort_order: 1, description: '', highlights: [], included: [] } },
 };
 
-async function fixture({ bookings, calendar = {}, history = {}, updateReply = null, sync = () => ({ status: 200, json: { status: 'synced', operation: 'create', eventId: 'evt' } }) }) {
+async function fixture({ bookings, calendar = {}, history = {}, updateReply = null, cancel = () => ({ status: 200, json: { calendar: { status: 'synced', operation: 'delete' } } }), sync = () => ({ status: 200, json: { status: 'synced', operation: 'create', eventId: 'evt' } }) }) {
   const browser = await chromium.launch({ headless: true, channel: 'msedge' });
   const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
-  const state = { bookings: bookings.map((row) => ({ ...row })), calendar: { ...calendar }, syncCalls: [], calls: [], updates: [] };
+  const state = { bookings: bookings.map((row) => ({ ...row })), calendar: { ...calendar }, syncCalls: [], cancelCalls: [], calls: [], updates: [] };
   await page.route('https://admin-test.supabase.co/**', async (route) => {
     const request = route.request(); const url = new URL(request.url()); const path = url.pathname;
     if (path.endsWith('/token')) return route.fulfill({ json: { access_token: 'test-admin-token', refresh_token: 'r', token_type: 'bearer', expires_in: 3600, user } });
     if (path.endsWith('/profiles')) return route.fulfill({ json: { ...user, full_name: 'Test Admin', role: 'admin', active: true } });
     if (path.endsWith('/user')) return route.fulfill({ json: user });
     if (path.endsWith('/rpc/list_admin_bookings')) return route.fulfill({ json: { rows: state.bookings, total: state.bookings.length } });
-    if (path.endsWith('/rpc/update_booking_status')) {
-      const body = request.postDataJSON(); state.calls.push(['status', body.p_booking_status]);
-      state.bookings = state.bookings.map((row) => (row.id === body.p_booking_id ? { ...row, booking_status: body.p_booking_status } : row));
-      return route.fulfill({ json: {} });
+    if (path.endsWith('/functions/v1/admin-cancel-booking')) {
+      // ONE server-side request: cancels the booking AND deletes its calendar event (the browser makes no second call).
+      const body = request.postDataJSON(); state.cancelCalls.push(body); state.calls.push(['cancel', body.bookingId]);
+      const planned = cancel(state.cancelCalls.length, body);
+      if (planned === 'abort') return route.abort();
+      if (planned.status === 200) state.bookings = state.bookings.map((row) => (row.id === body.bookingId ? { ...row, booking_status: 'cancelled' } : row));
+      const result = planned.json?.calendar;
+      if (result?.status === 'synced') state.calendar[body.bookingId] = { google_calendar_sync_status: 'synced', google_calendar_sync_error: null, google_calendar_event_id: null };
+      if (result?.status === 'failed') state.calendar[body.bookingId] = { google_calendar_sync_status: 'failed', google_calendar_sync_error: result.error ?? 'Google Calendar respondió 500.', google_calendar_event_id: state.calendar[body.bookingId]?.google_calendar_event_id ?? 'evt' };
+      return route.fulfill({ status: planned.status, json: { booking_id: body.bookingId, booking_status: 'cancelled', transitioned: true, ...planned.json } });
     }
     if (path.endsWith('/functions/v1/admin-confirm-booking')) {
       const body = request.postDataJSON(); state.calls.push(['confirm', body.bookingId]);
@@ -52,14 +59,14 @@ async function fixture({ bookings, calendar = {}, history = {}, updateReply = nu
       const body = request.postDataJSON(); state.syncCalls.push(body); state.calls.push(['sync', body.reservationId]);
       const planned = sync(state.syncCalls.length, body);
       if (planned === 'abort') return route.abort();
-      if (planned.json?.status === 'synced') state.calendar[body.reservationId] = { google_calendar_sync_status: 'synced', google_calendar_sync_error: null };
+      if (planned.json?.status === 'synced') state.calendar[body.reservationId] = { google_calendar_sync_status: 'synced', google_calendar_sync_error: null, google_calendar_event_id: planned.json.operation === 'delete' ? null : 'evt' };
       if (planned.json?.status === 'failed') state.calendar[body.reservationId] = { google_calendar_sync_status: 'failed', google_calendar_sync_error: planned.json.error ?? 'Google Calendar respondió 500.' };
       return route.fulfill({ status: planned.status, json: planned.json });
     }
     if (path.endsWith('/rest/v1/bookings')) {
       const id = url.searchParams.get('id')?.replace('eq.', '');
       if (id) {
-        const cal = state.calendar[id] ?? { google_calendar_sync_status: null, google_calendar_sync_error: null };
+        const cal = { google_calendar_sync_status: null, google_calendar_sync_error: null, google_calendar_event_id: null, ...state.calendar[id] };
         const object = (request.headers().accept ?? '').includes('vnd.pgrst.object');
         return route.fulfill({ json: object ? cal : [cal] });
       }
@@ -133,9 +140,14 @@ test('the function being unreachable (network / auth) is also just "No sincroniz
   } finally { await f.browser.close(); }
 });
 
-test('editor states: pending = "Sincronizando...", synced = "Agendada", failed = "No sincronizada" + Reintentar (only there); pending / cancelled bookings show no calendar row', async () => {
-  const bookings = [booking('sy', 'confirmed'), booking('pe', 'confirmed'), booking('fa', 'confirmed'), booking('nu', 'confirmed'), booking('pn', 'pending'), booking('ca', 'cancelled')];
-  const calendar = { sy: { google_calendar_sync_status: 'synced' }, pe: { google_calendar_sync_status: 'pending' }, fa: { google_calendar_sync_status: 'failed', google_calendar_sync_error: 'Google Calendar respondió 500.' } };
+test('editor states: pending = "Sincronizando...", synced = "Agendada", failed = "No sincronizada" + Reintentar (only there); pending bookings show no calendar row; cancelled ones say "Sin evento", never "Agendada"', async () => {
+  const bookings = [booking('sy', 'confirmed'), booking('pe', 'confirmed'), booking('fa', 'confirmed'), booking('nu', 'confirmed'), booking('pn', 'pending'), booking('ca', 'cancelled'), booking('cs', 'cancelled'), booking('cf', 'cancelled'), booking('ce', 'cancelled')];
+  const calendar = {
+    sy: { google_calendar_sync_status: 'synced' }, pe: { google_calendar_sync_status: 'pending' }, fa: { google_calendar_sync_status: 'failed', google_calendar_sync_error: 'Google Calendar respondió 500.' },
+    cs: { google_calendar_sync_status: 'synced', google_calendar_event_id: null },
+    cf: { google_calendar_sync_status: 'failed', google_calendar_sync_error: 'Google Calendar respondió 500.', google_calendar_event_id: 'evt-cf' },
+    ce: { google_calendar_sync_status: 'synced', google_calendar_event_id: 'evt-ce' }, // cancelled but its event is still there (the sync never ran)
+  };
   const f = await fixture({ bookings, calendar }); const { page } = f;
   try {
     const close = () => page.getByRole('dialog').getByRole('button', { name: 'Cerrar', exact: true }).first().click();
@@ -155,9 +167,23 @@ test('editor states: pending = "Sincronizando...", synced = "Agendada", failed =
     await expect(calendarRow(page).getByText('Sin sincronizar')).toBeVisible();
     await expect(calendarRow(page).getByRole('button', { name: 'Reintentar' })).toHaveCount(0);
     await close();
-    for (const id of ['pn', 'ca']) {
+    await openEditor(page, 'pn');
+    await expect(calendarRow(page)).toHaveCount(0);
+    await close();
+    // 10. A cancelled booking has no event: "Sin evento" (never "Agendada", no buttons) — also when it was synced before and when it never was.
+    for (const id of ['ca', 'cs']) {
       await openEditor(page, id);
-      await expect(calendarRow(page)).toHaveCount(0);
+      await expect(calendarRow(page).getByText('Sin evento')).toBeVisible();
+      await expect(calendarRow(page).getByText('Agendada')).toHaveCount(0);
+      await expect(calendarRow(page).getByRole('button')).toHaveCount(0);
+      await close();
+    }
+    // The delete failed (or the event is still there): "No sincronizada" + Reintentar, still never "Agendada".
+    for (const id of ['cf', 'ce']) {
+      await openEditor(page, id);
+      await expect(calendarRow(page).getByText('No sincronizada')).toBeVisible();
+      await expect(calendarRow(page).getByText('Agendada')).toHaveCount(0);
+      await expect(calendarRow(page).getByRole('button')).toHaveText(['Reintentar']);
       await close();
     }
   } finally { await f.browser.close(); }
@@ -183,15 +209,65 @@ test('editing a CONFIRMED booking updates the same calendar event (one sync call
   } finally { await f.browser.close(); }
 });
 
-test('cancelling a confirmed booking syncs the calendar afterwards (the function marks the same event [CANCELADA])', async () => {
-  const f = await fixture({ bookings: [booking('cx', 'confirmed')], calendar: { cx: { google_calendar_sync_status: 'synced' } } }); const { page, state } = f;
+const cancelFromEditor = async (page, id) => {
+  await openEditor(page, id);
+  await page.getByRole('button', { name: 'Cancelar reserva' }).click();
+  await page.getByRole('button', { name: /Sí, cancelar reserva/ }).click();
+};
+
+test('cancelling is ONE server-side request (it cancels and deletes the calendar event there): the browser makes no second call, and the editor says "Sin evento", never "Agendada"', async () => {
+  const f = await fixture({ bookings: [booking('cx', 'confirmed')], calendar: { cx: { google_calendar_sync_status: 'synced', google_calendar_event_id: 'evt-cx' } } }); const { page, state } = f;
   try {
-    await openEditor(page, 'cx');
-    await page.getByRole('button', { name: 'Cancelar reserva' }).click();
-    await page.getByRole('button', { name: /Sí, cancelar reserva/ }).click();
-    await expect.poll(() => state.calls.map((call) => call[0]).join('>')).toBe('status>sync');
-    assert.deepEqual(state.syncCalls, [{ reservationId: 'cx' }]);
+    await cancelFromEditor(page, 'cx');
+    await expect(page.getByText(/Reserva cancelada\. El bloqueo de disponibilidad fue liberado\. Evento eliminado de Google Calendar\./)).toBeVisible();
+    assert.deepEqual(state.cancelCalls, [{ bookingId: 'cx' }], 'only the booking id is sent');
+    assert.deepEqual(state.calls.map((call) => call[0]), ['cancel'], 'no separate status call and no separate calendar sync from the browser');
+    assert.equal(state.syncCalls.length, 0);
     assert.equal(state.bookings[0].booking_status, 'cancelled');
+    await openEditor(page, 'cx');
+    await expect(calendarRow(page).getByText('Sin evento')).toBeVisible();
+    await expect(calendarRow(page).getByText('Agendada')).toHaveCount(0);
+    await expect(calendarRow(page).getByRole('button')).toHaveCount(0);
+  } finally { await f.browser.close(); }
+});
+
+test('a Google failure while cancelling keeps the booking cancelled: "No sincronizada" + Reintentar, and Reintentar reuses the SAME server operation until it ends in "Sin evento"', async () => {
+  const f = await fixture({
+    bookings: [booking('cf', 'confirmed')], calendar: { cf: { google_calendar_sync_status: 'synced', google_calendar_event_id: 'evt-cf' } },
+    cancel: (attempt) => ({ status: 200, json: { calendar: attempt === 1 ? { status: 'failed', error: 'Google Calendar respondió 500.' } : { status: 'synced', operation: 'delete' }, transitioned: attempt === 1 } }),
+  }); const { page, state } = f;
+  try {
+    await cancelFromEditor(page, 'cf');
+    await expect(page.getByText(/No se pudo eliminar el evento de Google Calendar/)).toBeVisible();
+    assert.equal(state.bookings[0].booking_status, 'cancelled', 'the cancellation stays');
+    await openEditor(page, 'cf');
+    await expect(calendarRow(page).getByText('No sincronizada')).toBeVisible();
+    await expect(calendarRow(page).getByText('Agendada')).toHaveCount(0);
+    await calendarRow(page).getByRole('button', { name: 'Reintentar' }).click();
+    await expect(calendarRow(page).getByText('Sin evento')).toBeVisible();
+    assert.deepEqual(state.cancelCalls, [{ bookingId: 'cf' }, { bookingId: 'cf' }], 'the retry is the same operation (idempotent on a cancelled booking)');
+    assert.equal(state.syncCalls.length, 0, 'sync-reservation-calendar is not used to retry a cancelled booking');
+    assert.equal(state.bookings[0].booking_status, 'cancelled');
+  } finally { await f.browser.close(); }
+});
+
+test('cancelling a booking that never had an event (the server skips Calendar) shows no calendar message at all', async () => {
+  const f = await fixture({ bookings: [booking('nv', 'confirmed')], cancel: () => ({ status: 200, json: { calendar: { status: 'skipped' } } }) }); const { page, state } = f;
+  try {
+    await cancelFromEditor(page, 'nv');
+    await expect(page.getByText(/Reserva cancelada\. El bloqueo de disponibilidad fue liberado\./)).toBeVisible();
+    assert.equal(state.cancelCalls.length, 1);
+    await expect(page.getByText(/eliminar el evento|Evento eliminado/)).toHaveCount(0);
+  } finally { await f.browser.close(); }
+});
+
+test('if the cancel request itself fails (network / server), the Admin says so and does not claim it was cancelled', async () => {
+  const f = await fixture({ bookings: [booking('ne', 'confirmed')], cancel: () => ({ status: 500, json: { message: 'Booking could not be cancelled' } }) }); const { page, state } = f;
+  try {
+    await cancelFromEditor(page, 'ne');
+    await expect(page.getByText('Booking could not be cancelled')).toBeVisible();
+    await expect(page.getByText(/Reserva cancelada\./)).toHaveCount(0);
+    assert.equal(state.syncCalls.length, 0);
   } finally { await f.browser.close(); }
 });
 

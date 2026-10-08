@@ -15,7 +15,7 @@ import AdminPagination from '../../components/admin/AdminPagination';
 import { useAdminPagedList } from '../../hooks/useAdminPagedList';
 import { getAdminReservationsPage } from '../../services/adminListService';
 import { getActiveBoatTours, getActiveTimeSlots } from '../../services/boatTourService';
-import { adminCreateBooking, calculateBookingPrice, confirmBooking, getActiveDepartureLocations, retryConfirmationEmail, syncReservationCalendar, updateBooking, type DepartureLocation } from '../../services/bookingService';
+import { adminCreateBooking, calculateBookingPrice, cancelBooking, confirmBooking, getActiveDepartureLocations, retryConfirmationEmail, syncReservationCalendar, updateBooking, type CalendarSyncResult, type DepartureLocation } from '../../services/bookingService';
 import type { BoatTour, TourTimeSlot } from '../../types/boatTour';
 import { loadLogoDataUrl } from '../../utils/exportBrand';
 import {
@@ -121,7 +121,7 @@ export default function AdminReservationsPage() {
   const [editForm, setEditForm] = useState<EditBookingForm | null>(null);
   const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
   // Google Calendar state of the reservation open in the editor (read from the booking row; `busy` while a sync is running).
-  const [calendar, setCalendar] = useState<{ status: string | null; error: string | null } | null>(null);
+  const [calendar, setCalendar] = useState<{ status: string | null; error: string | null; eventId: string | null } | null>(null);
   const [calendarBusy, setCalendarBusy] = useState(false);
   // Reason for an operational edit + the audit history of the reservation open in the editor.
   const [editReason, setEditReason] = useState('');
@@ -251,28 +251,34 @@ export default function AdminReservationsPage() {
   }
 
   async function loadCalendarState(reservationId: string) {
-    const { data } = await db.from('bookings').select('google_calendar_sync_status, google_calendar_sync_error').eq('id', reservationId).maybeSingle();
+    const { data } = await db.from('bookings').select('google_calendar_sync_status, google_calendar_sync_error, google_calendar_event_id').eq('id', reservationId).maybeSingle();
     const status = data?.google_calendar_sync_status ?? (unreachableSyncs.current.has(reservationId) ? 'failed' : null);
-    setCalendar({ status, error: data?.google_calendar_sync_error ?? null });
+    setCalendar({ status, error: data?.google_calendar_sync_error ?? null, eventId: data?.google_calendar_event_id ?? null });
   }
 
-  // Google is secondary: the booking is already saved, so this never throws and never changes the booking. Returns whether it ended up synced.
-  async function runCalendarSync(reservationId: string): Promise<boolean> {
+  function applyCalendarResult(result: CalendarSyncResult) {
+    // A deleted event has no id any more; a skipped one never had any (the previous id, if any, is kept only when Google failed).
+    setCalendar((current) => ({ status: result.status === 'skipped' ? null : result.status, error: result.error ?? null, eventId: result.status === 'failed' ? current?.eventId ?? null : result.eventId ?? null }));
+  }
+
+  // Google is secondary: the booking is already saved, so this never throws and never changes the booking. Returns how the sync ended.
+  // A cancelled booking retries through the SAME server operation that cancels it (it only repeats the Calendar delete).
+  async function runCalendarSync(reservationId: string, cancelled = false): Promise<'synced' | 'failed' | 'skipped'> {
     setCalendarBusy(true);
-    setCalendar((current) => ({ status: 'pending', error: current?.error ?? null }));
-    let synced = false;
+    setCalendar((current) => ({ status: 'pending', error: current?.error ?? null, eventId: current?.eventId ?? null }));
+    let outcome: 'synced' | 'failed' | 'skipped' = 'failed';
     try {
-      const result = await syncReservationCalendar(reservationId);
-      synced = result.status === 'synced';
+      const result = cancelled ? (await cancelBooking(reservationId)).calendar : await syncReservationCalendar(reservationId);
+      outcome = result.status;
       unreachableSyncs.current.delete(reservationId);
-      setCalendar({ status: result.status === 'skipped' ? null : result.status, error: result.error ?? null });
+      applyCalendarResult(result);
     } catch (syncError) {
       unreachableSyncs.current.add(reservationId);
-      setCalendar({ status: 'failed', error: syncError instanceof Error ? syncError.message : 'No se pudo sincronizar.' });
+      setCalendar((current) => ({ status: 'failed', error: syncError instanceof Error ? syncError.message : 'No se pudo sincronizar.', eventId: current?.eventId ?? null }));
     } finally {
       setCalendarBusy(false);
     }
-    return synced;
+    return outcome;
   }
 
   async function updateReservationStatus(reservation: AdminReservation, nextBookingStatus: 'confirmed' | 'cancelled') {
@@ -280,24 +286,21 @@ export default function AdminReservationsPage() {
     setNotice('');
     setError('');
 
-    const nextPaymentStatus =
-      nextBookingStatus === 'cancelled' && reservation.payment_status !== 'paid'
-        ? 'failed'
-        : reservation.payment_status;
-
     let confirmationResult = { customerEmailPresent: false, emailQueued: false };
+    let cancelResult: CalendarSyncResult | null = null;
+    // Cancelling is ONE server-side request: the booking is cancelled, its availability released and its Calendar event deleted there, so
+    // closing the tab cannot leave a cancelled booking with a live event. Confirming keeps its own order (confirm, then sync).
     const { error } = nextBookingStatus === 'confirmed'
       ? await confirmBooking(reservation.id)
         .then((result) => {
           confirmationResult = result;
           return { error: null };
         }, (confirmError) => ({ error: confirmError }))
-      : await db.rpc('update_booking_status', {
-        p_booking_id: reservation.id,
-        p_booking_status: nextBookingStatus,
-        p_payment_status: nextPaymentStatus,
-        p_note: 'Reserva cancelada desde admin. Bloqueo liberado.',
-      });
+      : await cancelBooking(reservation.id)
+        .then((result) => {
+          cancelResult = result.calendar;
+          return { error: null };
+        }, (cancelError) => ({ error: cancelError }));
 
     setBusyId('');
     if (error) {
@@ -314,11 +317,13 @@ export default function AdminReservationsPage() {
           ? 'Reserva confirmada. El correo de confirmación quedó encolado y el bote queda bloqueado.'
           : 'Reserva confirmada, pero el correo no pudo encolarse. El bote queda bloqueado.');
       // The booking is confirmed and saved; now (and only now) the calendar. A failure leaves it confirmed with "No sincronizada".
-      void runCalendarSync(reservation.id).then((synced) => setNotice((current) => `${current} ${synced ? 'Agendada en Google Calendar.' : 'No se pudo agendar en Google Calendar: reintenta desde Editar reserva.'}`));
+      void runCalendarSync(reservation.id).then((outcome) => setNotice((current) => `${current} ${outcome === 'synced' ? 'Agendada en Google Calendar.' : 'No se pudo agendar en Google Calendar: reintenta desde Editar reserva.'}`));
     } else {
-      setNotice('Reserva cancelada. El bloqueo de disponibilidad fue liberado.');
-      // A cancelled booking that already has an event gets "[CANCELADA]" on the same event (the function skips it otherwise).
-      void runCalendarSync(reservation.id);
+      // The server already tried the Calendar delete (a booking that never had an event is skipped). A failure leaves the booking cancelled
+      // with "No sincronizada" + Reintentar.
+      const calendarOutcome = (cancelResult as CalendarSyncResult | null)?.status;
+      setNotice(`Reserva cancelada. El bloqueo de disponibilidad fue liberado.${calendarOutcome === 'synced' ? ' Evento eliminado de Google Calendar.' : calendarOutcome === 'failed' ? ' No se pudo eliminar el evento de Google Calendar: reintenta desde Editar reserva.' : ''}`);
+      if (cancelResult) applyCalendarResult(cancelResult);
     }
     await loadReservations();
   }
@@ -451,7 +456,7 @@ export default function AdminReservationsPage() {
       setEditingReservation(null);
       setEditForm(null);
       setNotice('Cambios guardados. El estado y el pago de la reserva se conservaron; no se envió confirmación.');
-      if (keepsEvent) void runCalendarSync(editedId).then((synced) => { if (!synced) setNotice((current) => `${current} No se pudo actualizar Google Calendar: reintenta desde Editar reserva.`); });
+      if (keepsEvent) void runCalendarSync(editedId).then((outcome) => { if (outcome !== 'synced') setNotice((current) => `${current} No se pudo actualizar Google Calendar: reintenta desde Editar reserva.`); });
       await loadReservations();
     } catch (saveError) {
       setError(saveError instanceof Error ? friendlyEditError(saveError.message) : 'No se pudo guardar la reserva.');
@@ -836,18 +841,20 @@ export default function AdminReservationsPage() {
               ) : null}
             </div>
           ) : null}
-          {editingReservation && ['confirmed', 'completed'].includes(editingReservation.booking_status) && calendar !== null ? (
+          {editingReservation && ['confirmed', 'completed', 'cancelled'].includes(editingReservation.booking_status) && calendar !== null ? (
             <div className="admin-calendar-sync" role="group" aria-label="Google Calendar">
               <span className="admin-calendar-sync__label">Google Calendar</span>
+              {/* A cancelled booking has no calendar event: "Sin evento" once it is gone; "No sincronizada" + Reintentar while it still exists or the delete failed. */}
               {calendarBusy || calendar.status === 'pending' ? <span className="admin-calendar-sync__state admin-calendar-sync__state--pending" role="status">Sincronizando...</span> : null}
-              {!calendarBusy && calendar.status === 'synced' ? <span className="admin-calendar-sync__state admin-calendar-sync__state--synced" role="status">Agendada</span> : null}
-              {!calendarBusy && calendar.status === 'failed' ? (
+              {!calendarBusy && editingReservation.booking_status !== 'cancelled' && calendar.status === 'synced' ? <span className="admin-calendar-sync__state admin-calendar-sync__state--synced" role="status">Agendada</span> : null}
+              {!calendarBusy && calendar.status !== 'pending' && (calendar.status === 'failed' || (editingReservation.booking_status === 'cancelled' && calendar.eventId)) ? (
                 <>
                   <span className="admin-calendar-sync__state admin-calendar-sync__state--failed" role="status">No sincronizada</span>
-                  <button className="admin-btn admin-btn--secondary admin-btn--sm" type="button" onClick={() => void runCalendarSync(editingReservation.id)}>Reintentar</button>
+                  <button className="admin-btn admin-btn--secondary admin-btn--sm" type="button" onClick={() => void runCalendarSync(editingReservation.id, editingReservation.booking_status === 'cancelled')}>Reintentar</button>
                 </>
               ) : null}
-              {!calendarBusy && calendar.status === null ? (
+              {!calendarBusy && editingReservation.booking_status === 'cancelled' && calendar.status !== 'pending' && calendar.status !== 'failed' && !calendar.eventId ? <span className="admin-calendar-sync__state" role="status">Sin evento</span> : null}
+              {!calendarBusy && editingReservation.booking_status !== 'cancelled' && calendar.status === null ? (
                 <>
                   <span className="admin-calendar-sync__state" role="status">Sin sincronizar</span>
                   <button className="admin-btn admin-btn--secondary admin-btn--sm" type="button" onClick={() => void runCalendarSync(editingReservation.id)}>Sincronizar</button>

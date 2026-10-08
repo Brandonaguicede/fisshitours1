@@ -121,7 +121,7 @@ test('every booking that becomes confirmed starts with calendar state pending (a
   assert.equal((await state()).s, 'synced');
   // Cancel then confirm again: a new sync is due.
   await db.query(`update public.bookings set booking_status = 'cancelled' where id = $1`, [id]);
-  assert.equal((await state()).s, 'synced', 'cancelling alone does not change it (the Admin syncs the [CANCELADA] title)');
+  assert.equal((await state()).s, 'synced', 'cancelling alone does not change it (the Admin / sync function then deletes the Calendar event)');
   await db.query(`update public.bookings set google_calendar_sync_error = 'old error' where id = $1`, [id]);
   await db.query(`update public.bookings set booking_status = 'confirmed' where id = $1`, [id]);
   assert.deepEqual(await state(), { s: 'pending', e: null });

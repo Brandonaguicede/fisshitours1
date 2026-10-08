@@ -4,12 +4,12 @@
 //  - One booking = at most ONE event. The event id is derived from the booking id, so even a retry after a timeout (Google created the
 //    event but we never saved its id) or two parallel calls converge on the same event instead of creating a second one.
 //  - The booking is the source of truth: a Google failure never fails the booking, it is recorded (`failed`) and can be retried.
+//  - A cancelled booking has NO event: cancelling deletes it for real (no "[CANCELADA]" copy is kept); re-confirming creates it again.
 //  - Never logs or returns the private key, the signed JWT or the access token.
 
 export const CALENDAR_TIMEZONE = 'America/Costa_Rica';
 const SCOPE = 'https://www.googleapis.com/auth/calendar.events';
 const CALENDAR_API = 'https://www.googleapis.com/calendar/v3/calendars';
-const CANCELLED_PREFIX = '[CANCELADA] ';
 
 const PAYMENT_LABELS = { pending: 'Pendiente', processing: 'Procesando', paid: 'Pagado', failed: 'Fallido', refunded: 'Reembolsado', not_required_yet: 'Pago en el tour' };
 
@@ -35,7 +35,7 @@ export class CalendarSyncError extends Error {
 }
 
 /** Everything the event needs comes from the DATABASE row (never from the caller). Throws CalendarSyncError when it cannot be built honestly. */
-export function buildEvent(booking, { cancelled = false } = {}) {
+export function buildEvent(booking) {
   const tourTitle = booking.tours?.title ?? '';
   const customerName = booking.customers?.full_name ?? '';
   const startTime = booking.time_slots?.starts_at;
@@ -55,12 +55,12 @@ export function buildEvent(booking, { cancelled = false } = {}) {
     `Pago: ${PAYMENT_LABELS[booking.payment_status] ?? booking.payment_status}`,
   ].join('\n');
   return {
-    summary: `${cancelled ? CANCELLED_PREFIX : ''}${title}`,
+    summary: title,
     description,
     location: booking.departure_location_name_snapshot || undefined,
     start: { dateTime: localDateTime(booking.tour_date, startTime), timeZone: CALENDAR_TIMEZONE },
     end: { dateTime: localDateTime(booking.tour_date, startTime, duration), timeZone: CALENDAR_TIMEZONE },
-    // A previously deleted / cancelled Google event comes back to life on update.
+    // A previously deleted Google event comes back to life on update (re-confirming a cancelled booking).
     status: 'confirmed',
     // V1: no guests are invited, no emails from Calendar, no Meet links (attendees / conferenceData are simply absent).
   };
@@ -140,17 +140,53 @@ export async function upsertEvent(env, token, { knownEventId, bookingId, event }
   if (created.ok) return { eventId: created.data.id ?? id, operation: 'create' };
   if (created.status === 409) {
     const existing = await callCalendar(env, token, 'PATCH', `/${encodeURIComponent(id)}`, event, fetchImpl);
-    if (!existing.ok) throw googleError(existing);
-    return { eventId: id, operation: 'update' };
+    if (existing.ok) return { eventId: id, operation: 'update' };
+    if (existing.status !== 404 && existing.status !== 410) throw googleError(existing);
+    // The id belongs to an event that was deleted (e.g. the booking was cancelled and is now confirmed again) and Google will not bring
+    // it back: a deleted id cannot be reused, so the event is created under a fresh one (still ONE live event for the booking).
+    const fresh = `${id}${Date.now().toString(32)}`.slice(0, 120);
+    const recreated = await callCalendar(env, token, 'POST', '', { ...event, id: fresh }, fetchImpl);
+    if (!recreated.ok) throw googleError(recreated);
+    return { eventId: recreated.data.id ?? fresh, operation: 'create' };
   }
   throw googleError(created);
+}
+
+/**
+ * Delete the event for real. Idempotent: 204 / 200 = deleted, 404 / 410 = it was already gone (both are success); anything else throws
+ * (the caller records it as a failed sync and keeps the event id so the delete can be retried). Returns { deleted, alreadyGone }.
+ */
+export async function deleteEvent(env, token, eventId, fetchImpl = fetch) {
+  const result = await callCalendar(env, token, 'DELETE', `/${encodeURIComponent(eventId)}`, undefined, fetchImpl);
+  if (result.status === 204 || result.status === 200) return { deleted: true, alreadyGone: false };
+  if (result.status === 404 || result.status === 410) return { deleted: false, alreadyGone: true };
+  throw googleError(result);
+}
+
+/**
+ * Remove the event of a booking that is going away (cancelled, or about to be deleted for good). Never throws: { status: 'deleted' |
+ * 'already_gone' | 'skipped' | 'failed', error? }. `eventId` is the stored google_calendar_event_id; without one there is nothing to delete.
+ * Any flow that physically deletes a booking must call this BEFORE deleting the row (the event id is gone afterwards) and must not delete
+ * the row when the status is 'failed'.
+ */
+export async function deleteBookingEvent({ env, fetchImpl = fetch, eventId, bookingId, log = () => {} }) {
+  if (!eventId) return { status: 'skipped' };
+  try {
+    const token = await getAccessToken(env, fetchImpl);
+    const { alreadyGone } = await deleteEvent(env, token, eventId, fetchImpl);
+    log('info', 'calendar event deleted', { bookingId, eventId, alreadyGone });
+    return { status: alreadyGone ? 'already_gone' : 'deleted' };
+  } catch (error) {
+    log('error', 'calendar event could not be deleted', { bookingId, eventId, code: error?.code, message: shortError(error) });
+    return { status: 'failed', error: shortError(error) };
+  }
 }
 
 // --- Booking sync -------------------------------------------------------------------------------------------------------------------
 
 export const BOOKING_SELECT = 'id, booking_reference, booking_status, payment_status, tour_date, guests, departure_location_name_snapshot, google_calendar_event_id, google_calendar_sync_status, customers(full_name, email, whatsapp), boats(name), tours(title), tour_packages(name, duration_minutes), time_slots(starts_at)';
 
-/** Statuses that keep (or create) the event. `cancelled` only renames an event that already exists. */
+/** Statuses that keep (or create) the event. A `cancelled` booking has no event: it is deleted. */
 const LIVE_STATUSES = ['confirmed', 'completed'];
 
 const shortError = (error) => String(error instanceof Error ? error.message : error).slice(0, 300);
@@ -158,6 +194,11 @@ const shortError = (error) => String(error instanceof Error ? error.message : er
 /**
  * Sync ONE booking with Google Calendar. `db` is a Supabase service-role client. Always resolves with a result object (never throws for
  * Google problems): { status: 'synced' | 'failed' | 'skipped', operation?, eventId?, error? }.
+ *
+ * Calendar state after a sync (google_calendar_sync_status / _event_id):
+ *   confirmed | completed  -> synced + the event id (or failed + the previous id, retryable)
+ *   cancelled              -> synced + NO event id (the event was deleted or never existed) — for a cancelled booking this means
+ *                             "nothing in the calendar"; failed + the event id when the delete did not go through (retryable).
  */
 export async function syncBookingToCalendar({ db, env, fetchImpl = fetch, bookingId, log = () => {} }) {
   const { data: booking, error: loadError } = await db.from('bookings').select(BOOKING_SELECT).eq('id', bookingId).maybeSingle();
@@ -166,8 +207,10 @@ export async function syncBookingToCalendar({ db, env, fetchImpl = fetch, bookin
 
   const cancelled = booking.booking_status === 'cancelled';
   const live = LIVE_STATUSES.includes(booking.booking_status);
-  // Pending / draft bookings never get an event; a cancelled booking that never had one has nothing to mark.
-  if (!live && !(cancelled && booking.google_calendar_event_id)) return { status: 'skipped', reason: 'not_confirmed' };
+  // Pending / draft bookings never get an event. A cancelled booking only needs work while an event may still exist: it has an id, or a
+  // previous sync did not settle (a create may have reached Google without its id being saved — the id is derived from the booking).
+  const unsettled = ['pending', 'failed'].includes(booking.google_calendar_sync_status);
+  if (!live && !(cancelled && (booking.google_calendar_event_id || unsettled))) return { status: 'skipped', reason: cancelled ? 'no_event' : 'not_confirmed' };
 
   const record = async (fields) => {
     const { error } = await db.from('bookings').update(fields).eq('id', bookingId);
@@ -175,12 +218,22 @@ export async function syncBookingToCalendar({ db, env, fetchImpl = fetch, bookin
   };
 
   await record({ google_calendar_sync_status: 'pending' });
+  if (cancelled) {
+    // The cancellation is already saved (and the slot released); only now is the event removed. Failing here never un-cancels the booking.
+    const result = await deleteBookingEvent({ env, fetchImpl, eventId: booking.google_calendar_event_id ?? eventIdForBooking(bookingId), bookingId, log });
+    if (result.status === 'failed') {
+      await record({ google_calendar_sync_status: 'failed', google_calendar_sync_error: result.error });
+      return { status: 'failed', error: result.error };
+    }
+    await record({ google_calendar_event_id: null, google_calendar_sync_status: 'synced', google_calendar_synced_at: new Date().toISOString(), google_calendar_sync_error: null });
+    return { status: 'synced', operation: 'delete' };
+  }
   try {
-    const event = buildEvent(booking, { cancelled });
+    const event = buildEvent(booking);
     const token = await getAccessToken(env, fetchImpl);
     const { eventId, operation } = await upsertEvent(env, token, { knownEventId: booking.google_calendar_event_id, bookingId, event }, fetchImpl);
     await record({ google_calendar_event_id: eventId, google_calendar_sync_status: 'synced', google_calendar_synced_at: new Date().toISOString(), google_calendar_sync_error: null });
-    log('info', 'calendar synced', { bookingId, eventId, operation, cancelled });
+    log('info', 'calendar synced', { bookingId, eventId, operation });
     return { status: 'synced', operation, eventId };
   } catch (error) {
     const message = shortError(error);

@@ -141,10 +141,24 @@ export function confirmBooking(bookingId: string) {
   return callFunction<AdminConfirmBookingResult>('admin-confirm-booking', { bookingId });
 }
 
+export interface AdminCancelBookingResult {
+  booking_id: string;
+  booking_status: 'cancelled';
+  payment_status: string;
+  /** false when the booking was already cancelled (the call was only a Calendar retry). */
+  transitioned: boolean;
+  calendar: CalendarSyncResult;
+}
+
+/** Cancels the booking AND deletes its Google Calendar event in one server-side request; calling it again on a cancelled booking retries the event delete. */
+export function cancelBooking(bookingId: string) {
+  return callFunction<AdminCancelBookingResult>('admin-cancel-booking', { bookingId });
+}
+
 /** Result of syncing a booking with Google Calendar. `failed` never means the booking failed: it stays as it was. */
 export interface CalendarSyncResult {
   status: 'synced' | 'failed' | 'skipped';
-  operation?: 'create' | 'update';
+  operation?: 'create' | 'update' | 'delete';
   eventId?: string;
   error?: string;
 }

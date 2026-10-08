@@ -1,11 +1,12 @@
 // Google Calendar sync of confirmed bookings: event building (title, times in America/Costa_Rica, duration, location, description),
-// idempotency (one event per booking), update / cancel / re-confirm on the SAME event, failures that never fail the booking, and the
+// idempotency (one event per booking), edits on the SAME event, cancelling DELETES the event (no "[CANCELADA]" copy), re-confirming creates it
+// again without duplicates, failures that never fail the booking, and the
 // authorization of the Edge Function handler. Pure logic against an in-memory Google + database (no network, no real credentials).
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import test from 'node:test';
 
-import { buildEvent, eventIdForBooking, handleSyncRequest, localDateTime, resetTokenCache, syncBookingToCalendar, syncConfirmedBookingSafely } from '../supabase/functions/_shared/google-calendar.mjs';
+import { buildEvent, deleteBookingEvent, deleteEvent, eventIdForBooking, handleSyncRequest, localDateTime, resetTokenCache, syncBookingToCalendar, syncConfirmedBookingSafely } from '../supabase/functions/_shared/google-calendar.mjs';
 
 const { privateKey } = crypto.generateKeyPairSync('rsa', { modulusLength: 2048, privateKeyEncoding: { type: 'pkcs8', format: 'pem' }, publicKeyEncoding: { type: 'spki', format: 'pem' } });
 const ENV = { calendarId: 'cal@group.calendar.google.com', email: 'sa@project.iam.gserviceaccount.com', privateKey };
@@ -16,7 +17,8 @@ const BOOKING_ID = '11111111-2222-4333-8444-555555555555';
 function fakeGoogle() {
   const events = new Map();
   const calls = [];
-  const state = { failNext: null, tokenFails: false, deleteBeforePatch: null };
+  // tombstonePatch: what Google answers when a deleted (tombstone) event id is updated: 'revive' brings it back, '404' refuses it.
+  const state = { failNext: null, tokenFails: false, deleteBeforePatch: null, tombstonePatch: 'revive' };
   const respond = (status, body) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
   const fetchImpl = async (url, init = {}) => {
     const target = String(url);
@@ -37,8 +39,19 @@ function fakeGoogle() {
     }
     if (method === 'PATCH') {
       if (!events.has(id) || events.get(id).deleted) return respond(404, { error: { message: 'Not Found' } });
+      if (events.get(id).tombstone) {
+        if (state.tombstonePatch === '404') return respond(404, { error: { message: 'Not Found' } });
+        events.set(id, { ...body }); // a deleted event comes back to life when it is updated with status confirmed
+        return respond(200, events.get(id));
+      }
       events.set(id, { ...events.get(id), ...body });
       return respond(200, events.get(id));
+    }
+    if (method === 'DELETE') {
+      if (!events.has(id) || events.get(id).deleted) return respond(404, { error: { message: 'Not Found' } });
+      if (events.get(id).tombstone) return respond(410, { error: { message: 'Resource has been deleted' } });
+      events.set(id, { ...events.get(id), status: 'cancelled', tombstone: true }); // Google keeps a tombstone: its id can never be inserted again
+      return new Response(null, { status: 204 });
     }
     return respond(405, {});
   };
@@ -72,7 +85,7 @@ function fakeDb({ booking = baseBooking(), profile = { role: 'admin', active: tr
 }
 
 const sync = (google, fake, extra = {}) => syncBookingToCalendar({ db: fake.db, env: ENV, fetchImpl: google.fetchImpl, bookingId: BOOKING_ID, ...extra });
-const only = (google) => [...google.events.values()];
+const only = (google) => [...google.events.values()].filter((event) => !event.tombstone && !event.deleted); // LIVE events (deleted ones are tombstones)
 
 test.beforeEach(() => resetTokenCache());
 
@@ -98,10 +111,10 @@ test('the end is start + the REAL package duration (also across midnight and for
   for (const duration_minutes of [null, 0, -5]) assert.throws(() => buildEvent(baseBooking({ tour_packages: { name: 'X', duration_minutes } })), /duración válida/);
 });
 
-test('cancelled bookings get the [CANCELADA] prefix on the same title, date and time', () => {
+test('there is no "[CANCELADA]" event any more: the title never carries a cancelled mark (a cancelled booking has no event at all)', () => {
   const event = buildEvent(baseBooking({ booking_status: 'cancelled' }), { cancelled: true });
-  assert.equal(event.summary, '[CANCELADA] Fishing Tour — Brandon Aguirre');
-  assert.equal(event.start.dateTime, '2026-12-01T07:00:00');
+  assert.equal(event.summary, 'Fishing Tour — Brandon Aguirre');
+  assert.doesNotMatch(JSON.stringify(event), /CANCELADA/);
 });
 
 // ---- create / idempotency ------------------------------------------------------------------------------------------------------------
@@ -163,21 +176,151 @@ test('editing date, time, location, package or guests updates the SAME event (ne
 
 // ---- cancel / re-confirm -------------------------------------------------------------------------------------------------------------
 
-test('cancelling marks the same event [CANCELADA] (not deleted); re-confirming removes the mark and reuses the event id', async () => {
+test('1. confirmed -> the event exists (one live event, id stored)', async () => {
+  const google = fakeGoogle(); const fake = fakeDb();
+  await sync(google, fake);
+  assert.equal(only(google).length, 1);
+  assert.equal(fake.store.booking.google_calendar_event_id, eventIdForBooking(BOOKING_ID));
+});
+
+test('2. confirmed -> cancelled DELETES the event for real (no rename, no [CANCELADA] copy) and settles synced with no event id', async () => {
   const google = fakeGoogle(); const fake = fakeDb();
   await sync(google, fake);
   const id = fake.store.booking.google_calendar_event_id;
   fake.store.booking = { ...fake.store.booking, booking_status: 'cancelled' };
   const cancelled = await sync(google, fake);
-  assert.deepEqual([cancelled.status, cancelled.operation], ['synced', 'update']);
-  assert.equal(google.events.get(id).summary, '[CANCELADA] Fishing Tour — Brandon Aguirre');
-  assert.equal(google.events.get(id).start.dateTime, '2026-12-01T07:00:00');
-  assert.ok(!google.calls.some((call) => call.method === 'DELETE'), 'the event is never deleted');
-  fake.store.booking = { ...fake.store.booking, booking_status: 'confirmed' };
-  const again = await sync(google, fake);
-  assert.deepEqual([again.status, again.eventId], ['synced', id]);
-  assert.equal(google.events.get(id).summary, 'Fishing Tour — Brandon Aguirre');
-  assert.equal(only(google).length, 1);
+  assert.deepEqual([cancelled.status, cancelled.operation], ['synced', 'delete']);
+  assert.deepEqual(google.eventCalls().filter((call) => call.method === 'DELETE').map((call) => call.id), [id]);
+  assert.equal(only(google).length, 0, 'no live event is left');
+  assert.ok(![...google.events.values()].some((event) => /CANCELADA/.test(event.summary ?? '')), 'nothing is renamed to [CANCELADA]');
+  assert.equal(google.eventCalls().filter((call) => call.method === 'PATCH').length, 0);
+  // The booking itself keeps existing (history / audit) and the calendar state is "nothing in the calendar".
+  assert.equal(fake.store.booking.booking_status, 'cancelled');
+  assert.equal(fake.store.booking.google_calendar_event_id, null);
+  assert.equal(fake.store.booking.google_calendar_sync_status, 'synced');
+  assert.ok(fake.store.booking.google_calendar_synced_at);
+  assert.equal(fake.store.booking.google_calendar_sync_error, null);
+  // Syncing it again does nothing (already settled): no second DELETE.
+  const callsBefore = google.eventCalls().length;
+  const repeated = await sync(google, fake);
+  assert.equal(repeated.status, 'skipped');
+  assert.equal(google.eventCalls().length, callsBefore);
+});
+
+test('3. DELETE answering 404 / 410 (already deleted by hand) counts as success: the booking settles synced with no event id', async () => {
+  for (const status of [404, 410]) {
+    const google = fakeGoogle(); const fake = fakeDb();
+    await sync(google, fake);
+    fake.store.booking = { ...fake.store.booking, booking_status: 'cancelled' };
+    // The event vanished from Google before the cancellation: the DELETE finds nothing (404) or a tombstone (410).
+    const eventId = fake.store.booking.google_calendar_event_id;
+    google.events.clear();
+    if (status === 410) google.events.set(eventId, { tombstone: true });
+    const result = await sync(google, fake);
+    assert.deepEqual([result.status, result.operation], ['synced', 'delete'], String(status));
+    assert.equal(fake.store.booking.google_calendar_sync_status, 'synced');
+    assert.equal(fake.store.booking.google_calendar_event_id, null);
+    assert.equal(fake.store.booking.google_calendar_sync_error, null);
+  }
+});
+
+test('4. a real DELETE error never un-cancels the booking: it stays cancelled, Calendar is failed with the event id kept, and Reintentar deletes it', async () => {
+  const google = fakeGoogle(); const fake = fakeDb();
+  await sync(google, fake);
+  const id = fake.store.booking.google_calendar_event_id;
+  fake.store.booking = { ...fake.store.booking, booking_status: 'cancelled' };
+  // Fail only the first DELETE.
+  let failures = 1;
+  const flaky = async (url, init = {}) => (init.method === 'DELETE' && failures-- > 0 ? new Response(JSON.stringify({ error: { message: 'Backend Error' } }), { status: 500 }) : google.fetchImpl(url, init));
+  const failed = await syncBookingToCalendar({ db: fake.db, env: ENV, fetchImpl: flaky, bookingId: BOOKING_ID });
+  assert.equal(failed.status, 'failed');
+  assert.equal(fake.store.booking.booking_status, 'cancelled', 'the cancellation is never reverted');
+  assert.equal(fake.store.booking.google_calendar_sync_status, 'failed');
+  assert.match(fake.store.booking.google_calendar_sync_error, /Google Calendar respondió 500/);
+  assert.equal(fake.store.booking.google_calendar_event_id, id, 'the id is kept so the delete can be retried');
+  assert.equal(only(google).length, 1, 'the event is still there');
+  const retried = await sync(google, fake);
+  assert.deepEqual([retried.status, retried.operation], ['synced', 'delete']);
+  assert.equal(only(google).length, 0);
+  assert.equal(fake.store.booking.google_calendar_event_id, null);
+  assert.equal(fake.store.booking.google_calendar_sync_error, null, 'the error is cleared on success');
+  // Rejected credentials while deleting are failed too, never a thrown error.
+  const authGoogle = fakeGoogle(); const authFake = fakeDb({ booking: baseBooking({ booking_status: 'cancelled', google_calendar_event_id: 'evt', google_calendar_sync_status: 'synced' }) });
+  authGoogle.state.tokenFails = true;
+  resetTokenCache(); // the access token of the previous calls is cached in the isolate
+  assert.equal((await sync(authGoogle, authFake)).status, 'failed');
+  assert.equal(authFake.store.booking.booking_status, 'cancelled');
+  assert.match(authFake.store.booking.google_calendar_sync_error, /rechazó la autenticación/);
+});
+
+test('a cancelled booking whose create never saved its id (sync pending / failed, no event id) still has its event deleted by the derived id', async () => {
+  for (const syncStatus of ['pending', 'failed']) {
+    const google = fakeGoogle(); const fake = fakeDb();
+    await sync(google, fake); // Google created the event ...
+    fake.store.booking = { ...fake.store.booking, booking_status: 'cancelled', google_calendar_event_id: null, google_calendar_sync_status: syncStatus }; // ... but the id was lost
+    const result = await sync(google, fake);
+    assert.deepEqual([result.status, result.operation], ['synced', 'delete'], syncStatus);
+    assert.equal(only(google).length, 0, syncStatus);
+  }
+});
+
+for (const tombstonePatch of ['revive', '404']) {
+  test(`6/8. re-confirming a cancelled booking creates its event again and never duplicates it (Google ${tombstonePatch === 'revive' ? 'revives the deleted id' : 'refuses the deleted id: a fresh one is used'})`, async () => {
+    const google = fakeGoogle(); const fake = fakeDb();
+    google.state.tombstonePatch = tombstonePatch;
+    await sync(google, fake);
+    fake.store.booking = { ...fake.store.booking, booking_status: 'cancelled' };
+    await sync(google, fake);
+    assert.equal(only(google).length, 0);
+    // Confirmed again (the database trigger puts the calendar state back to pending, and the event id is still null).
+    fake.store.booking = { ...fake.store.booking, booking_status: 'confirmed', google_calendar_sync_status: 'pending' };
+    const again = await sync(google, fake);
+    assert.equal(again.status, 'synced');
+    assert.equal(only(google).length, 1, 'exactly one live event');
+    assert.equal(only(google)[0].summary, 'Fishing Tour — Brandon Aguirre');
+    assert.equal(fake.store.booking.google_calendar_event_id, again.eventId);
+    // Retries, a double click or the PayPal webhook arriving later never add a second one.
+    await sync(google, fake);
+    await Promise.all([sync(google, fake), sync(google, fake)]);
+    const webhook = await syncConfirmedBookingSafely({ db: fake.db, env: ENV, fetchImpl: google.fetchImpl, bookingId: BOOKING_ID });
+    assert.equal(webhook.status, 'skipped');
+    assert.equal(only(google).length, 1, 'still exactly one live event');
+  });
+}
+
+test('7. a re-confirmation that the database rejects (slot taken by another booking) leaves the booking cancelled: the sync does nothing and no event appears', async () => {
+  // The availability guard itself (BOAT_TIME_CONFLICT) is exercised on a real Postgres in booking-edit-slots.test.mjs; here the consequence for Calendar.
+  const google = fakeGoogle(); const fake = fakeDb();
+  await sync(google, fake);
+  fake.store.booking = { ...fake.store.booking, booking_status: 'cancelled' };
+  await sync(google, fake); // cancelled and cleaned
+  const calls = google.eventCalls().length;
+  const result = await sync(google, fake); // the Admin still runs a sync after the failed confirm attempt
+  assert.equal(result.status, 'skipped');
+  assert.equal(google.eventCalls().length, calls, 'Google is not touched');
+  assert.equal(only(google).length, 0);
+  assert.equal(fake.store.booking.booking_status, 'cancelled');
+});
+
+test('9. hard delete: deleteBookingEvent removes the event (idempotent) and reports failed so the caller does NOT delete the row', async () => {
+  const google = fakeGoogle(); const fake = fakeDb();
+  await sync(google, fake);
+  const eventId = fake.store.booking.google_calendar_event_id;
+  const deleted = await deleteBookingEvent({ env: ENV, fetchImpl: google.fetchImpl, eventId, bookingId: BOOKING_ID });
+  assert.equal(deleted.status, 'deleted');
+  assert.equal(only(google).length, 0);
+  assert.equal((await deleteBookingEvent({ env: ENV, fetchImpl: google.fetchImpl, eventId, bookingId: BOOKING_ID })).status, 'already_gone', 'a second call is a no-op success (410)');
+  assert.equal((await deleteBookingEvent({ env: ENV, fetchImpl: google.fetchImpl, eventId: 'never-existed', bookingId: BOOKING_ID })).status, 'already_gone', '404');
+  assert.equal((await deleteBookingEvent({ env: ENV, fetchImpl: google.fetchImpl, eventId: null, bookingId: BOOKING_ID })).status, 'skipped', 'no event, nothing to do');
+  const second = fakeGoogle(); const other = fakeDb();
+  await sync(second, other);
+  const broken = async (url, init = {}) => (init.method === 'DELETE' ? new Response('{}', { status: 503 }) : second.fetchImpl(url, init));
+  const failed = await deleteBookingEvent({ env: ENV, fetchImpl: broken, eventId: other.store.booking.google_calendar_event_id, bookingId: BOOKING_ID });
+  assert.equal(failed.status, 'failed');
+  assert.match(failed.error, /Google Calendar respondió 503/);
+  assert.equal(only(second).length, 1, 'the event is untouched, so the booking must not be removed yet');
+  // The low-level helper returns the outcome and throws on anything else.
+  await assert.rejects(() => deleteEvent(ENV, 'fake-access-token', 'x', async () => new Response('{}', { status: 403 })), /Google Calendar respondió 403/);
 });
 
 test('pending bookings (and cancelled ones that never had an event) are skipped: no Google call at all', async () => {
@@ -364,18 +507,19 @@ test('even if the database or the network blows up, the automatic sync only repo
   assert.doesNotMatch(JSON.stringify(failed), /BEGIN PRIVATE KEY|fake-access-token|eyJ/);
 });
 
-test('cancelling after the automatic confirmation updates the SAME event to [CANCELADA]', async () => {
+test('cancelling after the automatic confirmation deletes the event (a late PayPal webhook retry does not bring it back)', async () => {
   const google = fakeGoogle(); const fake = fakeDb({ booking: paidByPayPal() });
   await auto(google, fake);
-  const id = fake.store.booking.google_calendar_event_id;
   fake.store.booking = { ...fake.store.booking, booking_status: 'cancelled' };
   const cancelled = await sync(google, fake);
-  assert.deepEqual([cancelled.status, cancelled.eventId], ['synced', id]);
-  assert.equal(google.events.get(id).summary, '[CANCELADA] Fishing Tour — Brandon Aguirre');
-  assert.equal(only(google).length, 1);
+  assert.deepEqual([cancelled.status, cancelled.operation], ['synced', 'delete']);
+  assert.equal(only(google).length, 0);
+  const webhookRetry = await auto(google, fake);
+  assert.equal(webhookRetry.status, 'skipped');
+  assert.equal(only(google).length, 0, 'a cancelled booking never gets its event back from an automatic flow');
 });
 
-test('a NEW booking on the slot of a cancelled one gets its own event without touching the cancelled one', async () => {
+test('a NEW booking on the slot of a cancelled one gets its own event (the cancelled one has none)', async () => {
   const google = fakeGoogle(); const fake = fakeDb({ booking: paidByPayPal() });
   await auto(google, fake);
   fake.store.booking = { ...fake.store.booking, booking_status: 'cancelled' };
@@ -384,6 +528,6 @@ test('a NEW booking on the slot of a cancelled one gets its own event without to
   const other = fakeDb({ booking: paidByPayPal({ id: otherId, booking_reference: 'PFT-000124', customers: { full_name: 'Nueva Persona', email: 'n@example.com', whatsapp: '1' } }) });
   const result = await syncConfirmedBookingSafely({ db: other.db, env: ENV, fetchImpl: google.fetchImpl, bookingId: otherId });
   assert.equal(result.status, 'synced');
-  assert.equal(only(google).length, 2);
-  assert.deepEqual(only(google).map((event) => event.summary).sort(), ['Fishing Tour — Nueva Persona', '[CANCELADA] Fishing Tour — Brandon Aguirre']);
+  assert.equal(only(google).length, 1);
+  assert.deepEqual(only(google).map((event) => event.summary), ['Fishing Tour — Nueva Persona']);
 });

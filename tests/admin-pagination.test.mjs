@@ -56,10 +56,10 @@ async function fixture(viewport = { width: 1440, height: 1000 }) {
       const booking = bookings.find((row) => row.id === input.bookingId); booking.booking_status = 'confirmed'; booking.payment_status = 'paid';
       return route.fulfill({ json: { booking_id: booking.id, booking_status: 'confirmed', payment_status: 'paid', customerEmailPresent: true, emailQueued: true } });
     }
-    if (path.endsWith('/rpc/update_booking_status')) {
+    if (path.endsWith('/functions/v1/admin-cancel-booking')) { // cancelling is one server-side request (it also removes the Calendar event)
       const input = request.postDataJSON(); writes.push({ name: 'cancel', ...input });
-      const booking = bookings.find((row) => row.id === input.p_booking_id); booking.booking_status = input.p_booking_status; booking.payment_status = input.p_payment_status;
-      return route.fulfill({ json: {} });
+      const booking = bookings.find((row) => row.id === input.bookingId); booking.booking_status = 'cancelled'; if (booking.payment_status !== 'paid') booking.payment_status = 'failed';
+      return route.fulfill({ json: { booking_id: booking.id, booking_status: 'cancelled', payment_status: booking.payment_status, transitioned: true, calendar: { status: 'skipped' } } });
     }
     if (path.endsWith('/rpc/list_admin_gallery_categories')) return route.fulfill({ json: ['fishing', 'custom'] });
     if (path.endsWith('/bookings')) return route.fulfill({ json: bookings });
@@ -231,7 +231,8 @@ test('responsive reservations contain scroll, preserve the sidebar and use cards
     await page.getByRole('button', { name: 'Cancelar reserva' }).click();
     await page.getByRole('button', { name: 'Sí, cancelar reserva' }).click();
     await expect(card).toContainText('Cancelada');
-    assert.equal(f.writes[0].p_booking_id, 'booking-1');
+    assert.equal(f.writes[0].bookingId, 'booking-1');
+    assert.equal(f.writes[0].name, 'cancel');
   } finally { await f.browser.close(); }
 });
 
