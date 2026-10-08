@@ -57,7 +57,7 @@ async function fixture(paymentMethods, options = {}) {
       if (options.catalogGate) await options.catalogGate;
       return route.fulfill({ json: options.emptyCatalog ? [] : [tourPackageRow] });
     }
-    if (path.endsWith('/time_slots')) return route.fulfill({ json: [timeSlotRow] });
+    if (path.endsWith('/time_slots')) return route.fulfill({ json: options.slotRows ?? [timeSlotRow] });
     if (path.endsWith('/tour_images') || path.endsWith('/tour_inclusions')) return route.fulfill({ json: [] });
     if (path.endsWith('/departure_locations')) {
       return route.fulfill({ json: [{ id: 'loc-1', name: 'Playas del Coco', slug: 'playas-del-coco', description: '', surcharge_amount: 0, currency: 'USD', active: true, sort_order: 1, is_default: true }] });
@@ -68,7 +68,7 @@ async function fixture(paymentMethods, options = {}) {
     if (path.endsWith('/payment_methods')) return route.fulfill({ json: paymentMethods.filter((method) => method.active) });
     if (path.endsWith('/functions/v1/get-booking-availability')) {
       availabilityRequests.push(request.postDataJSON());
-      return route.fulfill({ json: { slots: [{ id: 'slot-1', label: 'Morning', time: '07:00', available: true }] } });
+      return route.fulfill({ json: { slots: options.availabilitySlots ?? [{ id: 'slot-1', label: 'Morning', time: '07:00', available: true }] } });
     }
     if (path.endsWith('/functions/v1/calculate-booking-price')) {
       priceRequests.push(request.postDataJSON());
@@ -140,14 +140,14 @@ test('the default paypal key still works unchanged for the seeded method', async
 test('an inactive payment method never renders as a selectable card', async () => {
   const paymentMethods = [
     { id: '1', key: 'paypal', name: 'PayPal', description: '', type: 'paypal', active: true, instructions: null, logo_url: null, sort_order: 1, created_at: '', updated_at: '' },
-    { id: '2', key: 'pay-on-day', name: 'Pay on the Day', description: '', type: 'pay_on_day', active: false, instructions: null, logo_url: null, sort_order: 2, created_at: '', updated_at: '' },
+    { id: '2', key: 'cash', name: 'Cash', description: '', type: 'cash', active: false, instructions: null, logo_url: null, sort_order: 2, created_at: '', updated_at: '' },
   ];
   const f = await fixture(paymentMethods);
   const { page } = f;
   try {
     await runBookingFlowToPaymentStep(page);
     await expect(page.locator('[data-payment-method="paypal"]')).toBeVisible();
-    await expect(page.locator('[data-payment-method="pay-on-day"]')).toHaveCount(0);
+    await expect(page.locator('[data-payment-method="cash"]')).toHaveCount(0);
   } finally {
     await f.browser.close();
   }
@@ -516,3 +516,40 @@ for (const [name, viewport] of [['desktop', { width: 1366, height: 900 }], ['pho
     } finally { await f.browser.close(); }
   });
 }
+
+// --- Pay on the Day is gone; departure hours are chronological in the public booking ------------------------------------------------------------
+
+test('pay on the day: not offered anywhere in the public booking — not even if an old payment_methods row still existed', async () => {
+  const legacy = { id: '9', key: 'pay-on-day', name: 'Pay on the Day of the Tour', description: 'Pay when the tour starts.', type: 'pay_on_day', active: true, instructions: null, logo_url: null, sort_order: 3, created_at: '', updated_at: '' };
+  const f = await fixture([...paypalMethod, legacy]);
+  try {
+    await runBookingFlowToPaymentStep(f.page, { acceptTerms: false });
+    await expect(f.page.locator('[data-payment-method="paypal"]')).toBeVisible();
+    await expect(f.page.locator('[data-payment-method="pay-on-day"]')).toHaveCount(0);
+    const body = await f.page.locator('body').innerText();
+    for (const gone of [/Pay on the Day/i, /Pagar el d[ií]a del tour/i, /Pay when the tour starts/i, /Paga cuando inicie/i]) assert.doesNotMatch(body, gone);
+    await f.page.getByRole('button', { name: 'Switch to Spanish' }).click();
+    assert.doesNotMatch(await f.page.locator('body').innerText(), /Pagar el d[ií]a del tour|Paga cuando inicie/i);
+    // Only the real, supported methods are cards.
+    assert.deepEqual(await f.page.locator('[data-payment-method]').evaluateAll((nodes) => nodes.map((node) => node.getAttribute('data-payment-method'))), ['paypal']);
+  } finally { await f.browser.close(); }
+});
+
+test('hours: the public booking lists the departure times chronologically whatever order the availability answer arrives in', async () => {
+  const hours = [['s5', '16:30'], ['s1', '08:00'], ['s4', '12:00'], ['s0', '06:00'], ['s3', '11:30'], ['s2', '14:00']];
+  const f = await fixture(paypalMethod, { slotRows: hours.map(([id, time]) => ({ id, label: time, starts_at: `${time}:00`, is_general: true })), availabilitySlots: [
+    { id: 's5', label: '16:30', time: '16:30', available: true }, { id: 's1', label: '08:00', time: '08:00', available: true }, { id: 's4', label: '12:00', time: '12:00', available: true },
+    { id: 's0', label: '06:00', time: '06:00', available: true }, { id: 's3', label: '11:30', time: '11:30', available: true }, { id: 's2', label: '14:00', time: '14:00', available: true },
+  ] });
+  try {
+    await f.page.goto(`${base}/reservar`);
+    const booking = f.page.locator('main');
+    await booking.getByRole('button', { name: /Continue/i }).first().click();
+    await booking.getByRole('button', { name: /Fishing/i }).first().click();
+    await f.page.getByLabel(/Date/i).fill('2026-12-01');
+    const radios = f.page.locator('input[name="timeSlot"]');
+    await expect(radios).toHaveCount(6);
+    const labels = await f.page.locator('label:has(input[name="timeSlot"])').allInnerTexts();
+    assert.deepEqual(labels.map((text) => text.split('\n')[0].trim()), ['6:00 AM', '8:00 AM', '11:30 AM', '12:00 PM', '2:00 PM', '4:30 PM']);
+  } finally { await f.browser.close(); }
+});

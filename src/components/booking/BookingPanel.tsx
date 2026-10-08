@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowRight, Check, CreditCard, Info, Mail, MapPin, Minus, MessageCircle, Phone, Plus, Ship, User, WalletCards } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Check, CreditCard, Info, Mail, MapPin, Minus, MessageCircle, Phone, Plus, Ship, User } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
@@ -21,7 +21,7 @@ import { getDefaultDepartureLocation } from '../../utils/departureLocations';
 import { formatTime, sortSlotsChronologically } from '../../utils/format';
 import { Button, ChoiceCard, Field, FieldError, GlassPanel, Input, ModalShell, TextArea } from '../ui';
 import { CURRENT_TERMS_VERSION } from '../../../supabase/functions/_shared/terms.mjs';
-import { TermsConsent, TermsLink } from './TermsModal';
+import { TermsConsent } from './TermsModal';
 
 function formatCurrency(value: number) {
   return Number.isFinite(value) ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value) : '\u2026';
@@ -43,16 +43,15 @@ interface BookingPanelProps {
 // any other `type` (e.g. bank_transfer, sinpe, cash, manual — all valid per
 // the DB's own CHECK constraint) has no real handler yet, so it's filtered
 // out rather than rendered as a card that does nothing when clicked.
-type SupportedPaymentType = 'paypal' | 'whatsapp_link' | 'pay_on_day';
-const SUPPORTED_PAYMENT_TYPES: SupportedPaymentType[] = ['paypal', 'whatsapp_link', 'pay_on_day'];
+type SupportedPaymentType = 'paypal' | 'whatsapp_link';
+const SUPPORTED_PAYMENT_TYPES: SupportedPaymentType[] = ['paypal', 'whatsapp_link'];
 
 const paymentMethods: Array<{ id: BookingPaymentMethod; type: SupportedPaymentType; title: string; description: string; icon: typeof CreditCard; logo?: string; logoAlt?: string }> = [
   { id: 'paypal', type: 'paypal', title: 'Pay with PayPal', description: 'Secure USD checkout.', icon: CreditCard, logo: '/images/paypal.png', logoAlt: 'PayPal' },
   { id: 'whatsapp-link', type: 'whatsapp_link', title: 'Request Payment Link via WhatsApp', description: 'Request a payment link.', icon: MessageCircle, logo: '/images/whatsapp.png', logoAlt: 'WhatsApp' },
-  { id: 'pay-on-day', type: 'pay_on_day', title: 'Pay on the Day of the Tour', description: 'Pay when the tour starts.', icon: WalletCards },
 ];
 
-// Spanish copy for the 3 known integrations, keyed by `type` (not `key`/`id`)
+// Spanish copy for the known integrations, keyed by `type` (not `key`/`id`)
 // so it survives an admin renaming a method's name or key. `payment_methods`
 // only stores one (English) name/description, so this is the only source of
 // Spanish text for these — a method with a custom name still gets an
@@ -60,7 +59,6 @@ const paymentMethods: Array<{ id: BookingPaymentMethod; type: SupportedPaymentTy
 const SPANISH_COPY_BY_TYPE: Record<SupportedPaymentType, { title: string; description: string }> = {
   paypal: { title: 'Pagar con PayPal', description: 'Checkout seguro en USD.' },
   whatsapp_link: { title: 'Solicitar enlace por WhatsApp', description: 'Solicita un enlace de pago.' },
-  pay_on_day: { title: 'Pagar el día del tour', description: 'Paga cuando inicie el tour.' },
 };
 
 function getPaymentMethodCopy(method: { title: string; description: string; type: SupportedPaymentType }, language: 'es' | 'en') {
@@ -86,7 +84,6 @@ export function BookingPanel({ selectedBoat, selectedTour: requestedTour, boats,
   const [mealOption, setMealOption] = useState('');
   const [departureLocationId, setDepartureLocationId] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<BookingPaymentMethod>('paypal');
-  const [isPayOnDayOpen, setIsPayOnDayOpen] = useState(false);
   const [bookingStatus, setBookingStatus] = useState<BookingStatus>('pending');
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>('pending');
   const [validationMessage, setValidationMessage] = useState('');
@@ -119,7 +116,6 @@ export function BookingPanel({ selectedBoat, selectedTour: requestedTour, boats,
     setPaypalSuccess(null);
     setCreatedBooking(null);
     setSuccessNotice(null);
-    setIsPayOnDayOpen(false);
     setValidationMessage('');
     setActiveStep(selectedTour ? 1 : 0);
   }, [parentIdentity, selectedBoat, selectedTour]);
@@ -159,7 +155,7 @@ export function BookingPanel({ selectedBoat, selectedTour: requestedTour, boats,
       description: language === 'en'
         ? method.description_en || method.description || method.description_es || ''
         : method.description_es || method.description || method.description_en || '',
-      icon: method.type === 'paypal' ? CreditCard : method.type === 'whatsapp_link' ? MessageCircle : WalletCards,
+      icon: method.type === 'paypal' ? CreditCard : MessageCircle,
       logo: method.logo_url ?? undefined,
       logoAlt: method.name,
     }));
@@ -410,7 +406,7 @@ export function BookingPanel({ selectedBoat, selectedTour: requestedTour, boats,
     return result;
   }
 
-  function openWhatsAppBooking(booking: BookingPaymentPayload, variant: 'payment_link' | 'pay_on_day' | 'paid_confirmation') {
+  function openWhatsAppBooking(booking: BookingPaymentPayload, variant: 'payment_link' | 'paid_confirmation') {
     const url = getWhatsAppBookingUrl(createWhatsAppBookingMessage(booking, variant, language));
     window.location.assign(url);
   }
@@ -434,34 +430,6 @@ export function BookingPanel({ selectedBoat, selectedTour: requestedTour, boats,
     }).catch((error: unknown) => {
       setValidationMessage(error instanceof Error ? error.message : (language === 'es' ? 'No se pudo abrir WhatsApp. Intenta nuevamente.' : 'Unable to open WhatsApp. Please try again.'));
     });
-  }
-
-  function handlePayOnDayRequest(key: BookingPaymentMethod) {
-    const booking = validateBookingForPayment();
-    if (!booking) return;
-    // The actual submission happens later, in handleConfirmPayOnDay, once the
-    // user confirms the dialog this opens — by then `paymentMethod` state
-    // (set here) has settled through a real render, so reading it there is
-    // safe (unlike calling submitBooking synchronously in this same tick).
-    setPaymentMethod(key);
-    setIsPayOnDayOpen(true);
-  }
-
-  function handleConfirmPayOnDay() {
-    const booking = validateBookingForPayment();
-    if (!booking) return;
-    submitBooking(paymentMethod).then((result) => {
-      if (!result || !bookingPayload) return;
-      setBookingStatus('pending_confirmation');
-      setPaymentStatus('not_required_yet');
-      setIsPayOnDayOpen(false);
-      openWhatsAppBooking({ ...bookingPayload, bookingReference: result.booking_reference, basePrice: result.base_price_snapshot, taxRate: result.tax_rate_snapshot, taxAmount: result.tax_amount_snapshot, additionalGuestCharge: result.extra_guests_total_snapshot, extrasTotal: result.extras_total_snapshot, departureSurcharge: Number(result.departure_surcharge_snapshot ?? 0), total: result.total_snapshot, paymentMethod: language === 'es' ? 'Pago el día del tour' : 'Pay on the day of the tour', paymentStatus: 'not_required_yet' }, 'pay_on_day');
-      setSuccessNotice({
-        title: language === 'es' ? 'Reserva recibida' : 'Booking received',
-        message: language === 'es' ? 'Tu solicitud fue creada y queda pendiente de confirmacion.' : 'Your request was created and is pending confirmation.',
-        reference: result.booking_reference,
-      });
-    }).catch(() => undefined);
   }
 
   function handlePayPalRequest(key: BookingPaymentMethod) {
@@ -626,7 +594,6 @@ export function BookingPanel({ selectedBoat, selectedTour: requestedTour, boats,
                 onPaymentMethodChange={setPaymentMethod}
                 onPayPalRequest={handlePayPalRequest}
                 onPaymentLinkRequest={handlePaymentLinkRequest}
-                onPayOnDayRequest={handlePayOnDayRequest}
                 onPayPalSuccess={(result) => {
                   setPaypalError('');
                   setPaypalInfo('');
@@ -721,26 +688,6 @@ export function BookingPanel({ selectedBoat, selectedTour: requestedTour, boats,
           <BookingSummary {...summaryProps} />
         </div>
       </div>
-
-      {isPayOnDayOpen && bookingPayload ? (
-        <ReviewModal
-          selectedBoat={selectedBoat}
-          selectedTour={selectedTour}
-          date={date}
-          departure={selectedTimeSlot ? formatTime(selectedTimeSlot.time) : (language === 'es' ? 'No seleccionado' : 'Not selected')}
-          guests={guests}
-          mealOption={mealOption}
-          customerName={customerName}
-          customerEmail={customerEmail}
-          customerWhatsapp={customerWhatsapp}
-          specialRequests={specialRequests}
-          paymentMethod={language === 'es' ? 'Pagar el día del tour' : 'Pay on the Day of the Tour'}
-          pricing={pricing}
-          departureLocation={selectedDepartureLocation}
-          onBack={() => setIsPayOnDayOpen(false)}
-          onConfirm={handleConfirmPayOnDay}
-        />
-      ) : null}
 
       {successNotice ? (
         <BookingSuccessModal notice={successNotice} onClose={() => { setSuccessNotice(null); window.location.assign('/'); }} />
@@ -1215,7 +1162,6 @@ function CustomerStep(props: {
   // render's value, not the one just selected (classic stale-closure trap).
   onPayPalRequest: (key: BookingPaymentMethod) => void;
   onPaymentLinkRequest: (key: BookingPaymentMethod) => void;
-  onPayOnDayRequest: (key: BookingPaymentMethod) => void;
   onPayPalSuccess: (result: PayPalCaptureResult) => void;
   onPayPalError: (message: string) => void;
   onPayPalCancel: () => void;
@@ -1241,7 +1187,6 @@ function CustomerStep(props: {
     props.onPaymentMethodChange(method);
     if (type === 'paypal') props.onPayPalRequest(method);
     if (type === 'whatsapp_link') props.onPaymentLinkRequest(method);
-    if (type === 'pay_on_day') props.onPayOnDayRequest(method);
   }
 
   return (
@@ -1347,12 +1292,6 @@ function CustomerStep(props: {
         </div>
       ) : null}
 
-      {props.bookingStatus === 'pending_confirmation' && props.paymentStatus === 'not_required_yet' ? (
-        <div className="mt-4 rounded-2xl border border-ocean-400/30 bg-ocean-500/10 p-4 text-ocean-100">
-          <p className="font-bold">{language === 'es' ? 'Solicitud de reserva recibida' : 'Booking Request Received'}</p>
-          <p className="mt-1 text-sm">{language === 'es' ? 'Recibimos tu solicitud y está pendiente de confirmación.' : 'Your booking request has been received and is awaiting confirmation.'}</p>
-        </div>
-      ) : null}
     </div>
   );
 }
@@ -1562,66 +1501,6 @@ function BookingSummary(props: {
         </div>
       </GlassPanel>
     </GlassPanel>
-  );
-}
-
-function ReviewModal(props: {
-  selectedBoat: Boat;
-  selectedTour?: BoatTour;
-  date: string;
-  departure: string;
-  guests: number;
-  mealOption: string;
-  customerName: string;
-  customerEmail: string;
-  customerWhatsapp: string;
-  specialRequests: string;
-  paymentMethod: string;
-  pricing: ReturnType<typeof calculateBookingTotal>;
-  departureLocation?: DepartureLocation;
-  onBack: () => void;
-  onConfirm: () => void;
-}) {
-  const { language } = useLanguage();
-  const selectedTourName = props.selectedTour ? `${getTourText(props.selectedTour, language).title} - ${getPackageLabel(props.selectedTour, language)}` : (language === 'es' ? 'No seleccionado' : 'Not selected');
-  return (
-    <ModalShell open onClose={props.onBack} titleId="booking-review-title" className="max-h-[calc(100dvh-1rem)] max-w-xl overflow-y-auto p-3 text-white sm:max-h-[calc(100dvh-2rem)] sm:p-5">
-        <img className="mb-3 aspect-[16/5] w-full rounded-lg object-cover sm:mb-4" src={props.selectedBoat.image} alt={props.selectedBoat.name} loading="lazy" />
-        <h3 id="booking-review-title" className="text-2xl font-extrabold text-white sm:text-3xl">{language === 'es' ? 'Revisar reserva' : 'Review reservation'}</h3>
-        <p className="mt-2 text-sm leading-6 text-ocean-200 sm:mt-3 sm:text-base sm:leading-7">
-          {language === 'es' ? 'Revisa los detalles antes de confirmar la solicitud. La disponibilidad y el metodo de pago seleccionado se validan al crear la reserva.' : 'Review your reservation details before confirming this request. Availability and the selected payment method are validated when the booking is created.'}
-        </p>
-        <GlassPanel className="mt-3 grid gap-2 p-3 text-[0.8rem] sm:mt-4 sm:gap-2.5 sm:text-sm" variant="subtle">
-          <SummaryLine label={language === 'es' ? 'Barco' : 'Boat'} value={props.selectedBoat.name} />
-          <SummaryLine label="Tour" value={selectedTourName} />
-          <SummaryLine label={language === 'es' ? 'Fecha' : 'Date'} value={formatDisplayDate(props.date)} />
-          <SummaryLine label={language === 'es' ? 'Salida' : 'Departure time'} value={props.departure} />
-          <SummaryLine label={language === 'es' ? 'Personas' : 'Guests'} value={String(props.guests)} />
-          {Boolean(props.selectedTour?.mealOptions?.length) ? <SummaryLine label={language === 'es' ? 'Comida' : 'Meal option'} value={props.mealOption || (language === 'es' ? 'No seleccionada' : 'Not selected')} /> : null}
-          <SummaryLine label={language === 'es' ? 'Cargos por personas extra' : 'Additional guest charges'} value={props.pricing.extraGuests > 0 ? `${props.pricing.extraGuests} x ${formatCurrency(props.pricing.extraGuestPrice)} = ${formatCurrency(props.pricing.extraGuestsTotal)}` : '$0'} />
-          <SummaryLine label={language === 'es' ? 'Lugar de salida' : 'Departure location'} value={props.departureLocation?.name ?? '-'} />
-          <SummaryLine label={language === 'es' ? 'Cargo por salida' : 'Departure surcharge'} value={props.pricing.departureSurcharge > 0 ? formatCurrency(props.pricing.departureSurcharge) : (language === 'es' ? 'Sin costo' : 'No cost')} />
-          <SummaryLine label={language === 'es' ? 'Precio del paquete' : 'Package Price'} value={formatCurrency(props.pricing.basePrice)} />
-          <SummaryLine label={`IVA (${Math.round(props.pricing.taxRate * 100)}%)`} value={formatCurrency(props.pricing.taxAmount)} />
-          <SummaryLine label="Total" value={props.pricing.isCustomQuote ? (language === 'es' ? 'Cotización personalizada' : 'Custom quote') : formatCurrency(props.pricing.total)} />
-          <SummaryLine label={language === 'es' ? 'Nombre' : 'Customer name'} value={props.customerName} />
-          <SummaryLine label={language === 'es' ? 'Correo' : 'Email'} value={props.customerEmail} />
-          <SummaryLine label={language === 'es' ? 'Numero de WhatsApp' : 'WhatsApp number'} value={props.customerWhatsapp} />
-          <SummaryLine label={language === 'es' ? 'Solicitudes especiales' : 'Special requests'} value={props.specialRequests || (language === 'es' ? 'Ninguna' : 'None')} />
-          <SummaryLine label={language === 'es' ? 'Metodo de pago' : 'Payment method'} value={props.paymentMethod} />
-        </GlassPanel>
-        <div className="mt-3 text-center sm:text-left">
-          <TermsLink language={language} />
-        </div>
-        <div className="sticky -bottom-3 mt-4 flex flex-col-reverse gap-2 border-t border-white/10 bg-ocean-950/95 pt-3 backdrop-blur sm:-bottom-5 sm:flex-row sm:justify-end">
-          <Button variant="glass" type="button" onClick={props.onBack}>
-            {language === 'es' ? 'Volver' : 'Go Back'}
-          </Button>
-          <Button type="button" onClick={props.onConfirm}>
-            {language === 'es' ? 'Confirmar reserva' : 'Confirm reservation'}
-          </Button>
-        </div>
-    </ModalShell>
   );
 }
 

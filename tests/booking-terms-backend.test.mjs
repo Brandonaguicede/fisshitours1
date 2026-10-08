@@ -26,7 +26,7 @@ function load(file, { profile = { role: 'admin', active: true }, env = {}, rpcEr
     Deno: { env: { get: (key) => environment[key] } },
     serve: (fn) => { handler = fn; }, withCors: (fn) => fn, corsHeaders: () => ({}), corsPreflight: () => new Response(null, { status: 204 }),
     createClient: () => supabase, areExternalProviderMocksAllowed: () => false,
-    buildBookingRequestAdminHtml: async () => '', buildBookingRequestCustomerHtml: async () => '', buildBookingRequestSummary: async () => '',
+    buildBookingRequestAdminHtml: async () => '', buildBookingRequestSummary: async () => '',
     fetch: async () => new Response('{}'),
     ...terms,
   });
@@ -44,7 +44,7 @@ const web = (overrides = {}) => ({
   boatId: 'boat', tourId: 'tour', tourPackageId: 'pkg', tourDate: '2099-10-01', timeSlotId: 'slot', guests: 2,
   departureLocationId: 'loc', paymentMethodKey: 'whatsapp-link', language: 'en', ...overrides,
 });
-const admin = (overrides = {}) => { const { language, ...base } = web({ paymentMethodKey: 'pay-on-day' }); return { ...base, ...overrides }; };
+const admin = (overrides = {}) => { const { language, ...base } = web({ paymentMethodKey: 'whatsapp-link' }); return { ...base, ...overrides }; };
 
 test('create-booking (web): an explicit refusal, a non-boolean or an incoherent payload is rejected with TERMS_NOT_ACCEPTED and never reaches the database', async () => {
   const bodies = [web({ termsAccepted: false, termsVersion: 'v1' }), web({ termsAccepted: false }), web({ termsVersion: 'v1' }), web({ termsAccepted: null, termsVersion: 'v1' }), web({ termsAccepted: 'true', termsVersion: 'v1' }), web({ termsAccepted: 1, termsVersion: 'v1' })];

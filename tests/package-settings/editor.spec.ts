@@ -33,7 +33,7 @@ async function mockCatalog(page: import('@playwright/test').Page) {
     if (table === 'tours') data = [tour];
     if (table === 'time_slots') data = slots;
     if (table === 'departure_locations') data = [{ id: 'departure-location', name: 'Playas del Coco', slug: 'coco', surcharge_amount: 0, currency: 'USD', active: true, is_default: true, sort_order: 1 }];
-    if (table === 'payment_methods') data = [{ key: 'pay-on-day', name: 'Pay on the day', type: 'pay_on_day', active: true, sort_order: 1 }];
+    if (table === 'payment_methods') data = [{ key: 'whatsapp-link', name: 'WhatsApp payment link', type: 'whatsapp_link', active: true, sort_order: 1 }];
     await route.fulfill({ json: data });
   });
   await page.route(/\/functions\/v1\//, async route => {

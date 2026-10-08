@@ -30,6 +30,23 @@ export function sortSlotsChronologically<T extends { time: string }>(slots: read
     .map((entry) => entry.slot);
 }
 
+/** Canonical "HH:MM" (24h, zero-padded) for any accepted spelling ("8:00", "08:00", "8:00 AM", "12:00 AM" -> "00:00"); null when it is not a time. */
+export function normalizeTime(value: string): string | null {
+  const minutes = timeToMinutes(value);
+  if (minutes === null) return null;
+  return `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
+}
+
+/** Distinct hours ("HH:MM") in chronological order. Equivalent spellings collapse into one; anything that is not a time is dropped. */
+export function sortTimes(values: readonly string[]): string[] {
+  const minutes = new Map<string, number>();
+  for (const value of values) {
+    const normalized = normalizeTime(value);
+    if (normalized !== null) minutes.set(normalized, timeToMinutes(normalized) ?? 0);
+  }
+  return [...minutes.entries()].sort((a, b) => a[1] - b[1]).map(([time]) => time);
+}
+
 export function money(value: number): string {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(value);
 }

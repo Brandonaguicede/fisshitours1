@@ -11,7 +11,7 @@ export const CALENDAR_TIMEZONE = 'America/Costa_Rica';
 const SCOPE = 'https://www.googleapis.com/auth/calendar.events';
 const CALENDAR_API = 'https://www.googleapis.com/calendar/v3/calendars';
 
-const PAYMENT_LABELS = { pending: 'Pendiente', processing: 'Procesando', paid: 'Pagado', failed: 'Fallido', refunded: 'Reembolsado', not_required_yet: 'Pago en el tour' };
+const PAYMENT_LABELS = { pending: 'Pendiente', processing: 'Procesando', paid: 'Pagado', failed: 'Fallido', refunded: 'Reembolsado' };
 
 /** Google accepts caller-chosen event ids made of a-v and 0-9 (base32hex): a UUID without dashes qualifies. */
 export const eventIdForBooking = (bookingId) => String(bookingId).replace(/-/g, '').toLowerCase();

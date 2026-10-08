@@ -19,7 +19,7 @@ const FIXTURE = [
   ['bk-b', 60_000, 'Cliente B', 'Papagayo I', 'Snorkel', 'whatsapp-link', 'Pago por WhatsApp', 'pending_payment', 'pending', 100, '2026-10-02'],
   ['bk-c', 7 * DAY, 'Cliente C', 'Marlin', 'Pesca', 'paypal', 'PayPal', 'pending_confirmation', 'paid', 120, '2026-10-03'],
   ['bk-d', 7 * DAY, 'Cliente D', 'Marlin', 'Pesca', 'whatsapp-link', 'Pago por WhatsApp', 'confirmed', 'paid', 150, '2026-10-04'],
-  ['bk-e', 14 * DAY, 'Cliente E', 'Papagayo I', 'Atardecer', 'pay-on-day', 'Pagar el día del tour', 'pending_confirmation', 'not_required_yet', 80, '2026-10-05'],
+  ['bk-e', 14 * DAY, 'Cliente E', 'Papagayo I', 'Atardecer', 'sinpe', 'SINPE Móvil', 'pending_confirmation', 'pending', 80, '2026-10-05'],
   ['bk-f', 21 * DAY, 'Cliente F', 'Marlin', 'Pesca', 'paypal', 'PayPal', 'cancelled', 'refunded', 90, '2026-10-06'], // cancelled: KPIs yes, analytics no
   ['bk-g', 28 * DAY, 'Cliente G', 'Papagayo I', 'Snorkel', 'paypal', 'PayPal', 'completed', 'paid', 300, '2026-10-07'],
   ['bk-h', 100 * DAY, 'Cliente H', 'Papagayo I', 'Snorkel', 'paypal', 'PayPal', 'completed', 'paid', 500, '2026-10-08'], // older than 12 weeks: KPIs yes, analytics no
@@ -76,7 +76,7 @@ test('dashboard with data: compact KPIs, the four analytics and a compact latest
 
     // KPIs: every booking counts (8), analytics rules do not leak into them.
     await expect(card(page, 'Reservas totales')).toHaveText('8');
-    await expect(card(page, 'Pagos pendientes')).toHaveText('1'); // bk-b
+    await expect(card(page, 'Pagos pendientes')).toHaveText('2'); // bk-b and bk-e (a SINPE booking awaiting confirmation: payment still pending)
     await expect(card(page, 'Ingresos')).toHaveText('$1,320'); // paid: 250 + 120 + 150 + 300 + 500
     await expect(card(page, 'Pagos confirmados')).toHaveText('5');
     await expect(card(page, 'Reservas por confirmar')).toHaveText('3'); // bk-b, bk-c (PayPal already paid), bk-e
@@ -113,12 +113,12 @@ test('dashboard with data: compact KPIs, the four analytics and a compact latest
     await expect(weeks.nth(11)).toContainText('(en curso)');
     await expect(weeks.nth(11)).toContainText('2 reservas');
     await expect(weeks.nth(8)).toContainText('0 reservas'); // quiet weeks stay in the timeline
-    // Método de pago: PayPal 3 (50%), WhatsApp 2 (33%), Día del tour 1 (17%); the most used one is spelled out.
+    // Método de pago: PayPal 3 (50%), WhatsApp 2 (33%), SINPE Móvil 1 (17%); the most used one is spelled out.
     const methods = chart(page, 'Método de pago');
     await expect(methods).toContainText('Método más usado');
     await expect(methods.locator('.admin-dash-highlight')).toContainText('PayPal');
     await expect(methods.locator('.admin-dash-highlight')).toContainText('3 reservas · 50%');
-    await expect(methods.getByRole('listitem')).toHaveText([/PayPal\s*3 · 50%/, /WhatsApp\s*2 · 33%/, /Día del tour\s*1 · 17%/]);
+    await expect(methods.getByRole('listitem')).toHaveText([/PayPal\s*3 · 50%/, /WhatsApp\s*2 · 33%/, /SINPE Móvil\s*1 · 17%/]);
     assert.equal(await methods.locator('.admin-dash-donut__seg').count(), 3);
     await expect(page.getByText(EMPTY)).toHaveCount(0);
 
@@ -132,7 +132,7 @@ test('dashboard with data: compact KPIs, the four analytics and a compact latest
     await expect(rows.nth(0)).toContainText('1 oct 2026');
     await expect(rows.nth(0)).toContainText('Pagado');
     await expect(rows.nth(1)).toContainText('Pendiente');
-    await expect(rows.nth(4)).toContainText('Pago en tour');
+    await expect(rows.nth(4)).toContainText('Pendiente');
     for (const absent of ['Cliente F', 'Cliente G', 'Cliente H', 'PFT-', 'Test Tour']) await expect(recent).not.toContainText(absent);
 
     // A secondary summary: no "Ver todas" button, a small header and tight rows (the card is not the protagonist of the page).

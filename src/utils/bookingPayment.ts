@@ -5,14 +5,13 @@ import type { Boat } from '../types/boat';
 import type { BoatTour, TourTimeSlot } from '../types/boatTour';
 import type { calculateBookingTotal } from './bookingPricing';
 
-export type BookingPaymentMethod = 'paypal' | 'whatsapp-link' | 'pay-on-day';
+export type BookingPaymentMethod = 'paypal' | 'whatsapp-link';
 export type PaymentStatus =
   | 'pending'
   | 'processing'
   | 'paid'
   | 'failed'
-  | 'refunded'
-  | 'not_required_yet';
+  | 'refunded';
 
 export type BookingStatus =
   | 'pending'
@@ -100,14 +99,12 @@ export function buildBookingPaymentPayload(input: {
 // This becomes the customer's own pre-filled WhatsApp message — they review
 // and send it themselves — so it follows the site's language the same as
 // any other customer-facing text, not a fixed operating language.
-export function createWhatsAppBookingMessage(booking: BookingPaymentPayload, variant: 'payment_link' | 'pay_on_day' | 'paid_confirmation' = 'payment_link', language: 'es' | 'en' = 'en') {
+export function createWhatsAppBookingMessage(booking: BookingPaymentPayload, variant: 'payment_link' | 'paid_confirmation' = 'payment_link', language: 'es' | 'en' = 'en') {
   const es = language === 'es';
   const opening =
     variant === 'payment_link'
       ? (es ? 'Hola, quisiera hacer una reserva y solicitar un enlace de pago.' : 'Hello, I would like to make a reservation and request a payment link.')
-      : variant === 'pay_on_day'
-        ? (es ? 'Hola, quisiera solicitar una reserva.' : 'Hello, I would like to request a reservation.')
-        : (es ? 'Hola, quisiera enviar mi confirmación de pago para esta reserva.' : 'Hello, I would like to send my payment confirmation for this reservation.');
+      : (es ? 'Hola, quisiera enviar mi confirmación de pago para esta reserva.' : 'Hello, I would like to send my payment confirmation for this reservation.');
 
   const lines = [
     opening,
@@ -139,7 +136,7 @@ export function createWhatsAppBookingMessage(booking: BookingPaymentPayload, var
     `${es ? 'Total' : 'Total'}: ${formatMessageCurrency(booking.total)}`,
     '',
     es ? 'MÉTODO DE PAGO' : 'PAYMENT METHOD',
-    booking.paymentMethod ?? (variant === 'pay_on_day' ? (es ? 'Pago el día del tour.' : 'Pay on the day of the tour.') : variant === 'payment_link' ? (es ? 'Enlace de pago por WhatsApp.' : 'WhatsApp payment link.') : 'PayPal.'),
+    booking.paymentMethod ?? (variant === 'payment_link' ? (es ? 'Enlace de pago por WhatsApp.' : 'WhatsApp payment link.') : 'PayPal.'),
   ];
 
   lines.push('', es ? 'SOLICITUDES ESPECIALES' : 'SPECIAL REQUESTS', booking.specialRequests || (es ? 'Ninguna' : 'None'), '');

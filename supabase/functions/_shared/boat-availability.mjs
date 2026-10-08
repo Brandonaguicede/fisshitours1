@@ -21,7 +21,9 @@ export function resolveAvailableDepartures({ slots, bookings, packages, timeSlot
   const startBySlot = new Map(timeSlots.map((item) => [item.id, minutesSinceMidnight(String(item.starts_at))]));
   const operatingEndMinutes = operatingEnd == null ? null : minutesSinceMidnight(String(operatingEnd));
   return slots
-    .filter((slot) => departureTimes === null || departureTimes.includes(String(slot.starts_at).slice(0, 5)))
+    // A package that inherits offers the shared (general) hours only (is_general missing = general, for callers that predate the flag);
+    // one with its own list offers exactly those hours.
+    .filter((slot) => (departureTimes === null ? slot.is_general !== false : departureTimes.includes(String(slot.starts_at).slice(0, 5))))
     .map((slot) => {
       const start = minutesSinceMidnight(String(slot.starts_at));
       const candidateEnd = start === null ? null : start + durationMinutes;
@@ -36,5 +38,7 @@ export function resolveAvailableDepartures({ slots, bookings, packages, timeSlot
         && (candidateEnd === null || candidateEnd > operatingEndMinutes);
       return { ...slot, time: String(slot.starts_at).slice(0, 5), available: !blockedSlotIds.has(slot.id) && !conflicted && !outsideOperatingHours };
     })
-    .filter((slot) => slot.available);
+    .filter((slot) => slot.available)
+    // Chronological, whatever order the rows came in.
+    .sort((a, b) => (minutesSinceMidnight(String(a.starts_at)) ?? Infinity) - (minutesSinceMidnight(String(b.starts_at)) ?? Infinity));
 }

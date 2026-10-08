@@ -1390,6 +1390,7 @@ export type Database = {
       time_slots: {
         Row: {
           active: boolean
+          is_general: boolean
           id: string
           label: string
           sort_order: number
@@ -1397,6 +1398,7 @@ export type Database = {
         }
         Insert: {
           active?: boolean
+          is_general?: boolean
           id: string
           label: string
           sort_order?: number
@@ -1404,6 +1406,7 @@ export type Database = {
         }
         Update: {
           active?: boolean
+          is_general?: boolean
           id?: string
           label?: string
           sort_order?: number
@@ -1846,6 +1849,9 @@ export type Database = {
         Returns: boolean
       }
       update_booking_details: { Args: { payload: Json }; Returns: Json }
+      admin_create_time_slot: { Args: { p_time: string }; Returns: Json }
+      admin_update_time_slot: { Args: { p_id: string; p_time: string }; Returns: Json }
+      admin_delete_time_slot: { Args: { p_id: string }; Returns: Json }
       update_booking_status: {
         Args: {
           p_booking_id: string

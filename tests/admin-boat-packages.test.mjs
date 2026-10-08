@@ -49,6 +49,11 @@ async function fixture({ boats: boatsOverride, packages: packagesOverride, slowC
     // sort_order 1, 2 and 4 (a hole at 3, as left by a deleted package): count+1 would be 4 and collide.
     packages: packagesOverride ?? [pkgRow('p1', 'l1', 'Half Day', 680, 1, { meal_options: [{ es: 'Casado con pescado', en: 'Fish casado' }, { es: 'Pasta con mariscos', en: 'Seafood pasta' }] }), pkgRow('p2', 'l1', '3/4 Day', 800, 2, { package_included: ['Drinks', 'Snacks'], package_included_en: ['Drinks', 'Snacks'], package_included_es: ['Bebidas', 'Snacks (viejo)'] }), pkgRow('p3', 'l1', 'Full Day', 1050, 4), pkgRow('p4', 'l2', 'Splash', 300, 1)],
   };
+  // Shared hours: 7:00 and 11:30 are general; the rest of the catalog arrives scrambled on purpose.
+  state.slots = [
+    { id: 'slot-2', label: 'Midday', starts_at: '11:30:00', active: true, is_general: true, sort_order: 2 },
+    { id: 'slot-1', label: 'Morning', starts_at: '07:00:00', active: true, is_general: true, sort_order: 1 },
+  ];
   const objectAccept = (request) => (request.headers().accept ?? '').includes('vnd.pgrst.object');
 
   await page.route('https://admin-test.supabase.co/**', async (route) => {
@@ -149,10 +154,46 @@ async function fixture({ boats: boatsOverride, packages: packagesOverride, slowC
       if (method === 'DELETE') state.equipment = state.equipment.filter((item) => item.id !== q('id'));
       return route.fulfill({ status: method === 'POST' ? 201 : 200, json: [] });
     }
+    // The three general-hours RPCs behave like the database ones: create / edit / delete change ONLY the shared catalog (state.slots).
+    if (path.endsWith('/rpc/admin_create_time_slot') || path.endsWith('/rpc/admin_update_time_slot') || path.endsWith('/rpc/admin_delete_time_slot')) {
+      const body = request.postDataJSON();
+      const name = path.split('/').pop();
+      writes.push({ table: name, method, body });
+      const fail = (message) => route.fulfill({ status: 400, json: { message, code: '22023' } });
+      const valid = (time) => /^([01][0-9]|2[0-3]):[0-5][0-9]$/.test(time ?? '');
+      const rowAt = (time) => state.slots.find((slot) => slot.starts_at.slice(0, 5) === time);
+      if (name === 'admin_create_time_slot') {
+        if (!valid(body.p_time)) return fail('La hora debe tener formato HH:MM de 24 horas.');
+        const existing = rowAt(body.p_time);
+        if (existing && existing.is_general && existing.active) return route.fulfill({ json: { id: existing.id, time: body.p_time, created: false } });
+        if (existing) Object.assign(existing, { is_general: true, active: true });
+        else state.slots.push({ id: `departure-${body.p_time.replace(':', '')}`, label: body.p_time, starts_at: `${body.p_time}:00`, active: true, is_general: true, sort_order: 0 });
+        return route.fulfill({ json: { id: `departure-${body.p_time.replace(':', '')}`, time: body.p_time, created: true } });
+      }
+      if (name === 'admin_update_time_slot') {
+        const old = state.slots.find((slot) => slot.id === body.p_id && slot.is_general && slot.active);
+        if (!old) return fail('El horario general ya no existe.');
+        if (!valid(body.p_time)) return fail('La hora debe tener formato HH:MM de 24 horas.');
+        const clash = rowAt(body.p_time);
+        if (clash && clash.is_general && clash.active) return fail(`Ya existe un horario general a las ${body.p_time}.`);
+        const oldTime = old.starts_at.slice(0, 5);
+        if (clash) Object.assign(clash, { is_general: true, active: true });
+        else state.slots.push({ id: `departure-${body.p_time.replace(':', '')}`, label: body.p_time, starts_at: `${body.p_time}:00`, active: true, is_general: true, sort_order: 0 });
+        // The old hour leaves the catalog; it stays active only while some package lists it as ITS OWN hour. Packages are NOT rewritten.
+        Object.assign(old, { is_general: false, active: state.packages.some((pkg) => (pkg.departure_times ?? []).includes(oldTime)) });
+        return route.fulfill({ json: { id: `departure-${body.p_time.replace(':', '')}`, time: body.p_time, changed: true } });
+      }
+      const slot = state.slots.find((item) => item.id === body.p_id && item.is_general && item.active);
+      if (!slot) return fail('El horario general ya no existe.');
+      Object.assign(slot, { is_general: false, active: state.packages.some((pkg) => (pkg.departure_times ?? []).includes(slot.starts_at.slice(0, 5))) });
+      return route.fulfill({ json: { id: slot.id, time: slot.starts_at.slice(0, 5), kept_for_packages: slot.active, general_left: state.slots.filter((item) => item.is_general && item.active).length } });
+    }
     if (path.endsWith('/time_slots')) {
       if (method !== 'GET' && method !== 'HEAD') { writes.push({ table: path.split('/').pop(), method, body: request.postDataJSON() }); }
-      // The shared departure times (the real project has active ones); a package that inherits them needs at least one.
-      return route.fulfill({ json: [{ id: 'slot-1', label: 'Morning', starts_at: '07:00:00', active: true, sort_order: 1 }, { id: 'slot-2', label: 'Midday', starts_at: '11:30:00', active: true, sort_order: 2 }], headers: { 'access-control-expose-headers': 'content-range', 'content-range': '0-1/2' } });
+      else state.slotReads = (state.slotReads ?? 0) + 1;
+      // The shared catalog the editor asks for (active + general). Returned in a deliberately scrambled order: the UI must not depend on it.
+      const general = state.slots.filter((slot) => slot.active && slot.is_general);
+      return route.fulfill({ json: general, headers: { 'access-control-expose-headers': 'content-range', 'content-range': `0-${Math.max(general.length - 1, 0)}/${general.length}` } });
     }
     if (method !== 'GET' && method !== 'HEAD') { writes.push({ table: path.split('/').pop(), method }); return route.fulfill({ json: [] }); }
     return route.fulfill({ json: [], headers: { 'access-control-expose-headers': 'content-range', 'content-range': '0-0/0' } });
@@ -1065,7 +1106,7 @@ test('package form keeps every real field: what is typed is exactly what is save
     assert.equal(saved.included_guests, 2);
     assert.equal(saved.max_guests, 8);
     assert.equal(saved.custom_quote, true);
-    assert.deepEqual(saved.departure_times, ['07:00', '11:30', '09:30']); // the general times a new package starts with + the one added
+    assert.deepEqual(saved.departure_times, ['07:00', '09:30', '11:30']); // the general times a new package starts with + the one added, ALWAYS chronological
     assert.deepEqual(saved.package_included, ['Snacks', 'Bebidas']);
     assert.deepEqual(saved.meal_options, [{ es: 'Ceviche [ES]', en: 'Ceviche' }]); // Spanish comes from the (mocked) translator
     assert.deepEqual([saved.name, saved.name_en, saved.name_es], ['Sunset Special', 'Sunset Special', 'Sunset Special [ES]']);
@@ -1865,5 +1906,147 @@ test('package list: an ACTIVE legacy package without duration is flagged "Incomp
     await expect(rows.filter({ hasText: 'Paquete legacy' })).toContainText('No se ofrece a los clientes');
     await expect(rows.filter({ hasText: 'Paquete completo' })).not.toContainText('Incompleto');
     await expect(rows.filter({ hasText: 'Paquete oculto' })).not.toContainText('Incompleto'); // hidden: nothing to warn about
+  } finally { await f.browser.close(); }
+});
+
+// --- Departure hours: general catalog vs a package's own hours, always chronological ---------------------------------------------------------------
+
+const chipTexts = (editor) => editor.locator('.admin-time-chips .admin-time-chip').allTextContents().then((items) => items.map((item) => item.trim()));
+const openPackageEditor = async (page, name = 'Half Day') => {
+  await openSecondWind(page);
+  await goToStep(page, 'Tours y paquetes');
+  await page.locator('.admin-boat-package-row').filter({ hasText: name }).getByRole('button', { name: `Editar ${name}` }).click();
+  return page.locator('.admin-package-compact-editor');
+};
+const generalList = (page) => page.locator('[data-general-times] .admin-general-times__time').allTextContents();
+
+test('hours: the chips of a package are ALWAYS chronological — whatever order they were added, saved or returned in', async () => {
+  const f = await fixture({ packages: [pkgRow('p1', 'l1', 'Half Day', 680, 1, { departure_times: ['16:30', '08:00', '12:00'] })] }); const { page, writes } = f;
+  try {
+    const editor = await openPackageEditor(page);
+    // Catalog arrives as 11:30, 07:00 (scrambled by the mock); the package owns 16:30, 08:00, 12:00.
+    assert.deepEqual(await chipTexts(editor), ['7:00 AM', '8:00 AM', '11:30 AM', '12:00 PM', '4:30 PM']);
+    for (const time of ['06:00', '14:00', '02:00']) {
+      await editor.getByLabel('Agregar hora de salida').fill(time);
+      await editor.getByRole('button', { name: 'Agregar hora' }).click();
+    }
+    assert.deepEqual(await chipTexts(editor), ['2:00 AM', '6:00 AM', '7:00 AM', '8:00 AM', '11:30 AM', '12:00 PM', '2:00 PM', '4:30 PM']);
+    await editor.getByRole('button', { name: 'Guardar', exact: true }).click();
+    await expect(page.getByText('Paquete guardado.')).toBeVisible();
+    const saved = writes.find((w) => w.table === 'tour_packages' && w.method === 'POST').body;
+    assert.deepEqual(saved.departure_times, ['02:00', '06:00', '08:00', '12:00', '14:00', '16:30']);
+  } finally { await f.browser.close(); }
+});
+
+test('hours: adding an hour to ONE package is registered for that package only — it never touches the general catalog', async () => {
+  const f = await fixture({ packages: [pkgRow('p1', 'l1', 'Half Day', 680, 1, { departure_times: ['07:00'] })] }); const { page, writes, state } = f;
+  try {
+    const editor = await openPackageEditor(page);
+    await editor.getByLabel('Agregar hora de salida').fill('13:30');
+    await editor.getByRole('button', { name: 'Agregar hora' }).click();
+    await expect(editor.getByRole('checkbox', { name: '1:30 PM' })).toBeChecked();
+    await editor.getByRole('button', { name: 'Guardar', exact: true }).click();
+    await expect(page.getByText('Paquete guardado.')).toBeVisible();
+    assert.deepEqual(writes.find((w) => w.table === 'tour_packages' && w.method === 'POST').body.departure_times, ['07:00', '13:30']);
+    assert.equal(writes.filter((w) => /time_slot/.test(w.table)).length, 0, 'no catalog write of any kind');
+    assert.deepEqual(state.slots.map((slot) => slot.starts_at.slice(0, 5)).sort(), ['07:00', '11:30']);
+    // The general catalog panel still lists only the shared hours.
+    await page.locator('[data-general-times] summary').click();
+    assert.deepEqual(await generalList(page), ['7:00 AM', '11:30 AM']);
+  } finally { await f.browser.close(); }
+});
+
+test('hours: replacing an own hour (1:30 PM -> 1:45 PM) changes ONLY that package list; other packages and the catalog keep what they had', async () => {
+  const f = await fixture({ packages: [pkgRow('p1', 'l1', 'Half Day', 680, 1, { departure_times: ['07:00', '13:30'] }), pkgRow('p2', 'l1', 'Full Day', 900, 2, { departure_times: ['13:30'] })] }); const { page, writes, state } = f;
+  try {
+    const editor = await openPackageEditor(page);
+    await editor.getByRole('button', { name: 'Cambiar la hora 1:30 PM de este paquete' }).click();
+    await expect(editor.getByLabel('Cambiar 1:30 PM por')).toHaveValue('13:30');
+    await editor.getByLabel('Cambiar 1:30 PM por').fill('13:45');
+    await editor.getByRole('button', { name: 'Reemplazar hora' }).click();
+    assert.deepEqual(await chipTexts(editor), ['7:00 AM', '11:30 AM', '1:45 PM']);
+    await expect(editor.getByRole('checkbox', { name: '1:45 PM' })).toBeChecked();
+    await editor.getByRole('button', { name: 'Guardar', exact: true }).click();
+    await expect(page.getByText('Paquete guardado.')).toBeVisible();
+    assert.deepEqual(writes.find((w) => w.table === 'tour_packages' && w.method === 'POST').body.departure_times, ['07:00', '13:45']);
+    assert.equal(writes.filter((w) => /time_slot/.test(w.table)).length, 0, 'the shared row 13:30 is never edited from a package');
+    assert.deepEqual(state.packages.find((pkg) => pkg.id === 'p2').departure_times, ['13:30'], 'the other package keeps 13:30');
+    assert.equal(writes.filter((w) => w.table === 'tour_packages').length, 1, 'only the edited package was written');
+  } finally { await f.browser.close(); }
+});
+
+test('general hours: create 1:30 PM -> normalized, persisted through the RPC, chronological, the catalog is refetched and it survives a reload', async () => {
+  const f = await fixture({ packages: [pkgRow('p1', 'l1', 'Half Day', 680, 1, { departure_times: ['07:00'] })] }); const { page, writes, state } = f;
+  try {
+    await openSecondWind(page);
+    await goToStep(page, 'Tours y paquetes');
+    await page.locator('[data-general-times] summary').click();
+    assert.deepEqual(await generalList(page), ['7:00 AM', '11:30 AM']);
+    const readsBefore = state.slotReads;
+    await page.locator('[data-general-times]').getByLabel('Agregar horario general').fill('13:30');
+    await page.locator('[data-general-times]').getByRole('button', { name: 'Agregar horario' }).click();
+    await expect(page.getByText('Horario general agregado.')).toBeVisible();
+    assert.deepEqual(writes.filter((w) => w.table === 'admin_create_time_slot').map((w) => w.body), [{ p_time: '13:30' }]);
+    assert.deepEqual(await generalList(page), ['7:00 AM', '11:30 AM', '1:30 PM']);
+    assert.ok(state.slotReads > readsBefore, 'the catalog was refetched right after the change (no manual refresh needed)');
+    assert.equal(writes.filter((w) => w.table === 'tour_packages').length, 0, 'no package was rewritten');
+    await page.reload();
+    await openSecondWind(page);
+    await goToStep(page, 'Tours y paquetes');
+    await page.locator('[data-general-times] summary').click();
+    assert.deepEqual(await generalList(page), ['7:00 AM', '11:30 AM', '1:30 PM']);
+  } finally { await f.browser.close(); }
+});
+
+test('general hours: edit 1:30 PM -> 1:45 PM updates the catalog only; a package with its own 13:30 is NOT rewritten; the editor shows the new hour', async () => {
+  const f = await fixture({ packages: [pkgRow('p1', 'l1', 'Half Day', 680, 1, { departure_times: ['13:30'] }), pkgRow('p2', 'l1', 'Full Day', 900, 2)] }); const { page, writes, state } = f;
+  try {
+    state.slots.push({ id: 'departure-1330', label: '13:30', starts_at: '13:30:00', active: true, is_general: true, sort_order: 810 });
+    await openSecondWind(page);
+    await goToStep(page, 'Tours y paquetes');
+    await page.locator('[data-general-times] summary').click();
+    assert.deepEqual(await generalList(page), ['7:00 AM', '11:30 AM', '1:30 PM']);
+    await page.getByRole('button', { name: 'Editar horario 1:30 PM' }).click();
+    await page.getByLabel('Nueva hora para 1:30 PM').fill('13:45');
+    await page.locator('[data-general-times]').getByRole('button', { name: 'Guardar', exact: true }).click();
+    await expect(page.getByText('Horario general actualizado.')).toBeVisible();
+    assert.deepEqual(writes.filter((w) => w.table === 'admin_update_time_slot').map((w) => w.body), [{ p_id: 'departure-1330', p_time: '13:45' }]);
+    assert.deepEqual(await generalList(page), ['7:00 AM', '11:30 AM', '1:45 PM']);
+    assert.deepEqual(state.packages.find((pkg) => pkg.id === 'p1').departure_times, ['13:30'], 'a package that lists 13:30 as its own hour keeps it');
+    assert.equal(state.packages.find((pkg) => pkg.id === 'p2').departure_times, null, 'a package that inherits holds no list');
+    assert.equal(writes.filter((w) => w.table === 'tour_packages').length, 0);
+    // The package editor of an inheriting package: its choices follow the refreshed catalog.
+    await page.locator('.admin-boat-package-row').filter({ hasText: 'Full Day' }).getByRole('button', { name: 'Editar Full Day' }).click();
+    const editor = page.locator('.admin-package-compact-editor');
+    await editor.getByRole('checkbox', { name: 'Usar los horarios generales' }).uncheck();
+    assert.ok((await chipTexts(editor)).includes('1:45 PM') && !(await chipTexts(editor)).includes('1:30 PM'));
+  } finally { await f.browser.close(); }
+});
+
+test('general hours: duplicates and invalid values are stopped with a clear message and never reach the database; deleting asks first and changes only the catalog', async () => {
+  const f = await fixture({ packages: [pkgRow('p1', 'l1', 'Half Day', 680, 1, { departure_times: ['07:00'] })] }); const { page, writes, state } = f;
+  try {
+    await openSecondWind(page);
+    await goToStep(page, 'Tours y paquetes');
+    const panel = page.locator('[data-general-times]');
+    await panel.locator('summary').click();
+    await panel.getByLabel('Agregar horario general').fill('07:00');
+    await panel.getByRole('button', { name: 'Agregar horario' }).click();
+    await expect(panel.getByRole('alert')).toHaveText('Ya existe el horario general 7:00 AM.');
+    await page.getByRole('button', { name: 'Editar horario 11:30 AM' }).click();
+    await page.getByLabel('Nueva hora para 11:30 AM').fill('07:00');
+    await panel.getByRole('button', { name: 'Guardar', exact: true }).click();
+    await expect(panel.getByRole('alert')).toHaveText('Ya existe el horario general 7:00 AM.');
+    assert.equal(writes.filter((w) => /time_slot/.test(w.table)).length, 0, 'no RPC for duplicates');
+    await panel.getByRole('button', { name: 'Cancelar', exact: true }).click();
+    // Delete: confirmation first, then ONE RPC; the package that owns 07:00 is untouched.
+    await page.getByRole('button', { name: 'Eliminar horario 11:30 AM' }).click();
+    await expect(page.getByRole('dialog', { name: 'Eliminar horario general' })).toBeVisible();
+    assert.equal(writes.filter((w) => w.table === 'admin_delete_time_slot').length, 0, 'nothing happens before confirming');
+    await page.getByRole('button', { name: 'Eliminar horario', exact: true }).click();
+    await expect(page.getByText('Horario general 11:30 AM eliminado.')).toBeVisible();
+    assert.deepEqual(writes.filter((w) => w.table === 'admin_delete_time_slot').map((w) => w.body), [{ p_id: 'slot-2' }]);
+    assert.deepEqual(await generalList(page), ['7:00 AM']);
+    assert.deepEqual(state.packages.find((pkg) => pkg.id === 'p1').departure_times, ['07:00']);
   } finally { await f.browser.close(); }
 });

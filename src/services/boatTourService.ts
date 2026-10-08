@@ -5,12 +5,12 @@ import { mapBoatTour, type BoatTourCatalogRow } from './catalogMappers';
 export async function getActiveTimeSlots(): Promise<TourTimeSlot[]> {
   const { data, error } = await supabase
     .from('time_slots')
-    .select('id, label, starts_at')
+    .select('id, label, starts_at, is_general')
     .eq('active', true)
-    .order('sort_order');
+    .order('starts_at');
 
   if (error) throw new Error(error.message);
-  return (data ?? []).map((slot) => ({ id: slot.id, label: slot.label, time: slot.starts_at.slice(0, 5) }));
+  return (data ?? []).map((slot) => ({ id: slot.id, label: slot.label, time: slot.starts_at.slice(0, 5), isGeneral: slot.is_general }));
 }
 
 export async function getActiveBoatTours(): Promise<BoatTour[]> {

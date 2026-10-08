@@ -87,7 +87,7 @@ const LIST_PAGES = [
 const seed = {
   payment_methods: [
     { key: 'paypal', type: 'paypal', name: 'PayPal', description: 'Card or PayPal', active: true, sort_order: 1 },
-    { key: 'cash', type: 'pay_on_day', name: 'Cash on the day', description: 'Pay at the dock', active: false, sort_order: 2 },
+    { key: 'cash', type: 'cash', name: 'Cash on the day', description: 'Pay at the dock', active: false, sort_order: 2 },
   ],
   reviews: [
     { id: 'r-1', name: 'Ana', country: 'CR', quote: 'Great day', quote_es: 'Gran dia', quote_en: 'Great day', translated: true, rating: 5, status: 'approved', featured: false, active: true, sort_order: 1, image_url: null, image_public_id: null, created_at: '2026-01-02T00:00:00Z' },

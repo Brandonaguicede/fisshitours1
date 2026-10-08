@@ -27,7 +27,7 @@ async function mockCatalog(page: Page) {
     if(table==='tour_packages')data=packages;
     if(table==='time_slots')data=slots;
     if(table==='departure_locations')data=[{id:'coco',name:'Playas del Coco',slug:'coco',surcharge_amount:0,currency:'USD',active:true,is_default:true}];
-    if(table==='payment_methods')data=[{key:'pay-on-day',name:'Pay on the day',type:'pay_on_day',active:true}];
+    if(table==='payment_methods')data=[{key:'whatsapp-link',name:'WhatsApp payment link',type:'whatsapp_link',active:true}];
     await route.fulfill({json:data});
   });
   await page.route(/\/functions\/v1\//,async route=>{
@@ -120,8 +120,8 @@ for(const boatId of ['a','b'])test('reserve original full-day IDs from Boat '+bo
   await page.locator('#booking-name').fill('Test Customer');await page.locator('#booking-email').fill('test@example.com');
   await page.locator('#booking-phone').fill('+506 8888 8888');
   await page.locator('label[for="booking-terms"]').click();
-  await page.locator('[data-payment-method="pay-on-day"]').click();
-  await page.getByRole('button',{name:'Confirm reservation',exact:true}).click();
+  await page.route('https://wa.me/**', (route) => route.abort());
+  await page.locator('[data-payment-method="whatsapp-link"]').click();
   await expect.poll(()=>bookings.length).toBe(1);
   expect(bookings[0]).toMatchObject({boatId,tourId:'beach',tourPackageId:boatId+'-full',timeSlotId:boatId==='a'?'am':'pm',mealOption:boatId==='a'?'Chicken lunch':'Fish lunch',extras:[]});
   expect(priceRequests.some(input=>input.boatId===boatId && input.boatTourId===boatId+'-beach' && input.tourPackageId===boatId+'-full')).toBe(true);

@@ -96,33 +96,8 @@ async function getBookingConfirmationMessages(supabase: SupabaseClient, bookingI
   return messages;
 }
 
-export async function buildBookingRequestCustomerHtml(supabase: SupabaseClient, bookingId: string, language: Language = DEFAULT_LANGUAGE): Promise<string> {
-  const es = language === 'es';
-  const booking = await fetchBookingForEmail(supabase, bookingId);
-  const whatsappNumber = await getBusinessWhatsapp(supabase);
-  return buildBookingHtml({
-    name: booking.customers?.full_name ?? '',
-    reference: booking.booking_reference,
-    date: formatDate(booking.tour_date, language),
-    time: formatDepartureTime(booking.time_slots?.starts_at),
-    tour: booking.tours?.title,
-    boat: booking.boats?.name,
-    packageName: booking.tour_packages?.name,
-    guests: booking.guests,
-    departureLocation: booking.departure_location_name_snapshot,
-    ...bookingEmailAmounts(booking), total: formatEmailUsd(Number(booking.total_snapshot ?? 0)),
-    paymentStatus: es ? 'Pendiente' : 'Pending',
-    whatsappNumber,
-    heading: es ? 'Solicitud de reserva recibida' : 'Booking request received',
-    introduction: es
-      ? 'Hemos recibido tu solicitud de reserva. Nuestro equipo confirmará la disponibilidad y te contactará pronto.'
-      : 'We have received your booking request. Our team will confirm availability and contact you soon.',
-    language,
-  });
-}
-
-// Admin-facing counterpart to buildBookingRequestCustomerHtml — same branded
-// template (not a plain-text dump) so a new-booking alert looks like it
+// Admin-facing new-booking alert — same branded
+// template (not a plain-text dump) so it looks like it
 // belongs to the business, plus a contact block and a WhatsApp CTA aimed at
 // the customer's own number (the admin needs to reach the customer, not the
 // business itself). Always Spanish — the business's own operating language,

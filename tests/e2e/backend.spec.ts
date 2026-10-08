@@ -131,7 +131,7 @@ function bookingPayload(overrides: Record<string, unknown> = {}): Record<string,
     tourDate: uniqueDate(),
     timeSlotId: 'morning',
     guests: 5,
-    paymentMethodKey: 'pay-on-day',
+    paymentMethodKey: 'whatsapp-link',
     turnstileToken: MOCK_TURNSTILE,
     // Terms and Conditions are mandatory for every booking; individual tests override these to prove the rejection.
     termsAccepted: true,
@@ -379,8 +379,8 @@ test.describe('backend flows', () => {
     expect(res.body.total_snapshot).toBe(700);
     expect(res.body.departure_location_name_snapshot).toBe('Flamingo');
     expect(res.body.departure_surcharge_snapshot).toBe(50);
-    expect(res.body.payment_status).toBe('not_required_yet');
-    expect(res.body.booking_status).toBe('pending_confirmation');
+    expect(res.body.payment_status).toBe('pending');
+    expect(res.body.booking_status).toBe('pending_payment');
 
     const rows = await serviceSelect(request, 'bookings', 'id,booking_reference,departure_location_name_snapshot,departure_surcharge_snapshot', `id=eq.${res.body.booking_id}`);
     expect(rows).toHaveLength(1);
@@ -439,8 +439,8 @@ test.describe('backend flows', () => {
     } as Record<string, unknown>);
     expect(res.status).toBe(201);
     expect(res.body.total_snapshot).toBe(650);
-    expect(res.body.payment_status).toBe('not_required_yet');
-    expect(res.body.booking_status).toBe('pending_confirmation');
+    expect(res.body.payment_status).toBe('pending');
+    expect(res.body.booking_status).toBe('pending_payment');
   });
 
   test('booking: booking references are unique', async ({ request }) => {
@@ -1107,7 +1107,7 @@ test.describe('backend flows', () => {
   });
 
   test('paypal: create order rejects non-paypal bookings', async ({ request }) => {
-    const booking = await createBooking(request, { paymentMethodKey: 'pay-on-day' });
+    const booking = await createBooking(request, { paymentMethodKey: 'whatsapp-link' });
     expect(booking.status).toBe(201);
     const res = await fn(request, 'paypal-create-order', { bookingId: booking.body.booking_id });
     expect(res.status).toBe(400);
@@ -1278,15 +1278,12 @@ test.describe('backend flows', () => {
     expect(payments[0].status).toBe('paid');
   });
 
-  test('pay-on-day: booking is created without payment obligation', async ({ request }) => {
-    const res = await createBooking(request, { paymentMethodKey: 'pay-on-day' });
-    expect(res.status).toBe(201);
-    expect(res.body.payment_status).toBe('not_required_yet');
-    expect(res.body.booking_status).toBe('pending_confirmation');
-
-    const rows = await serviceSelect(request, 'bookings', 'payment_status,booking_status', `id=eq.${res.body.booking_id}`);
-    expect(rows[0].payment_status).toBe('not_required_yet');
-    expect(rows[0].booking_status).toBe('pending_confirmation');
+  test('the retired "pay on the day" method is rejected as an invalid payment method and creates nothing', async ({ request }) => {
+    for (const key of ['pay-on-day', 'pay_on_day']) {
+      const res = await createBooking(request, { paymentMethodKey: key });
+      expect(res.status).toBe(400);
+      expect(res.body.message).toBe('Invalid booking payload');
+    }
   });
 
   test('security: anonymous users cannot read bookings', async ({ request }) => {

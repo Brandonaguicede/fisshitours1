@@ -244,7 +244,6 @@ Limitaciones pendientes:
 - El cliente no envia precios finales ni estados.
 - PayPal cobra el total completo de `total_snapshot`.
 - WhatsApp deja `payment_status = pending` y `booking_status = pending_payment`.
-- Pay on tour day deja `payment_status = not_required_yet` y `booking_status = pending_confirmation`.
 - La doble reserva se bloquea en PostgreSQL con indice unico parcial en `availability_blocks(boat_id, tour_date, time_slot_id)`.
 - Las reservas PayPal pendientes pueden expirar mediante `expire_pending_paypal_bookings()`.
 
@@ -300,6 +299,5 @@ Despues de `db reset --local`, probar:
 1. Crear una reserva PayPal y confirmar `pending_payment`.
 2. Repetir `boat_id + tour_date + time_slot_id` y confirmar rechazo por doble reserva.
 3. Crear reserva WhatsApp y confirmar que no queda pagada.
-4. Crear reserva pay-on-day y confirmar que no queda confirmada.
-5. Enviar guests sobre capacidad y confirmar rechazo.
+4. Enviar guests sobre capacidad y confirmar rechazo.
 6. Intentar insertar directo como publico en tablas sensibles y confirmar bloqueo por RLS.

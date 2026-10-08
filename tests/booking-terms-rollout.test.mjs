@@ -25,18 +25,18 @@ function edgeOver(db, file) {
   const environment = { SUPABASE_URL: 'http://db', SUPABASE_SERVICE_ROLE_KEY: 'srv', DISABLE_TURNSTILE: 'true', RATE_LIMIT_HASH_SECRET: 'x' };
   const context = vm.createContext({ z, console, Response, crypto: globalThis.crypto, TextEncoder, Uint8Array, Deno: { env: { get: (key) => environment[key] } },
     serve: (fn) => { handler = fn; }, withCors: (fn) => fn, corsHeaders: () => ({}), corsPreflight: () => new Response(null), createClient: () => supabase, areExternalProviderMocksAllowed: () => false,
-    buildBookingRequestAdminHtml: async () => '', buildBookingRequestCustomerHtml: async () => '', buildBookingRequestSummary: async () => '', fetch: async () => new Response('{}'), ...terms });
+    buildBookingRequestAdminHtml: async () => '', buildBookingRequestSummary: async () => '', fetch: async () => new Response('{}'), ...terms });
   vm.runInContext(ts.transpile(fs.readFileSync(`supabase/functions/${file}/index.ts`, 'utf8').replace(/^import .*;\r?\n/gm, ''), { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None }), context);
   return async (body) => { const response = await handler({ method: 'POST', headers: new Headers({ authorization: 'Bearer t', 'cf-connecting-ip': '1.1.1.1' }), json: async () => body }); return { status: response.status, body: await response.json() }; };
 }
 const web = (date, extra = {}) => ({ customer: { fullName: 'Ana Perez', email: 'ana@example.com', whatsapp: '50688888888' }, boatId: 'boat', tourId: 'tour', tourPackageId: 'pkg', tourDate: date, timeSlotId: 'slot', guests: 4, departureLocationId: '00000000-0000-4000-8000-000000000002', paymentMethodKey: 'paypal', language: 'en', ...extra });
-const adminBody = (date, extra = {}) => { const { language, ...rest } = web(date, { paymentMethodKey: 'pay-on-day' }); return { ...rest, ...extra }; };
+const adminBody = (date, extra = {}) => { const { language, ...rest } = web(date, { paymentMethodKey: 'whatsapp-link' }); return { ...rest, ...extra }; };
 const stored = async (db, id) => (await db.query('select terms_accepted, terms_version, terms_accepted_via, language, terms_accepted_at is not null as has_time from bookings where id=$1', [id])).rows[0];
 
 test('rollout: with only migration 001 + the compatible backend, the CURRENT site (no terms) keeps booking, and new payloads are persisted properly', async () => {
   const { db } = await createBookingDb({ stage: 'additive' });
   try {
-    await db.exec("insert into payment_methods(key,name,type) values ('pay-on-day','Pay on day','manual')");
+    await db.exec("insert into payment_methods(key,name,type) values ('whatsapp-link','WhatsApp link','whatsapp_link')");
     const create = edgeOver(db, 'create-booking');
     const admin = edgeOver(db, 'admin-create-booking');
     // Phase A+B: the live site still sends no terms — it must keep working, recorded honestly as "no acceptance".
@@ -62,7 +62,7 @@ test('rollout: with only migration 001 + the compatible backend, the CURRENT sit
 test('rollout phase E: after migration 002 the same functions refuse a request without acceptance with the semantic TERMS_NOT_ACCEPTED (translated from the real database error), and accept the new payload', async () => {
   const { db } = await createBookingDb({ stage: 'additive' });
   try {
-    await db.exec("insert into payment_methods(key,name,type) values ('pay-on-day','Pay on day','manual')");
+    await db.exec("insert into payment_methods(key,name,type) values ('whatsapp-link','WhatsApp link','whatsapp_link')");
     const create = edgeOver(db, 'create-booking');
     const admin = edgeOver(db, 'admin-create-booking');
     const before = await create(web('2099-05-01'));

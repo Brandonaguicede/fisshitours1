@@ -20,7 +20,7 @@ const schema = z.object({
   departureLocationId: z.string().min(1),
   mealOption: z.string().max(120).optional(),
   specialRequests: z.string().max(1000).optional(),
-  paymentMethodKey: z.enum(['whatsapp-link', 'pay-on-day']).default('whatsapp-link'),
+  paymentMethodKey: z.enum(['whatsapp-link']).default('whatsapp-link'),
   extras: z.array(z.object({ key: z.string().min(1).max(80), quantity: z.number().int().positive() })).default([]),
   adminNote: z.string().max(1000).optional(),
   language: z.enum(['es', 'en']).default('es'),

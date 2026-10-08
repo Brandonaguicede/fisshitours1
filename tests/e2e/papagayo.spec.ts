@@ -70,8 +70,9 @@ test.describe('Papagayo connected frontend', () => {
     await page.screenshot({ path: `${screenshotDir}/tours-page.png`, fullPage: true });
   });
 
-  test('booking pricing, availability conflict and pay on day result', async ({ page, context }, testInfo) => {
+  test('booking pricing and availability conflict', async ({ page, context }, testInfo) => {
     const date = projectDate(testInfo.project.name, '2026-12-01');
+    await context.route('https://wa.me/**', (route) => route.abort());
     await page.goto('/');
     await page.locator('#booking').scrollIntoViewIfNeeded();
     const booking = page.locator('#booking');
@@ -93,10 +94,8 @@ test.describe('Papagayo connected frontend', () => {
     await page.getByPlaceholder('+506 0000 0000').fill('50600000000');
     await page.locator('label[for="booking-terms"]').click(); // mandatory: the payment methods stay locked until the terms are accepted
     await page.getByText('Local verification mock is active.').waitFor();
-    await page.getByRole('button', { name: /Pay on the Day/i }).click();
-    await page.getByRole('button', { name: /Confirm reservation/i }).click();
-    await expect(page.getByText('Booking Request Received')).toBeVisible();
-    await expect(page.getByText('Your booking request has been received and is awaiting confirmation.')).toBeVisible();
+    await page.locator('[data-payment-method="whatsapp-link"]').click();
+    await expect(page.getByText('Booking Request Created')).toBeVisible();
 
     const second = await context.newPage();
     await second.goto('/');
@@ -106,7 +105,7 @@ test.describe('Papagayo connected frontend', () => {
     await secondBooking.getByRole('button', { name: /Beach/i }).first().click();
     await second.getByLabel(/Date/i).fill(date);
     await expect(second.getByText('Unavailable').first()).toBeVisible();
-    await page.screenshot({ path: `${screenshotDir}/pay-on-day-result.png`, fullPage: true });
+    await page.screenshot({ path: `${screenshotDir}/pricing-and-conflict-result.png`, fullPage: true });
   });
 
   test('WhatsApp request creates booking before opening message', async ({ page, context }, testInfo) => {

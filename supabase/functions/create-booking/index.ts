@@ -4,7 +4,7 @@ import { z } from 'npm:zod@3.23.8';
 import { areExternalProviderMocksAllowed } from '../_shared/environment.ts';
 import { corsHeaders, corsPreflight, withCors } from '../_shared/cors.ts';
 import { checkTermsAcceptance } from '../_shared/terms.mjs';
-import { buildBookingRequestAdminHtml, buildBookingRequestCustomerHtml, buildBookingRequestSummary } from '../_shared/booking-confirmation-email.ts';
+import { buildBookingRequestAdminHtml, buildBookingRequestSummary } from '../_shared/booking-confirmation-email.ts';
 
 const schema = z.object({
   customer: z.object({
@@ -22,7 +22,7 @@ const schema = z.object({
   departureLocationId: z.string().min(1),
   mealOption: z.string().max(120).optional(),
   specialRequests: z.string().max(1000).optional(),
-  paymentMethodKey: z.enum(['paypal', 'whatsapp-link', 'pay-on-day']),
+  paymentMethodKey: z.enum(['paypal', 'whatsapp-link']),
   extras: z.array(z.object({ key: z.string().min(1).max(80), quantity: z.number().int().positive() })).default([]),
   turnstileToken: z.string().optional(),
   // Persisted in bookings.language: the confirmation email is rendered in it, and it picks the language of the request-received email below.
@@ -196,15 +196,6 @@ async function sendBookingEmails(supabase: ReturnType<typeof createClient>, book
   ].join('\n');
 
   const messages = [
-    payload.paymentMethodKey !== 'whatsapp-link' ? {
-      to: customerEmail,
-      subject: es ? `Solicitud de reserva ${booking.booking_reference}` : `Booking request ${booking.booking_reference}`,
-      html: await buildBookingRequestCustomerHtml(supabase, booking.booking_id, es ? 'es' : 'en'),
-      text: es
-        ? `Hemos recibido tu solicitud de reserva.\n\n${summary}\n\nNuestro equipo confirmará la disponibilidad y te contactará pronto.`
-        : `We have received your booking request.\n\n${summary}\n\nOur team will confirm availability and contact you soon.`,
-      dedupe: `booking:${booking.booking_id}:customer-email`,
-    } : null,
     adminEmail ? {
       to: adminEmail,
       subject: `Nueva reserva ${booking.booking_reference}`,

@@ -27,7 +27,7 @@ const departureLocations = [
   // older row: only the legacy description exists (no _en/_es yet)
   { id: 'tamarindo', name: 'Tamarindo', slug: 'tamarindo', description: 'Legacy pickup text.', description_en: null, description_es: null, surcharge_amount: 25, currency: 'USD', active: true, is_default: false, sort_order: 2 },
 ];
-const paymentMethods = [{ key: 'pay-on-day', name: 'Pay on the day', type: 'pay_on_day', description: 'Pay on the day of the tour.', description_en: 'Pay on the day of the tour.', description_es: 'Paga el día del tour.', active: true, sort_order: 1 }];
+const paymentMethods = [{ key: 'whatsapp-link', name: 'WhatsApp payment link', type: 'whatsapp_link', description: 'Request a payment link.', description_en: 'Request a payment link.', description_es: 'Solicita un enlace de pago.', active: true, sort_order: 1 }];
 
 async function mock(page: Page, language: 'en' | 'es') {
   await page.addInitScript((value) => localStorage.setItem('language', value), language);

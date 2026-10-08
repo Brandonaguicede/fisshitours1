@@ -121,7 +121,6 @@ export const ADMIN_STATUS_BADGES: Record<string, { label: string; tone: BadgeTon
   requested: { label: 'Solicitada', tone: 'warning' },
   pending_payment: { label: 'Pago pendiente', tone: 'warning' },
   pending_confirmation: { label: 'Por confirmar', tone: 'warning' },
-  not_required_yet: { label: 'Pago en tour', tone: 'neutral' },
   approved: { label: 'Aprobado', tone: 'success' },
   rejected: { label: 'Rechazado', tone: 'danger' },
   paid: { label: 'Pagado', tone: 'success' },

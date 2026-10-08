@@ -23,14 +23,14 @@ test('Reservas totales counts every booking, whatever its status', () => {
 test('Pagos pendientes counts payment_status pending and processing only', () => {
   const { computeDashboardKpis, PENDING_PAYMENT_STATUSES } = metrics();
   assert.deepEqual([...PENDING_PAYMENT_STATUSES], ['pending', 'processing']);
-  const rows = ['pending', 'processing', 'paid', 'failed', 'refunded', 'not_required_yet'].map((payment_status) => booking({ payment_status }));
-  // paid, failed (also cancelled/expired unpaid), refunded and pay-on-tour are not "pending payments".
+  const rows = ['pending', 'processing', 'paid', 'failed', 'refunded'].map((payment_status) => booking({ payment_status }));
+  // paid, failed (also cancelled/expired unpaid) and refunded are not "pending payments".
   assert.equal(computeDashboardKpis(rows).pendingPayments, 2);
 });
 
 test('Pagos confirmados counts payment_status paid only (refunded is not confirmed)', () => {
   const { computeDashboardKpis } = metrics();
-  const rows = ['paid', 'paid', 'refunded', 'pending', 'processing', 'failed', 'not_required_yet'].map((payment_status) => booking({ payment_status }));
+  const rows = ['paid', 'paid', 'refunded', 'pending', 'processing', 'failed'].map((payment_status) => booking({ payment_status }));
   assert.equal(computeDashboardKpis(rows).confirmedPayments, 2);
 });
 
@@ -38,7 +38,7 @@ test('Ingresos sums money collected on paid bookings and never a hardcoded value
   const { computeDashboardKpis } = metrics();
   assert.equal(computeDashboardKpis([]).revenue, 0);
   // Nothing paid yet -> 0 even though bookings have totals.
-  assert.equal(computeDashboardKpis([booking({ total_snapshot: 500 }), booking({ payment_status: 'not_required_yet', total_snapshot: 300 })]).revenue, 0);
+  assert.equal(computeDashboardKpis([booking({ total_snapshot: 500 }), booking({ payment_status: 'pending', total_snapshot: 300 })]).revenue, 0);
 
   const rows = [
     // admin-confirmed WhatsApp payment: no payments row, total_snapshot is the recorded amount
@@ -71,8 +71,8 @@ test('Reservas por confirmar counts open booking statuses, excluding PayPal book
   const count = (overrides) => computeDashboardKpis([booking(overrides)]).reservationsToConfirm;
   for (const booking_status of ['pending', 'pending_payment', 'pending_confirmation']) assert.equal(count({ booking_status }), 1, booking_status);
   for (const booking_status of ['confirmed', 'cancelled', 'completed']) assert.equal(count({ booking_status }), 0, booking_status);
-  // pay-on-tour and manual methods await the admin's confirmation
-  assert.equal(count({ booking_status: 'pending_confirmation', payment_method_key: 'pay-on-day', payment_status: 'not_required_yet' }), 1);
+  // manual methods await the admin's confirmation
+  assert.equal(count({ booking_status: 'pending_confirmation', payment_method_key: 'whatsapp-link', payment_status: 'pending' }), 1);
   // PayPal awaiting the customer's payment cannot be confirmed yet...
   assert.equal(count({ booking_status: 'pending_payment', payment_method_key: 'paypal', payment_status: 'pending' }), 0);
   assert.equal(count({ booking_status: 'pending_payment', payment_method_key: 'paypal', payment_status: 'processing' }), 0);

@@ -10,6 +10,8 @@ export interface TourTimeSlot {
   id: string;
   label: string;
   time: string;
+  /** Belongs to the shared catalog (offered to every package that uses the general hours). A package-specific hour is registered but not general. */
+  isGeneral?: boolean;
 }
 
 export interface BoatTour {

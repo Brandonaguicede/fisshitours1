@@ -41,7 +41,7 @@ export interface DashboardKpis {
 /**
  * Pagos pendientes: `bookings.payment_status` is `pending` (payment requested, nothing received: PayPal not yet
  * captured, WhatsApp link, transfer) or `processing` (PayPal order created, capture in flight).
- * Excluded: `not_required_yet` (pay-on-tour: nothing is due yet), `failed` and `refunded` (also what cancelled/expired
+ * Excluded: `failed` and `refunded` (also what cancelled/expired
  * unpaid bookings are moved to), and `paid`.
  */
 export const PENDING_PAYMENT_STATUSES = ['pending', 'processing'];

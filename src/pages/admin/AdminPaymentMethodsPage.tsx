@@ -68,7 +68,7 @@ export default function AdminPaymentMethodsPage() {
 
   return (
     <div className="admin-page">
-      <AdminPageHeader title="Metodos de pago" description="Activa o desactiva cada metodo. La integracion (PayPal, WhatsApp, pago el dia del tour) la controla el sistema." />
+      <AdminPageHeader title="Metodos de pago" description="Activa o desactiva cada metodo. La integracion (PayPal, WhatsApp) la controla el sistema." />
       <AdminModuleSurface>
         <AdminListToolbar
           embedded

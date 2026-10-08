@@ -45,32 +45,6 @@ function fixture(paymentMethodKey = 'whatsapp-link') {
   return { context, supabase, sent, notifications, booking };
 }
 
-for (const method of ['pay-on-day']) {
-  test(`${method}: actual sender includes existing branded HTML and records it`, async () => {
-    const { context, supabase, sent, notifications } = fixture(method);
-    await context.sendBookingEmails(supabase, {
-      booking_id: 'test-booking', booking_reference: 'PFT-TEST', boat_id: 'boat-id',
-      tour_id: 'tour-id', tour_package_id: 'package-id', tour_date: '2026-10-01',
-      time_slot_id: 'slot-id', guests: 2, total_snapshot: 350,
-      booking_status: 'pending_payment', payment_status: 'pending',
-    }, { customer: { fullName: 'Ana', email: 'customer@example.com', whatsapp: '0000000' }, paymentMethodKey: method });
-    assert.equal(sent.length, 2);
-    const customer = sent.find((message) => message.to === 'customer@example.com');
-    assert.ok(customer.text);
-    assert.match(customer.html, /<!doctype html>/);
-    assert.match(customer.html, /www\.papagayofishingtourcr\.com\/images\/papagayo-logo\.png/);
-    assert.match(customer.html, /max-width:620px/);
-    assert.match(customer.html, /Solicitud de reserva recibida/);
-    assert.match(customer.html, /Pendiente/);
-    assert.match(customer.html, /Second Wind/);
-    assert.match(customer.html, /Half Day/);
-    assert.match(customer.html, /&lt;b&gt;Ana&lt;\/b&gt;/);
-    assert.doesNotMatch(customer.html, /Tu pago fue recibido|Pago recibido y reserva confirmada/);
-    assert.equal(notifications.find((row) => row.dedupe_key.endsWith(':customer-email')).payload.html, customer.html);
-    assert.match(sent.find((message) => message.to === 'admin@example.com').html, /Nueva reserva recibida/);
-  });
-}
-
 test('WhatsApp request notifies the admin but sends no customer email before manual payment confirmation', async () => {
   const { context, supabase, sent, notifications } = fixture('whatsapp-link');
   await context.sendBookingEmails(supabase, { booking_id: 'test-booking', booking_reference: 'PFT-TEST' }, {
@@ -143,3 +117,27 @@ test('PayPal creation still sends no confirmation before payment capture', async
   assert.equal(context.formatDepartureTime('00:00:00'), '12:00 AM');
   assert.equal(context.formatDepartureTime('12:00:00'), '12:00 PM');
  });
+
+// whatsapp-link is a manual-payment REQUEST. Since commit be056fa ("Delay WhatsApp customer email until manual payment confirmation", 2026-09-15) the
+// customer gets no email at creation: their message is the WhatsApp chat they open themselves. The admin is alerted, and the customer's email is the
+// normal CONFIRMATION once the admin confirms / marks the payment. This test pins the whole flow so the Pay-on-the-Day retirement cannot change it.
+test('whatsapp-link end to end: creation alerts ONLY the admin (pending payment), and the customer receives the normal confirmation once the admin confirms', async () => {
+  const { context, supabase, sent, notifications, booking } = fixture('whatsapp-link');
+  assert.equal(booking.payment_status, 'pending');
+  await context.sendBookingEmails(supabase, { booking_id: 'test-booking', booking_reference: 'PFT-TEST', booking_status: 'pending_payment', payment_status: 'pending' }, {
+    customer: { fullName: 'Ana', email: 'customer@example.com', whatsapp: '0000000' }, paymentMethodKey: 'whatsapp-link',
+  });
+  assert.deepEqual(sent.map((message) => message.to), ['admin@example.com'], 'creation: only the admin is emailed');
+  assert.match(sent[0].html, /Nueva reserva recibida/);
+  assert.deepEqual(notifications.map((row) => row.dedupe_key), ['booking:test-booking:admin-email']);
+  assert.equal(notifications.some((row) => row.dedupe_key.endsWith(':customer-email')), false, 'no "request received" customer email exists for this method');
+  // Admin confirms and marks the payment: the customer's email is the standard confirmation (customer + admin copies).
+  booking.payment_status = 'paid';
+  const messages = await context.getBookingConfirmationMessages(supabase, 'test-booking');
+  const customer = messages.find((message) => message.to === 'customer@example.com');
+  assert.ok(customer, 'the customer gets the confirmation');
+  assert.equal(customer.dedupe, 'booking:test-booking:paypal-confirmation-customer-email');
+  assert.match(customer.subject, /Pago recibido y reserva confirmada|Payment received and booking confirmed/);
+  assert.match(customer.html, /Pagado|Paid/);
+  assert.ok(messages.some((message) => message.to === 'admin@example.com'));
+});

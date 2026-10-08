@@ -40,7 +40,7 @@ serve(withCors(async (req) => {
   }
 
   const [{ data: slots, error: slotsError }, { data: blocks, error: blocksError }, { data: bookings, error: bookingsError }] = await Promise.all([
-    supabase.from('time_slots').select('id, label, starts_at').eq('active', true).order('sort_order'),
+    supabase.from('time_slots').select('id, label, starts_at, is_general').eq('active', true).order('starts_at'),
     supabase
       .from('availability_blocks')
       .select('time_slot_id')

@@ -14,7 +14,7 @@ const reservationRows = [
   ['b-1', 'confirmed', 'paid', 'paypal'],
   ['b-2', 'pending_payment', 'pending', 'whatsapp-link'],
   ['b-3', 'cancelled', 'failed', 'paypal'],
-  ['b-4', 'pending_confirmation', 'not_required_yet', 'pay-on-day'],
+  ['b-4', 'pending_confirmation', 'pending', 'whatsapp-link'],
 ].map(([id, booking_status, payment_status, payment_method_key], i) => ({
   id, booking_reference: `PFT-${String(i + 1).padStart(4, '0')}`, boat_id: 'boat-1', tour_id: 'tour-1', tour_package_id: 'pkg-1', time_slot_id: 'slot-1', tour_date: `2026-10-0${i + 1}`,
   created_at: '2026-09-20T14:30:00Z', guests: 2, total_snapshot: 350 + i, departure_location_name_snapshot: 'Marina', departure_surcharge_snapshot: 0,
@@ -25,7 +25,7 @@ const reservationRows = [
 const seed = {
   payment_methods: [
     { key: 'paypal', type: 'paypal', name: 'PayPal', description: 'Card or PayPal', active: true, sort_order: 1 },
-    { key: 'cash', type: 'pay_on_day', name: 'Cash on the day', description: 'Pay at the dock', active: false, sort_order: 2 },
+    { key: 'cash', type: 'cash', name: 'Cash on the day', description: 'Pay at the dock', active: false, sort_order: 2 },
   ],
   reviews: [
     { id: 'r-1', name: 'Ana', country: 'CR', quote: 'Great day', quote_es: 'Gran dia', quote_en: 'Great day', translated: true, rating: 5, status: 'approved', featured: false, active: true, sort_order: 1, image_url: null, image_public_id: null, created_at: '2026-01-03T00:00:00Z' },
@@ -251,13 +251,13 @@ test('badges: the shared vocabulary maps stored values to Spanish without renami
     const result = await page.evaluate(async () => {
       const { adminStatusLabel, ADMIN_STATUS_BADGES } = await import('/src/components/admin/AdminPrimitives.tsx');
       return {
-        labels: Object.fromEntries(['active', 'inactive', 'pending', 'approved', 'rejected', 'visible', 'hidden', 'hidden_f', 'true', 'false', 'pending_payment', 'not_required_yet'].map((key) => [key, adminStatusLabel(key)])),
+        labels: Object.fromEntries(['active', 'inactive', 'pending', 'approved', 'rejected', 'visible', 'hidden', 'hidden_f', 'true', 'false', 'pending_payment'].map((key) => [key, adminStatusLabel(key)])),
         boolean: [adminStatusLabel(true), adminStatusLabel(false)],
         unknown: adminStatusLabel('some_new_state'),
         keys: Object.keys(ADMIN_STATUS_BADGES).length,
       };
     });
-    assert.deepEqual(result.labels, { active: 'Activo', inactive: 'Inactivo', pending: 'Pendiente', approved: 'Aprobado', rejected: 'Rechazado', visible: 'Visible', hidden: 'Oculto', hidden_f: 'Oculta', true: 'Activo', false: 'Inactivo', pending_payment: 'Pago pendiente', not_required_yet: 'Pago en tour' });
+    assert.deepEqual(result.labels, { active: 'Activo', inactive: 'Inactivo', pending: 'Pendiente', approved: 'Aprobado', rejected: 'Rechazado', visible: 'Visible', hidden: 'Oculto', hidden_f: 'Oculta', true: 'Activo', false: 'Inactivo', pending_payment: 'Pago pendiente' });
     assert.deepEqual(result.boolean, ['Activo', 'Inactivo']);
     assert.equal(result.unknown, 'Some new state');
   } finally { await f.browser.close(); }

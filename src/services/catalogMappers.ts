@@ -1,5 +1,6 @@
 import type { Boat, BoatEquipmentItem } from '../types/boat';
 import type { BoatTour, TourCategory, TourTimeSlot } from '../types/boatTour';
+import { sortSlotsChronologically } from '../utils/format';
 import { parseMealOptions } from '../utils/packageSettings';
 import type { Tables } from '../types/supabase';
 
@@ -143,7 +144,8 @@ export function mapBoatTour(
     extraGuestPrice: Number(row.extra_guest_price),
     customQuote: row.custom_quote,
     image: row.image_url ?? tour.image_url ?? primaryImage?.src ?? '/images/placeholder-image.jpg',
-    timeSlots: row.departure_times == null ? timeSlots : timeSlots.filter((slot) => row.departure_times?.includes(slot.time)),
+    // A package that inherits offers the shared (general) hours only; one with its own list offers exactly those hours. Always chronological.
+    timeSlots: sortSlotsChronologically(row.departure_times == null ? timeSlots.filter((slot) => slot.isGeneral !== false) : timeSlots.filter((slot) => row.departure_times?.includes(slot.time))),
   };
 }
 

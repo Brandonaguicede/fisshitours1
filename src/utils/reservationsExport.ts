@@ -59,7 +59,6 @@ export const PAYMENT_STATUS_LABELS: Record<string, string> = {
   paid: 'Pagado',
   pending: 'Pendiente',
   processing: 'Procesando',
-  not_required_yet: 'Pago en tour',
   failed: 'Fallido',
   refunded: 'Reembolsado',
 };
@@ -86,7 +85,6 @@ export function formatPaymentMethodLabel(key: string, name: string) {
   const source = `${key} ${name}`.toLowerCase();
   if (source.includes('paypal')) return 'PayPal';
   if (source.includes('whatsapp')) return 'WhatsApp';
-  if (/pay[\s_-]*on[\s_-]*(the[\s_-]*)?day|pago[\s_-]*(el[\s_-]*)?d[ií]a/.test(source)) return 'Día del tour';
   return name;
 }
 

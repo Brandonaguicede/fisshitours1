@@ -61,7 +61,8 @@ export async function loadBoatToursPackages(boatId: string): Promise<BoatToursPa
   const [toursRes, linksRes, slotsRes] = await Promise.all([
     supabase.from('tours').select('id, title, category, publication_status, active, sort_order').order('sort_order'),
     supabase.from('boat_tours').select('id, boat_id, tour_id, active, sort_order').eq('boat_id', boatId).order('sort_order'),
-    supabase.from('time_slots').select('*').eq('active', true).order('sort_order'),
+    // The editor works with the SHARED catalog (general hours); a package's own hours live in its departure_times.
+    supabase.from('time_slots').select('*').eq('active', true).eq('is_general', true).order('starts_at'),
   ]);
   if (toursRes.error) throw new Error(toursRes.error.message);
   if (slotsRes.error) throw new Error(slotsRes.error.message);
@@ -104,7 +105,7 @@ export async function ensureBoatTourLink(boatId: string, tourId: string, sortOrd
 
 /** Active shared departure times (what a package with no own list of hours falls back to). */
 async function countSharedTimeSlots(): Promise<number> {
-  const { count, error } = await supabase.from('time_slots').select('id', { count: 'exact', head: true }).eq('active', true);
+  const { count, error } = await supabase.from('time_slots').select('id', { count: 'exact', head: true }).eq('active', true).eq('is_general', true);
   if (error) throw new Error(error.message);
   return count ?? 0;
 }
@@ -242,4 +243,27 @@ export async function disableTourForBoat(boatId: string, tourId: string): Promis
     .update({ active: false, updated_at: new Date().toISOString() })
     .eq('boat_tour_id', link.data.id);
   if (deactivate.error) throw new Error(deactivate.error.message);
+}
+
+// --- General hours (the shared catalog) --------------------------------------------------------------------------------------------------------
+// Each call is ONE database transaction (RPC): the catalog changes, packages with their own list are never rewritten.
+
+const timeSlotError = (error: { message: string }) => new Error(error.message);
+
+export async function createGeneralTimeSlot(time: string): Promise<{ id: string; time: string; created: boolean }> {
+  const { data, error } = await supabase.rpc('admin_create_time_slot', { p_time: time });
+  if (error) throw timeSlotError(error);
+  return data as { id: string; time: string; created: boolean };
+}
+
+export async function updateGeneralTimeSlot(id: string, time: string): Promise<{ id: string; time: string; changed: boolean }> {
+  const { data, error } = await supabase.rpc('admin_update_time_slot', { p_id: id, p_time: time });
+  if (error) throw timeSlotError(error);
+  return data as { id: string; time: string; changed: boolean };
+}
+
+export async function deleteGeneralTimeSlot(id: string): Promise<{ id: string; time: string; kept_for_packages: boolean; general_left: number }> {
+  const { data, error } = await supabase.rpc('admin_delete_time_slot', { p_id: id });
+  if (error) throw timeSlotError(error);
+  return data as { id: string; time: string; kept_for_packages: boolean; general_left: number };
 }

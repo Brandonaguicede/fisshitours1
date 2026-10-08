@@ -2,6 +2,8 @@ import { Pencil, Plus, Trash2, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import {
+  createGeneralTimeSlot,
+  deleteGeneralTimeSlot,
   deletePackage,
   disableTourForBoat,
   enableTourForBoat,
@@ -9,6 +11,7 @@ import {
   packageSlug,
   packageRowIssues,
   savePackageForBoatTour,
+  updateGeneralTimeSlot,
   type AdminPackageRow,
   type AdminTourOption,
   type BoatToursPackagesData,
@@ -20,7 +23,7 @@ import { describePackageIssues, findPackageIssues, type PackageFacts } from '../
 import { friendlyDeleteError } from '../../utils/adminErrors';
 import { translateTextsToSpanish, TranslationError } from '../../services/translationService';
 import { cleanList, editableList, editableText, textColumns, textsToTranslate, type BilingualColumns } from '../../utils/bilingualContent';
-import { formatTime, money } from '../../utils/format';
+import { formatTime, money, normalizeTime, sortSlotsChronologically, sortTimes } from '../../utils/format';
 import { parseMealOptions } from '../../utils/packageSettings';
 import { useQueryClient } from '@tanstack/react-query';
 
@@ -255,8 +258,11 @@ interface PackageDraftEditorProps {
 function PackageDraftEditor({ draft, boatName, tourTitle, fieldErrors, busy, boatMaxGuests, defaultTimes, onChange, onCancel, onSave, onDelete }: PackageDraftEditorProps) {
   const key = `pkg-${draft.id}`;
   const [newTime, setNewTime] = useState('');
+  // The own hour being replaced (13:30 -> 13:45). Only THIS package's list changes (applied on save); the shared hour rows are never edited here.
+  const [replacing, setReplacing] = useState<string | null>(null);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
-  const timeChoices = Array.from(new Set([...defaultTimes, ...draft.departureTimes])).sort();
+  // The package's own hours plus the shared ones it can pick from: distinct, normalized and ALWAYS chronological (nothing here depends on insertion order).
+  const timeChoices = sortTimes([...defaultTimes, ...draft.departureTimes]);
   const fieldError = (name: string) => (fieldErrors[`${key}-${name}`] ? <span className="admin-field-error">{fieldErrors[`${key}-${name}`]}</span> : null);
   return (
     <div className="admin-package-compact-editor" role="group" aria-label={draft.isNew ? 'Nuevo paquete' : `Editar ${draft.name || 'paquete'}`}>
@@ -378,18 +384,30 @@ function PackageDraftEditor({ draft, boatName, tourTitle, fieldErrors, busy, boa
             <>
               <div className="admin-time-chips">
                 {timeChoices.map((time) => (
-                  <label key={time} className="admin-time-chip">
-                    <input type="checkbox" checked={draft.departureTimes.includes(time)} onChange={(event) => onChange({ departureTimes: event.target.checked ? [...draft.departureTimes, time] : draft.departureTimes.filter((item) => item !== time) })} />
-                    {formatTime(time)}
-                  </label>
+                  <span key={time} className="admin-time-chip-wrap">
+                    <label className="admin-time-chip">
+                      <input type="checkbox" checked={draft.departureTimes.includes(time)} onChange={(event) => onChange({ departureTimes: sortTimes(event.target.checked ? [...draft.departureTimes, time] : draft.departureTimes.filter((item) => item !== time)) })} />
+                      {formatTime(time)}
+                    </label>
+                    {draft.departureTimes.includes(time) ? (
+                      <button className="admin-icon-btn" type="button" aria-label={`Cambiar la hora ${formatTime(time)} de este paquete`} onClick={() => { setReplacing(time); setNewTime(time); }}><Pencil size={13} /></button>
+                    ) : null}
+                  </span>
                 ))}
               </div>
               <div className="admin-package-inline-add">
                 <label className="admin-field">
-                  <span className="admin-field__label">Agregar hora de salida</span>
+                  <span className="admin-field__label">{replacing ? `Cambiar ${formatTime(replacing)} por` : 'Agregar hora de salida'}</span>
                   <input className="admin-input" type="time" step="60" value={newTime} onChange={(event) => setNewTime(event.target.value)} />
                 </label>
-                <button className="admin-btn admin-btn--secondary" type="button" disabled={!newTime || draft.departureTimes.includes(newTime)} onClick={() => { onChange({ departureTimes: [...draft.departureTimes, newTime] }); setNewTime(''); }}><Plus size={15} /> Agregar hora</button>
+                <button className="admin-btn admin-btn--secondary" type="button" disabled={!normalizeTime(newTime) || (replacing ? normalizeTime(newTime) === replacing : draft.departureTimes.includes(normalizeTime(newTime) ?? ''))} onClick={() => {
+                  const time = normalizeTime(newTime);
+                  if (!time) return;
+                  onChange({ departureTimes: sortTimes(replacing ? [...draft.departureTimes.filter((item) => item !== replacing), time] : [...draft.departureTimes, time]) });
+                  setReplacing(null);
+                  setNewTime('');
+                }}>{replacing ? <Pencil size={15} /> : <Plus size={15} />} {replacing ? 'Reemplazar hora' : 'Agregar hora'}</button>
+                {replacing ? <button className="admin-btn admin-btn--secondary" type="button" onClick={() => { setReplacing(null); setNewTime(''); }}>Cancelar cambio</button> : null}
               </div>
               <span className="admin-field-help">Sin ninguna hora marcada, el paquete no se puede reservar.</span>
             </>
@@ -472,6 +490,80 @@ function PackageDraftEditor({ draft, boatName, tourTitle, fieldErrors, busy, boa
   );
 }
 
+
+/**
+ * The SHARED catalog ("horarios generales"): the hours offered by every package that uses the general hours. Create / edit / delete here change
+ * only this catalog; the own hours of a package (and packages with their own list) are never rewritten. Always chronological: the hour decides
+ * its position, nobody orders anything.
+ */
+function GeneralTimesManager({ slots, busy, onCreate, onUpdate, onDelete }: {
+  slots: Array<{ id: string; starts_at: string }>;
+  busy: boolean;
+  onCreate: (time: string) => Promise<void>;
+  onUpdate: (id: string, time: string) => Promise<void>;
+  onDelete: (slot: { id: string; time: string }) => void;
+}) {
+  const [newTime, setNewTime] = useState('');
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editTime, setEditTime] = useState('');
+  const [message, setMessage] = useState('');
+  const ordered = sortSlotsChronologically(slots.map((slot) => ({ id: slot.id, time: slot.starts_at.slice(0, 5) })));
+  const exists = (time: string, exceptId?: string) => ordered.some((slot) => slot.time === time && slot.id !== exceptId);
+  const normalizedNew = normalizeTime(newTime);
+  const normalizedEdit = normalizeTime(editTime);
+
+  async function add() {
+    if (!normalizedNew) { setMessage('Escribe una hora válida.'); return; }
+    if (exists(normalizedNew)) { setMessage(`Ya existe el horario general ${formatTime(normalizedNew)}.`); return; }
+    setMessage('');
+    await onCreate(normalizedNew);
+    setNewTime('');
+  }
+
+  async function save(id: string) {
+    if (!normalizedEdit) { setMessage('Escribe una hora válida.'); return; }
+    if (exists(normalizedEdit, id)) { setMessage(`Ya existe el horario general ${formatTime(normalizedEdit)}.`); return; }
+    setMessage('');
+    await onUpdate(id, normalizedEdit);
+    setEditingId(null);
+  }
+
+  return (
+    <details className="admin-general-times" data-general-times>
+      <summary>Horarios generales <span className="admin-boat-tours__count">{ordered.length}</span></summary>
+      <p className="admin-field-help">Los usan los paquetes con “Usar los horarios generales”. Las horas propias de un paquete no se ven afectadas por lo que cambies aquí.</p>
+      <ul className="admin-general-times__list">
+        {ordered.map((slot) => (
+          <li key={slot.id} className="admin-general-times__row">
+            {editingId === slot.id ? (
+              <>
+                <input className="admin-input" type="time" step="60" aria-label={`Nueva hora para ${formatTime(slot.time)}`} value={editTime} onChange={(event) => setEditTime(event.target.value)} />
+                <button className="admin-btn" type="button" disabled={busy || !normalizedEdit} onClick={() => void save(slot.id)}>Guardar</button>
+                <button className="admin-btn admin-btn--secondary" type="button" disabled={busy} onClick={() => { setEditingId(null); setMessage(''); }}>Cancelar</button>
+              </>
+            ) : (
+              <>
+                <strong className="admin-general-times__time">{formatTime(slot.time)}</strong>
+                <button className="admin-icon-btn" type="button" disabled={busy} aria-label={`Editar horario ${formatTime(slot.time)}`} onClick={() => { setEditingId(slot.id); setEditTime(slot.time); setMessage(''); }}><Pencil size={15} /></button>
+                <button className="admin-icon-btn" type="button" disabled={busy} aria-label={`Eliminar horario ${formatTime(slot.time)}`} onClick={() => onDelete({ id: slot.id, time: slot.time })}><Trash2 size={15} /></button>
+              </>
+            )}
+          </li>
+        ))}
+        {ordered.length === 0 ? <li className="admin-muted">No hay horarios generales. Agrega al menos uno para los paquetes que los usan.</li> : null}
+      </ul>
+      <div className="admin-package-inline-add">
+        <label className="admin-field">
+          <span className="admin-field__label">Agregar horario general</span>
+          <input className="admin-input" type="time" step="60" value={newTime} onChange={(event) => setNewTime(event.target.value)} />
+        </label>
+        <button className="admin-btn admin-btn--secondary" type="button" disabled={busy || !newTime} onClick={() => void add()}><Plus size={15} /> Agregar horario</button>
+      </div>
+      {message ? <span className="admin-field-error" role="alert">{message}</span> : null}
+    </details>
+  );
+}
+
 export default function BoatToursPackagesEditor({ boatId, boatName, boatMaxGuests, focusTourId, focusPackageId }: Props) {
   const queryClient = useQueryClient();
   const [data, setData] = useState<BoatToursPackagesData | null>(null);
@@ -483,6 +575,7 @@ export default function BoatToursPackagesEditor({ boatId, boatName, boatMaxGuest
   const [draft, setDraft] = useState<DraftPackage | null>(null);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [confirmRemove, setConfirmRemove] = useState<AdminTourOption | null>(null);
+  const [confirmDeleteTime, setConfirmDeleteTime] = useState<{ id: string; time: string } | null>(null);
   const [availableQuery, setAvailableQuery] = useState('');
   const [highlightTourId, setHighlightTourId] = useState<string | null>(null);
   const focusedRef = useRef<string | null>(null);
@@ -557,6 +650,14 @@ export default function BoatToursPackagesEditor({ boatId, boatName, boatMaxGuest
     }
   }
 
+  // Every change of the shared catalog refreshes what this editor shows AND what the public booking / availability read (no manual refresh needed).
+  async function runGeneralTimes(action: () => Promise<unknown>, okMessage: string) {
+    await run(async () => {
+      await action();
+      await Promise.all([queryClient.invalidateQueries({ queryKey: ['boatTours'] }), queryClient.invalidateQueries({ queryKey: ['availability'] })]);
+    }, okMessage);
+  }
+
   async function addTour(tour: AdminTourOption) {
     let skipped: Array<{ id: string; name: string }> = [];
     await run(async () => { skipped = (await enableTourForBoat(boatId, tour.id, tour.sort_order)).skipped; }, () => (skipped.length
@@ -570,7 +671,7 @@ export default function BoatToursPackagesEditor({ boatId, boatName, boatMaxGuest
     setFieldErrors({});
   }
 
-  const defaultTimes = Array.from(new Set((data?.timeSlots ?? []).map((slot) => slot.starts_at.slice(0, 5)))).sort();
+  const defaultTimes = sortTimes((data?.timeSlots ?? []).map((slot) => slot.starts_at.slice(0, 5)));
 
   function startEditing(row: AdminPackageRow, tourId: string) {
     setDraft(rowToDraft(row, tourId, defaultTimes));
@@ -608,7 +709,7 @@ export default function BoatToursPackagesEditor({ boatId, boatName, boatMaxGuest
       maxGuests: Number(draft.maxGuests),
       extraGuestPrice: Number(draft.extraGuestPrice),
       description: draft.description.trim() || null,
-      departureTimes: draft.inheritTimes ? null : draft.departureTimes,
+      departureTimes: draft.inheritTimes ? null : sortTimes(draft.departureTimes),
       mealOptions: [],
       packageIncluded: includedItems(draft),
       customQuote: draft.customQuote,
@@ -680,6 +781,14 @@ export default function BoatToursPackagesEditor({ boatId, boatName, boatMaxGuest
           <li><strong>{activePackageCount}</strong> {activePackageCount === 1 ? 'paquete activo' : 'paquetes activos'}</li>
         </ul>
       </header>
+
+      <GeneralTimesManager
+        slots={data?.timeSlots ?? []}
+        busy={busy}
+        onCreate={(time) => runGeneralTimes(() => createGeneralTimeSlot(time), 'Horario general agregado.')}
+        onUpdate={(id, time) => runGeneralTimes(() => updateGeneralTimeSlot(id, time), 'Horario general actualizado.')}
+        onDelete={(slot) => setConfirmDeleteTime(slot)}
+      />
 
       <div className={`admin-boat-tours__layout${draft ? ' admin-boat-tours__layout--editing' : ''}`}>
       <section className="admin-boat-tours__section" aria-label={`Tours de ${boatLabel}`}>
@@ -843,6 +952,27 @@ export default function BoatToursPackagesEditor({ boatId, boatName, boatMaxGuest
         )}
       </section>
       </div>
+
+      <AdminConfirmDialog
+        open={Boolean(confirmDeleteTime)}
+        onClose={() => setConfirmDeleteTime(null)}
+        onConfirm={() => {
+          const slot = confirmDeleteTime;
+          setConfirmDeleteTime(null);
+          if (slot) void runGeneralTimes(() => deleteGeneralTimeSlot(slot.id), `Horario general ${formatTime(slot.time)} eliminado.`);
+        }}
+        titleId="confirm-general-time-delete-title"
+        title="Eliminar horario general"
+        tone="primary"
+        cancelLabel="Volver"
+        confirmLabel="Eliminar horario"
+        message={confirmDeleteTime ? (
+          <>
+            <p>El horario general {formatTime(confirmDeleteTime.time)} dejará de ofrecerse en los paquetes que usan los horarios generales.</p>
+            <p className="admin-muted">Los paquetes con horas propias, las reservas existentes y los demás horarios no cambian.</p>
+          </>
+        ) : ''}
+      />
 
       <AdminConfirmDialog
         open={Boolean(confirmRemove)}

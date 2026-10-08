@@ -34,7 +34,7 @@ test("the client's cancellation rules are kept AS WRITTEN, overlap included (not
   assert.ok(!/72/.test(JSON.stringify(TERMS_VERSIONS)), 'no 72h reinterpretation');
 });
 
-test('payments section no longer carries the deposit / balance / payment-methods / PayPal lines (Pay on the Day is going away); only the fees line is left', () => {
+test('payments section no longer carries the deposit / balance / payment-methods / PayPal lines ; only the fees line is left', () => {
   const en = getTerms('v1', 'en').sections[0];
   const es = getTerms('v1', 'es').sections[0];
   assert.deepEqual(en.items, ['Bank transfer/PayPal fees will be covered by the client.']);

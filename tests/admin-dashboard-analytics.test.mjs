@@ -115,15 +115,14 @@ test('more than six boats/tours: top six plus an honest "Otros (n)" total', () =
 
 test('payment methods: labels, counts, percentages and the explicit most-used method', () => {
   const m = (key, name) => booking({ payment_method_key: key, payment_methods: { name } });
-  const rows = [m('paypal', 'PayPal'), m('paypal', 'PayPal'), m('paypal', 'PayPal'), m('whatsapp-link', 'Pago por WhatsApp'), m('whatsapp-link', 'Pago por WhatsApp'), m('pay-on-day', 'Pagar el día del tour'), m('sinpe', 'SINPE Móvil')];
+  const rows = [m('paypal', 'PayPal'), m('paypal', 'PayPal'), m('paypal', 'PayPal'), m('whatsapp-link', 'Pago por WhatsApp'), m('whatsapp-link', 'Pago por WhatsApp'), m('sinpe', 'SINPE Móvil')];
   const result = analytics(rows);
   assert.deepEqual(result.paymentMethods.map((item) => [item.label, item.count, item.percent]), [
-    ['PayPal', 3, 43], // 3/7 = 42.86 -> 43
-    ['WhatsApp', 2, 29], // 2/7 = 28.57 -> 29
-    ['Día del tour', 1, 14], // 1/7 = 14.29 -> 14
-    ['SINPE Móvil', 1, 14],
+    ['PayPal', 3, 50], // 3/6 = 50
+    ['WhatsApp', 2, 33], // 2/6 = 33.33 -> 33
+    ['SINPE Móvil', 1, 17], // 1/6 = 16.67 -> 17
   ]);
-  assert.deepEqual(result.mostUsedPaymentMethod, { labels: ['PayPal'], count: 3, percent: 43 });
+  assert.deepEqual(result.mostUsedPaymentMethod, { labels: ['PayPal'], count: 3, percent: 50 });
 });
 
 test('payment methods: a tie for first place lists every tied method, alphabetically', () => {
