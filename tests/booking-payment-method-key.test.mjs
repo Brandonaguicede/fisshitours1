@@ -553,3 +553,28 @@ test('hours: the public booking lists the departure times chronologically whatev
     assert.deepEqual(labels.map((text) => text.split('\n')[0].trim()), ['6:00 AM', '8:00 AM', '11:30 AM', '12:00 PM', '2:00 PM', '4:30 PM']);
   } finally { await f.browser.close(); }
 });
+
+test('payment methods grid follows the number of methods: 2 methods fill the row in two balanced columns on desktop, one column on a phone (no empty third column)', async () => {
+  const both = [...paypalMethod, { id: '2', key: 'whatsapp-link', name: 'WhatsApp payment link', description: '', type: 'whatsapp_link', active: true, instructions: null, logo_url: null, sort_order: 2, created_at: '', updated_at: '' }];
+  const f = await fixture(both);
+  try {
+    await runBookingFlowToPaymentStep(f.page, { acceptTerms: false });
+    const geometry = () => f.page.evaluate(() => {
+      const grid = document.querySelector('[data-payment-methods-grid]');
+      const cards = [...grid.querySelectorAll('[data-payment-method]')].map((node) => node.getBoundingClientRect());
+      const box = grid.getBoundingClientRect();
+      return { count: cards.length, gridLeft: box.left, gridRight: box.right, cards: cards.map((card) => ({ left: card.left, right: card.right, top: card.top, width: card.width })) };
+    });
+    const desktop = await geometry();
+    assert.equal(desktop.count, 2);
+    assert.equal(Math.round(desktop.cards[0].top), Math.round(desktop.cards[1].top), 'side by side');
+    assert.ok(Math.abs(desktop.cards[0].width - desktop.cards[1].width) <= 1, 'balanced widths');
+    assert.ok(Math.abs(desktop.cards[0].left - desktop.gridLeft) <= 1 && Math.abs(desktop.cards[1].right - desktop.gridRight) <= 1, 'together they fill the whole row: no empty column on the right');
+    await f.page.setViewportSize({ width: 390, height: 900 });
+    const phone = await geometry();
+    assert.ok(phone.cards[1].top > phone.cards[0].top, 'stacked on a phone');
+    assert.ok(Math.abs(phone.cards[0].width - (phone.gridRight - phone.gridLeft)) <= 1, 'full width on a phone');
+    // Behavior and accessibility of the cards are untouched: still locked (aria-disabled) until the terms are accepted.
+    await expect(f.page.locator('[data-payment-method="paypal"]')).toHaveAttribute('aria-disabled', 'true');
+  } finally { await f.browser.close(); }
+});

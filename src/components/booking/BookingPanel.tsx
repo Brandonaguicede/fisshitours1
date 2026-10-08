@@ -1226,7 +1226,8 @@ function CustomerStep(props: {
       {/* Group B: Payment method */}
       <div className="mt-4">
         <p className="text-xs font-extrabold uppercase tracking-[0.12em] text-ocean-400">{language === 'es' ? 'Método de pago' : 'Payment method'}</p>
-        <div className="mt-2.5 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        {/* Columns follow the number of methods actually rendered (never a fixed empty third column). Classes are spelled out so Tailwind keeps them. */}
+        <div className={cn('mt-2.5 grid grid-cols-1 gap-2', props.paymentMethods.length <= 1 ? 'sm:grid-cols-1' : props.paymentMethods.length === 2 ? 'sm:grid-cols-2' : 'sm:grid-cols-2 lg:grid-cols-3')} data-payment-methods-grid>
           {props.paymentMethods.map((method) => {
             const methodCopy = getPaymentMethodCopy(method, language);
             const selected = props.paymentMethod === method.id;
