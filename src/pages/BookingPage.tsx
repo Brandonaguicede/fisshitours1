@@ -1,6 +1,7 @@
 import { ShieldCheck } from 'lucide-react';
 
-import { BookingPanel, getBookingTerms } from '../components/booking/BookingPanel';
+import { BookingPanel } from '../components/booking/BookingPanel';
+import { TermsLink } from '../components/booking/TermsModal';
 import { BackToHomeButton } from '../components/common/BackToHomeButton';
 import { Container } from '../components/common/Container';
 import { SectionHeader } from '../components/ui';
@@ -55,10 +56,8 @@ export default function BookingPage() {
               <ShieldCheck aria-hidden="true" size={13} />
               {language === 'es' ? 'Información de la reserva' : 'Booking information'}
             </p>
-            <div className="mx-auto mt-2 grid max-w-xl gap-1 text-xs leading-5 text-ocean-300">
-              {getBookingTerms(language).slice(0, 3).map((term) => (
-                <p key={term}>{term}</p>
-              ))}
+            <div className="mx-auto mt-2 max-w-xl text-xs leading-5 text-ocean-300">
+              <TermsLink language={language} />
             </div>
           </div>
         </Container>

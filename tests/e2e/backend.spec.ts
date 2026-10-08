@@ -133,6 +133,10 @@ function bookingPayload(overrides: Record<string, unknown> = {}): Record<string,
     guests: 5,
     paymentMethodKey: 'pay-on-day',
     turnstileToken: MOCK_TURNSTILE,
+    // Terms and Conditions are mandatory for every booking; individual tests override these to prove the rejection.
+    termsAccepted: true,
+    termsVersion: 'v1',
+    language: 'en',
     ...overrides,
   };
 }

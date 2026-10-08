@@ -4,6 +4,7 @@ import vm from 'node:vm';
 import test from 'node:test';
 import ts from 'typescript';
 import { z } from 'zod';
+import * as terms from '../supabase/functions/_shared/terms.mjs';
 
 function fixture(paymentMethodKey = 'whatsapp-link') {
   const sent = [];
@@ -32,7 +33,7 @@ function fixture(paymentMethodKey = 'whatsapp-link') {
     },
   };
   const context = vm.createContext({
-    z, console, Response, Deno: { env: { get: (key) => env[key] } },
+    z, console, Response, Deno: { env: { get: (key) => env[key] } }, ...terms, // imports are stripped from the transpiled sources, so the shared terms module is injected as globals
     serve() {}, withCors: (handler) => handler,
     fetch: async (_url, init) => { sent.push(JSON.parse(init.body)); return new Response('{}', { status: 200 }); },
   });
@@ -99,8 +100,9 @@ test('PayPal creation still sends no confirmation before payment capture', async
 });
 
  test('confirmation emails show persisted base, IVA, total and real departure in HTML and text', async () => {
-  const { context, supabase } = fixture('paypal');
-  const messages = await context.getBookingConfirmationMessages(supabase, 'test-booking', 'en');
+  const { context, supabase, booking } = fixture('paypal');
+  booking.language = 'en'; // the confirmation is rendered in the language stored on the booking
+  const messages = await context.getBookingConfirmationMessages(supabase, 'test-booking');
   for (const message of messages) {
     assert.match(message.html, /\$700\.00/);
     assert.match(message.html, /IVA \(13%\)/);
@@ -110,27 +112,29 @@ test('PayPal creation still sends no confirmation before payment capture', async
     assert.match(message.text, /IVA \(13%\): \$91\.00/);
     assert.doesNotMatch(message.html, /Morning|07:00:00/);
   }
-  assert.match(messages[0].html, /Package Price/);
+  assert.match(messages[0].html, /Package subtotal/);
   assert.match(messages[0].html, /Departure Time/);
   assert.match(messages[0].text, /Departure Time: 7:00 AM/);
-  assert.match(messages[0].html, /Please arrive 15 minutes before your scheduled departure time\./);
-  assert.match(messages[0].text, /Please arrive 15 minutes before your scheduled departure time\./);
+  assert.match(messages[0].html, /Please arrive at the departure location at least 15 minutes before the scheduled departure time\./);
+  assert.match(messages[0].text, /lease arrive at the departure location at least 15 minutes before the scheduled departure time\./);
  });
  test('worker refresh reads the updated booking slot rather than queued departure', async () => {
   const { context, supabase, booking } = fixture('paypal');
-  const old = await context.getBookingConfirmationMessages(supabase, booking.id, 'en');
+  booking.language = 'en';
+  const old = await context.getBookingConfirmationMessages(supabase, booking.id);
   assert.match(old[0].html, /7:00 AM/);
   booking.time_slots = { starts_at: '13:30:00', label: 'Old label' };
-  const refreshed = await context.refreshBookingConfirmationNotification(supabase, 'notification', 'en');
+  const refreshed = await context.refreshBookingConfirmationNotification(supabase, 'notification');
   assert.match(refreshed.html, /Departure Time: 1:30 PM/);
   assert.match(refreshed.text, /Departure Time: 1:30 PM/);
   assert.doesNotMatch(refreshed.html, /7:00 AM|Old label/);
  });
  test('absent or invalid schedule omits departure time without inventing a time', async () => {
   const { context, supabase, booking } = fixture('paypal');
+  booking.language = 'en';
   for (const slot of [null, { starts_at: '25:00:00', label: '7:00 AM' }, { label: 'Morning' }]) {
     booking.time_slots = slot;
-    const messages = await context.getBookingConfirmationMessages(supabase, booking.id, 'en');
+    const messages = await context.getBookingConfirmationMessages(supabase, booking.id);
     for (const message of messages) {
       assert.doesNotMatch(message.html, /Departure Time|Hora de salida|7:00 AM/);
       assert.doesNotMatch(message.text, /Departure Time:|Hora de salida:/);

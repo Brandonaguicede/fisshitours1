@@ -542,6 +542,11 @@ export type Database = {
           payment_status: string
           paypal_order_id: string | null
           special_requests: string | null
+          terms_accepted: boolean
+          terms_accepted_at: string | null
+          terms_accepted_via: string | null
+          terms_version: string | null
+          language: string
           time_slot_id: string
           total_snapshot: number
           tour_date: string
@@ -581,6 +586,11 @@ export type Database = {
           payment_status: string
           paypal_order_id?: string | null
           special_requests?: string | null
+          terms_accepted?: boolean
+          terms_accepted_at?: string | null
+          terms_accepted_via?: string | null
+          terms_version?: string | null
+          language?: string
           time_slot_id: string
           total_snapshot: number
           tour_date: string
@@ -620,6 +630,11 @@ export type Database = {
           payment_status?: string
           paypal_order_id?: string | null
           special_requests?: string | null
+          terms_accepted?: boolean
+          terms_accepted_at?: string | null
+          terms_accepted_via?: string | null
+          terms_version?: string | null
+          language?: string
           time_slot_id?: string
           total_snapshot?: number
           tour_date?: string

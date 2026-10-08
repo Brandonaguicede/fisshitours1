@@ -3,6 +3,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2';
 import { z } from 'npm:zod@3.23.8';
 import { areExternalProviderMocksAllowed } from '../_shared/environment.ts';
 import { corsHeaders, corsPreflight, withCors } from '../_shared/cors.ts';
+import { checkTermsAcceptance } from '../_shared/terms.mjs';
 import { buildBookingRequestAdminHtml, buildBookingRequestCustomerHtml, buildBookingRequestSummary } from '../_shared/booking-confirmation-email.ts';
 
 const schema = z.object({
@@ -24,10 +25,12 @@ const schema = z.object({
   paymentMethodKey: z.enum(['paypal', 'whatsapp-link', 'pay-on-day']),
   extras: z.array(z.object({ key: z.string().min(1).max(80), quantity: z.number().int().positive() })).default([]),
   turnstileToken: z.string().optional(),
-  // Not persisted (bookings has no language column) — used only to pick the
-  // language of the immediate request-received email sent below, since the
-  // client knows it in real time and it would otherwise be lost.
+  // Persisted in bookings.language: the confirmation email is rendered in it, and it picks the language of the request-received email below.
   language: z.enum(['es', 'en']).optional().default('es'),
+  // Terms and Conditions acceptance. Validated by checkTermsAcceptance (not by zod) so a missing / false value answers the semantic
+  // TERMS_NOT_ACCEPTED. The timestamp and the "web" source are set here / in the database, never by the client.
+  termsAccepted: z.unknown().optional(),
+  termsVersion: z.unknown().optional(),
 });
 
 serve(withCors(async (req) => {
@@ -38,13 +41,16 @@ serve(withCors(async (req) => {
   const parsed = schema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return Response.json({ message: 'Invalid booking payload', issues: parsed.error.issues }, { status: 400, headers });
 
+  const terms = checkTermsAcceptance(parsed.data);
+  if (!terms.ok) return Response.json({ message: terms.code, code: terms.code }, { status: terms.status, headers });
+
   const supabaseUrl = Deno.env.get('SUPABASE_URL');
   const serviceRole = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
   if (!supabaseUrl || !serviceRole) return Response.json({ message: 'Supabase secrets are not configured' }, { status: 500, headers });
 
   const supabase = createClient(supabaseUrl, serviceRole, { auth: { persistSession: false } });
 
-  const payload = sanitizePayload(parsed.data);
+  const payload = sanitizePayload(parsed.data, terms.legacy ? null : terms.termsVersion);
   const ipHash = await hashIp(getClientIp(req));
   const rateLimit = {
     maxRequests: Number(Deno.env.get('BOOKING_RATE_LIMIT_MAX_REQUESTS') ?? '8'),
@@ -65,6 +71,9 @@ serve(withCors(async (req) => {
 
   if (error) {
     const message = error.message || 'Booking could not be created';
+    // The database is the last line of defense (migration 202610080002): translate its terms errors into the same semantic answer as above.
+    const termsCode = /TERMS_[A-Z_]+/.exec(message)?.[0];
+    if (termsCode) return Response.json({ message: termsCode, code: termsCode }, { status: 400, headers });
     const status = message.includes('BOAT_TIME_CONFLICT') || message.includes('already reserved') ? 409 : 400;
     return Response.json({ message }, { status, headers });
   }
@@ -132,7 +141,8 @@ async function hashIp(value: string) {
   return Array.from(new Uint8Array(hash)).map((byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
-function sanitizePayload(value: z.infer<typeof schema>) {
+// `termsVersion` is null only for a legacy client during the rollout (no terms fields sent): nothing is invented for it.
+function sanitizePayload(value: z.infer<typeof schema>, termsVersion: string | null) {
   return {
     customer: {
       fullName: clean(value.customer.fullName),
@@ -155,6 +165,7 @@ function sanitizePayload(value: z.infer<typeof schema>) {
       quantity: extra.quantity,
     })),
     language: value.language,
+    ...(termsVersion ? { termsAccepted: true, termsVersion, termsAcceptedVia: 'web' } : {}),
   };
 }
 

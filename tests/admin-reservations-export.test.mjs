@@ -171,7 +171,7 @@ test('Crear reserva manual: aligned grid, uniform controls, full-width notes, pr
     const heights = await controls.evaluateAll((nodes) => nodes.map((node) => Math.round(node.getBoundingClientRect().height)));
     assert.equal(new Set(heights).size, 1, `inputs and selects share one height: ${heights}`);
     const name = await box(dialog.getByLabel('Nombre del cliente')); const email = await box(dialog.getByLabel('Email'));
-    const whatsapp = await box(dialog.getByLabel('WhatsApp')); const country = await box(dialog.getByLabel('Pais'));
+    const whatsapp = await box(dialog.getByLabel('WhatsApp', { exact: true })); const country = await box(dialog.getByLabel('Pais'));
     const tour = await box(dialog.getByLabel('Tour / paquete'));
     const rowFour = [await box(dialog.getByLabel('Fecha')), await box(dialog.getByLabel('Hora')), await box(dialog.getByLabel('Personas')), await box(dialog.getByLabel('Lugar de salida'))];
     const notes = await box(dialog.getByLabel('Notas'));
@@ -201,18 +201,60 @@ test('Crear reserva manual: aligned grid, uniform controls, full-width notes, pr
     assert.deepEqual(f.priceRequests.at(-1), { boatId: 'boat-1', tourId: 'tour-1', tourPackageId: 'pkg-1', guests: 6, departureLocationId: 'loc-2', extras: [] });
     await expect(dialog.locator('.admin-reservation-total')).toContainText('El total definitivo lo recalcula Supabase al guardar.');
     await dialog.getByLabel('Nombre del cliente').fill('Ana Solano');
-    await dialog.getByLabel('WhatsApp').fill('+506 7000 1111');
+    await dialog.getByLabel('WhatsApp', { exact: true }).fill('+506 7000 1111');
     await dialog.getByLabel('Fecha').fill('2026-11-05');
     await dialog.getByLabel('Notas').fill('Celebración');
+    await dialog.locator('label[for="manual-booking-terms"]').click();
     await dialog.getByRole('button', { name: 'Crear', exact: true }).click();
     await expect(page.getByRole('status').filter({ hasText: 'Reserva PFT-NEW-0001 guardada como pendiente' })).toBeVisible();
     assert.equal(f.createRequests.length, 1);
     assert.deepEqual(f.createRequests[0], {
       customer: { fullName: 'Ana Solano', email: '', whatsapp: '+506 7000 1111', country: 'Costa Rica' },
       boatId: 'boat-1', tourId: 'tour-1', tourPackageId: 'pkg-1', tourDate: '2026-11-05', timeSlotId: 'slot-1', guests: 6, departureLocationId: 'loc-2',
-      paymentMethodKey: 'whatsapp-link', extras: [], specialRequests: 'Celebración',
+      paymentMethodKey: 'whatsapp-link', extras: [], specialRequests: 'Celebración', language: 'es', termsAccepted: true,
       adminNote: 'Reserva manual guardada desde WhatsApp/link. Pendiente de confirmación administrativa.',
     });
+  } finally { await f.browser.close(); }
+});
+
+test('Crear reserva manual: the operator MUST confirm the customer accepted the terms (inline message, nothing is created) and picks the customer language (default Español)', async () => {
+  const f = await fixture(); const { page } = f;
+  try {
+    const dialogs = []; page.on('dialog', (dialog) => { dialogs.push(dialog.message()); void dialog.dismiss(); });
+    await page.getByRole('button', { name: 'Crear reserva', exact: true }).click();
+    const dialog = page.locator('.admin-reservation-modal');
+    await expect(dialog.getByRole('heading', { name: 'Crear reserva manual' })).toBeVisible();
+    const language = dialog.getByLabel('Idioma del cliente');
+    await expect(language).toHaveValue('es');
+    await expect(language.locator('option')).toHaveText(['Español', 'English']);
+    const consent = dialog.getByLabel('El cliente aceptó los términos y condiciones por WhatsApp, teléfono u otro medio.');
+    await expect(consent).not.toBeChecked();
+    await dialog.getByLabel('Nombre del cliente').fill('Ana Solano');
+    await dialog.getByLabel('WhatsApp', { exact: true }).fill('+506 7000 1111');
+    await dialog.getByLabel('Fecha').fill('2026-11-05');
+    await dialog.getByRole('button', { name: 'Crear', exact: true }).click();
+    await expect(dialog.getByRole('alert').filter({ hasText: 'Confirma que el cliente aceptó los términos y condiciones.' })).toBeVisible();
+    await expect(consent).toHaveAttribute('aria-invalid', 'true');
+    await page.waitForTimeout(400);
+    assert.equal(f.createRequests.length, 0, 'no booking without the confirmation');
+    assert.deepEqual(dialogs, [], 'no browser alert()');
+    // The terms can be read from here (same structured policies, Spanish) without losing the form.
+    await dialog.getByRole('button', { name: 'Ver Términos y Condiciones' }).click();
+    const terms = page.getByRole('dialog', { name: 'Términos y Condiciones' });
+    await expect(terms.getByText('Las comisiones de transferencia bancaria o PayPal serán cubiertas por el cliente.')).toBeVisible();
+    await expect(terms.getByText('depósito del 50%')).toHaveCount(0);
+    await terms.getByRole('button', { name: 'Cerrar', exact: true }).click();
+    await expect(terms).toHaveCount(0);
+    await expect(dialog.getByLabel('Nombre del cliente')).toHaveValue('Ana Solano');
+    await language.selectOption('en');
+    await dialog.locator('label[for="manual-booking-terms"]').click();
+    await expect(dialog.getByRole('alert').filter({ hasText: 'Confirma que el cliente' })).toHaveCount(0);
+    await dialog.getByRole('button', { name: 'Crear', exact: true }).click();
+    await expect(page.getByRole('status').filter({ hasText: 'guardada como pendiente' })).toBeVisible();
+    assert.equal(f.createRequests.length, 1);
+    assert.equal(f.createRequests[0].termsAccepted, true);
+    assert.equal(f.createRequests[0].language, 'en');
+    assert.ok(!('termsVersion' in f.createRequests[0]) && !('termsAcceptedVia' in f.createRequests[0]) && !('termsAcceptedAt' in f.createRequests[0]), 'the Admin client cannot choose version, source or time: the server fixes them');
   } finally { await f.browser.close(); }
 });
 

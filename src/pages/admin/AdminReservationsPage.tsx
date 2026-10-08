@@ -8,6 +8,7 @@ import { AdminDangerRow } from '../../components/admin/AdminStatusSection';
 import FormSection from '../../components/admin/FormSection';
 import AdminConfirmDialog from '../../components/admin/AdminConfirmDialog';
 import { Modal } from '../../components/common/Modal';
+import { TermsConsent } from '../../components/booking/TermsModal';
 import { supabase } from '../../lib/supabase';
 import { readWithAdminSession } from '../../services/adminAuthService';
 import { AdminExportMenu } from '../../components/admin/AdminExportMenu';
@@ -84,6 +85,9 @@ const emptyManualBooking = {
   guests: 1,
   departureLocationId: '',
   specialRequests: '',
+  // Language of the customer's confirmation email (stored on the booking) and the operator's confirmation that the customer accepted the terms.
+  language: 'es' as 'es' | 'en',
+  termsAccepted: false,
 };
 
 type ManualBookingForm = typeof emptyManualBooking;
@@ -132,6 +136,7 @@ export default function AdminReservationsPage() {
   const [confirmTarget, setConfirmTarget] = useState<AdminReservation | null>(null);
   const [manualSaving, setManualSaving] = useState(false);
   const [manualForm, setManualForm] = useState<ManualBookingForm>(emptyManualBooking);
+  const [manualTermsError, setManualTermsError] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const activeFilterCount = Number(bookingStatus !== 'all') + Number(paymentStatus !== 'all') + Number(Boolean(date));
@@ -500,6 +505,10 @@ export default function AdminReservationsPage() {
   }
 
   async function createManualReservation() {
+    if (!manualForm.termsAccepted) {
+      setManualTermsError(true);
+      return;
+    }
     setManualSaving(true);
     setError('');
     setNotice('');
@@ -522,10 +531,13 @@ export default function AdminReservationsPage() {
         paymentMethodKey: 'whatsapp-link',
         extras: [],
         specialRequests: manualForm.specialRequests,
+        language: manualForm.language,
+        termsAccepted: true,
         adminNote: 'Reserva manual guardada desde WhatsApp/link. Pendiente de confirmación administrativa.',
       });
       setManualOpen(false);
       setManualForm(emptyManualBooking);
+      setManualTermsError(false);
       setNotice(`Reserva ${result.booking_reference} guardada como pendiente. Usa "Confirmar" para confirmar y enviar el correo.`);
       await loadReservations();
     } catch (manualError) {
@@ -777,6 +789,22 @@ export default function AdminReservationsPage() {
                   <span className="admin-field__label">Notas</span>
                   <textarea className="admin-input admin-textarea-list" value={manualForm.specialRequests} onChange={(event) => updateManualForm('specialRequests', event.target.value)} />
                 </label>
+                <label className="admin-field admin-reservation-form__half">
+                  <span className="admin-field__label">Idioma del cliente</span>
+                  <select className="admin-input" value={manualForm.language} onChange={(event) => updateManualForm('language', event.target.value as 'es' | 'en')}>
+                    <option value="es">Español</option>
+                    <option value="en">English</option>
+                  </select>
+                </label>
+                <TermsConsent
+                  className="admin-reservation-form__full"
+                  id="manual-booking-terms"
+                  variant="admin"
+                  language="es"
+                  checked={manualForm.termsAccepted}
+                  showError={manualTermsError}
+                  onChange={(accepted) => { updateManualForm('termsAccepted', accepted); if (accepted) setManualTermsError(false); }}
+                />
               </div>
               <div className="admin-reservation-total">
                 <div className="admin-reservation-total__copy">

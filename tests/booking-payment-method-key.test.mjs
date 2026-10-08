@@ -85,13 +85,15 @@ async function fixture(paymentMethods, options = {}) {
   return { browser, page, createBookingRequests, availabilityRequests, priceRequests };
 }
 
-async function runBookingFlowToPaymentStep(page) {
+// `acceptTerms` ticks the mandatory Terms and Conditions box (the payment methods stay locked until it is ticked).
+async function runBookingFlowToPaymentStep(page, { acceptTerms = true } = {}) {
   // The homepage's own #booking teaser navigates to /reservar on "Start
   // booking" (a real page change, not a same-page reveal) — go there
   // directly instead of round-tripping through the homepage.
   await page.goto(`${base}/reservar`);
   const acceptDialog = page.getByRole('dialog').getByRole('button', { name: /Aceptar|Accept/i });
-  if (await acceptDialog.isVisible().catch(() => false)) await acceptDialog.click();
+  // Wait (briefly) for the cookie notice instead of sampling once: on a cold dev server it can mount after the first check and then covers the buttons.
+  await acceptDialog.waitFor({ state: 'visible', timeout: 4000 }).then(() => acceptDialog.click()).catch(() => undefined);
   const booking = page.locator('main');
   await booking.getByRole('button', { name: /Continue/i }).first().click();
   await booking.getByRole('button', { name: /Fishing/i }).first().click();
@@ -103,6 +105,7 @@ async function runBookingFlowToPaymentStep(page) {
   await page.getByPlaceholder('John Smith').fill('Key Test');
   await page.getByPlaceholder('john@email.com').fill('key-test@example.com');
   await page.getByPlaceholder('+506 0000 0000').fill('50600000000');
+  if (acceptTerms) await page.locator('label[for="booking-terms"]').click(); // click the visible selector, like a customer (the native input is visually hidden)
 }
 
 test('a payment method row with a distinct key from its default persists its OWN key, not the default', async () => {
@@ -249,4 +252,267 @@ for (const viewport of [{width:1366,height:1200},{width:390,height:844}]) {
    assert.equal(f.createBookingRequests.length,1);
   } finally {await f.browser.close();}
  });
+}
+
+
+// --- Terms and Conditions at the last step ----------------------------------------------------------------------------
+// Choosing a payment method is what creates the booking, so the methods stay aria-disabled (NOT `disabled`, which would swallow the click and
+// the feedback) until the customer accepts the terms.
+const paypalMethod = [{ id: '1', key: 'paypal', name: 'PayPal', description: '', type: 'paypal', active: true, instructions: null, logo_url: null, sort_order: 1, created_at: '', updated_at: '' }];
+
+test('terms: payment methods are logically locked until accepted — aria-disabled + dimmed, an inline message (no browser alert) and NO booking is created', async () => {
+  const f = await fixture(paypalMethod);
+  try {
+    const dialogs = []; f.page.on('dialog', (dialog) => { dialogs.push(dialog.message()); void dialog.dismiss(); });
+    await runBookingFlowToPaymentStep(f.page, { acceptTerms: false });
+    const checkbox = f.page.locator('#booking-terms');
+    const method = f.page.locator('[data-payment-method="paypal"]');
+    await expect(checkbox).not.toBeChecked();
+    await expect(f.page.getByLabel('I have read and accept the Terms and Conditions')).toBeVisible();
+    await expect(f.page.locator('[data-terms-consent]').getByRole('button', { name: 'View Terms and Conditions' })).toBeVisible();
+    await expect(method).toHaveAttribute('aria-disabled', 'true');
+    await expect(method).not.toHaveAttribute('disabled'); // not a real `disabled`: it must still answer the click (Playwright reads aria-disabled as disabled, hence force below)
+    await expect(method).toHaveClass(/opacity-60/);
+    await expect(f.page.locator('#booking-terms-error')).toHaveCount(0);
+    await method.click({ force: true });
+    const error = f.page.locator('#booking-terms-error');
+    await expect(error).toHaveText('Please accept the Terms and Conditions to continue.');
+    await expect(error).toHaveAttribute('role', 'alert');
+    await expect(checkbox).toHaveAttribute('aria-invalid', 'true');
+    await expect(checkbox).toHaveAttribute('aria-describedby', 'booking-terms-error');
+    await f.page.waitForTimeout(400);
+    assert.equal(f.createBookingRequests.length, 0, 'no booking without accepting the terms');
+    assert.deepEqual(dialogs, [], 'no browser alert()');
+    await f.page.locator('label[for="booking-terms"]').click();
+    await expect(error).toHaveCount(0);
+    await expect(method).not.toHaveAttribute('aria-disabled', 'true');
+    await expect(method).not.toHaveClass(/opacity-60/);
+    await method.click();
+    await expect.poll(() => f.createBookingRequests.length).toBe(1);
+    const body = f.createBookingRequests[0];
+    assert.equal(body.termsAccepted, true);
+    assert.equal(body.termsVersion, 'v1');
+    assert.equal(body.language, 'en');
+    assert.ok(!('termsAcceptedAt' in body) && !('termsAcceptedVia' in body), 'the client sends no timestamp and no source');
+  } finally { await f.browser.close(); }
+});
+
+test('terms: un-ticking the box locks the methods again and the request is blocked even if the customer retries', async () => {
+  const f = await fixture(paypalMethod);
+  try {
+    await runBookingFlowToPaymentStep(f.page);
+    const checkbox = f.page.locator('#booking-terms');
+    await expect(checkbox).toBeChecked();
+    await f.page.locator('label[for="booking-terms"]').click();
+    const method = f.page.locator('[data-payment-method="paypal"]');
+    await expect(method).toHaveAttribute('aria-disabled', 'true');
+    await method.click({ force: true });
+    await expect(f.page.locator('#booking-terms-error')).toBeVisible();
+    await f.page.waitForTimeout(400);
+    assert.equal(f.createBookingRequests.length, 0);
+  } finally { await f.browser.close(); }
+});
+
+test('terms: the modal shows the structured v1 policies (EN), closes with X / Escape / Close and returns focus; the booking keeps all its state', async () => {
+  const f = await fixture(paypalMethod);
+  try {
+    await runBookingFlowToPaymentStep(f.page, { acceptTerms: false });
+    const open = f.page.locator('[data-terms-consent]').getByRole('button', { name: 'View Terms and Conditions' });
+    await open.click();
+    const dialog = f.page.getByRole('dialog', { name: 'Terms and Conditions' });
+    await expect(dialog).toBeVisible();
+    for (const heading of ['Reservations and Payments', 'Change and Cancellation Policies', 'Weather-related Cancellation Policies', 'Arrival and Punctuality', 'Customer Responsibilities', 'Privacy and Use of Personal Data']) {
+      await expect(dialog.getByRole('heading', { name: heading })).toBeVisible();
+    }
+    await expect(dialog.getByText('Bank transfer/PayPal fees will be covered by the client.')).toBeVisible();
+    for (const removed of ['50% deposit', 'remaining balance', 'Payment methods:', 'safe and easy way to pay online']) await expect(dialog.getByText(removed)).toHaveCount(0);
+    await expect(dialog.getByText('Cancellations within 3 days of the tour date: A 30% penalty will apply due to operational losses/boat rental costs.')).toBeVisible();
+    await expect(dialog.getByText('Cancellations with full penalty: If you cancel within 24 hours of the tour, a 100% penalty will apply due to operational/boat rental costs, food, and beverage services.')).toBeVisible();
+    // The version is internal: never shown in the header or anywhere in the dialog.
+    await expect(dialog.getByText(/Version|Versión/)).toHaveCount(0);
+    await expect(dialog).not.toContainText(/\bv1\b/);
+    await expect(dialog.getByRole('heading', { name: 'Terms and Conditions' })).toBeVisible();
+    await expect(dialog.getByText('Papagayo Fishing Tours', { exact: true })).toBeVisible();
+    // Closing paths. Escape: the first stop of the keyboard path.
+    await f.page.keyboard.press('Escape');
+    await expect(dialog).toHaveCount(0);
+    await expect(open).toBeFocused();
+    await open.click();
+    await dialog.getByRole('button', { name: 'Close Terms and Conditions' }).click();
+    await expect(dialog).toHaveCount(0);
+    await open.click();
+    await dialog.getByRole('button', { name: 'Close', exact: true }).click();
+    await expect(dialog).toHaveCount(0);
+    // Nothing was lost: customer fields, tour step data and the (still unchecked) box.
+    await expect(f.page.getByPlaceholder('John Smith')).toHaveValue('Key Test');
+    await expect(f.page.getByPlaceholder('john@email.com')).toHaveValue('key-test@example.com');
+    await expect(f.page.getByPlaceholder('+506 0000 0000')).toHaveValue('50600000000');
+    await expect(f.page.locator('#booking-terms')).not.toBeChecked();
+    await f.page.locator('label[for="booking-terms"]').click();
+    await open.click();
+    await f.page.keyboard.press('Escape');
+    await expect(f.page.locator('#booking-terms')).toBeChecked();
+    assert.equal(f.createBookingRequests.length, 0, 'opening the terms never creates a booking');
+  } finally { await f.browser.close(); }
+});
+
+test('terms: ES — checkbox and modal in Spanish; switching the language with the modal flow keeps the booking state', async () => {
+  const f = await fixture(paypalMethod);
+  try {
+    await runBookingFlowToPaymentStep(f.page, { acceptTerms: false });
+    await f.page.getByRole('button', { name: 'Switch to Spanish' }).click();
+    await expect(f.page.getByLabel('He leído y acepto los Términos y Condiciones')).toBeVisible();
+    const open = f.page.locator('[data-terms-consent]').getByRole('button', { name: 'Ver Términos y Condiciones' });
+    await expect(open).toBeVisible();
+    await f.page.locator('[data-payment-method="paypal"]').click({ force: true });
+    await expect(f.page.locator('#booking-terms-error')).toHaveText('Acepta los Términos y Condiciones para continuar.');
+    await open.click();
+    const dialog = f.page.getByRole('dialog', { name: 'Términos y Condiciones' });
+    await expect(dialog).toBeVisible();
+    for (const heading of ['Reservas y pagos', 'Políticas de cambios y cancelaciones', 'Políticas de cancelación por clima', 'Llegada y puntualidad', 'Responsabilidad del cliente', 'Privacidad y uso de datos personales']) {
+      await expect(dialog.getByRole('heading', { name: heading })).toBeVisible();
+    }
+    await expect(dialog.getByText('Las comisiones de transferencia bancaria o PayPal serán cubiertas por el cliente.')).toBeVisible();
+    for (const removed of ['depósito del 50%', 'saldo restante', 'Métodos de pago:', 'forma segura y sencilla']) await expect(dialog.getByText(removed)).toHaveCount(0);
+    await expect(dialog.getByText('Cancelaciones dentro de los 3 días de la fecha del tour: se aplicará una penalización del 30% debido a pérdidas operativas y costos de alquiler de embarcación.')).toBeVisible();
+    await dialog.getByRole('button', { name: 'Cerrar', exact: true }).click();
+    await expect(dialog).toHaveCount(0);
+    await expect(f.page.getByPlaceholder('John Smith')).toHaveValue('Key Test');
+    await f.page.locator('label[for="booking-terms"]').click();
+    await f.page.locator('[data-payment-method="paypal"]').click();
+    await expect.poll(() => f.createBookingRequests.length).toBe(1);
+    assert.equal(f.createBookingRequests[0].language, 'es');
+    assert.equal(f.createBookingRequests[0].termsVersion, 'v1');
+  } finally { await f.browser.close(); }
+});
+
+for (const [name, viewport] of [['desktop', { width: 1366, height: 800 }], ['phone', { width: 390, height: 720 }]]) {
+  test(`terms modal (${name}): internal scroll, header + close always reachable, no horizontal overflow, keyboard focus stays inside, accessible dialog`, async () => {
+    const f = await fixture(paypalMethod);
+    try {
+      await f.page.setViewportSize(viewport);
+      await runBookingFlowToPaymentStep(f.page, { acceptTerms: false });
+      await f.page.locator('[data-terms-consent]').getByRole('button', { name: 'View Terms and Conditions' }).click();
+      const dialog = f.page.getByRole('dialog', { name: 'Terms and Conditions' });
+      await expect(dialog).toBeVisible();
+      await expect(dialog).toHaveAttribute('aria-modal', 'true');
+      await f.page.waitForTimeout(700); // let the entrance animation (scale 0.95 -> 1) finish before measuring
+      const metrics = await f.page.evaluate(() => {
+        const panel = document.querySelector('[role="dialog"]');
+        const body = document.querySelector('[data-terms-body]');
+        const header = panel.querySelector('header');
+        const rect = panel.getBoundingClientRect();
+        return { panelWidth: rect.width, panelHeight: rect.height, panelBottom: rect.bottom, viewportWidth: window.innerWidth, viewportHeight: window.innerHeight,
+          bodyScrolls: body.scrollHeight > body.clientHeight, bodyOverflowY: getComputedStyle(body).overflowY, panelScrollWidth: panel.scrollWidth, panelClientWidth: panel.clientWidth,
+          docOverflow: document.documentElement.scrollWidth > window.innerWidth, headerTop: header.getBoundingClientRect().top, closeSize: panel.querySelector('button[aria-label="Close Terms and Conditions"]').getBoundingClientRect().width };
+      });
+      assert.ok(metrics.bodyScrolls, 'the policies scroll inside the dialog');
+      // Thin, discreet scrollbar (class thin-scroll): standard properties for Chromium/Firefox, content still scrollable, no arrows / wide track.
+      const scroll = await f.page.evaluate(() => { const body = document.querySelector('[data-terms-body]'); const style = getComputedStyle(body); body.scrollTop = 40; return { scrolled: body.scrollTop > 0, width: style.scrollbarWidth, color: style.scrollbarColor, overflowY: style.overflowY, gutter: body.offsetWidth - body.clientWidth }; });
+      assert.ok(scroll.scrolled, 'the content still scrolls');
+      assert.equal(scroll.overflowY, 'auto', 'overflow is not hidden');
+      assert.equal(scroll.width, 'thin');
+      assert.match(scroll.color, /rgba\(168, 211, 228, 0\.28\)\s+rgba\(0, 0, 0, 0\)|transparent/, 'low-contrast thumb on a transparent track');
+      assert.ok(scroll.gutter <= 10, `no wide scrollbar gutter (got ${scroll.gutter}px)`);
+      if (process.env.TERMS_SHOT_DIR) await f.page.screenshot({ path: `${process.env.TERMS_SHOT_DIR}/modal-${name}.png` });
+      assert.equal(metrics.bodyOverflowY, 'auto');
+      assert.ok(metrics.panelBottom <= metrics.viewportHeight + 1 && metrics.headerTop >= 0, 'the dialog fits the viewport: header and close are on screen');
+      assert.ok(metrics.panelScrollWidth <= metrics.panelClientWidth + 1 && !metrics.docOverflow, 'no horizontal overflow');
+      assert.ok(metrics.closeSize >= 44, `close target >= 44px (got ${metrics.closeSize})`);
+      if (name === 'phone') assert.ok(metrics.panelWidth >= metrics.viewportWidth - 24 && metrics.panelHeight >= metrics.viewportHeight * 0.85, 'near full-screen on phones');
+      else assert.ok(metrics.panelWidth <= 700 && metrics.panelWidth < metrics.viewportWidth, 'centered, reasonable width on desktop');
+      // Keyboard: Tab never leaves the dialog; the last paragraph is reachable by scrolling the body.
+      for (let index = 0; index < 4; index += 1) await f.page.keyboard.press('Tab');
+      assert.ok(await f.page.evaluate(() => document.querySelector('[role="dialog"]').contains(document.activeElement)), 'focus is trapped in the dialog');
+      await dialog.locator('[data-terms-body]').evaluate((element) => { element.scrollTop = element.scrollHeight; });
+      await expect(dialog.getByText('Papagayo Fishing Tours may modify or interrupt an activity')).toBeVisible();
+      await expect(dialog.getByRole('button', { name: 'Close', exact: true })).toBeVisible();
+    } finally { await f.browser.close(); }
+  });
+}
+
+test('terms: the booking page has NO paraphrased rules of its own — only a link that opens the real v1 (EN, then ES)', async () => {
+  const f = await fixture(paypalMethod);
+  try {
+    await f.page.goto(`${base}/reservar`);
+    const info = f.page.getByText('Booking information');
+    await expect(info).toBeVisible();
+    const link = f.page.locator('[data-terms-link]');
+    await expect(link).toHaveText('View Terms and Conditions');
+    // The old 3-line summary is gone: none of its wording (or any policy wording) is printed outside the modal.
+    const mainText = await f.page.locator('body').innerText();
+    for (const legacy of ['30% penalty', '100% refund', 'without penalty', 'subject to availability confirmation', 'Payment methods:', 'penalidad', 'reembolso del 100%']) assert.ok(!mainText.includes(legacy), `legacy text "${legacy}" must not be on the page`);
+    await link.click();
+    const dialog = f.page.getByRole('dialog', { name: 'Terms and Conditions' });
+    await expect(dialog.getByText('Cancellations 3 days before the tour date: You may cancel your tour without penalty up to 3 days before the tour and receive a 100% refund.')).toBeVisible();
+    await expect(dialog.getByText('Bank transfer/PayPal fees will be covered by the client.')).toBeVisible();
+    await f.page.keyboard.press('Escape');
+    await expect(dialog).toHaveCount(0);
+    await expect(link).toBeFocused();
+    await f.page.getByRole('button', { name: 'Switch to Spanish' }).click();
+    await expect(f.page.locator('[data-terms-link]')).toHaveText('Ver Términos y Condiciones');
+    await f.page.locator('[data-terms-link]').click();
+    const es = f.page.getByRole('dialog', { name: 'Términos y Condiciones' });
+    await expect(es.getByText('Cancelaciones 3 días antes de la fecha del tour: el cliente puede cancelar sin penalización hasta 3 días antes del tour y recibir un reembolso del 100%.')).toBeVisible();
+    await expect(es.getByText('Las comisiones de transferencia bancaria o PayPal serán cubiertas por el cliente.')).toBeVisible();
+  } finally { await f.browser.close(); }
+});
+
+for (const [name, viewport] of [['desktop', { width: 1366, height: 900 }], ['phone', { width: 390, height: 800 }]]) {
+  test(`terms: the acceptance is a styled selector like the packages / times (no native checkbox look), aligned, accessible and without overflow (${name})`, async () => {
+    const f = await fixture(paypalMethod);
+    try {
+      await f.page.setViewportSize(viewport);
+      await runBookingFlowToPaymentStep(f.page, { acceptTerms: false });
+      const consent = f.page.locator('[data-terms-consent]');
+      const card = consent.locator('label');
+      const input = consent.locator('#booking-terms');
+      const indicator = consent.locator('[data-terms-check]');
+      await consent.scrollIntoViewIfNeeded();
+      // The native control is never drawn: 1px, clipped (sr-only) — the round check is what the customer sees.
+      const nativeBox = await input.boundingBox();
+      assert.ok(nativeBox.width <= 2 && nativeBox.height <= 2, 'native checkbox is visually hidden');
+      await expect(indicator).toBeVisible();
+      assert.equal(await indicator.evaluate((node) => getComputedStyle(node).borderRadius), '9999px', 'round, like the other selectors');
+      await expect(card).not.toHaveAttribute('data-selected', 'true');
+      // Selecting it fills the check and selects the card — the same state the packages / times use.
+      await card.click();
+      await expect(input).toBeChecked();
+      await expect(card).toHaveAttribute('data-selected', 'true');
+      await expect(indicator.locator('svg')).toBeVisible();
+      await f.page.waitForTimeout(400); // the fill is a colour transition
+      assert.notEqual(await indicator.evaluate((node) => getComputedStyle(node).backgroundColor), 'rgba(0, 0, 0, 0)', 'filled when selected');
+      await card.click();
+      await expect(input).not.toBeChecked();
+      // Keyboard: Space on the (visually hidden) input toggles it.
+      await input.focus();
+      await f.page.keyboard.press('Space');
+      await expect(input).toBeChecked();
+      await f.page.keyboard.press('Space');
+      await expect(input).not.toBeChecked();
+      // The accessible name is exactly the acceptance sentence; the link is a separate control.
+      await expect(f.page.getByRole('checkbox', { name: 'I have read and accept the Terms and Conditions' })).toBeAttached();
+      // Layout: the "View Terms" link lines up with the text (not under the check), nothing overflows or overlaps.
+      const geometry = await f.page.evaluate(() => {
+        const root = document.querySelector('[data-terms-consent]');
+        const label = root.querySelector('label'); const text = label.querySelector('span:last-child'); const link = root.querySelector('button');
+        const r = (el) => el.getBoundingClientRect();
+        return { cardRight: r(label).right, cardBottom: r(label).bottom, textLeft: r(text).left, linkLeft: r(link).left, linkTop: r(link).top, linkHeight: r(link).height, viewport: window.innerWidth, docOverflow: document.documentElement.scrollWidth > window.innerWidth, rootScroll: root.scrollWidth - root.clientWidth };
+      });
+      assert.ok(Math.abs(geometry.linkLeft - geometry.textLeft) <= 2, `link aligned with the text (${geometry.linkLeft} vs ${geometry.textLeft})`);
+      assert.ok(geometry.linkTop >= geometry.cardBottom - 1, 'link sits below the card');
+      assert.ok(geometry.cardRight <= geometry.viewport && !geometry.docOverflow && geometry.rootScroll <= 0, 'no horizontal overflow');
+      if (name === 'phone') assert.ok(geometry.linkHeight >= 44, 'touch target >= 44px');
+      // The control sits right above the payment methods, inside the same step.
+      const gap = await f.page.evaluate(() => document.querySelector('[data-payment-method]').getBoundingClientRect().top - document.querySelector('[data-terms-consent]').getBoundingClientRect().bottom);
+      assert.ok(gap >= 0 && gap < 120, `terms control directly above the payment methods (gap ${gap}px)`);
+      if (process.env.TERMS_SHOT_DIR) {
+        await card.click();
+        await f.page.locator('[data-terms-consent]').locator('xpath=ancestor::div[contains(@class,"flex-col")][1]').screenshot({ path: `${process.env.TERMS_SHOT_DIR}/terms-${name}-checked.png` }).catch(() => undefined);
+        await card.click();
+        await f.page.locator('[data-payment-method]').first().click({ force: true });
+        await f.page.locator('[data-terms-consent]').locator('xpath=ancestor::div[contains(@class,"flex-col")][1]').screenshot({ path: `${process.env.TERMS_SHOT_DIR}/terms-${name}-error.png` }).catch(() => undefined);
+      }
+    } finally { await f.browser.close(); }
+  });
 }

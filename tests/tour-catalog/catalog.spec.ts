@@ -119,6 +119,7 @@ for(const boatId of ['a','b'])test('reserve original full-day IDs from Boat '+bo
   await page.getByRole('button',{name:'Continue',exact:true}).click();
   await page.locator('#booking-name').fill('Test Customer');await page.locator('#booking-email').fill('test@example.com');
   await page.locator('#booking-phone').fill('+506 8888 8888');
+  await page.locator('label[for="booking-terms"]').click();
   await page.locator('[data-payment-method="pay-on-day"]').click();
   await page.getByRole('button',{name:'Confirm reservation',exact:true}).click();
   await expect.poll(()=>bookings.length).toBe(1);

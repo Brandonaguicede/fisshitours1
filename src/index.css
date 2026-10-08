@@ -929,3 +929,50 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Thin, discreet scrollbar for scrollable panels (the Terms and Conditions dialog). The content stays fully scrollable.
+   Firefox: scrollbar-width/-color. Chrome/Edge/Safari: a 6px rounded thumb on a transparent track, no arrows.
+   Touch devices keep the normal gesture but draw no bar. */
+.thin-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(168, 211, 228, 0.28) transparent;
+}
+.thin-scroll::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+  background: transparent;
+}
+.thin-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.thin-scroll::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+}
+.thin-scroll::-webkit-scrollbar-thumb {
+  border-radius: 9999px;
+  background-color: rgba(168, 211, 228, 0.22);
+  background-clip: padding-box;
+  border: 1px solid transparent;
+}
+.thin-scroll:hover::-webkit-scrollbar-thumb {
+  background-color: rgba(168, 211, 228, 0.42);
+}
+.thin-scroll--light {
+  scrollbar-color: rgba(100, 116, 139, 0.35) transparent;
+}
+.thin-scroll--light::-webkit-scrollbar-thumb {
+  background-color: rgba(100, 116, 139, 0.3);
+}
+.thin-scroll--light:hover::-webkit-scrollbar-thumb {
+  background-color: rgba(100, 116, 139, 0.5);
+}
+@media (hover: none) and (pointer: coarse) {
+  .thin-scroll {
+    scrollbar-width: none;
+  }
+  .thin-scroll::-webkit-scrollbar {
+    display: none;
+  }
+}

@@ -62,11 +62,17 @@ export interface CreateBookingRequest {
   extras: Array<{ key: string; quantity: number }>;
   turnstileToken?: string;
   language?: 'es' | 'en';
+  /** Terms and Conditions acceptance. The backend rejects the booking without it (TERMS_NOT_ACCEPTED); the timestamp and the "web" source are set server-side. */
+  termsAccepted: boolean;
+  termsVersion: string;
 }
 
-export interface AdminCreateBookingRequest extends Omit<CreateBookingRequest, 'turnstileToken' | 'customer'> {
+export interface AdminCreateBookingRequest extends Omit<CreateBookingRequest, 'turnstileToken' | 'customer' | 'termsVersion'> {
   customer: Omit<CreateBookingRequest['customer'], 'email'> & { email?: string };
   adminNote?: string;
+  /** The operator confirms the customer accepted the terms. The version and the "admin" source are fixed by the server. */
+  termsAccepted: boolean;
+  language: 'es' | 'en';
 }
 
 export interface AdminConfirmBookingResult {

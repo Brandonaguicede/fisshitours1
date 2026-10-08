@@ -20,6 +20,8 @@ import { cn } from '../../utils/cn';
 import { getDefaultDepartureLocation } from '../../utils/departureLocations';
 import { formatTime, sortSlotsChronologically } from '../../utils/format';
 import { Button, ChoiceCard, Field, FieldError, GlassPanel, Input, ModalShell, TextArea } from '../ui';
+import { CURRENT_TERMS_VERSION } from '../../../supabase/functions/_shared/terms.mjs';
+import { TermsConsent, TermsLink } from './TermsModal';
 
 function formatCurrency(value: number) {
   return Number.isFinite(value) ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value) : '\u2026';
@@ -66,26 +68,6 @@ function getPaymentMethodCopy(method: { title: string; description: string; type
   return { ...method, ...SPANISH_COPY_BY_TYPE[method.type] };
 }
 
-export function getBookingTerms(language: 'es' | 'en') {
-  return language === 'es'
-    ? [
-        'La solicitud queda sujeta a confirmación de disponibilidad por nuestro equipo.',
-        'Metodos de pago: PayPal, enlace de pago por WhatsApp o pago el dia del tour.',
-        'Cancelacion al menos 3 dias antes del tour: reembolso del 100% sin penalidad.',
-        'Cancelacion dentro de 3 dias: penalidad del 30% por costos operativos y alquiler del bote. Reprogramar dentro de 3 dias es permitido segun disponibilidad.',
-        'Cancelacion dentro de 24 horas: penalidad del 100% por costos operativos, alquiler del bote, comida y bebidas.',
-        'Reembolso o reprogramacion por clima solo aplica por huracanes, pronostico de oleaje fuerte, vientos altos o lluvia fuerte dentro de 24 horas antes del tour. Dias nublados o poca luz solar no califican.',
-      ]
-    : [
-        'Your request remains subject to availability confirmation by our team.',
-        'Payment methods: PayPal, WhatsApp payment link or pay on the day of the tour.',
-        'Cancellation at least 3 days before the tour: 100% refund without penalty.',
-        'Cancellation within 3 days: 30% penalty due to operational and boat rental costs. Rescheduling within 3 days is allowed for another available date, subject to availability.',
-        'Cancellation within 24 hours: 100% penalty due to operational, boat rental, food and beverage costs.',
-        'Refund or rescheduling for weather applies only to hurricanes, strong wave forecasts, high winds or heavy rain within 24 hours before the tour. Cloudy days or limited sunlight do not qualify.',
-      ];
-}
-
 export function BookingPanel({ selectedBoat, selectedTour: requestedTour, boats, tours, catalogLoading, selectedTimeSlotId, onBoatChange, onTourChange }: BookingPanelProps) {
   const { language } = useLanguage();
   const queryClient = useQueryClient();
@@ -108,6 +90,9 @@ export function BookingPanel({ selectedBoat, selectedTour: requestedTour, boats,
   const [bookingStatus, setBookingStatus] = useState<BookingStatus>('pending');
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>('pending');
   const [validationMessage, setValidationMessage] = useState('');
+  // Terms and Conditions: the payment methods stay logically locked (aria-disabled) until accepted, because choosing one is what creates the booking.
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [termsError, setTermsError] = useState(false);
   const [paypalVisible, setPaypalVisible] = useState(false);
   const [paypalError, setPaypalError] = useState('');
   const [paypalInfo, setPaypalInfo] = useState('');
@@ -366,6 +351,11 @@ export function BookingPanel({ selectedBoat, selectedTour: requestedTour, boats,
       setValidationMessage(language === 'es' ? 'Selecciona un paquete de tour con precio.' : 'Please select a priced tour package.');
       return null;
     }
+    if (!termsAccepted) {
+      setActiveStep(3);
+      setTermsError(true);
+      return null;
+    }
     return bookingPayload;
   }
 
@@ -412,6 +402,8 @@ export function BookingPanel({ selectedBoat, selectedTour: requestedTour, boats,
       extras: [],
       turnstileToken: USE_LOCAL_TURNSTILE_MOCK ? MOCK_TURNSTILE_TOKEN : turnstileToken,
       language,
+      termsAccepted: true,
+      termsVersion: CURRENT_TERMS_VERSION,
     });
     setTurnstileToken('');
     setTurnstileResetKey((value) => value + 1);
@@ -613,6 +605,10 @@ export function BookingPanel({ selectedBoat, selectedTour: requestedTour, boats,
                 paymentStatus={paymentStatus}
                 canReview={canReview}
                 validationMessage={validationMessage}
+                termsAccepted={termsAccepted}
+                termsError={termsError}
+                onTermsAcceptedChange={(accepted) => { setTermsAccepted(accepted); if (accepted) setTermsError(false); }}
+                onTermsRequired={() => setTermsError(true)}
                 isSubmitting={createBookingMutation.isPending}
                 booking={bookingPayload}
                 createdBooking={createdBooking}
@@ -1193,6 +1189,10 @@ function CustomerStep(props: {
   paymentStatus: PaymentStatus;
   canReview: boolean;
   validationMessage: string;
+  termsAccepted: boolean;
+  termsError: boolean;
+  onTermsAcceptedChange: (accepted: boolean) => void;
+  onTermsRequired: () => void;
   isSubmitting: boolean;
   booking: BookingPaymentPayload | null;
   createdBooking: BookingResult | null;
@@ -1226,6 +1226,11 @@ function CustomerStep(props: {
 
   function handlePaymentMethodAction(method: BookingPaymentMethod, type: SupportedPaymentType) {
     if (props.isSubmitting) return;
+    // Not a real `disabled` (that would swallow the click and the feedback): the method is aria-disabled and answers with an inline message.
+    if (!props.termsAccepted) {
+      props.onTermsRequired();
+      return;
+    }
     // `key` (`method`) is what gets persisted as payment_method_key — real,
     // schema-backed identity of the exact row the customer picked. `type`
     // only decides which integration to run; two rows can share a `type`
@@ -1270,8 +1275,11 @@ function CustomerStep(props: {
 
       {props.validationMessage ? <FieldError className="mt-2.5" variant="panel">{props.validationMessage}</FieldError> : null}
 
+      {/* Terms and Conditions: right above the payment methods, once the customer already saw tour, price, IVA and total. */}
+      <TermsConsent className="mt-5" checked={props.termsAccepted} onChange={props.onTermsAcceptedChange} showError={props.termsError} language={language} />
+
       {/* Group B: Payment method */}
-      <div className="mt-5">
+      <div className="mt-4">
         <p className="text-xs font-extrabold uppercase tracking-[0.12em] text-ocean-400">{language === 'es' ? 'Método de pago' : 'Payment method'}</p>
         <div className="mt-2.5 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
           {props.paymentMethods.map((method) => {
@@ -1282,7 +1290,8 @@ function CustomerStep(props: {
                 key={method.id}
                 data-payment-method={method.id}
                 shape="rounded"
-                className="relative flex min-w-0 flex-col justify-center gap-1 p-3 text-left"
+                className={cn('relative flex min-w-0 flex-col justify-center gap-1 p-3 text-left', !props.termsAccepted && 'opacity-60')}
+                aria-disabled={!props.termsAccepted || undefined}
                 disabled={props.isSubmitting}
                 selected={selected}
                 onClick={() => handlePaymentMethodAction(method.id, method.type)}
@@ -1574,7 +1583,6 @@ function ReviewModal(props: {
   onConfirm: () => void;
 }) {
   const { language } = useLanguage();
-  const terms = getBookingTerms(language);
   const selectedTourName = props.selectedTour ? `${getTourText(props.selectedTour, language).title} - ${getPackageLabel(props.selectedTour, language)}` : (language === 'es' ? 'No seleccionado' : 'Not selected');
   return (
     <ModalShell open onClose={props.onBack} titleId="booking-review-title" className="max-h-[calc(100dvh-1rem)] max-w-xl overflow-y-auto p-3 text-white sm:max-h-[calc(100dvh-2rem)] sm:p-5">
@@ -1602,11 +1610,9 @@ function ReviewModal(props: {
           <SummaryLine label={language === 'es' ? 'Solicitudes especiales' : 'Special requests'} value={props.specialRequests || (language === 'es' ? 'Ninguna' : 'None')} />
           <SummaryLine label={language === 'es' ? 'Metodo de pago' : 'Payment method'} value={props.paymentMethod} />
         </GlassPanel>
-        <GlassPanel className="mt-3 grid gap-1.5 p-3 text-[0.72rem] leading-5 text-ocean-200 sm:text-xs" variant="subtle">
-          {terms.map((term) => (
-            <p key={term}>{term}</p>
-          ))}
-        </GlassPanel>
+        <div className="mt-3 text-center sm:text-left">
+          <TermsLink language={language} />
+        </div>
         <div className="sticky -bottom-3 mt-4 flex flex-col-reverse gap-2 border-t border-white/10 bg-ocean-950/95 pt-3 backdrop-blur sm:-bottom-5 sm:flex-row sm:justify-end">
           <Button variant="glass" type="button" onClick={props.onBack}>
             {language === 'es' ? 'Volver' : 'Go Back'}
