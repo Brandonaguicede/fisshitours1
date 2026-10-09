@@ -116,7 +116,7 @@ function getWorkerSecretKey() {
 async function sendEmail(
   apiKey: string,
   from: string,
-  message: { to: string; subject: string; text: string; html: string },
+  message: { to: string; subject: string; text: string; html: string; bcc?: string },
   idempotencyKey: string,
   replyTo?: string,
 ) {
@@ -127,7 +127,7 @@ async function sendEmail(
       'Content-Type': 'application/json',
       'Idempotency-Key': idempotencyKey,
     },
-    body: JSON.stringify({ from, to: message.to, subject: message.subject, text: message.text, html: message.html, ...(replyTo ? { reply_to: replyTo } : {}) }),
+    body: JSON.stringify({ from, to: message.to, subject: message.subject, text: message.text, html: message.html, ...(message.bcc ? { bcc: [message.bcc] } : {}), ...(replyTo ? { reply_to: replyTo } : {}) }),
   });
 }
 

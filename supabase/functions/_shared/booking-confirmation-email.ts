@@ -2,7 +2,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2';
 import { getTerms, renderTermsText } from './terms.mjs';
 
 type SupabaseClient = ReturnType<typeof createClient>;
-type ConfirmationMessage = { to: string; subject: string; text: string; html: string; dedupe: string };
+type ConfirmationMessage = { to: string; subject: string; text: string; html: string; dedupe: string; bcc?: string };
 type Language = 'es' | 'en';
 
 // The language of a booking is persisted in bookings.language (set by create-booking / the Admin form), so every path that renders the
@@ -38,6 +38,7 @@ async function getBookingConfirmationMessages(supabase: SupabaseClient, bookingI
   const language = bookingLanguage(booking.language);
   const es = language === 'es';
   const adminEmail = Deno.env.get('BOOKING_ADMIN_EMAIL');
+  const bcc = customerBcc(adminEmail, booking.customers.email);
   const { data: whatsappSetting } = await supabase.from('site_settings').select('value').eq('key', 'whatsapp_number').eq('active', true).maybeSingle();
   const whatsappNumber = String(whatsappSetting?.value ?? '50686105784').replace(/\D/g, '');
   const paid = booking.payment_status === 'paid';
@@ -59,6 +60,9 @@ async function getBookingConfirmationMessages(supabase: SupabaseClient, bookingI
     text: customerText,
     html: buildBookingHtml({ name: booking.customers.full_name, reference: booking.booking_reference, date: dateLabel, time: timeLabel, arrival: formatRecommendedArrival(booking.time_slots?.starts_at, language), tour: booking.tours?.title, boat: booking.boats?.name, packageName, guests: booking.guests, departureLocation: booking.departure_location_name_snapshot, specialRequests: String(booking.special_requests ?? '').trim(), termsVersion, ...bookingEmailAmounts(booking), total: formatEmailUsd(Number(booking.total_snapshot ?? 0)), paymentStatus: paidLabel, whatsappNumber, language }),
     dedupe: `booking:${booking.id}:paypal-confirmation-customer-email`,
+    // Hidden copy of the customer's confirmation for the business mailbox (BOOKING_ADMIN_EMAIL). Only this customer-facing message carries it, and
+    // never when the customer is that same address.
+    ...(bcc ? { bcc } : {}),
   }];
   if (adminEmail) {
     // Admin-facing — stays in the business's own operating language
@@ -124,6 +128,14 @@ export async function buildBookingRequestAdminHtml(supabase: SupabaseClient, boo
     ctaLabel: 'Contactar al cliente por WhatsApp',
     language: 'es',
   });
+}
+
+// The business mailbox gets a hidden copy of the customer's confirmation. No configured address -> no copy (nothing is invented); the same address
+// as the recipient -> no copy (it would be a duplicate).
+function customerBcc(adminEmail: string | undefined, customerEmail: string) {
+  const bcc = adminEmail?.trim();
+  if (!bcc || bcc.toLowerCase() === String(customerEmail).trim().toLowerCase()) return undefined;
+  return bcc;
 }
 
 async function fetchBookingForEmail(supabase: SupabaseClient, bookingId: string) {

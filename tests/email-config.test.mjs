@@ -148,3 +148,62 @@ test('the Edge Functions that send email read the reply-to / sender / recipient 
   assert.match(fs.readFileSync('supabase/functions/create-booking/index.ts', 'utf8'), /Deno\.env\.get\('BOOKING_REPLY_TO'\)/);
   assert.match(fs.readFileSync('supabase/functions/process-booking-emails/index.ts', 'utf8'), /Deno\.env\.get\('BOOKING_REPLY_TO'\)/);
 });
+
+// ---- hidden copy (BCC) of the customer's confirmation for the business mailbox ------------------------------------------------------------------
+
+function confirmationMessages({ admin, customerEmail = 'cliente@example.com' }) {
+  const booking = {
+    id: 'b-1', booking_reference: 'PFT-TEST', payment_method_key: 'whatsapp-link', payment_status: 'pending', tour_date: '2027-03-02', guests: 2, special_requests: null, language: 'es',
+    terms_accepted: false, terms_version: null, base_price_snapshot: 800, extra_guests_total_snapshot: 0, extras_total_snapshot: 0, departure_surcharge_snapshot: 0,
+    subtotal_snapshot: 800, tax_rate_snapshot: 0.13, tax_amount_snapshot: 104, total_snapshot: 904, departure_location_name_snapshot: 'Playas del Coco',
+    customers: { full_name: 'Ana', email: customerEmail, whatsapp: '50688888888' }, boats: { name: 'Boat' }, tours: { title: 'Tour' }, tour_packages: { name: 'Half day' }, time_slots: { starts_at: '07:00:00' },
+  };
+  const supabase = { from: () => { const query = { select: () => query, eq: () => query, single: async () => ({ data: booking, error: null }), maybeSingle: async () => ({ data: { value: '50686105784' }, error: null }) }; return query; } };
+  const context = vm.createContext({ console, Response, Deno: { env: envOf(admin === undefined ? {} : { BOOKING_ADMIN_EMAIL: admin }) } });
+  const source = fs.readFileSync('supabase/functions/_shared/booking-confirmation-email.ts', 'utf8').replace(/^﻿/, '').replace(/^import .*;\r?\n/gm, '').replace(/^export /gm, '');
+  vm.runInContext(ts.transpile(source, { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None }), context);
+  return context.getBookingConfirmationMessages(supabase, 'b-1');
+}
+
+test('BCC: the customer confirmation carries a hidden copy to BOOKING_ADMIN_EMAIL and keeps the customer as the main recipient', async () => {
+  const messages = await confirmationMessages({ admin: OFFICIAL });
+  const customer = messages.find((message) => message.dedupe.endsWith('paypal-confirmation-customer-email'));
+  assert.equal(customer.to, 'cliente@example.com');
+  assert.equal(customer.bcc, OFFICIAL, 'the address comes from the secret');
+});
+
+test('BCC: the admin confirmation does not get a copy (nor a duplicate); only the customer message has bcc', async () => {
+  const messages = await confirmationMessages({ admin: OFFICIAL });
+  const admin = messages.find((message) => message.dedupe.endsWith('paypal-confirmation-admin-email'));
+  assert.equal(admin.to, OFFICIAL);
+  assert.ok(!('bcc' in admin));
+  assert.equal(JSON.stringify(messages.filter((message) => 'bcc' in message).map((message) => message.dedupe.split(':').pop())), JSON.stringify(['paypal-confirmation-customer-email']));
+});
+
+test('BCC: no copy when the customer already is the business address (case/space-insensitive), and none is invented without BOOKING_ADMIN_EMAIL', async () => {
+  const same = await confirmationMessages({ admin: OFFICIAL, customerEmail: ` ${OFFICIAL.toUpperCase()} ` });
+  assert.ok(same.every((message) => !('bcc' in message)));
+  for (const admin of [undefined, '']) {
+    const none = await confirmationMessages({ admin });
+    assert.equal(none.length, 1, 'without the admin address there is only the customer message (unchanged behaviour)');
+    assert.ok(!('bcc' in none[0]));
+  }
+});
+
+test('BCC: the worker sends to the customer with bcc as a separate field, keeping From and Reply-To; a message without bcc sends none', async () => {
+  const withBcc = await workerRun({ RESEND_API_KEY: 'k', BOOKING_EMAIL_FROM: FROM, BOOKING_REPLY_TO: OFFICIAL }, { to: 'cliente@example.com', bcc: OFFICIAL, subject: 's', text: 't', html: '<p>h</p>' });
+  assert.equal(withBcc.calls[0].body.to, 'cliente@example.com', 'bcc does not replace to');
+  assert.equal(JSON.stringify(withBcc.calls[0].body.bcc), JSON.stringify([OFFICIAL]));
+  assert.ok(!('cc' in withBcc.calls[0].body), 'it is a bcc, never a cc');
+  assert.equal(withBcc.calls[0].body.from, FROM);
+  assert.equal(withBcc.calls[0].body.reply_to, OFFICIAL);
+  const without = await workerRun({ RESEND_API_KEY: 'k', BOOKING_EMAIL_FROM: FROM }, { to: OFFICIAL, subject: 's', text: 't', html: '<p>h</p>' });
+  assert.ok(!('bcc' in without.calls[0].body));
+});
+
+test('BCC: the contact form and the booking alert never add a bcc', async () => {
+  const contactSend = await contact({ RESEND_API_KEY: 'k', BOOKING_EMAIL_FROM: FROM, BOOKING_ADMIN_EMAIL: OFFICIAL });
+  assert.ok(!('bcc' in contactSend.calls[0].body));
+  const alert = await bookingAlert({ RESEND_API_KEY: 'k', BOOKING_EMAIL_FROM: FROM, BOOKING_ADMIN_EMAIL: OFFICIAL, BOOKING_REPLY_TO: OFFICIAL });
+  assert.ok(alert.calls.every((call) => !('bcc' in call.body)));
+});
