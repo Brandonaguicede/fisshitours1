@@ -128,15 +128,13 @@ test('policies of the ACCEPTED version go at the end of the customer confirmatio
   }
 });
 
-test('the policies are NOT in the Admin email nor in the new-booking alert', async () => {
-  const { messages, context, supabase } = load();
+test('the policies are NOT in the Admin email; the new-booking alert is a plain notice with no builder', async () => {
+  const { messages, context } = load();
   const admin = adminOf(await messages());
   assert.doesNotMatch(admin.html + admin.text, /Términos y Condiciones|fees will be covered|comisiones de transferencia/);
-  const requestAdmin = await context.buildBookingRequestAdminHtml(supabase, 'b-1');
   assert.equal(typeof context.buildBookingRequestCustomerHtml, 'undefined', 'the customer "request received" email no longer exists (it only served the retired modality)');
-  assert.doesNotMatch(requestAdmin, /Terms and Conditions|Términos y Condiciones|fees will be covered|comisiones de transferencia/);
-  const summary = await context.buildBookingRequestSummary(supabase, 'b-1', 'en');
-  assert.doesNotMatch(summary, /Terms and Conditions|fees will be covered/);
+  assert.equal(typeof context.buildBookingRequestAdminHtml, 'undefined');
+  assert.equal(typeof context.buildBookingRequestSummary, 'undefined');
 });
 
 test('a booking keeps ITS version: v1 stays v1 after a v2 exists, an unaccepted/historical booking gets no policies, an unknown version fails loudly', async () => {

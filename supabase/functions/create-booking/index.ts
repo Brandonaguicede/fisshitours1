@@ -4,7 +4,6 @@ import { z } from 'npm:zod@3.23.8';
 import { areExternalProviderMocksAllowed } from '../_shared/environment.ts';
 import { corsHeaders, corsPreflight, withCors } from '../_shared/cors.ts';
 import { checkTermsAcceptance } from '../_shared/terms.mjs';
-import { buildBookingRequestAdminHtml, buildBookingRequestSummary } from '../_shared/booking-confirmation-email.ts';
 
 const schema = z.object({
   customer: z.object({
@@ -181,28 +180,13 @@ async function sendBookingEmails(supabase: ReturnType<typeof createClient>, book
   // function queues the paid confirmation once PayPal returns COMPLETED.
   if (payload.paymentMethodKey === 'paypal') return;
 
-  const es = payload.language !== 'en';
-  const summary = [
-    await buildBookingRequestSummary(supabase, booking.booking_id, es ? 'es' : 'en'),
-    `${es ? 'Metodo de pago' : 'Payment method'}: ${payload.paymentMethodKey}`,
-    `${es ? 'Estado de la reserva' : 'Booking status'}: ${booking.booking_status}`,
-    `${es ? 'Estado del pago' : 'Payment status'}: ${booking.payment_status}`,
-    `${es ? 'Notas' : 'Notes'}: ${payload.specialRequests ?? (es ? 'Ninguna' : 'None')}`,
-  ].join('\n');
-  const adminSummary = es ? summary : [
-    await buildBookingRequestSummary(supabase, booking.booking_id, 'es'),
-    `Metodo de pago: ${payload.paymentMethodKey}`,
-    `Estado de la reserva: ${booking.booking_status}`,
-    `Estado del pago: ${booking.payment_status}`,
-    `Notas: ${payload.specialRequests ?? 'Ninguna'}`,
-  ].join('\n');
-
   const messages = [
+    // Internal notice (always Spanish, plain text): just "there is a new request, go review it in the panel". Sent once, when the booking is created;
+    // the dedupe key is recorded in booking_notifications.
     adminEmail ? {
       to: adminEmail,
-      subject: `Nueva reserva ${booking.booking_reference}`,
-      html: await buildBookingRequestAdminHtml(supabase, booking.booking_id),
-      text: `Nueva reserva recibida.\n\n${adminSummary}`,
+      subject: `Nueva solicitud de reserva - ${booking.booking_reference}`,
+      text: `Se recibió una nueva solicitud de reserva.\n\nReserva: ${booking.booking_reference}\n\nIngresa al panel administrativo para revisarla.`,
       dedupe: `booking:${booking.booking_id}:admin-email`,
     } : null,
   ].filter(Boolean) as Array<{ to: string; subject: string; text: string; html?: string; dedupe: string }>;

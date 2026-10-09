@@ -38,7 +38,7 @@ async function getBookingConfirmationMessages(supabase: SupabaseClient, bookingI
   const language = bookingLanguage(booking.language);
   const es = language === 'es';
   const adminEmail = Deno.env.get('BOOKING_ADMIN_EMAIL');
-  const bcc = customerBcc(adminEmail, booking.customers.email);
+  const bcc = customerBcc(Deno.env.get('BOOKING_CONFIRMATION_BCC'), booking.customers.email);
   const { data: whatsappSetting } = await supabase.from('site_settings').select('value').eq('key', 'whatsapp_number').eq('active', true).maybeSingle();
   const whatsappNumber = String(whatsappSetting?.value ?? '50686105784').replace(/\D/g, '');
   const paid = booking.payment_status === 'paid';
@@ -60,8 +60,8 @@ async function getBookingConfirmationMessages(supabase: SupabaseClient, bookingI
     text: customerText,
     html: buildBookingHtml({ name: booking.customers.full_name, reference: booking.booking_reference, date: dateLabel, time: timeLabel, arrival: formatRecommendedArrival(booking.time_slots?.starts_at, language), tour: booking.tours?.title, boat: booking.boats?.name, packageName, guests: booking.guests, departureLocation: booking.departure_location_name_snapshot, specialRequests: String(booking.special_requests ?? '').trim(), termsVersion, ...bookingEmailAmounts(booking), total: formatEmailUsd(Number(booking.total_snapshot ?? 0)), paymentStatus: paidLabel, whatsappNumber, language }),
     dedupe: `booking:${booking.id}:paypal-confirmation-customer-email`,
-    // Hidden copy of the customer's confirmation for the business mailbox (BOOKING_ADMIN_EMAIL). Only this customer-facing message carries it, and
-    // never when the customer is that same address.
+    // Hidden copy of the customer's confirmation (BOOKING_CONFIRMATION_BCC, independent from BOOKING_ADMIN_EMAIL). Only this customer-facing
+    // message carries it, and never when the customer is that same address.
     ...(bcc ? { bcc } : {}),
   }];
   if (adminEmail) {
@@ -100,57 +100,12 @@ async function getBookingConfirmationMessages(supabase: SupabaseClient, bookingI
   return messages;
 }
 
-// Admin-facing new-booking alert — same branded
-// template (not a plain-text dump) so it looks like it
-// belongs to the business, plus a contact block and a WhatsApp CTA aimed at
-// the customer's own number (the admin needs to reach the customer, not the
-// business itself). Always Spanish — the business's own operating language,
-// independent of whichever language the customer booked in.
-export async function buildBookingRequestAdminHtml(supabase: SupabaseClient, bookingId: string): Promise<string> {
-  const booking = await fetchBookingForEmail(supabase, bookingId);
-  const fallbackWhatsapp = await getBusinessWhatsapp(supabase);
-  return buildBookingHtml({
-    name: booking.customers?.full_name ?? '',
-    reference: booking.booking_reference,
-    date: formatDate(booking.tour_date, 'es'),
-    time: formatDepartureTime(booking.time_slots?.starts_at),
-    tour: booking.tours?.title,
-    boat: booking.boats?.name,
-    packageName: booking.tour_packages?.name,
-    guests: booking.guests,
-    departureLocation: booking.departure_location_name_snapshot,
-    ...bookingEmailAmounts(booking), total: formatEmailUsd(Number(booking.total_snapshot ?? 0)),
-    paymentStatus: 'Pendiente',
-    whatsappNumber: (booking.customers?.whatsapp ?? '').replace(/\D/g, '') || fallbackWhatsapp,
-    heading: 'Nueva reserva recibida',
-    introduction: 'Un cliente acaba de solicitar una reserva. Confirma la disponibilidad y contáctalo pronto.',
-    contact: { email: booking.customers?.email ?? '', whatsapp: booking.customers?.whatsapp ?? '' },
-    ctaLabel: 'Contactar al cliente por WhatsApp',
-    language: 'es',
-  });
-}
-
-// The business mailbox gets a hidden copy of the customer's confirmation. No configured address -> no copy (nothing is invented); the same address
+// Hidden copy of the customer's confirmation. No configured address -> no copy and the send is unaffected (nothing is invented); the same address
 // as the recipient -> no copy (it would be a duplicate).
-function customerBcc(adminEmail: string | undefined, customerEmail: string) {
-  const bcc = adminEmail?.trim();
+function customerBcc(configured: string | undefined, customerEmail: string) {
+  const bcc = configured?.trim();
   if (!bcc || bcc.toLowerCase() === String(customerEmail).trim().toLowerCase()) return undefined;
   return bcc;
-}
-
-async function fetchBookingForEmail(supabase: SupabaseClient, bookingId: string) {
-  const { data: booking, error } = await supabase.from('bookings')
-    .select('booking_reference, tour_date, guests, base_price_snapshot, extra_guests_total_snapshot, extras_total_snapshot, departure_surcharge_snapshot, subtotal_snapshot, tax_rate_snapshot, tax_amount_snapshot, total_snapshot, departure_location_name_snapshot, customers(full_name, email, whatsapp), boats(name), tours(title), tour_packages(name), time_slots(starts_at)')
-    .eq('id', bookingId).single();
-  if (error) throw error;
-  if (!booking) throw new Error('Booking email details not found');
-  return booking;
-}
-
-async function getBusinessWhatsapp(supabase: SupabaseClient) {
-  const { data: whatsappSetting } = await supabase.from('site_settings')
-    .select('value').eq('key', 'whatsapp_number').eq('active', true).maybeSingle();
-  return String(whatsappSetting?.value ?? '50686105784').replace(/\D/g, '');
 }
 
 // ---- Email colours -----------------------------------------------------------------------------------------------------------------
@@ -279,25 +234,4 @@ function bookingSummaryLines(booking: any, language: Language, ctx: { dateLabel:
     `Total: ${formatEmailUsd(Number(booking.total_snapshot ?? 0))}`,
     `${es ? 'Estado del pago' : 'Payment status'}: ${ctx.paymentLabel}`,
   ];
-}
-
-export async function buildBookingRequestSummary(supabase: SupabaseClient, bookingId: string, language: Language): Promise<string> {
-  const booking = await fetchBookingForEmail(supabase, bookingId);
-  const es = language === 'es';
-  const time = formatDepartureTime(booking.time_slots?.starts_at);
-  return [
-    `${es ? 'Reserva' : 'Reservation'}: ${booking.booking_reference}`,
-    `${es ? 'Cliente' : 'Customer'}: ${booking.customers?.full_name ?? ''}`,
-    `Email: ${booking.customers?.email ?? ''}`,
-    `WhatsApp: ${booking.customers?.whatsapp ?? ''}`,
-    `${es ? 'Bote' : 'Boat'}: ${booking.boats?.name ?? ''}`,
-    `Tour: ${booking.tours?.title ?? ''}`,
-    `${es ? 'Paquete' : 'Package'}: ${booking.tour_packages?.name ?? ''}`,
-    `${es ? 'Fecha' : 'Tour Date'}: ${formatDate(booking.tour_date, language)}`,
-    ...(time ? [`${es ? 'Hora de salida' : 'Departure Time'}: ${time}`] : []),
-    `${es ? 'Personas' : 'Guests'}: ${booking.guests}`,
-    `${es ? 'Lugar de salida' : 'Departure location'}: ${booking.departure_location_name_snapshot ?? '-'}`,
-    ...bookingPriceLines(booking, es),
-    `Total: ${formatEmailUsd(Number(booking.total_snapshot ?? 0))}`,
-  ].join('\n');
 }

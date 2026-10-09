@@ -128,7 +128,8 @@ test('whatsapp-link end to end: creation alerts ONLY the admin (pending payment)
     customer: { fullName: 'Ana', email: 'customer@example.com', whatsapp: '0000000' }, paymentMethodKey: 'whatsapp-link',
   });
   assert.deepEqual(sent.map((message) => message.to), ['admin@example.com'], 'creation: only the admin is emailed');
-  assert.match(sent[0].html, /Nueva reserva recibida/);
+  assert.equal(sent[0].subject, 'Nueva solicitud de reserva - PFT-TEST');
+  assert.match(sent[0].text, /Reserva: PFT-TEST/);
   assert.deepEqual(notifications.map((row) => row.dedupe_key), ['booking:test-booking:admin-email']);
   assert.equal(notifications.some((row) => row.dedupe_key.endsWith(':customer-email')), false, 'no "request received" customer email exists for this method');
   // Admin confirms and marks the payment: the customer's email is the standard confirmation (customer + admin copies).
