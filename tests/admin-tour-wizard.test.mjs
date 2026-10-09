@@ -12,7 +12,7 @@ import { mockTranslation, SPANISH_ERROR } from './support/translation-mock.mjs';
 const base = process.env.ADMIN_TEST_BASE_URL ?? 'http://localhost:5174';
 const user = { id: '00000000-0000-4000-8000-000000000001', aud: 'authenticated', role: 'authenticated', email: 'admin@example.com', app_metadata: {}, user_metadata: {}, created_at: new Date().toISOString() };
 
-async function fixture({ publicationStatus = 'published', slowCreate = 0, tours: toursOverride, imageCount = 0, uploadFails = false, imageUpdateFails = false, deleteStatus = 200 } = {}) {
+async function fixture({ sellable = true, publicationStatus = 'published', slowCreate = 0, tours: toursOverride, imageCount = 0, uploadFails = false, imageUpdateFails = false, deleteStatus = 200 } = {}) {
   const browser = await chromium.launch({ headless: true, channel: 'msedge' });
   const page = await browser.newPage({ viewport: { width: 1366, height: 900 } });
   const writes = [];
@@ -65,6 +65,10 @@ async function fixture({ publicationStatus = 'published', slowCreate = 0, tours:
       // The real query is `.order('sort_order')` (ascending) — sort the mock's response
       // the same way, so tests can rely on visual row order matching sort_order.
       return route.fulfill({ json: [...state.tours].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0)) });
+    }
+    // Publication rule: a tour needs a SELLABLE package (tour_packages joined to its boat link and boat). `sellable: false` = a tour that has none.
+    if (path.endsWith('/tour_packages') && method === 'GET') {
+      return route.fulfill({ json: sellable ? state.tours.map((tour) => ({ id: `pkg-${tour.id}`, name: 'Half Day', active: true, custom_quote: false, base_price: 700, included_guests: 4, max_guests: 8, extra_guest_price: 50, duration_minutes: 240, departure_times: ['07:00'], boat_tours: { tour_id: tour.id, active: true, boats: { active: true } } })) : [] });
     }
     if (path.endsWith('/boats')) return route.fulfill({ json: boats });
     if (path.endsWith('/boat_tours')) return route.fulfill({ json: relations });
@@ -504,6 +508,50 @@ test('publishing with a name and 3+ photos succeeds', async () => {
     // confirmation is the Configuración step itself flipping to the published state.
     await expect(page.getByRole('button', { name: 'Ocultar tour' })).toBeVisible();
     await expect(page.locator('.admin-tour-config-row .admin-badge')).toHaveText('Activo');
+  } finally { await f.browser.close(); }
+});
+
+const NO_PACKAGES_DRAFT = /guardó como borrador porque todavía no tiene paquetes activos disponibles/;
+const NO_PACKAGES_CANNOT_PUBLISH = /No se puede publicar este tour porque todavía no tiene paquetes activos disponibles/;
+
+test('PUBLICATION RULE: "Mostrar tour" on a tour with no sellable package does not publish it and explains why', async () => {
+  const tours = [{ id: 'tour-1', title: 'Tour sin paquetes', slug: 'tour-1', description: '', long_description: '', category: 'Fishing', publication_status: 'draft', active: false, featured: false, sort_order: 1 }];
+  const f = await fixture({ tours, imageCount: 3, sellable: false }); const { page, writes } = f;
+  try {
+    await openExisting(page);
+    await page.locator('.admin-stepper').getByRole('button', { name: 'Configuración' }).click();
+    await page.getByRole('button', { name: 'Mostrar tour' }).click();
+    await expect(page.getByRole('alert').filter({ hasText: NO_PACKAGES_CANNOT_PUBLISH })).toBeVisible();
+    assert.equal(patches(writes).filter((w) => w.body.publication_status === 'published').length, 0, 'it is never published');
+    await expect(page.getByRole('button', { name: 'Mostrar tour' })).toBeVisible();
+  } finally { await f.browser.close(); }
+});
+
+test('PUBLICATION RULE: the final Guardar of a tour with no sellable package saves everything as a DRAFT and says why', async () => {
+  const f = await fixture({ imageCount: 3, sellable: false }); const { page, writes } = f;
+  try {
+    await openExisting(page);
+    await page.locator('.admin-stepper').getByRole('button', { name: 'Configuración' }).click();
+    const before = writes.length;
+    await page.getByRole('button', { name: 'Guardar', exact: true }).click();
+    await expect(page.locator('.admin-tour-modal')).toHaveCount(0);
+    const saved = patches(writes).slice(before);
+    assert.equal(saved.some((w) => w.body.publication_status === 'published'), false, 'never published');
+    assert.equal(saved.some((w) => w.body.publication_status === 'draft'), true, 'saved as draft');
+    await expect(page.getByText(NO_PACKAGES_DRAFT)).toBeVisible();
+  } finally { await f.browser.close(); }
+});
+
+test('PUBLICATION RULE: with a sellable package the final Guardar still publishes (and the usual message is shown)', async () => {
+  const f = await fixture({ imageCount: 3, sellable: true }); const { page, writes } = f;
+  try {
+    await openExisting(page);
+    await page.locator('.admin-stepper').getByRole('button', { name: 'Configuración' }).click();
+    const before = writes.length;
+    await page.getByRole('button', { name: 'Guardar', exact: true }).click();
+    await expect(page.locator('.admin-tour-modal')).toHaveCount(0);
+    assert.equal(patches(writes).slice(before).some((w) => w.body.publication_status === 'published'), true);
+    await expect(page.getByText('Tour guardado y activado.')).toBeVisible();
   } finally { await f.browser.close(); }
 });
 

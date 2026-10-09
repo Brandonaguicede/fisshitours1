@@ -1,6 +1,7 @@
 import { supabase } from '../lib/supabase';
 import type { Tables } from '../types/supabase';
-import { findPackageIssues, PackageIncompleteError, type PackageFacts } from '../utils/packageRequirements';
+import { findPackageIssues, PackageIncompleteError, packageRowFacts, type PackageFacts } from '../utils/packageRequirements';
+import { demoteUnsellablePublishedTours, type DemotedTour } from './tourPublicationService';
 
 // Admin data + writes for the boat-centric "Tours y paquetes" editor.
 //
@@ -110,17 +111,7 @@ async function countSharedTimeSlots(): Promise<number> {
   return count ?? 0;
 }
 
-const rowFacts = (row: AdminPackageRow, sharedTimeCount: number): PackageFacts => ({
-  name: row.name,
-  customQuote: row.custom_quote,
-  basePrice: row.base_price == null ? null : Number(row.base_price),
-  includedGuests: row.included_guests,
-  maxGuests: row.max_guests,
-  extraGuestPrice: row.extra_guest_price == null ? null : Number(row.extra_guest_price),
-  durationMinutes: row.duration_minutes,
-  departureTimes: row.departure_times,
-  sharedTimeCount,
-});
+const rowFacts = (row: AdminPackageRow, sharedTimeCount: number): PackageFacts => packageRowFacts(row, sharedTimeCount);
 
 /** What a stored package is missing to be bookable (same rules as the form, the service layer and the public catalog). */
 export const packageRowIssues = (row: AdminPackageRow, sharedTimeCount: number) => findPackageIssues(rowFacts(row, sharedTimeCount));
@@ -136,7 +127,7 @@ export async function savePackageForBoatTour(
   tourId: string,
   input: PackageInput,
   boatMaxGuests: number,
-): Promise<void> {
+): Promise<DemotedTour[]> {
   const maxGuests = Math.max(input.includedGuests, Math.min(input.maxGuests, boatMaxGuests));
   if (input.active) {
     const issues = findPackageIssues({
@@ -170,9 +161,11 @@ export async function savePackageForBoatTour(
     updated_at: new Date().toISOString(),
   });
   if (error) throw new Error(error.message);
+  // A package saved as inactive may have been the tour's last sellable one.
+  return demoteUnsellablePublishedTours();
 }
 
-export async function setPackageActive(packageId: string, active: boolean): Promise<void> {
+export async function setPackageActive(packageId: string, active: boolean): Promise<DemotedTour[]> {
   if (active) {
     const current = await supabase.from('tour_packages').select('*').eq('id', packageId).single();
     if (current.error) throw new Error(current.error.message);
@@ -183,12 +176,14 @@ export async function setPackageActive(packageId: string, active: boolean): Prom
     .update({ active, updated_at: new Date().toISOString() })
     .eq('id', packageId);
   if (error) throw new Error(error.message);
+  return demoteUnsellablePublishedTours();
 }
 
 /** Hard delete. The DB blocks it (23503) if the package has booking history. */
-export async function deletePackage(packageId: string): Promise<void> {
+export async function deletePackage(packageId: string): Promise<DemotedTour[]> {
   const { error } = await supabase.from('tour_packages').delete().eq('id', packageId);
   if (error) throw new Error(error.message);
+  return demoteUnsellablePublishedTours();
 }
 
 /**
@@ -222,7 +217,7 @@ export async function enableTourForBoat(boatId: string, tourId: string, sortOrde
 }
 
 /** Disable a tour for a boat without destroying packages or history. */
-export async function disableTourForBoat(boatId: string, tourId: string): Promise<void> {
+export async function disableTourForBoat(boatId: string, tourId: string): Promise<DemotedTour[]> {
   const link = await supabase
     .from('boat_tours')
     .select('id')
@@ -230,7 +225,7 @@ export async function disableTourForBoat(boatId: string, tourId: string): Promis
     .eq('tour_id', tourId)
     .maybeSingle();
   if (link.error) throw new Error(link.error.message);
-  if (!link.data) return;
+  if (!link.data) return [];
 
   const deactivateLink = await supabase
     .from('boat_tours')
@@ -243,6 +238,7 @@ export async function disableTourForBoat(boatId: string, tourId: string): Promis
     .update({ active: false, updated_at: new Date().toISOString() })
     .eq('boat_tour_id', link.data.id);
   if (deactivate.error) throw new Error(deactivate.error.message);
+  return demoteUnsellablePublishedTours();
 }
 
 // --- General hours (the shared catalog) --------------------------------------------------------------------------------------------------------

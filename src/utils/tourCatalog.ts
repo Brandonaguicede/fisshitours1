@@ -1,6 +1,6 @@
 import type { Boat } from '../types/boat';
 import type { BoatTour } from '../types/boatTour';
-import { isPackageReady, type PackageFacts } from './packageRequirements';
+import { isSellablePackage, type PackageFacts } from './packageRequirements';
 
 export interface TourBoatOption {
   boat: Boat;
@@ -36,7 +36,16 @@ export function bookableFacts(item: BoatTour): PackageFacts {
 }
 
 export function isBookableCatalogPackage(item: BoatTour) {
-  return item.catalogActive !== false && !item.customQuote && isPackageReady(bookableFacts(item));
+  return isSellablePackage(item.catalogActive !== false, bookableFacts(item));
+}
+
+/**
+ * THE public tour order: the one Admin persists (tours.sort_order, 1..N). Packages arrive in package order; this puts them in tour order and
+ * keeps their own order inside each tour (the sort is stable). Every public list (home, Tours page, booking panel, contact form, fleet)
+ * gets its tours from a list already in this order, so no screen needs, or has, a second criterion (name, price, id, creation).
+ */
+export function sortByTourOrder<T extends { tourSortOrder?: number | null }>(items: readonly T[]): T[] {
+  return [...items].sort((a, b) => (a.tourSortOrder ?? Number.MAX_SAFE_INTEGER) - (b.tourSortOrder ?? Number.MAX_SAFE_INTEGER));
 }
 
 export function groupTourCatalog(packages: BoatTour[], boats: Boat[]): TourCatalogItem[] {
@@ -58,9 +67,6 @@ export function groupTourCatalog(packages: BoatTour[], boats: Boat[]): TourCatal
     }
     if (!option.packages.some((entry) => entry.id === item.id)) option.packages.push(item);
   }
-  // `groups` preserves insertion order (first-seen package), which follows
-  // `tour_packages.sort_order` — not the tour's own `sort_order` that the
-  // Admin's Tours reorder actually writes. Re-sort explicitly by the tour's
-  // order so the public catalog matches what Admin persists.
-  return [...groups.values()].sort((a, b) => (a.tour.tourSortOrder ?? 0) - (b.tour.tourSortOrder ?? 0));
+  // `groups` preserves insertion order (first-seen package). Order it by the tour's own order, the one Admin persists.
+  return sortByTourOrder([...groups.values()].map((group) => ({ group, tourSortOrder: group.tour.tourSortOrder }))).map((entry) => entry.group);
 }

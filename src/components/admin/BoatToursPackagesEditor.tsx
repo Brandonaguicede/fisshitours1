@@ -21,6 +21,7 @@ import AdminConfirmDialog from './AdminConfirmDialog';
 import { AdminBadge, AdminVisibilityButton } from './AdminPrimitives';
 import { describePackageIssues, findPackageIssues, type PackageFacts } from '../../utils/packageRequirements';
 import { friendlyDeleteError } from '../../utils/adminErrors';
+import { demoteUnsellablePublishedTours, describeDemotedTours, loadSellableTourIds, TOUR_PUBLICATION_REQUIREMENT, TOUR_PUBLISHABLE_NOTICE, type DemotedTour } from '../../services/tourPublicationService';
 import { translateTextsToSpanish, TranslationError } from '../../services/translationService';
 import { cleanList, editableList, editableText, textColumns, textsToTranslate, type BilingualColumns } from '../../utils/bilingualContent';
 import { formatTime, money, normalizeTime, sortSlotsChronologically, sortTimes } from '../../utils/format';
@@ -567,6 +568,7 @@ function GeneralTimesManager({ slots, busy, onCreate, onUpdate, onDelete }: {
 export default function BoatToursPackagesEditor({ boatId, boatName, boatMaxGuests, focusTourId, focusPackageId }: Props) {
   const queryClient = useQueryClient();
   const [data, setData] = useState<BoatToursPackagesData | null>(null);
+  const [sellableTourIds, setSellableTourIds] = useState<Set<string> | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -585,7 +587,9 @@ export default function BoatToursPackagesEditor({ boatId, boatName, boatMaxGuest
   const reload = useCallback(async () => {
     setLoading(true);
     try {
-      setData(await loadBoatToursPackages(boatId));
+      const [loaded, sellable] = await Promise.all([loadBoatToursPackages(boatId), loadSellableTourIds()]);
+      setData(loaded);
+      setSellableTourIds(sellable);
       setError('');
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'No se pudo cargar el catálogo de tours.');
@@ -635,13 +639,16 @@ export default function BoatToursPackagesEditor({ boatId, boatName, boatMaxGuest
     [catalogTours, linkByTour],
   );
 
-  async function run(action: () => Promise<void>, okMessage?: string | (() => string)) {
+  async function run(action: () => Promise<void | DemotedTour[]>, okMessage?: string | (() => string)) {
     setBusy(true);
     setError('');
     setNotice('');
     try {
-      await action();
-      if (okMessage) setNotice(typeof okMessage === 'function' ? okMessage() : okMessage);
+      const demoted = await action();
+      const message = [okMessage ? (typeof okMessage === 'function' ? okMessage() : okMessage) : '', Array.isArray(demoted) ? describeDemotedTours(demoted) : ''].filter(Boolean).join(' ');
+      if (message) setNotice(message);
+      // A package / link change can hide or show tours on the public site: refresh what it has cached.
+      await queryClient.invalidateQueries({ queryKey: ['boatTours'] });
       await reload();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'La operación no se pudo completar.');
@@ -654,7 +661,9 @@ export default function BoatToursPackagesEditor({ boatId, boatName, boatMaxGuest
   async function runGeneralTimes(action: () => Promise<unknown>, okMessage: string) {
     await run(async () => {
       await action();
+      const demoted = await demoteUnsellablePublishedTours();
       await Promise.all([queryClient.invalidateQueries({ queryKey: ['boatTours'] }), queryClient.invalidateQueries({ queryKey: ['availability'] })]);
+      return demoted;
     }, okMessage);
   }
 
@@ -723,21 +732,24 @@ export default function BoatToursPackagesEditor({ boatId, boatName, boatMaxGuest
       input.bilingual = resolved.bilingual;
       input.packageIncludedEs = resolved.includedEs;
       input.packageIncludedEn = resolved.includedEn;
-      await savePackageForBoatTour(boatId, draft.tourId, input, boatMaxGuests);
+      const demoted = await savePackageForBoatTour(boatId, draft.tourId, input, boatMaxGuests);
       await Promise.all([queryClient.invalidateQueries({ queryKey: ['boatTours'] }), queryClient.invalidateQueries({ queryKey: ['availability'] })]);
       closeEditor();
+      return demoted;
     }, 'Paquete guardado.');
   }
 
   async function removeDraft() {
     if (!draft) return;
     await run(async () => {
+      let demoted: DemotedTour[] = [];
       try {
-        await deletePackage(draft.id);
+        demoted = await deletePackage(draft.id);
       } catch (caught) {
         throw new Error(friendlyDeleteError({ message: caught instanceof Error ? caught.message : String(caught) }, 'este paquete'));
       }
       closeEditor();
+      return demoted;
     }, 'Paquete eliminado.');
   }
 
@@ -831,6 +843,17 @@ export default function BoatToursPackagesEditor({ boatId, boatName, boatMaxGuest
                 </button>
               </div>
             </header>
+
+            {sellableTourIds ? (
+              sellableTourIds.has(tour.id)
+                ? <p className="admin-alert admin-alert--success admin-boat-tour-card__publication" role="status">{TOUR_PUBLISHABLE_NOTICE}</p>
+                : (
+                  <div className="admin-alert admin-alert--warning admin-boat-tour-card__publication" role="status">
+                    <strong>Publicación del tour</strong>
+                    <p>{TOUR_PUBLICATION_REQUIREMENT}</p>
+                  </div>
+                )
+            ) : null}
 
             {list.length === 0 && !creatingHere ? (
               <p className="admin-boat-tour-card__empty">Este tour aún no tiene paquetes. Agrega el primero para poder reservarlo en {boatLabel}.</p>

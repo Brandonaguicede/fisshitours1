@@ -998,6 +998,21 @@ tr.admin-sortable-row--dragging {
   color: var(--admin-danger-ink);
 }
 
+.admin-alert--warning {
+  border-color: var(--admin-warning);
+  background: var(--admin-warning-soft);
+  color: var(--admin-warning-ink);
+}
+
+.admin-alert--warning p {
+  margin: 0.25rem 0 0;
+  font-weight: 500;
+}
+
+.admin-boat-tour-card__publication {
+  margin: 0.75rem 0 0.5rem;
+}
+
 .admin-table__quote {
   max-width: 26rem;
   min-width: 14rem;

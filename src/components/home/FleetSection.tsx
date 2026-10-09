@@ -247,7 +247,7 @@ function getModalTourTypes(boat: Boat | null, tours: BoatTour[], language: Langu
     });
 
   return Array.from(groups.entries())
-    .map(([key, relatedTours], order) => {
+    .map(([key, relatedTours]) => {
       const sortedTours = [...relatedTours].sort((a, b) => a.basePrice - b.basePrice);
       const display = getTourText(sortedTours[0], language);
       return {
@@ -256,8 +256,6 @@ function getModalTourTypes(boat: Boat | null, tours: BoatTour[], language: Langu
         category: display.category,
         price: sortedTours[0].basePrice,
         representativeTour: sortedTours[0],
-        order,
       };
-    })
-    .sort((a, b) => a.price - b.price || a.order - b.order);
+    });
 }

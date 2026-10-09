@@ -1,6 +1,7 @@
 import { supabase } from '../lib/supabase';
 import type { Boat } from '../types/boat';
 import { mapBoat } from './catalogMappers';
+import { orderBoatImages } from '../utils/boatImages';
 
 export async function getActiveBoats(): Promise<Boat[]> {
   const { data, error } = await supabase
@@ -29,30 +30,24 @@ export async function getActiveBoats(): Promise<Boat[]> {
 
   const imagesResult = await db
     .from('boat_images')
-    .select('boat_id, image_url, alt_text, is_primary, sort_order')
+    .select('id, boat_id, image_url, alt_text, sort_order, created_at')
     .in('boat_id', boatIds)
     .eq('active', true)
     .order('sort_order', { ascending: true });
 
   if (imagesResult.error) return mapped;
 
-  const imagesByBoat = new Map<string, string[]>();
-  const primaryByBoat = new Map<string, string>();
+  // One gallery order per boat; its first photo is the cover. Nothing else (no is_primary flag) decides which photo leads.
+  const rowsByBoat = new Map<string, Array<{ id: string; image_url: string; sort_order: number; created_at: string | null }>>();
   for (const image of imagesResult.data ?? []) {
-    const current = imagesByBoat.get(image.boat_id) ?? [];
-    current.push(image.image_url);
-    imagesByBoat.set(image.boat_id, current);
-    if (image.is_primary) primaryByBoat.set(image.boat_id, image.image_url);
+    const current = rowsByBoat.get(image.boat_id) ?? [];
+    current.push(image);
+    rowsByBoat.set(image.boat_id, current);
   }
 
   return mapped.map((boat) => {
-    const images = imagesByBoat.get(boat.id);
-    if (!images?.length) return boat;
-    const primary = primaryByBoat.get(boat.id) ?? images[0];
-    return {
-      ...boat,
-      image: primary,
-      images: [primary, ...images.filter((image) => image !== primary)],
-    };
+    const images = Array.from(new Set(orderBoatImages(rowsByBoat.get(boat.id) ?? []).map((image) => image.image_url).filter(Boolean)));
+    if (!images.length) return boat;
+    return { ...boat, image: images[0], images };
   });
 }

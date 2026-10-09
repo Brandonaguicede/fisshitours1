@@ -1,6 +1,7 @@
 import { supabase } from '../lib/supabase';
 import type { BoatTour, TourTimeSlot } from '../types/boatTour';
 import { mapBoatTour, type BoatTourCatalogRow } from './catalogMappers';
+import { sortByTourOrder } from '../utils/tourCatalog';
 
 export async function getActiveTimeSlots(): Promise<TourTimeSlot[]> {
   const { data, error } = await supabase
@@ -31,7 +32,8 @@ export async function getActiveBoatTours(): Promise<BoatTour[]> {
   if (packages.error) throw new Error(packages.error.message);
   if (images.error) throw new Error(images.error.message);
   if (inclusions.error) throw new Error(inclusions.error.message);
-  return ((packages.data ?? []) as unknown as BoatTourCatalogRow[]).map((row) => mapBoatTour(row, timeSlots, images.data ?? [], inclusions.data ?? []));
+  // Same order as Admin (tours.sort_order). The query orders by the PACKAGE's sort_order, which is not the order Admin's Tours reorder writes.
+  return sortByTourOrder(((packages.data ?? []) as unknown as BoatTourCatalogRow[]).map((row) => mapBoatTour(row, timeSlots, images.data ?? [], inclusions.data ?? [])));
 }
 
 export async function getActivePaymentMethods() {

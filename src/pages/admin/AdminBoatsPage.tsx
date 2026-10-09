@@ -1,4 +1,5 @@
 import { Check, ChevronLeft, ChevronRight, Image as ImageIcon, Info, Loader2, Pencil, Plus, Settings2, Trash2, Users, X } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 
@@ -18,6 +19,8 @@ import { translateTextsToSpanish } from '../../services/translationService';
 import { editableText, textColumns, textsToTranslate, type BilingualColumns } from '../../utils/bilingualContent';
 import type { StorageImage } from '../../services/imageService';
 import { friendlyDeleteError } from '../../utils/adminErrors';
+import { boatCover, orderBoatImages } from '../../utils/boatImages';
+import { demoteUnsellablePublishedTours, describeDemotedTours } from '../../services/tourPublicationService';
 import { money } from '../../utils/format';
 
 interface BoatImageRow {
@@ -26,8 +29,10 @@ interface BoatImageRow {
   image_url: string;
   storage_path: string | null;
   alt_text: string;
+  /** Derived from the gallery order by the database (first active image); the cover is read through boatCover(), never from this flag. */
   is_primary: boolean;
   sort_order: number;
+  created_at?: string | null;
   active: boolean;
   pending_deletion: boolean;
   /**
@@ -219,6 +224,7 @@ async function translateBoatContent(boat: BoatRow): Promise<Map<string, string>>
 
 export default function AdminBoatsPage() {
   const db = supabase as any;
+  const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const [boats, setBoats] = useState<BoatRow[] | null>(null);
   const [loading, setLoading] = useState(true);
@@ -267,7 +273,7 @@ export default function AdminBoatsPage() {
     const imagesResult = boatIds.length
       ? await db
           .from('boat_images')
-          .select('id, boat_id, image_url, storage_path, alt_text, is_primary, sort_order, active, pending_deletion')
+          .select('id, boat_id, image_url, storage_path, alt_text, is_primary, sort_order, created_at, active, pending_deletion')
           .in('boat_id', boatIds)
           .eq('active', true)
           .order('sort_order', { ascending: true })
@@ -410,9 +416,21 @@ export default function AdminBoatsPage() {
     setPendingBoatDelete(null);
   }
 
+  /** A hidden / draft / deleted boat can take a tour's last sellable package with it: those tours go back to draft. Returns the sentence for the feedback. */
+  async function tourDemotionNote(): Promise<string> {
+    try {
+      const note = describeDemotedTours(await demoteUnsellablePublishedTours());
+      if (note) void queryClient.invalidateQueries({ queryKey: ['boatTours'] });
+      return note ? ` ${note}` : '';
+    } catch {
+      return ' No se pudo comprobar el estado de publicación de los tours; revísalo en Tours.';
+    }
+  }
+
   async function syncBoatImageFields(boatId: string, images: BoatImageRow[]) {
-    const activeImages = images.filter((image) => image.active).sort((a, b) => a.sort_order - b.sort_order);
-    const primary = activeImages.find((image) => image.is_primary) ?? activeImages[0] ?? null;
+    const activeImages = orderBoatImages(images.filter((image) => image.active));
+    // The cover is the FIRST photo of the gallery — the same rule the public site uses.
+    const primary = boatCover(activeImages) ?? null;
     const { error } = await supabase
       .from('boats')
       .update({
@@ -423,6 +441,8 @@ export default function AdminBoatsPage() {
       })
       .eq('id', boatId);
     if (error) throw new Error(error.message);
+    // Gallery changed (possibly the cover): refresh the cached public boats.
+    void queryClient.invalidateQueries({ queryKey: ['boats'] });
   }
 
   async function refreshEditing(boatId = editing?.id) {
@@ -436,7 +456,7 @@ export default function AdminBoatsPage() {
     if (!data) return;
     const imagesResult = await db
       .from('boat_images')
-      .select('id, boat_id, image_url, storage_path, alt_text, is_primary, sort_order, active, pending_deletion')
+      .select('id, boat_id, image_url, storage_path, alt_text, is_primary, sort_order, created_at, active, pending_deletion')
       .eq('boat_id', boatId)
       .eq('active', true)
       .order('sort_order', { ascending: true });
@@ -569,12 +589,13 @@ export default function AdminBoatsPage() {
         setEditing((current) => (current ? { ...current, id, slug, sort_order: saved.sort_order, equipment: saved.equipment, badgeSaved: saved.badgeSaved } : current));
         await loadBoats();
       } else {
+        const demotionNote = mode === 'publish' && !keepStatus ? '' : await tourDemotionNote();
         setNotice(
-          keepStatus
+          (keepStatus
             ? 'Cambios guardados. El bote sigue oculto.'
             : mode === 'publish'
               ? (editing.active ? 'Bote guardado.' : 'Bote publicado.')
-              : 'Borrador guardado.',
+              : 'Borrador guardado.') + demotionNote,
         );
         setEditing(null);
         setFocusTourId(undefined);
@@ -617,7 +638,7 @@ export default function AdminBoatsPage() {
     }
     keepHiddenRef.current = !nextActive;
     setEditing((current) => (current ? { ...current, active: nextActive, publication_status: nextStatus } : current));
-    setNotice(nextActive ? 'Bote activado.' : 'Bote oculto.');
+    setNotice((nextActive ? 'Bote activado.' : 'Bote oculto.') + (nextActive ? '' : await tourDemotionNote()));
     await loadBoats();
   }
 
@@ -687,7 +708,7 @@ export default function AdminBoatsPage() {
     setPendingBoatDelete(null);
     setEditing(null);
     if (renumberError) setError(`Bote eliminado, pero no se pudo renumerar el orden: ${renumberError}. Usa Reordenar > Guardar.`);
-    else setNotice('Bote eliminado.');
+    else setNotice(`Bote eliminado.${await tourDemotionNote()}`);
     await loadBoats();
   }
 
@@ -719,7 +740,7 @@ export default function AdminBoatsPage() {
         sort_order: nextSortOrder,
         active: true,
       })
-      .select('id, boat_id, image_url, storage_path, alt_text, is_primary, sort_order, active, pending_deletion')
+      .select('id, boat_id, image_url, storage_path, alt_text, is_primary, sort_order, created_at, active, pending_deletion')
       .single();
     if (error) throw new Error(error.message);
     const nextImages = shouldBePrimary ? [data as BoatImageRow] : [...currentImages, data as BoatImageRow];
@@ -759,12 +780,6 @@ export default function AdminBoatsPage() {
       setError(`No puedes eliminar esta imagen mientras el bote esta activo: quedaria con ${remaining.length}. Inactivalo primero.`);
       return;
     }
-    if (image.is_primary && remaining.length > 0) {
-      const replacement = remaining[0];
-      await db.from('boat_images').update({ is_primary: true }).eq('id', replacement.id);
-      replacement.is_primary = true;
-    }
-
     const { error } = await db.from('boat_images').update({ active: false, pending_deletion: Boolean(image.storage_path) }).eq('id', image.id);
     if (error) {
       setError(error.message);
@@ -789,7 +804,7 @@ export default function AdminBoatsPage() {
   // editing.boat_images is always real (or []) — see loadBoats()/refreshEditing(). The
   // synthetic legacy preview is applied ONLY here, for display, and every row it produces
   // carries `synthetic: true` so the actions below know not to wire real writes to it.
-  const editorImages = useMemo(() => (editing?.boat_images?.length ? editing.boat_images : editing ? fallbackBoatImages(editing) : []), [editing]);
+  const editorImages = useMemo(() => (editing?.boat_images?.length ? orderBoatImages(editing.boat_images) : editing ? fallbackBoatImages(editing) : []), [editing]);
   const isExistingBoat = Boolean(editing && boats?.some((boat) => boat.id === editing.id));
   // True while we're showing the boat's legacy boats.images/image_url as a read-only
   // preview because it has no boat_images rows yet.
@@ -810,6 +825,8 @@ export default function AdminBoatsPage() {
       if (error) { setError(error.message); throw new Error(error.message); }
     }
     setNotice('Orden actualizado.');
+    // The public boats list is cached by React Query: refresh it so the new order shows without a reload.
+    await queryClient.invalidateQueries({ queryKey: ['boats'] });
     await loadBoats();
   }
 
@@ -1014,7 +1031,7 @@ export default function AdminBoatsPage() {
                     </p>
                   ) : null}
                   <AdminImageSlots
-                    images={editorImages.map((image) => ({ id: image.id, url: image.image_url, alt: image.alt_text, cover: Boolean(image.is_primary), locked: Boolean(image.synthetic) }))}
+                    images={editorImages.map((image, index) => ({ id: image.id, url: image.image_url, alt: image.alt_text, cover: index === 0, locked: Boolean(image.synthetic) }))}
                     onDelete={(item) => setPendingDelete(editorImages.find((image) => image.id === item.id) ?? null)}
                     fallbackAlt={(index) => `${editing.name} foto ${index + 1}`}
                     // New photos are appended, so only the first empty slot can be filled.

@@ -1,4 +1,6 @@
 import { Check, ChevronLeft, ChevronRight, Image as ImageIcon, Info, Loader2, Pencil, Plus, Settings, Trash2, X } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
+import { isTourPublishable, TOUR_CANNOT_PUBLISH_NOTICE, TOUR_SAVED_AS_DRAFT_NOTICE } from '../../services/tourPublicationService';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import AdminConfirmDialog from '../../components/admin/AdminConfirmDialog';
@@ -120,6 +122,7 @@ function createEditor(tour: TourRow, images: TourImageRow[], inclusions: TourInc
 }
 
 export default function AdminToursPage() {
+  const queryClient = useQueryClient();
   const [tours, setTours] = useState<TourRow[]>([]);
   const [boats, setBoats] = useState<BoatRow[]>([]);
   const [relations, setRelations] = useState<BoatTourRow[]>([]);
@@ -263,6 +266,12 @@ export default function AdminToursPage() {
   async function toggleTourPublication(tour: TourRow, nextStatus: PublicationStatus) {
     setTogglingTourId(tour.id);
     setError(''); setNotice('');
+    if (nextStatus === 'published') {
+      // Same rule as the public site: no sellable package -> it cannot be published (it stays as it is, with the reason).
+      let publishable = false;
+      try { publishable = await isTourPublishable(tour.id); } catch (caught) { setTogglingTourId(null); setError(caught instanceof Error ? caught.message : 'No se pudo comprobar los paquetes del tour.'); return; }
+      if (!publishable) { setTogglingTourId(null); setError(TOUR_CANNOT_PUBLISH_NOTICE); return; }
+    }
     const { error: updateError } = await supabase.from('tours').update({ publication_status: nextStatus, updated_at: new Date().toISOString() }).eq('id', tour.id);
     setTogglingTourId(null);
     if (updateError) { setError(updateError.message); return; }
@@ -435,9 +444,10 @@ export default function AdminToursPage() {
       const spanish = await translateTourContent(editing, { info: true, experience: true });
       await persistInfo(editing, spanish); await persistExperience(editing, spanish);
       const firstImage = editing.images[0];
-      const { error: tourError } = await supabase.from('tours').update({ publication_status: 'published', active: true, featured: editing.featured, image_url: firstImage?.image_url ?? null, image_public_id: firstImage?.storage_path ?? null, image_alt: firstImage?.alt_text || editing.title, updated_at: new Date().toISOString() }).eq('id', editing.id);
+      const publishable = await isTourPublishable(editing.id);
+      const { error: tourError } = await supabase.from('tours').update({ publication_status: publishable ? 'published' : 'draft', featured: editing.featured, image_url: firstImage?.image_url ?? null, image_public_id: firstImage?.storage_path ?? null, image_alt: firstImage?.alt_text || editing.title, updated_at: new Date().toISOString() }).eq('id', editing.id);
       if (tourError) throw new Error(tourError.message);
-      setSaving(false); setDirty(false); setEditing(null); setNotice('Tour guardado y activado.'); await loadTours();
+      setSaving(false); setDirty(false); setEditing(null); setNotice(publishable ? 'Tour guardado y activado.' : TOUR_SAVED_AS_DRAFT_NOTICE); await queryClient.invalidateQueries({ queryKey: ['boatTours'] }); await loadTours();
     } catch (caught) { setSaving(false); setError(caught instanceof Error ? caught.message : 'No se pudo finalizar el tour.'); }
   }
 
@@ -514,6 +524,8 @@ export default function AdminToursPage() {
       if (error) { setError(error.message); throw new Error(error.message); }
     }
     setNotice('Orden actualizado.');
+    // The public catalog is cached by React Query: refresh it so the new order shows without a reload.
+    await queryClient.invalidateQueries({ queryKey: ['boatTours'] });
     await loadTours();
   }
 

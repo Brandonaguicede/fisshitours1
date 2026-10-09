@@ -56,6 +56,37 @@ export function findPackageIssues(facts: PackageFacts): PackageIssue[] {
 
 export const isPackageReady = (facts: PackageFacts) => findPackageIssues(facts).length === 0;
 
+/** The columns of a stored package that decide whether it is complete (a `tour_packages` row has all of them). */
+export interface PackageRowLike {
+  name: string | null;
+  custom_quote: boolean;
+  base_price: number | string | null;
+  included_guests: number | null;
+  max_guests: number | null;
+  extra_guest_price: number | string | null;
+  duration_minutes: number | null;
+  departure_times: string[] | null;
+}
+
+export const packageRowFacts = (row: PackageRowLike, sharedTimeCount: number): PackageFacts => ({
+  name: row.name,
+  customQuote: row.custom_quote,
+  basePrice: row.base_price == null ? null : Number(row.base_price),
+  includedGuests: row.included_guests,
+  maxGuests: row.max_guests,
+  extraGuestPrice: row.extra_guest_price == null ? null : Number(row.extra_guest_price),
+  durationMinutes: row.duration_minutes,
+  departureTimes: row.departure_times,
+  sharedTimeCount,
+});
+
+/**
+ * THE definition of "a customer can book this package": every link of its chain is active (package, tour <-> boat link, boat, and — for what the public
+ * site shows — the tour itself), it is not a custom quote and it is complete. The public catalog and the rule "a tour needs at least one sellable package
+ * to be published" both use it; there is no second copy of this condition.
+ */
+export const isSellablePackage = (chainActive: boolean, facts: PackageFacts) => chainActive && !facts.customQuote && isPackageReady(facts);
+
 /** Short, admin-facing (Spanish) wording — never a column name. */
 export const PACKAGE_ISSUE_LABELS: Record<PackageIssue, string> = {
   name: 'el nombre',
