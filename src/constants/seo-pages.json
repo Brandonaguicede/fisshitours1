@@ -14,5 +14,9 @@
   "/contacto": {
     "es": { "title": "Contáctanos | Papagayo Fishing Tours", "description": "Contacta a Papagayo Fishing Tours para planear tu viaje de pesca o tour en barco en Costa Rica." },
     "en": { "title": "Contact Us | Papagayo Fishing Tours", "description": "Contact Papagayo Fishing Tours to plan your fishing trip or boat tour in Costa Rica." }
+  },
+  "/terminos": {
+    "es": { "title": "Términos y Condiciones | Papagayo Fishing Tours", "description": "Términos y condiciones, políticas de cancelación, clima y privacidad de Papagayo Fishing Tours." },
+    "en": { "title": "Terms and Conditions | Papagayo Fishing Tours", "description": "Terms and conditions, cancellation, weather and privacy policies of Papagayo Fishing Tours." }
   }
 }

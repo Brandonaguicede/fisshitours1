@@ -21,7 +21,7 @@ const schema = z.object({
   departureLocationId: z.string().min(1),
   mealOption: z.string().max(120).optional(),
   specialRequests: z.string().max(1000).optional(),
-  paymentMethodKey: z.enum(['paypal', 'whatsapp-link']),
+  paymentMethodKey: z.enum(['paypal', 'whatsapp-link', 'bac-card']),
   extras: z.array(z.object({ key: z.string().min(1).max(80), quantity: z.number().int().positive() })).default([]),
   turnstileToken: z.string().optional(),
   // Persisted in bookings.language: the confirmation email is rendered in it, and it picks the language of the request-received email below.
@@ -176,9 +176,9 @@ async function sendBookingEmails(supabase: ReturnType<typeof createClient>, book
   const replyTo = Deno.env.get('BOOKING_REPLY_TO')?.trim();
   const customerEmail = payload.customer.email;
   if (!booking?.booking_id || !customerEmail) return;
-  // PayPal reservations are notified only after capture succeeds. The capture
-  // function queues the paid confirmation once PayPal returns COMPLETED.
-  if (payload.paymentMethodKey === 'paypal') return;
+  // Online payments (PayPal, BAC card) are notified only after the charge
+  // succeeds: the capture/sale function queues the paid confirmation itself.
+  if (payload.paymentMethodKey === 'paypal' || payload.paymentMethodKey === 'bac-card') return;
 
   const messages = [
     // Internal notice (always Spanish, plain text): just "there is a new request, go review it in the panel". Sent once, when the booking is created;

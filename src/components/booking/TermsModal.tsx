@@ -20,7 +20,6 @@ const copy = {
 export function TermsModal({ open, onClose, language, tone = 'glass', version = CURRENT_TERMS_VERSION }: { open: boolean; onClose: () => void; language: Language; tone?: Tone; version?: string }) {
   const titleId = useId();
   const text = copy[language];
-  const terms = getTerms(version, language);
   const light = tone === 'light';
   return (
     <ModalShell
@@ -47,20 +46,35 @@ export function TermsModal({ open, onClose, language, tone = 'glass', version = 
           </button>
         </header>
         <div data-terms-body className={cn('thin-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-6 sm:py-5', light && 'thin-scroll--light')}>
-          {terms.sections.map((section) => (
-            <section key={section.id} className="mb-5 last:mb-0">
-              <h3 className={cn('text-sm font-extrabold sm:text-base', light ? 'text-slate-900' : 'text-white')}>{section.title}</h3>
-              <ul className={cn('mt-2 grid list-disc gap-1.5 pl-5 text-[0.82rem] leading-6 sm:text-sm', light ? 'text-slate-700' : 'text-ocean-100')}>
-                {section.items.map((item) => <li key={item} className="break-words">{item}</li>)}
-              </ul>
-            </section>
-          ))}
+          <TermsSections language={language} version={version} tone={tone} />
         </div>
         <footer className={cn('flex shrink-0 justify-end border-t px-4 py-3 sm:px-6', light ? 'border-slate-200' : 'border-white/10')}>
           <Button variant={light ? 'primary' : 'glass'} type="button" onClick={onClose}>{text.close}</Button>
         </footer>
       </div>
     </ModalShell>
+  );
+}
+
+/**
+ * The policy sections of one published version. Shared by the modal and the public /terminos page (required by the card acquirer)
+ * so both always render the exact same registry text. `headingLevel` keeps the document outline correct in each context.
+ */
+export function TermsSections({ language, version = CURRENT_TERMS_VERSION, tone = 'glass', headingLevel = 'h3' }: { language: Language; version?: string; tone?: Tone; headingLevel?: 'h2' | 'h3' }) {
+  const terms = getTerms(version, language);
+  const light = tone === 'light';
+  const Heading = headingLevel;
+  return (
+    <>
+      {terms.sections.map((section) => (
+        <section key={section.id} className="mb-5 last:mb-0">
+          <Heading className={cn('text-sm font-extrabold sm:text-base', light ? 'text-slate-900' : 'text-white')}>{section.title}</Heading>
+          <ul className={cn('mt-2 grid list-disc gap-1.5 pl-5 text-[0.82rem] leading-6 sm:text-sm', light ? 'text-slate-700' : 'text-ocean-100')}>
+            {section.items.map((item) => <li key={item} className="break-words">{item}</li>)}
+          </ul>
+        </section>
+      ))}
+    </>
   );
 }
 

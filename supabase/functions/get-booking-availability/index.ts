@@ -25,6 +25,7 @@ serve(withCors(async (req) => {
 
   const supabase = createClient(supabaseUrl, serviceRole, { auth: { persistSession: false } });
   await supabase.rpc('expire_pending_paypal_bookings');
+  await supabase.rpc('expire_pending_bac_bookings');
 
   const { data: boat } = await supabase.from('boats').select('id').eq('id', parsed.data.boatId).eq('active', true).maybeSingle();
   if (!boat) return Response.json({ message: 'Boat not found', code: 'PACKAGE_UNAVAILABLE' }, { status: 404, headers });
