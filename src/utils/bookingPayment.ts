@@ -5,7 +5,7 @@ import type { Boat } from '../types/boat';
 import type { BoatTour, TourTimeSlot } from '../types/boatTour';
 import type { calculateBookingTotal } from './bookingPricing';
 
-export type BookingPaymentMethod = 'paypal' | 'whatsapp-link';
+export type BookingPaymentMethod = 'paypal' | 'whatsapp-link' | 'bac-card';
 export type PaymentStatus =
   | 'pending'
   | 'processing'
@@ -170,4 +170,11 @@ function formatMessageDate(value: string, language: 'es' | 'en') {
 
 function cleanText(value: string) {
   return value.trim().replace(/\s+/g, ' ');
+}
+
+/** Card networks require separate first/last names; a single word fills both. */
+export function splitFullName(fullName: string) {
+  const parts = cleanText(fullName).split(' ').filter(Boolean);
+  if (parts.length <= 1) return { firstName: parts[0] ?? '', lastName: parts[0] ?? '' };
+  return { firstName: parts.slice(0, -1).join(' '), lastName: parts[parts.length - 1] };
 }

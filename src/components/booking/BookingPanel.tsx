@@ -7,6 +7,7 @@ import { useLanguage } from '../../i18n/LanguageContext';
 import { text, tr } from '../../i18n/translations';
 import { MOCK_TURNSTILE_TOKEN, USE_LOCAL_TURNSTILE_MOCK } from '../../lib/turnstile';
 import { cancelPayPalOrder, capturePayPalOrder, createPayPalOrder, getPayPalErrorMessage, loadPayPalSdk, type PayPalCaptureResult } from '../../services/paypalService';
+import type { BacPaymentResult } from '../../services/bacPaymentService';
 import { AvailabilityError, getBookingAvailability, type AvailabilitySlot } from '../../services/availabilityService';
 import { calculateBookingPrice, createBooking, getActiveDepartureLocations, type BookingResult, type DepartureLocation, type PriceResult } from '../../services/bookingService';
 import { getActivePaymentMethods } from '../../services/paymentService';
@@ -22,6 +23,7 @@ import { formatTime, sortSlotsChronologically } from '../../utils/format';
 import { Button, ChoiceCard, Field, FieldError, GlassPanel, Input, ModalShell, TextArea } from '../ui';
 import { CURRENT_TERMS_VERSION } from '../../../supabase/functions/_shared/terms.mjs';
 import { TermsConsent } from './TermsModal';
+import { BacCardCheckout } from './BacCardCheckout';
 
 function formatCurrency(value: number) {
   return Number.isFinite(value) ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value) : '\u2026';
@@ -43,8 +45,8 @@ interface BookingPanelProps {
 // any other `type` (e.g. bank_transfer, sinpe, cash, manual — all valid per
 // the DB's own CHECK constraint) has no real handler yet, so it's filtered
 // out rather than rendered as a card that does nothing when clicked.
-type SupportedPaymentType = 'paypal' | 'whatsapp_link';
-const SUPPORTED_PAYMENT_TYPES: SupportedPaymentType[] = ['paypal', 'whatsapp_link'];
+type SupportedPaymentType = 'paypal' | 'whatsapp_link' | 'card';
+const SUPPORTED_PAYMENT_TYPES: SupportedPaymentType[] = ['paypal', 'whatsapp_link', 'card'];
 
 const paymentMethods: Array<{ id: BookingPaymentMethod; type: SupportedPaymentType; title: string; description: string; icon: typeof CreditCard; logo?: string; logoAlt?: string }> = [
   { id: 'paypal', type: 'paypal', title: 'Pay with PayPal', description: 'Secure USD checkout.', icon: CreditCard, logo: '/images/paypal.png', logoAlt: 'PayPal' },
@@ -59,6 +61,7 @@ const paymentMethods: Array<{ id: BookingPaymentMethod; type: SupportedPaymentTy
 const SPANISH_COPY_BY_TYPE: Record<SupportedPaymentType, { title: string; description: string }> = {
   paypal: { title: 'Pagar con PayPal', description: 'Checkout seguro en USD.' },
   whatsapp_link: { title: 'Solicitar enlace por WhatsApp', description: 'Solicita un enlace de pago.' },
+  card: { title: 'Tarjeta de crédito o débito', description: 'Visa, Mastercard o American Express.' },
 };
 
 function getPaymentMethodCopy(method: { title: string; description: string; type: SupportedPaymentType }, language: 'es' | 'en') {
@@ -94,6 +97,8 @@ export function BookingPanel({ selectedBoat, selectedTour: requestedTour, boats,
   const [paypalError, setPaypalError] = useState('');
   const [paypalInfo, setPaypalInfo] = useState('');
   const [paypalSuccess, setPaypalSuccess] = useState<PayPalCaptureResult | null>(null);
+  const [cardCheckoutVisible, setCardCheckoutVisible] = useState(false);
+  const [cardSuccess, setCardSuccess] = useState<BacPaymentResult | null>(null);
   const [successNotice, setSuccessNotice] = useState<{ title: string; message: string; reference?: string; whatsappUrl?: string } | null>(null);
   const [createdBooking, setCreatedBooking] = useState<BookingResult | null>(null);
   const [turnstileToken, setTurnstileToken] = useState('');
@@ -114,6 +119,8 @@ export function BookingPanel({ selectedBoat, selectedTour: requestedTour, boats,
     setPaypalError('');
     setPaypalInfo('');
     setPaypalSuccess(null);
+    setCardCheckoutVisible(false);
+    setCardSuccess(null);
     setCreatedBooking(null);
     setSuccessNotice(null);
     setValidationMessage('');
@@ -155,7 +162,7 @@ export function BookingPanel({ selectedBoat, selectedTour: requestedTour, boats,
       description: language === 'en'
         ? method.description_en || method.description || method.description_es || ''
         : method.description_es || method.description || method.description_en || '',
-      icon: method.type === 'paypal' ? CreditCard : MessageCircle,
+      icon: method.type === 'paypal' || method.type === 'card' ? CreditCard : MessageCircle,
       logo: method.logo_url ?? undefined,
       logoAlt: method.name,
     }));
@@ -267,6 +274,8 @@ export function BookingPanel({ selectedBoat, selectedTour: requestedTour, boats,
     setPaypalVisible(false);
     setPaypalInfo('');
     setPaypalSuccess(null);
+    setCardCheckoutVisible(false);
+    setCardSuccess(null);
     setCreatedBooking(null);
   }
 
@@ -281,6 +290,8 @@ export function BookingPanel({ selectedBoat, selectedTour: requestedTour, boats,
     setPaypalVisible(false);
     setPaypalInfo('');
     setPaypalSuccess(null);
+    setCardCheckoutVisible(false);
+    setCardSuccess(null);
     setCreatedBooking(null);
   }
 
@@ -441,8 +452,39 @@ export function BookingPanel({ selectedBoat, selectedTour: requestedTour, boats,
       setPaymentStatus('pending');
       setPaypalError('');
       setPaypalInfo(language === 'es' ? 'Completa el pago en PayPal. Cuando el pago se confirme, en unos momentos recibirás un correo. Muchas gracias por reservar.' : 'Complete your PayPal payment. Once it is confirmed, you will receive an email in a few moments. Thank you for booking.');
+      setCardCheckoutVisible(false);
       setPaypalVisible(true);
     }).catch(() => undefined);
+  }
+
+  function handleCardRequest(key: BookingPaymentMethod) {
+    const booking = validateBookingForPayment();
+    if (!booking) return;
+    submitBooking(key).then((result) => {
+      if (!result) return;
+      setPaymentMethod(key);
+      setBookingStatus('pending_payment');
+      setPaymentStatus('pending');
+      setPaypalVisible(false);
+      setPaypalError('');
+      setPaypalInfo('');
+      setCardSuccess(null);
+      setCardCheckoutVisible(true);
+    }).catch(() => undefined);
+  }
+
+  function handleCardSuccess(result: BacPaymentResult) {
+    setCardCheckoutVisible(false);
+    setCardSuccess(result);
+    setBookingStatus('confirmed');
+    setPaymentStatus('paid');
+    setSuccessNotice({
+      title: language === 'es' ? 'Pago completado' : 'Payment completed',
+      message: language === 'es'
+        ? 'Tu pago con tarjeta fue aprobado. En unos momentos recibirás un correo con la confirmación de tu reserva. Muchas gracias por reservar con nosotros.'
+        : 'Your card payment was approved. In a few moments you will receive a confirmation email for your reservation.',
+      reference: result.bookingReference,
+    });
   }
 
   const summaryProps = {
@@ -587,6 +629,10 @@ export function BookingPanel({ selectedBoat, selectedTour: requestedTour, boats,
                 paypalError={paypalError}
                 paypalInfo={paypalInfo}
                 paypalSuccess={paypalSuccess}
+                cardCheckoutVisible={cardCheckoutVisible}
+                cardSuccess={cardSuccess}
+                onCardRequest={handleCardRequest}
+                onCardSuccess={handleCardSuccess}
                 onCustomerNameChange={setCustomerName}
                 onCustomerEmailChange={setCustomerEmail}
                 onCustomerWhatsappChange={setCustomerWhatsapp}
@@ -1149,6 +1195,10 @@ function CustomerStep(props: {
   paypalError: string;
   paypalInfo: string;
   paypalSuccess: PayPalCaptureResult | null;
+  cardCheckoutVisible: boolean;
+  cardSuccess: BacPaymentResult | null;
+  onCardRequest: (key: BookingPaymentMethod) => void;
+  onCardSuccess: (result: BacPaymentResult) => void;
   onCustomerNameChange: (name: string) => void;
   onCustomerEmailChange: (email: string) => void;
   onCustomerWhatsappChange: (value: string) => void;
@@ -1187,6 +1237,7 @@ function CustomerStep(props: {
     props.onPaymentMethodChange(method);
     if (type === 'paypal') props.onPayPalRequest(method);
     if (type === 'whatsapp_link') props.onPaymentLinkRequest(method);
+    if (type === 'card') props.onCardRequest(method);
   }
 
   return (
@@ -1261,6 +1312,29 @@ function CustomerStep(props: {
 
       {props.paypalVisible && props.booking && props.createdBooking ? (
         <PayPalCheckoutBox booking={props.booking} createdBooking={props.createdBooking} onSuccess={props.onPayPalSuccess} onError={props.onPayPalError} onCancel={props.onPayPalCancel} onStart={props.onPayPalStart} language={language} />
+      ) : null}
+
+      {props.cardCheckoutVisible && props.createdBooking ? (
+        <BacCardCheckout
+          createdBooking={props.createdBooking}
+          customerName={props.customerName}
+          customerEmail={props.customerEmail}
+          customerPhone={props.customerWhatsapp}
+          language={language}
+          onSuccess={props.onCardSuccess}
+        />
+      ) : null}
+
+      {props.cardSuccess && props.booking ? (
+        <div className="mt-4 rounded-2xl border border-seafoam-400/30 bg-seafoam-500/10 p-4 text-ocean-50" role="status">
+          <p className="text-lg font-extrabold">{language === 'es' ? 'Pago exitoso' : 'Payment Successful'}</p>
+          <div className="mt-3 grid gap-2 text-sm">
+            <SummaryLine label={language === 'es' ? 'Referencia de reserva' : 'Booking reference'} value={props.cardSuccess.bookingReference} />
+            <SummaryLine label={language === 'es' ? 'Monto pagado' : 'Amount paid'} value={`${props.cardSuccess.amount} ${props.cardSuccess.currency}`} />
+            <SummaryLine label={language === 'es' ? 'Referencia de transacción' : 'Transaction reference'} value={props.cardSuccess.transactionId} />
+            <SummaryLine label={language === 'es' ? 'Información del tour' : 'Tour information'} value={`${getTourText(props.booking.tour, language).title} - ${props.booking.packageLabel}`} />
+          </div>
+        </div>
       ) : null}
 
       {props.paypalError ? (

@@ -7,6 +7,7 @@ import { useLanguage } from '../../i18n/LanguageContext';
 import { text, tr } from '../../i18n/translations';
 import { Container } from '../common/Container';
 import { IconButton } from '../ui';
+import { cn } from '../../utils/cn';
 
 // Desktop (lg+, untouched): footer-shoreline.webp is the footer's own
 // background at its native 2.5:1 ratio, `100% auto`, continuing exactly
@@ -63,6 +64,15 @@ const MOBILE_NAVY_FADE =
 // the contact card instead of starting only once the footer itself
 // begins.
 const MOBILE_SHORELINE_REACH = 90;
+
+// Card-acquirer requirement (BAC): the terms must be reachable from every page, home included.
+function TermsPageLink({ language, className }: { language: 'es' | 'en'; className?: string }) {
+  return (
+    <Link className={cn('font-semibold text-ocean-800 underline underline-offset-4 hover:text-ocean-950', className)} to="/terminos">
+      {language === 'es' ? 'Términos y Condiciones' : 'Terms and Conditions'}
+    </Link>
+  );
+}
 
 export function Footer() {
   const { language } = useLanguage();
@@ -169,6 +179,7 @@ export function Footer() {
           {/* Copyright */}
           <div className="mt-6 border-t border-ocean-950/10 pt-3 pb-10 text-center text-xs text-ocean-700">
             © 2026 Papagayo Fishing Tours. {language === 'es' ? 'Todos los derechos reservados.' : 'All rights reserved.'}
+            <TermsPageLink className="mt-1.5 block" language={language} />
           </div>
         </div>
       </div>
@@ -296,6 +307,8 @@ export function Footer() {
           <div className="border-t border-ocean-950/10">
             <Container className="py-1.5 pb-1.5 text-center text-xs text-ocean-700">
               © 2026 Papagayo Fishing Tours. {language === 'es' ? 'Todos los derechos reservados.' : 'All rights reserved.'}
+              <span aria-hidden="true"> · </span>
+              <TermsPageLink language={language} />
             </Container>
           </div>
         </div>

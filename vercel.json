@@ -13,6 +13,7 @@
     { "source": "/tours", "destination": "/tours/index.html" },
     { "source": "/reservar", "destination": "/reservar/index.html" },
     { "source": "/contacto", "destination": "/contacto/index.html" },
+    { "source": "/terminos", "destination": "/terminos/index.html" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }

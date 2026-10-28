@@ -84,6 +84,7 @@ export function formatBookingStatusLabel(status: string) {
 export function formatPaymentMethodLabel(key: string, name: string) {
   const source = `${key} ${name}`.toLowerCase();
   if (source.includes('paypal')) return 'PayPal';
+  if (source.includes('bac-card')) return 'Tarjeta BAC';
   if (source.includes('whatsapp')) return 'WhatsApp';
   return name;
 }

@@ -552,7 +552,7 @@ export default function AdminReservationsPage() {
   // once the payment is verified as paid. Now it is simply hidden otherwise.
   function canConfirmReservation(reservation: AdminReservation) {
     if (reservation.booking_status === 'confirmed' || reservation.booking_status === 'cancelled') return false;
-    return !(reservation.payment_method_key === 'paypal' && reservation.payment_status !== 'paid');
+    return !((reservation.payment_method_key === 'paypal' || reservation.payment_method_key === 'bac-card') && reservation.payment_status !== 'paid');
   }
 
   function renderReservationActions(reservation: AdminReservation) {

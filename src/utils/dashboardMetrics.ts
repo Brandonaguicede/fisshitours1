@@ -56,10 +56,10 @@ export const CONFIRMED_PAYMENT_STATUS = 'paid';
  */
 export const OPEN_BOOKING_STATUSES = ['pending', 'pending_payment', 'pending_confirmation'];
 
-/** A PayPal booking can only be confirmed by an admin once PayPal has actually paid it (mirrors the Reservas "Confirmar" button). */
+/** Online-paid methods (PayPal, BAC card) can only be confirmed by an admin once the charge is verified (mirrors the Reservas "Confirmar" button). */
 export function isAwaitingAdminConfirmation(row: Pick<DashboardBookingRow, 'booking_status' | 'payment_method_key' | 'payment_status'>): boolean {
   if (!OPEN_BOOKING_STATUSES.includes(row.booking_status)) return false;
-  return !(row.payment_method_key === 'paypal' && row.payment_status !== CONFIRMED_PAYMENT_STATUS);
+  return !((row.payment_method_key === 'paypal' || row.payment_method_key === 'bac-card') && row.payment_status !== CONFIRMED_PAYMENT_STATUS);
 }
 
 const toCents = (value: number | string | null | undefined) => {

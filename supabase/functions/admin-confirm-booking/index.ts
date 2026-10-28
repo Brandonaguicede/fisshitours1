@@ -50,6 +50,9 @@ serve(withCors(async (req) => {
     if (booking.payment_method_key === 'paypal' && booking.payment_status !== 'paid') {
       return Response.json({ message: 'PayPal payment must be verified before confirming the booking' }, { status: 409, headers });
     }
+    if (booking.payment_method_key === 'bac-card' && booking.payment_status !== 'paid') {
+      return Response.json({ message: 'Card payment must be approved before confirming the booking' }, { status: 409, headers });
+    }
 
     const { data, error } = await userClient.rpc('update_booking_status', {
       p_booking_id: parsed.data.bookingId,
