@@ -5,6 +5,7 @@ import { corsHeaders, corsPreflight, withCors } from '../_shared/cors.ts';
 import { areExternalProviderMocksAllowed } from '../_shared/environment.ts';
 import { enqueueBookingConfirmationEmails } from '../_shared/booking-confirmation-email.ts';
 import { syncBookingCalendarAfterConfirmation } from '../_shared/booking-calendar.ts';
+import { sendAdminBookingNotice } from '../_shared/admin-booking-notice.ts';
 import {
   buildSaleRequest,
   getBacCheckoutType,
@@ -121,6 +122,14 @@ serve(withCors(async (req) => {
     await enqueueBookingConfirmationEmails(supabase, booking.id).catch((emailError) => {
       console.error('Booking confirmation email could not be queued', emailError);
     });
+  } else if (settled.payment_status === 'authorized') {
+    // The funds are only held: the business must capture (or void) them, and an authorization expires at the issuer.
+    await sendAdminBookingNotice(supabase, {
+      bookingId: booking.id,
+      subject: `Pago con tarjeta autorizado, pendiente de captura - ${attempt.booking_reference}`,
+      text: `El banco autorizó el pago con tarjeta de la reserva ${attempt.booking_reference} por ${attempt.currency} ${Number(attempt.amount).toFixed(2)}.\n\nTodavía no se ha cobrado. Ingresa al panel administrativo, revisa la reserva y usa Capturar para cobrarla y confirmarla, o Anular para liberar los fondos.\n\nLa autorización vence en el banco emisor si no se captura a tiempo.`,
+      dedupe: `booking:${booking.id}:bac-authorized-admin-email`,
+    }).catch((noticeError) => console.error('Admin authorization notice failed', noticeError));
   }
 
   return Response.json({

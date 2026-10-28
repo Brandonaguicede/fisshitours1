@@ -13,18 +13,22 @@ import {
   postGatewayRequest,
 } from '../_shared/bac-gateway.ts';
 
-// Admin money operations on a BAC card booking: Capture (an authorization), Void (an authorization or an
-// unsettled sale/capture) and Refund (full or partial, of a settled sale/capture). Only active `admin`
-// profiles may move money; editors can confirm bookings but cannot capture, void or refund.
-// The browser sends the booking id, the operation and (refund only) an amount. The original gateway
-// transaction and every limit are resolved from the payments ledger on the server.
-const schema = z.object({
-  bookingId: z.string().uuid(),
-  operation: z.enum(['capture', 'void', 'refund']),
-  amount: z.number().positive().max(100000).multipleOf(0.01).optional(),
-});
+// Admin money operations on a BAC card booking:
+//   * capture   — charge an authorization (full amount);
+//   * void      — cancel an authorization or an unsettled sale/capture;
+//   * refund    — full or partial refund of a settled sale/capture;
+//   * reconcile — record the real outcome of a gateway call that timed out, after checking the BAC portal.
+// Only active `admin` profiles may move money; editors can confirm bookings but cannot run these.
+// The original gateway transaction and every limit are resolved from the payments ledger on the server.
+const bookingId = z.string().uuid();
+const schema = z.discriminatedUnion('operation', [
+  z.object({ bookingId, operation: z.literal('capture') }).strict(),
+  z.object({ bookingId, operation: z.literal('void') }).strict(),
+  z.object({ bookingId, operation: z.literal('refund'), amount: z.number().positive().max(100000).multipleOf(0.01).optional() }).strict(),
+  z.object({ bookingId, operation: z.literal('reconcile'), approved: z.boolean(), transactionId: z.string().trim().max(64).regex(/^[A-Za-z0-9-]*$/).optional() }).strict(),
+]);
 
-const UNKNOWN_OUTCOME_MESSAGE = 'The gateway did not confirm the result. Do not retry: check the transaction in the BAC portal and reconcile it.';
+const UNKNOWN_OUTCOME_MESSAGE = 'The gateway did not confirm the result. Do not retry: check the transaction in the BAC portal and use Conciliar.';
 
 serve(withCors(async (req) => {
   const headers = corsHeaders(req, 'POST, OPTIONS');
@@ -33,9 +37,7 @@ serve(withCors(async (req) => {
 
   const parsed = schema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return Response.json({ message: 'Invalid card operation payload' }, { status: 400, headers });
-  if (parsed.data.operation !== 'refund' && parsed.data.amount !== undefined) {
-    return Response.json({ message: 'Only refunds accept an amount' }, { status: 400, headers });
-  }
+  const input = parsed.data;
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL');
   const serviceRole = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
@@ -55,6 +57,22 @@ serve(withCors(async (req) => {
   const { data: profile, error: profileError } = await db.from('profiles').select('role, active').eq('id', userData.user.id).maybeSingle();
   if (profileError) return Response.json({ message: 'Admin profile could not be verified' }, { status: 500, headers });
   if (!profile?.active || profile.role !== 'admin') return Response.json({ message: 'Admin role required' }, { status: 403, headers });
+  const actor = userData.user.id;
+
+  if (input.operation === 'reconcile') {
+    const { data: reconciled, error } = await db.rpc('reconcile_bac_operation', {
+      p_booking_id: input.bookingId,
+      p_approved: input.approved,
+      p_transaction_id: input.transactionId ?? null,
+      p_actor: actor,
+    });
+    if (error || !reconciled) {
+      // RPC messages are our own validation texts (never gateway or secret data).
+      return Response.json({ message: error?.message ?? 'The card operation could not be reconciled' }, { status: error?.code === '55P03' ? 409 : 400, headers });
+    }
+    if (reconciled.approved === true) await runFollowUps(db, input.bookingId, followUpFor(reconciled.reconciled, reconciled.booking_status));
+    return Response.json(reconciled, { headers });
+  }
 
   let securityKey: string;
   let gatewayUrl: string;
@@ -66,14 +84,13 @@ serve(withCors(async (req) => {
   }
 
   const { data: operation, error: beginError } = await db.rpc('begin_bac_admin_operation', {
-    p_booking_id: parsed.data.bookingId,
-    p_operation: parsed.data.operation,
-    p_amount: parsed.data.amount ?? null,
-    p_actor: userData.user.id,
+    p_booking_id: input.bookingId,
+    p_operation: input.operation,
+    p_amount: input.operation === 'refund' ? input.amount ?? null : null,
+    p_actor: actor,
   });
   if (beginError || !operation) {
-    if (beginError?.code === '55P03') return Response.json({ message: 'Another card operation for this booking is still in progress' }, { status: 409, headers });
-    // RPC messages are our own validation texts (never gateway or secret data).
+    if (beginError?.code === '55P03') return Response.json({ message: 'Another card operation for this booking is still pending: use Conciliar after checking the BAC portal' }, { status: 409, headers });
     return Response.json({ message: beginError?.message ?? 'Card operation is not allowed for this booking' }, { status: 400, headers });
   }
 
@@ -101,7 +118,7 @@ serve(withCors(async (req) => {
     p_approved: result.approved,
     p_transaction_id: result.transactionId,
     p_note: `BAC ${operation.operation} ${result.approved ? 'approved' : `declined (${result.responseCode || 'no code'})`} by admin`,
-    p_raw_response: { ...result.audit, actor: userData.user.id },
+    p_raw_response: { ...result.audit, actor },
   });
   if (settleError || !settled) {
     console.error('BAC admin operation could not be recorded', { operationId: operation.operation_id, code: settleError?.code });
@@ -112,18 +129,32 @@ serve(withCors(async (req) => {
     return Response.json({ ...settled, message: `The gateway declined the ${operation.operation}: ${result.responseText || 'no reason given'}` }, { status: 402, headers });
   }
 
-  // Same follow-ups as the other confirmation / cancellation flows; neither can fail the money operation.
-  if (operation.operation === 'capture' || operation.operation === 'void') {
-    await syncBookingCalendarAfterConfirmation(db, parsed.data.bookingId);
-  }
-  if (operation.operation === 'capture') {
-    await enqueueBookingConfirmationEmails(db, parsed.data.bookingId).catch((emailError) => {
+  await runFollowUps(db, input.bookingId, followUpFor(operation.operation, settled.booking_status));
+  return Response.json(settled, { headers });
+}));
+
+type FollowUp = 'confirmed' | 'cancelled' | null;
+
+/**
+ * Only an approved operation that CHANGED the booking needs follow-ups: a sale/capture that confirmed it, or a void that
+ * cancelled it. A refund (or an authorization) leaves the booking as it was, so nothing is re-sent.
+ */
+function followUpFor(transactionType: string, bookingStatus: string): FollowUp {
+  if ((transactionType === 'sale' || transactionType === 'capture') && bookingStatus === 'confirmed') return 'confirmed';
+  if (transactionType === 'void' && bookingStatus === 'cancelled') return 'cancelled';
+  return null;
+}
+
+/** Same follow-ups as every other confirmation / cancellation flow; neither can fail the money operation. */
+async function runFollowUps(db: ReturnType<typeof createClient>, id: string, followUp: FollowUp) {
+  if (!followUp) return;
+  await syncBookingCalendarAfterConfirmation(db, id);
+  if (followUp === 'confirmed') {
+    await enqueueBookingConfirmationEmails(db, id).catch((emailError) => {
       console.error('Booking confirmation email could not be queued', emailError);
     });
   }
-
-  return Response.json(settled, { headers });
-}));
+}
 
 // Local/test only (see areExternalProviderMocksAllowed).
 function mockFollowUpResponse(transactionId: string, orderId: string) {
