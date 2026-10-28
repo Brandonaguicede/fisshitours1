@@ -40,6 +40,9 @@ export async function handleCancelBookingRequest(req, deps, headers) {
     const { data: booking, error: bookingError } = await db.from('bookings').select('id, booking_status, payment_status').eq('id', bookingId).maybeSingle();
     if (bookingError) return json({ message: 'Booking could not be loaded' }, 500);
     if (!booking) return json({ message: 'Booking not found' }, 404);
+    // A card authorization still holds the customer's funds: it must be voided at the gateway (which also cancels the booking),
+    // never just marked cancelled here.
+    if (booking.payment_status === 'authorized') return json({ message: 'Void the card authorization before cancelling this booking' }, 409);
 
     let paymentStatus = booking.payment_status;
     const transitioned = booking.booking_status !== 'cancelled';

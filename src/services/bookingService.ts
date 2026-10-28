@@ -147,6 +147,24 @@ export function confirmBooking(bookingId: string) {
   return callFunction<AdminConfirmBookingResult>('admin-confirm-booking', { bookingId });
 }
 
+export type BacAdminOperation = 'capture' | 'void' | 'refund';
+
+export interface BacAdminOperationResult {
+  booking_id: string;
+  booking_reference: string;
+  operation: BacAdminOperation;
+  approved: boolean;
+  amount: number;
+  payment_status: string;
+  booking_status: string;
+  transaction_id: string | null;
+}
+
+/** BAC card capture / void / refund (admin role only). The server resolves the original transaction and every limit. */
+export function runBacAdminOperation(bookingId: string, operation: BacAdminOperation, amount?: number) {
+  return callFunction<BacAdminOperationResult>('admin-bac-transaction', { bookingId, operation, ...(amount !== undefined ? { amount } : {}) });
+}
+
 export interface AdminCancelBookingResult {
   booking_id: string;
   booking_status: 'cancelled';

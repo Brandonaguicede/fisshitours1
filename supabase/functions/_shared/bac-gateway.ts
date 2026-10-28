@@ -17,7 +17,13 @@ export interface BacThreeDSecure {
   directoryServerId?: string;
 }
 
+/** Customer checkout: charge now (`sale`) or only hold the funds for a later admin capture (`auth`). */
+export type BacCheckoutType = 'sale' | 'auth';
+/** Admin follow-up operations on an existing gateway transaction. */
+export type BacFollowUpType = 'capture' | 'void' | 'refund';
+
 export interface BacSaleInput {
+  type: BacCheckoutType;
   securityKey: string;
   paymentToken: string;
   amount: string;
@@ -29,6 +35,16 @@ export interface BacSaleInput {
   customer: { fullName: string; email: string };
   ipAddress?: string;
   threeDSecure: BacThreeDSecure;
+}
+
+export interface BacFollowUpInput {
+  type: BacFollowUpType;
+  securityKey: string;
+  /** Gateway transaction id of the original auth / sale / capture. */
+  transactionId: string;
+  /** Required for capture and refund (x.xx). Void always cancels the whole transaction. */
+  amount?: string;
+  orderId: string;
 }
 
 export interface BacSaleResult {
@@ -80,12 +96,18 @@ export function splitCustomerName(fullName: string) {
   return { firstName: parts.slice(0, -1).join(' '), lastName: parts.at(-1) ?? '' };
 }
 
-/** Builds the urlencoded body for the Payment API sale. Amounts always come from the booking row. */
+/** Reads BAC_TRANSACTION_TYPE: `auth` holds funds for a later capture; anything else charges immediately. */
+export function getBacCheckoutType(): BacCheckoutType {
+  return Deno.env.get('BAC_TRANSACTION_TYPE')?.trim().toLowerCase() === 'auth' ? 'auth' : 'sale';
+}
+
+/** Builds the urlencoded body for the Payment API sale / auth. Amounts always come from the booking row. */
 export function buildSaleRequest(input: BacSaleInput): URLSearchParams {
+  if (input.type !== 'sale' && input.type !== 'auth') throw new Error('Invalid checkout transaction type');
   const { firstName, lastName } = splitCustomerName(input.customer.fullName);
   const body = new URLSearchParams({
     security_key: input.securityKey,
-    type: 'sale',
+    type: input.type,
     payment_token: input.paymentToken,
     amount: input.amount,
     tax: input.taxAmount,
@@ -107,8 +129,21 @@ export function buildSaleRequest(input: BacSaleInput): URLSearchParams {
   return body;
 }
 
-/** Payment API answers `response=1&responsetext=...&response_code=100...`. Approved only on 1 + 100. */
-export function parseSaleResponse(raw: string, expectedOrderId: string): BacSaleResult {
+/** Capture / void / refund of an existing transaction. Amounts are decided server side from the payments ledger. */
+export function buildFollowUpRequest(input: BacFollowUpInput): URLSearchParams {
+  if (!['capture', 'void', 'refund'].includes(input.type)) throw new Error('Invalid follow-up transaction type');
+  if (!/^[A-Za-z0-9-]{1,64}$/.test(input.transactionId)) throw new Error('Invalid gateway transaction id');
+  const body = new URLSearchParams({ security_key: input.securityKey, type: input.type, transactionid: input.transactionId });
+  if (input.type !== 'void') {
+    if (!input.amount || !/^\d+\.\d{2}$/.test(input.amount) || Number(input.amount) <= 0) throw new Error('A positive x.xx amount is required');
+    body.set('amount', input.amount);
+  }
+  if (input.type === 'capture') body.set('orderid', input.orderId);
+  return body;
+}
+
+/** Payment API answers `response=1&responsetext=...&response_code=100...`. Approved only on 1 + 100 (fail closed otherwise). */
+export function parseGatewayResponse(raw: string, expectedOrderId: string): BacSaleResult {
   const params = new URLSearchParams(raw.trim());
   const audit: Record<string, string> = {};
   for (const field of AUDIT_FIELDS) {
@@ -124,6 +159,27 @@ export function parseSaleResponse(raw: string, expectedOrderId: string): BacSale
     responseText: params.get('responsetext') ?? '',
     audit,
   };
+}
+
+/**
+ * POSTs one Payment API request. Throws on timeout, network error or non-2xx: callers must treat that as
+ * "outcome unknown" (never as a decline) and leave the ledger row "processing" for reconciliation.
+ */
+export async function postGatewayRequest(url: string, body: URLSearchParams, timeoutMs = 30000): Promise<string> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body,
+      signal: controller.signal,
+    });
+    if (!response.ok) throw new Error(`Gateway HTTP ${response.status}`);
+    return await response.text();
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 export function getBacGatewayApiUrl(): string {

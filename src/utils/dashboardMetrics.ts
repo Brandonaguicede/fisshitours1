@@ -71,13 +71,17 @@ const toCents = (value: number | string | null | undefined) => {
  * Cash collected for one booking, in cents. Only meaningful for `payment_status = 'paid'` rows.
  * - If the booking has `payments` rows with status `paid` (PayPal captures), their amounts are what was really charged
  *   (the booking total can be edited by an admin after payment; the capture cannot).
+ *   Partial card refunds (BAC) are their own `refunded` rows while the booking stays `paid`, so they are subtracted.
  * - Otherwise the payment was confirmed by an admin (WhatsApp / transfer / cash, which never write a `payments` row),
  *   and the booking's `total_snapshot` is the only recorded amount.
  */
 export function collectedCents(row: DashboardBookingRow): number {
-  const paidPayments = (row.payments ?? []).filter((payment) => payment.status === 'paid');
-  if (paidPayments.length > 0) return paidPayments.reduce((sum, payment) => sum + toCents(payment.amount), 0);
-  return toCents(row.total_snapshot);
+  const payments = row.payments ?? [];
+  const paidPayments = payments.filter((payment) => payment.status === 'paid');
+  if (paidPayments.length === 0) return toCents(row.total_snapshot);
+  const charged = paidPayments.reduce((sum, payment) => sum + toCents(payment.amount), 0);
+  const refunded = payments.filter((payment) => payment.status === 'refunded').reduce((sum, payment) => sum + toCents(payment.amount), 0);
+  return Math.max(charged - refunded, 0);
 }
 
 /** Rows repeated across pages (same id) count once. Rows without an id are kept as they are. */
