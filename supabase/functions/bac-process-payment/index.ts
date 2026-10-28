@@ -4,15 +4,20 @@ import { z } from 'npm:zod@3.23.8';
 import { corsHeaders, corsPreflight, withCors } from '../_shared/cors.ts';
 import { areExternalProviderMocksAllowed } from '../_shared/environment.ts';
 import { enqueueBookingConfirmationEmails } from '../_shared/booking-confirmation-email.ts';
+import { syncBookingCalendarAfterConfirmation } from '../_shared/booking-calendar.ts';
 import {
   buildSaleRequest,
+  getBacCheckoutType,
   getBacGatewayApiUrl,
   getBacSecurityKey,
   getClientIpAddress,
-  parseSaleResponse,
+  parseGatewayResponse,
+  postGatewayRequest,
   validateThreeDSecure,
 } from '../_shared/bac-gateway.ts';
 
+// Customer checkout: Credit Card - Sale, or Credit Card - Authorize when BAC_TRANSACTION_TYPE=auth
+// (an admin then captures or voids it with admin-bac-transaction).
 // The browser sends only a single-use token and the 3DS result. Amount,
 // currency and order id are always read from the booking row on the server.
 const schema = z.object({
@@ -22,7 +27,7 @@ const schema = z.object({
 });
 
 const MAX_ATTEMPTS_PER_BOOKING = 3;
-const GATEWAY_TIMEOUT_MS = 30000;
+const UNKNOWN_OUTCOME_MESSAGE = 'We could not confirm the payment result. Do not retry; contact us with your booking reference.';
 
 serve(withCors(async (req) => {
   const headers = corsHeaders(req, 'POST, OPTIONS');
@@ -42,6 +47,7 @@ serve(withCors(async (req) => {
   } catch {
     return Response.json({ message: 'Card payments are not available right now' }, { status: 503, headers });
   }
+  const transactionType = getBacCheckoutType();
 
   const supabase = getSupabase();
   const { data: booking, error: bookingError } = await supabase
@@ -54,10 +60,12 @@ serve(withCors(async (req) => {
   const { data: attempt, error: attemptError } = await supabase.rpc('begin_bac_payment_attempt', {
     p_booking_id: booking.id,
     p_max_attempts: MAX_ATTEMPTS_PER_BOOKING,
+    p_transaction_type: transactionType,
   });
   if (attemptError || !attempt) return attemptErrorResponse(attemptError, headers);
 
   const saleBody = buildSaleRequest({
+    type: transactionType,
     securityKey,
     paymentToken: parsed.data.paymentToken,
     amount: Number(attempt.amount).toFixed(2),
@@ -73,16 +81,18 @@ serve(withCors(async (req) => {
 
   let rawResponse: string;
   try {
-    rawResponse = await postSale(gatewayUrl, saleBody, parsed.data.paymentToken, attempt.amount);
+    rawResponse = areExternalProviderMocksAllowed()
+      ? mockCheckoutResponse(parsed.data.paymentToken, attempt.booking_reference, attempt.amount)
+      : await postGatewayRequest(gatewayUrl, saleBody);
   } catch (error) {
     // Outcome unknown (timeout / network): the attempt stays "processing" so it
     // is never retried automatically and cannot be charged twice. An admin
     // reconciles it against the BAC portal using the booking reference.
-    console.error('BAC sale outcome unknown', { attemptId: attempt.attempt_id, reason: error instanceof Error ? error.name : 'unknown' });
-    return Response.json({ message: 'We could not confirm the payment result. Do not retry; contact us with your booking reference.', bookingReference: attempt.booking_reference }, { status: 502, headers });
+    console.error('BAC checkout outcome unknown', { attemptId: attempt.attempt_id, reason: error instanceof Error ? error.name : 'unknown' });
+    return Response.json({ message: UNKNOWN_OUTCOME_MESSAGE, bookingReference: attempt.booking_reference }, { status: 502, headers });
   }
 
-  const result = parseSaleResponse(rawResponse, attempt.booking_reference);
+  const result = parseGatewayResponse(rawResponse, attempt.booking_reference);
   const audit = { ...result.audit, eci: threeDSecure.eci, cardholder_auth: threeDSecure.cardHolderAuth, three_ds_version: threeDSecure.threeDsVersion };
 
   const { data: settled, error: settleError } = await supabase.rpc('complete_bac_payment_attempt', {
@@ -91,12 +101,12 @@ serve(withCors(async (req) => {
     p_transaction_id: result.transactionId,
     p_amount: Number(attempt.amount),
     p_currency: attempt.currency,
-    p_note: result.approved ? 'BAC card payment approved' : `BAC card payment declined (${result.responseCode || 'no code'})`,
+    p_note: result.approved ? `BAC card ${transactionType} approved` : `BAC card ${transactionType} declined (${result.responseCode || 'no code'})`,
     p_raw_response: audit,
   });
   if (settleError || !settled) {
     console.error('BAC payment could not be recorded', { attemptId: attempt.attempt_id, code: settleError?.code });
-    return Response.json({ message: 'We could not confirm the payment result. Do not retry; contact us with your booking reference.', bookingReference: attempt.booking_reference }, { status: 500, headers });
+    return Response.json({ message: UNKNOWN_OUTCOME_MESSAGE, bookingReference: attempt.booking_reference }, { status: 500, headers });
   }
 
   if (!result.approved) {
@@ -104,9 +114,14 @@ serve(withCors(async (req) => {
     return Response.json({ message: 'The card payment was declined. Please check your details or use another card.', bookingReference: attempt.booking_reference }, { status: 402, headers });
   }
 
-  await enqueueBookingConfirmationEmails(supabase, booking.id).catch((emailError) => {
-    console.error('Booking confirmation email could not be queued', emailError);
-  });
+  // Only a sale confirms the booking; an authorization waits for the admin capture,
+  // which then runs the same Calendar sync and confirmation email.
+  if (settled.booking_status === 'confirmed') {
+    await syncBookingCalendarAfterConfirmation(supabase, booking.id);
+    await enqueueBookingConfirmationEmails(supabase, booking.id).catch((emailError) => {
+      console.error('Booking confirmation email could not be queued', emailError);
+    });
+  }
 
   return Response.json({
     bookingId: booking.id,
@@ -132,27 +147,9 @@ function getSupabase() {
   return createClient(url, key, { auth: { persistSession: false } });
 }
 
-async function postSale(url: string, body: URLSearchParams, paymentToken: string, amount: number | string): Promise<string> {
-  if (areExternalProviderMocksAllowed()) return mockSaleResponse(paymentToken, body.get('orderid') ?? '', amount);
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), GATEWAY_TIMEOUT_MS);
-  try {
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body,
-      signal: controller.signal,
-    });
-    if (!response.ok) throw new Error(`Gateway HTTP ${response.status}`);
-    return await response.text();
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
 // Local/test only (see areExternalProviderMocksAllowed): token text picks the outcome.
-function mockSaleResponse(paymentToken: string, orderId: string, amount: number | string) {
+function mockCheckoutResponse(paymentToken: string, orderId: string, amount: number | string) {
   if (paymentToken.includes('TIMEOUT')) throw new Error('Mock gateway timeout');
-  if (paymentToken.includes('DECLINE')) return `response=2&responsetext=DECLINE&response_code=200&transactionid=MOCK-DECLINED&orderid=${orderId}&type=sale`;
-  return `response=1&responsetext=SUCCESS&authcode=123456&response_code=100&transactionid=MOCK-${Number(amount).toFixed(2)}-${crypto.randomUUID()}&orderid=${orderId}&type=sale`;
+  if (paymentToken.includes('DECLINE')) return `response=2&responsetext=DECLINE&response_code=200&transactionid=MOCK-DECLINED&orderid=${orderId}`;
+  return `response=1&responsetext=SUCCESS&authcode=123456&response_code=100&transactionid=MOCK-${Number(amount).toFixed(2)}-${crypto.randomUUID()}&orderid=${orderId}`;
 }

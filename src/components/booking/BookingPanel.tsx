@@ -474,15 +474,21 @@ export function BookingPanel({ selectedBoat, selectedTour: requestedTour, boats,
   }
 
   function handleCardSuccess(result: BacPaymentResult) {
+    // In authorize mode the funds are only held; the charge happens when our team confirms (captures) the booking.
+    const authorized = result.paymentStatus === 'authorized';
     setCardCheckoutVisible(false);
     setCardSuccess(result);
-    setBookingStatus('confirmed');
-    setPaymentStatus('paid');
+    setBookingStatus(authorized ? 'pending_confirmation' : 'confirmed');
+    setPaymentStatus(authorized ? 'authorized' : 'paid');
     setSuccessNotice({
-      title: language === 'es' ? 'Pago completado' : 'Payment completed',
-      message: language === 'es'
-        ? 'Tu pago con tarjeta fue aprobado. En unos momentos recibirás un correo con la confirmación de tu reserva. Muchas gracias por reservar con nosotros.'
-        : 'Your card payment was approved. In a few moments you will receive a confirmation email for your reservation.',
+      title: authorized ? (language === 'es' ? 'Pago autorizado' : 'Payment authorized') : (language === 'es' ? 'Pago completado' : 'Payment completed'),
+      message: authorized
+        ? (language === 'es'
+          ? 'Tu banco autorizó el monto. Lo cobraremos cuando confirmemos tu reserva y te enviaremos la confirmación por correo.'
+          : 'Your bank authorized the amount. We will charge it once we confirm your reservation and email you the confirmation.')
+        : (language === 'es'
+          ? 'Tu pago con tarjeta fue aprobado. En unos momentos recibirás un correo con la confirmación de tu reserva. Muchas gracias por reservar con nosotros.'
+          : 'Your card payment was approved. In a few moments you will receive a confirmation email for your reservation.'),
       reference: result.bookingReference,
     });
   }
@@ -1327,10 +1333,17 @@ function CustomerStep(props: {
 
       {props.cardSuccess && props.booking ? (
         <div className="mt-4 rounded-2xl border border-seafoam-400/30 bg-seafoam-500/10 p-4 text-ocean-50" role="status">
-          <p className="text-lg font-extrabold">{language === 'es' ? 'Pago exitoso' : 'Payment Successful'}</p>
+          <p className="text-lg font-extrabold">
+            {props.cardSuccess.paymentStatus === 'authorized'
+              ? (language === 'es' ? 'Pago autorizado' : 'Payment Authorized')
+              : (language === 'es' ? 'Pago exitoso' : 'Payment Successful')}
+          </p>
           <div className="mt-3 grid gap-2 text-sm">
             <SummaryLine label={language === 'es' ? 'Referencia de reserva' : 'Booking reference'} value={props.cardSuccess.bookingReference} />
-            <SummaryLine label={language === 'es' ? 'Monto pagado' : 'Amount paid'} value={`${props.cardSuccess.amount} ${props.cardSuccess.currency}`} />
+            <SummaryLine
+              label={props.cardSuccess.paymentStatus === 'authorized' ? (language === 'es' ? 'Monto autorizado' : 'Amount authorized') : (language === 'es' ? 'Monto pagado' : 'Amount paid')}
+              value={`${props.cardSuccess.amount} ${props.cardSuccess.currency}`}
+            />
             <SummaryLine label={language === 'es' ? 'Referencia de transacción' : 'Transaction reference'} value={props.cardSuccess.transactionId} />
             <SummaryLine label={language === 'es' ? 'Información del tour' : 'Tour information'} value={`${getTourText(props.booking.tour, language).title} - ${props.booking.packageLabel}`} />
           </div>
