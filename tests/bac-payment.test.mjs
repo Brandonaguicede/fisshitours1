@@ -13,6 +13,7 @@ import { handleCancelBookingRequest } from '../supabase/functions/_shared/bookin
 const migrations = [
   'supabase/migrations/202610280001_bac_card_payments.sql',
   'supabase/migrations/202610290001_bac_basic_methods.sql',
+  'supabase/migrations/202610300001_bac_reconciliation.sql',
 ].map((file) => fs.readFileSync(file, 'utf8'));
 
 async function createDatabase() {
@@ -183,6 +184,31 @@ test('admin operations are serialized per booking and never touch non-card booki
   } finally { await db.close(); }
 });
 
+test('RECONCILE: a lost gateway answer is settled with the same rules, never while it may still be in flight', async () => {
+  const db = await createDatabase();
+  try {
+    const reconcile = (booking, approved, transactionId, minAge = '0 seconds') =>
+      db.query(`select reconcile_bac_operation($1, $2, $3, null, $4::interval) as r`, [booking.id, approved, transactionId, minAge]);
+
+    const lostSale = await insertCardBooking(db, 'PFT-LOST');
+    await db.query('select begin_bac_payment_attempt($1, 3)', [lostSale.id]);
+    assert.equal((await rpcError(reconcile(lostSale, true, 'GW-9', '2 minutes'))).code, '55P03', 'a fresh call may still be waiting on the gateway');
+    assert.match((await rpcError(reconcile(lostSale, true, null))).message, /transaction id is required/);
+    assert.match((await rpcError(reconcile(lostSale, true, '1&amount=9'))).message, /invalid BAC transaction id/);
+    const settled = (await reconcile(lostSale, true, 'GW-9')).rows[0].r;
+    assert.deepEqual({ reconciled: settled.reconciled, payment: settled.payment_status, booking: settled.booking_status }, { reconciled: 'sale', payment: 'paid', booking: 'confirmed' });
+    assert.match((await rpcError(reconcile(lostSale, true, 'GW-9'))).message, /no pending card operation/);
+
+    const lostVoid = await insertCardBooking(db, 'PFT-VOID');
+    await checkout(db, lostVoid, 'sale');
+    await db.query(`select begin_bac_admin_operation($1, 'void', null, null)`, [lostVoid.id]);
+    const notProcessed = (await reconcile(lostVoid, false, null)).rows[0].r;
+    assert.equal(notProcessed.payment_status, 'paid', 'a void that never happened leaves the sale paid');
+    assert.equal((await adminOperation(db, lostVoid, 'void')).payment_status, 'voided', 'and the operation can be run again');
+    assert.equal(await one(db, `select has_function_privilege('authenticated', 'reconcile_bac_operation(uuid,boolean,text,uuid,interval)', 'execute') as x`).then((r) => r.x), false);
+  } finally { await db.close(); }
+});
+
 test('expired pending card holds are released, in-flight and authorized ones are kept', async () => {
   const db = await createDatabase();
   try {
@@ -290,7 +316,7 @@ function runEdgeFunction(file, { supabase, env, fetchImpl, extra = {} }) {
 const gatewayEnv = { SUPABASE_URL: 'test', SUPABASE_SERVICE_ROLE_KEY: 'test', SUPABASE_ANON_KEY: 'anon', BAC_SECURITY_KEY: 'private-key', BAC_GATEWAY_URL: 'https://gateway.example.com' };
 
 function loadProcessFunction({ gatewayText, gatewayError, beginError, env = {} } = {}) {
-  const calls = { rpc: [], fetch: [], calendar: 0, emails: 0 };
+  const calls = { rpc: [], fetch: [], calendar: 0, emails: 0, notices: [] };
   const booking = { id: '00000000-0000-4000-8000-000000000001', booking_reference: 'PFT-1', customers: { full_name: 'Ana Mora', email: 'ana@example.com' }, boats: { name: 'Second Wind' }, tour_packages: { name: 'Half Day' } };
   const query = { select() { return this; }, eq() { return this; }, single: async () => ({ data: booking, error: null }) };
   const supabase = {
@@ -305,7 +331,11 @@ function loadProcessFunction({ gatewayText, gatewayError, beginError, env = {} }
   const call = runEdgeFunction('supabase/functions/bac-process-payment/index.ts', {
     supabase, env: { ...gatewayEnv, ...env },
     fetchImpl: async (url, init) => { calls.fetch.push({ url, body: new URLSearchParams(String(init.body)) }); if (gatewayError) throw gatewayError; return new Response(gatewayText, { status: 200 }); },
-    extra: { enqueueBookingConfirmationEmails: async () => { calls.emails += 1; }, syncBookingCalendarAfterConfirmation: async () => { calls.calendar += 1; } },
+    extra: {
+      enqueueBookingConfirmationEmails: async () => { calls.emails += 1; },
+      syncBookingCalendarAfterConfirmation: async () => { calls.calendar += 1; },
+      sendAdminBookingNotice: async (_db, notice) => { calls.notices.push(notice); },
+    },
   });
   return { call, calls };
 }
@@ -336,6 +366,9 @@ test('checkout AUTHORIZE (BAC_TRANSACTION_TYPE=auth) only holds funds: no Calend
   assert.equal(calls.fetch[0].body.get('type'), 'auth');
   assert.equal(calls.rpc[0].args.p_transaction_type, 'auth');
   assert.deepEqual({ calendar: calls.calendar, emails: calls.emails }, { calendar: 0, emails: 0 });
+  assert.equal(calls.notices.length, 1, 'the business is told to capture or void the hold');
+  assert.match(calls.notices[0].subject, /pendiente de captura - PFT-1/);
+  assert.equal(calls.notices[0].dedupe, 'booking:00000000-0000-4000-8000-000000000001:bac-authorized-admin-email');
   assert.equal((await response.json()).paymentStatus, 'authorized');
 });
 
@@ -358,7 +391,10 @@ test('checkout declines, missing 3DS, limits and unknown outcomes fail safely', 
   assert.ok(!timeout.calls.rpc.some((entry) => entry.name === 'complete_bac_payment_attempt'), 'unknown outcomes stay processing for reconciliation');
 });
 
-function loadAdminFunction({ role = 'admin', gatewayText = 'response=1&responsetext=SUCCESS&response_code=100&transactionid=GW-2&orderid=PFT-1', gatewayError, beginError } = {}) {
+// Booking state each approved operation leaves behind (what complete_bac_admin_operation returns).
+const SETTLED_STATE = { capture: ['paid', 'confirmed'], void: ['voided', 'cancelled'], refund: ['paid', 'confirmed'] };
+
+function loadAdminFunction({ role = 'admin', gatewayText = 'response=1&responsetext=SUCCESS&response_code=100&transactionid=GW-2&orderid=PFT-1', gatewayError, beginError, reconcileResult } = {}) {
   const calls = { rpc: [], fetch: [], calendar: 0, emails: 0 };
   const profileQuery = { select() { return this; }, eq() { return this; }, maybeSingle: async () => ({ data: { role, active: true }, error: null }) };
   const supabase = {
@@ -367,7 +403,10 @@ function loadAdminFunction({ role = 'admin', gatewayText = 'response=1&responset
     rpc: async (name, args) => {
       calls.rpc.push({ name, args });
       if (name === 'begin_bac_admin_operation') return beginError ? { data: null, error: beginError } : { data: { operation_id: 'op-1', operation: args.p_operation, booking_reference: 'PFT-1', gateway_transaction_id: 'GW-1', amount: args.p_amount ?? 791, currency: 'USD' }, error: null };
-      return { data: { operation: calls.rpc[0].args.p_operation, approved: args.p_approved, amount: 791, payment_status: 'paid', booking_status: 'confirmed' }, error: null };
+      if (name === 'reconcile_bac_operation') return reconcileResult ?? { data: null, error: { code: '22023', message: 'there is no pending card operation to reconcile' } };
+      const operation = calls.rpc[0].args.p_operation;
+      const [payment_status, booking_status] = args.p_approved ? SETTLED_STATE[operation] : ['paid', 'confirmed'];
+      return { data: { operation, approved: args.p_approved, amount: 791, payment_status, booking_status }, error: null };
     },
   };
   const call = runEdgeFunction('supabase/functions/admin-bac-transaction/index.ts', {
@@ -396,6 +435,7 @@ test('admin CAPTURE / VOID / REFUND call the gateway with the ledger transaction
   assert.equal((await refund.call({ operation: 'refund', amount: 237.3 })).status, 200);
   assert.equal(refund.calls.fetch[0].body.get('amount'), '237.30');
   assert.equal(refund.calls.rpc[0].args.p_amount, 237.3);
+  assert.deepEqual({ calendar: refund.calls.calendar, emails: refund.calls.emails }, { calendar: 0, emails: 0 }, 'a refund must not re-send the confirmation');
 
   const editor = loadAdminFunction({ role: 'editor' });
   assert.equal((await editor.call({ operation: 'refund', amount: 1 })).status, 403);
@@ -423,6 +463,44 @@ test('admin operations reject bad payloads, conflicts, declines and unknown outc
   const timeout = loadAdminFunction({ gatewayError: new Error('aborted') });
   assert.equal((await timeout.call({ operation: 'refund', amount: 10 })).status, 502);
   assert.ok(!timeout.calls.rpc.some((entry) => entry.name === 'complete_bac_admin_operation'));
+});
+
+test('admin RECONCILE records the portal outcome without calling the gateway and runs the right follow-ups', async () => {
+  const approvedSale = loadAdminFunction({ reconcileResult: { data: { reconciled: 'sale', approved: true, payment_status: 'paid', booking_status: 'confirmed' }, error: null } });
+  const response = await approvedSale.call({ operation: 'reconcile', approved: true, transactionId: 'GW-77' });
+  assert.equal(response.status, 200);
+  assert.deepEqual(plain(approvedSale.calls.rpc[0].args), { p_booking_id: '00000000-0000-4000-8000-000000000001', p_approved: true, p_transaction_id: 'GW-77', p_actor: 'admin-1' });
+  assert.equal(approvedSale.calls.fetch.length, 0, 'reconciling never calls the gateway');
+  assert.deepEqual({ calendar: approvedSale.calls.calendar, emails: approvedSale.calls.emails }, { calendar: 1, emails: 1 });
+
+  const refundReconciled = loadAdminFunction({ reconcileResult: { data: { reconciled: 'refund', approved: true, payment_status: 'paid', booking_status: 'confirmed' }, error: null } });
+  await refundReconciled.call({ operation: 'reconcile', approved: true, transactionId: 'GW-78' });
+  assert.deepEqual({ calendar: refundReconciled.calls.calendar, emails: refundReconciled.calls.emails }, { calendar: 0, emails: 0 });
+
+  const tooSoon = loadAdminFunction({ reconcileResult: { data: null, error: { code: '55P03', message: 'may still be in progress' } } });
+  assert.equal((await tooSoon.call({ operation: 'reconcile', approved: false })).status, 409);
+  assert.equal((await loadAdminFunction().call({ operation: 'reconcile', approved: true, transactionId: 'x&y' })).status, 400);
+  assert.equal((await loadAdminFunction({ role: 'editor' }).call({ operation: 'reconcile', approved: false })).status, 403);
+});
+
+test('the admin authorization notice is claimed once in booking_notifications before it is sent', async () => {
+  const inserted = [];
+  const sent = [];
+  const supabase = {
+    from: () => ({
+      insert(row) { inserted.push(row); const duplicate = inserted.filter((item) => item.dedupe_key === row.dedupe_key).length > 1; return { select: () => ({ maybeSingle: async () => (duplicate ? { data: null, error: { code: '23505' } } : { data: { id: 'n1' }, error: null }) }) }; },
+      update() { return { eq: async () => ({ error: null }) }; },
+    }),
+  };
+  const context = vm.createContext({ console: { error() {} }, Response, JSON, Date,
+    Deno: { env: { get: (key) => ({ BOOKING_ADMIN_EMAIL: 'ops@example.com', RESEND_API_KEY: 're_x', BOOKING_EMAIL_FROM: 'from@example.com' })[key] } },
+    fetch: async (_url, init) => { sent.push(JSON.parse(init.body)); return new Response('{}', { status: 200 }); } });
+  loadTs('supabase/functions/_shared/admin-booking-notice.ts', context);
+  const notice = { bookingId: 'b1', subject: 'Pago autorizado', text: 'Capturar', dedupe: 'booking:b1:bac-authorized-admin-email' };
+  await context.sendAdminBookingNotice(supabase, notice);
+  await context.sendAdminBookingNotice(supabase, notice);
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].to, 'ops@example.com');
 });
 
 test('an authorized booking cannot be cancelled without voiding the card hold first', async () => {

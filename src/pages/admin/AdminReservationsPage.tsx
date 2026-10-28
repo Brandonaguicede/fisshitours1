@@ -8,7 +8,6 @@ import { AdminDangerRow } from '../../components/admin/AdminStatusSection';
 import FormSection from '../../components/admin/FormSection';
 import AdminConfirmDialog from '../../components/admin/AdminConfirmDialog';
 import { BacPaymentActions } from '../../components/admin/BacPaymentActions';
-import type { BacAdminOperationResult } from '../../services/bookingService';
 import { Modal } from '../../components/common/Modal';
 import { TermsConsent } from '../../components/booking/TermsModal';
 import { supabase } from '../../lib/supabase';
@@ -335,14 +334,9 @@ export default function AdminReservationsPage() {
     await loadReservations();
   }
 
-  async function handleBacOperationCompleted(result: BacAdminOperationResult) {
+  async function handleBacOperationCompleted(notice: string) {
     setError('');
-    const amount = `$${Number(result.amount).toFixed(2)}`;
-    setNotice(result.operation === 'capture'
-      ? `Pago capturado (${amount}). La reserva ${result.booking_reference} quedó confirmada y el correo de confirmación fue encolado.`
-      : result.operation === 'void'
-        ? `Transacción anulada en BAC. La reserva ${result.booking_reference} fue cancelada y el horario quedó libre.`
-        : `Se reembolsaron ${amount} de la reserva ${result.booking_reference}.${result.payment_status === 'refunded' ? ' El pago quedó reembolsado por completo.' : ''}`);
+    setNotice(notice);
     await loadReservations();
   }
 
@@ -599,7 +593,7 @@ export default function AdminReservationsPage() {
         <BacPaymentActions
           reservation={reservation}
           disabled={busy}
-          onCompleted={(result) => void handleBacOperationCompleted(result)}
+          onCompleted={(notice) => void handleBacOperationCompleted(notice)}
           onError={(message) => { setNotice(''); setError(message); void loadReservations(); }}
         />
         <button className="admin-icon-action" type="button" title="Editar reserva" aria-label={`Editar reserva ${reservation.booking_reference}`} disabled={busy} onClick={() => openEdit(reservation)}><Pencil size={17} /></button>

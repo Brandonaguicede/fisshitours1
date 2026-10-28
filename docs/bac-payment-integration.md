@@ -81,7 +81,7 @@ VITE_BAC_GATEWAY_URL=https://<mismo dominio del gateway>
 
 ## Puesta en marcha
 
-1. Aplicar las migraciones `202610280001_bac_card_payments.sql` y `202610290001_bac_basic_methods.sql`.
+1. Aplicar las migraciones `202610280001_bac_card_payments.sql`, `202610290001_bac_basic_methods.sql` y `202610300001_bac_reconciliation.sql`.
 2. Desplegar estas funciones:
 ```
 npx supabase functions deploy bac-process-payment admin-bac-transaction create-booking get-booking-availability admin-confirm-booking admin-cancel-booking
@@ -109,22 +109,32 @@ Cada operación con cada marca, usando las tarjetas de prueba de BAC. Anotar la 
 
 Para probar autorizaciones, cambiar `BAC_TRANSACTION_TYPE=auth`, hacer esas filas y volver a `sale` si el negocio prefiere cobrar de inmediato.
 
+## Avisos
+
+- **Venta aprobada o captura:** el cliente recibe el correo de confirmación y la reserva se agenda en Google Calendar.
+- **Autorización aprobada:** el admin recibe un aviso interno, "Pago con tarjeta autorizado, pendiente de captura". El cliente ve el resultado en pantalla y recibe su confirmación cuando se captura, igual que en el resto de métodos.
+- **Anulación:** el evento de Google Calendar se elimina.
+- **Reembolso:** no se reenvía nada.
+
 ## Conciliación de operaciones en `processing`
 
-Si una operación queda en `processing` por más de unos minutos:
+Si BAC no responde, la operación queda en "Procesando" y bloquea nuevas operaciones de esa reserva. Para resolverla:
 
 1. Buscar la referencia de reserva en el portal BAC. El campo `orderid` es esa referencia.
-2. Buscar la fila con `select id, transaction_type from payments where provider = 'bac' and status = 'processing' and booking_id = '<id>'`.
-3. Registrar el resultado real desde el SQL Editor de Supabase. Usar `true` si BAC la muestra aprobada y `false` si no aparece:
+2. En Admin > Reservas, usar **Conciliar** en esa reserva. El botón aparece cuando el pago está "Procesando" o cuando una operación responde que hay otra pendiente.
+3. Elegir lo que muestra el portal:
+   - **Aprobada:** escribir el Transaction ID de BAC.
+   - **No aparece o fue rechazada:** no se escribe nada más.
 
-```sql
--- Venta o autorización del cliente:
-select complete_bac_payment_attempt('<id>', true, '<transactionid>', <total>, 'USD', 'Conciliado manualmente', '{"source":"manual-reconciliation"}');
--- Captura, anulación o reembolso del admin:
-select complete_bac_admin_operation('<id>', true, '<transactionid>', 'Conciliado manualmente', '{"source":"manual-reconciliation"}');
-```
+**Reglas de la conciliación:**
+- **Espera mínima:** se rechaza si la operación tiene menos de 2 minutos, porque podría seguir en curso.
+- **Mismas reglas:** usa las mismas funciones que el flujo automático, con monto, estados y liberación del horario.
+- **Auditoría:** queda registrado quién concilió, en `raw_response.actor` y en el historial de la reserva.
 
-Todavía no existe una pantalla de admin para conciliar.
+## Antes de activar el método en producción
+
+- **Turnstile:** hoy `DISABLE_TURNSTILE=true` en los secretos de producción, así que la verificación antibots de `create-booking` está apagada. Con tarjetas activas, la única defensa contra pruebas de tarjetas robadas sería el límite por IP y los 3 intentos por reserva. Hay que configurar Turnstile con `VITE_TURNSTILE_SITE_KEY` en Vercel y `TURNSTILE_SECRET_KEY` en Supabase. Después hay que pasar `DISABLE_TURNSTILE` a `false` en Supabase y confirmar que `VITE_DISABLE_TURNSTILE` no sea `true` en Vercel.
+- **Base de datos de pruebas:** solo hay un proyecto de Supabase. Para no probar sobre datos reales conviene crear un proyecto de pruebas y apuntar ahí las vistas previas de Vercel.
 
 ## Por confirmar con BAC
 

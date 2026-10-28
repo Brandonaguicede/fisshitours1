@@ -7,7 +7,7 @@ import test from 'node:test';
 import ts from 'typescript';
 
 const context = vm.createContext({});
-for (const file of ['src/utils/packageSettings.ts', 'src/services/catalogMappers.ts', 'src/i18n/content.ts']) {
+for (const file of ['src/utils/format.ts', 'src/utils/packageSettings.ts', 'src/services/catalogMappers.ts', 'src/i18n/content.ts']) {
   const source = fs.readFileSync(file, 'utf8').replace(/^import .*;\r?\n/gm, '').replace(/^export /gm, '');
   vm.runInContext(ts.transpile(source, { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None }), context);
 }
