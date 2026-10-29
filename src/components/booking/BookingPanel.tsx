@@ -7,7 +7,7 @@ import { useLanguage } from '../../i18n/LanguageContext';
 import { text, tr } from '../../i18n/translations';
 import { MOCK_TURNSTILE_TOKEN, USE_LOCAL_TURNSTILE_MOCK } from '../../lib/turnstile';
 import { cancelPayPalOrder, capturePayPalOrder, createPayPalOrder, getPayPalErrorMessage, loadPayPalSdk, type PayPalCaptureResult } from '../../services/paypalService';
-import type { BacPaymentResult } from '../../services/bacPaymentService';
+import { getBacConfig, type BacPaymentResult } from '../../services/bacPaymentService';
 import { AvailabilityError, getBookingAvailability, type AvailabilitySlot } from '../../services/availabilityService';
 import { calculateBookingPrice, createBooking, getActiveDepartureLocations, type BookingResult, type DepartureLocation, type PriceResult } from '../../services/bookingService';
 import { getActivePaymentMethods } from '../../services/paymentService';
@@ -154,6 +154,9 @@ export function BookingPanel({ selectedBoat, selectedTour: requestedTour, boats,
     // payment_method_key later — exclude it rather than silently falling
     // back to some other key at submit time (see submitBooking).
     ?.filter((method): method is typeof method & { type: SupportedPaymentType } => Boolean(method.key) && SUPPORTED_PAYMENT_TYPES.includes(method.type as SupportedPaymentType))
+    // Picking a method creates the booking first, so a card row is only offered when the BAC browser keys are
+    // valid; otherwise the customer would hold a slot with a form that can never load.
+    .filter((method) => method.type !== 'card' || getBacConfig().configured)
     .map((method) => ({
       id: method.key as BookingPaymentMethod,
       type: method.type,

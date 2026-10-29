@@ -169,6 +169,24 @@ test('a payment method with an unsupported type never renders a dead-end card', 
   }
 });
 
+test('an active BAC card method is not offered while the BAC browser keys are missing (it would hold a slot it cannot charge)', async () => {
+  // .env.test has no VITE_BAC_* keys, exactly like a Preview whose Vercel variables were not set yet.
+  const paymentMethods = [
+    { id: '1', key: 'paypal', name: 'PayPal', description: '', type: 'paypal', active: true, instructions: null, logo_url: null, sort_order: 1, created_at: '', updated_at: '' },
+    { id: '2', key: 'bac-card', name: 'Credit or debit card', description: '', type: 'card', active: true, instructions: null, logo_url: null, sort_order: 2, created_at: '', updated_at: '' },
+  ];
+  const f = await fixture(paymentMethods);
+  const { page } = f;
+  try {
+    await runBookingFlowToPaymentStep(page);
+    await expect(page.locator('[data-payment-method="paypal"]')).toBeVisible();
+    await expect(page.locator('[data-payment-method="bac-card"]')).toHaveCount(0);
+    assert.equal(f.createBookingRequests.length, 0, 'no booking is created for a method that cannot be paid');
+  } finally {
+    await f.browser.close();
+  }
+});
+
 test('delayed remote catalog never sends static IDs; guest changes and create-booking use remote selection', async () => {
   let release;
   const catalogGate = new Promise(resolve => { release = resolve; });
