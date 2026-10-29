@@ -52,7 +52,7 @@ test('every Edge Function entrypoint returns allowed-origin preflight', async ()
   for (const name of names) {
     let handler;
     context.serve = (value) => { handler = value; };
-    const source = fs.readFileSync(`supabase/functions/${name}/index.ts`, 'utf8').replace(/^import .*;\r?\n/gm, '');
+    const source = fs.readFileSync(`supabase/functions/${name}/index.ts`, 'utf8').replace(/^import [\s\S]*?;\r?\n/gm, '');
     vm.runInContext(`{ ${ts.transpile(source, { target: ts.ScriptTarget.ES2022 })} }`, context);
     for (const origin of origins.slice(0, 2)) {
       const response = await handler(new Request('https://edge.example', { method: 'OPTIONS', headers: { origin } }));
@@ -86,7 +86,7 @@ for (const name of ['calculate-booking-price', 'get-booking-availability', 'crea
     context.serve = (value) => { handler = value; };
     context.createClient = () => { throw Error('simulated client failure'); };
     // Isolate each function's schema while using the real shared CORS helper.
-    const source = fs.readFileSync(`supabase/functions/${name}/index.ts`, 'utf8').replace(/^import .*;\r?\n/gm, '');
+    const source = fs.readFileSync(`supabase/functions/${name}/index.ts`, 'utf8').replace(/^import [\s\S]*?;\r?\n/gm, '');
     vm.runInContext(`{ ${ts.transpile(source, { target: ts.ScriptTarget.ES2022 })} }`, context);
     for (const origin of origins.slice(0, 2)) {
       const request = (method, body) => new Request('https://edge.example', { method, headers: { origin, 'content-type': 'application/json' }, ...(body ? { body: JSON.stringify(body) } : {}) });

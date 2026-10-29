@@ -71,6 +71,11 @@ serve(withCors(async (req) => {
   });
   if (attemptError || !attempt) return attemptErrorResponse(attemptError, headers);
 
+  // Without generated DB types the client types to-one embeds as arrays; at runtime they are single rows.
+  const customer = Array.isArray(booking.customers) ? booking.customers[0] : booking.customers;
+  const boat = Array.isArray(booking.boats) ? booking.boats[0] : booking.boats;
+  const tourPackage = Array.isArray(booking.tour_packages) ? booking.tour_packages[0] : booking.tour_packages;
+
   const saleBody = buildSaleRequest({
     type: transactionType,
     securityKey,
@@ -80,9 +85,9 @@ serve(withCors(async (req) => {
     currency: attempt.currency,
     processorId,
     orderId: attempt.booking_reference,
-    orderDescription: `${booking.boats?.name ?? 'Boat'} - ${booking.tour_packages?.name ?? 'Tour package'}`,
+    orderDescription: `${boat?.name ?? 'Boat'} - ${tourPackage?.name ?? 'Tour package'}`,
     attemptId: attempt.attempt_id,
-    customer: { fullName: booking.customers?.full_name ?? '', email: booking.customers?.email ?? '' },
+    customer: { fullName: customer?.full_name ?? '', email: customer?.email ?? '' },
     ipAddress: getClientIpAddress(req),
     threeDSecure,
   });
