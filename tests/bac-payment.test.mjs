@@ -287,6 +287,20 @@ test('sale/auth requests carry server amounts and 3DS values; response parsing i
   assert.throws(() => loadGateway({ BAC_GATEWAY_URL: 'http://insecure.example.com' }).getBacGatewayApiUrl());
 });
 
+test('sale/auth are routed to the contracted processor and only in USD', () => {
+  const gateway = loadGateway();
+  const saleInput = { type: 'sale', securityKey: 'secret', paymentToken: 'tok_1', amount: '791.00', taxAmount: '91.00', currency: 'USD',
+    orderId: 'PFT-1', orderDescription: 'Boat', attemptId: 'attempt-1', customer: { fullName: 'Ana Mora', email: 'ana@example.com' }, threeDSecure: validThreeDs };
+  assert.equal(gateway.buildSaleRequest({ ...saleInput, processorId: '12345678' }).get('processor_id'), '12345678');
+  assert.equal(gateway.buildSaleRequest({ ...saleInput, type: 'auth', processorId: '12345678' }).get('processor_id'), '12345678');
+  assert.equal(gateway.buildSaleRequest(saleInput).get('processor_id'), null, 'without a processor id the gateway default routing applies');
+  assert.throws(() => gateway.buildSaleRequest({ ...saleInput, currency: 'CRC' }), /only accept USD/);
+
+  assert.equal(loadGateway({ BAC_PROCESSOR_ID: ' 12345678 ' }).getBacProcessorId(), '12345678');
+  assert.equal(loadGateway({}).getBacProcessorId(), undefined);
+  assert.throws(() => loadGateway({ BAC_PROCESSOR_ID: '706&amount=1' }).getBacProcessorId());
+});
+
 test('capture/void/refund requests reference the original transaction with strict amounts', () => {
   const gateway = loadGateway();
   const base = { securityKey: 'secret', transactionId: '1234567890', orderId: 'PFT-1' };
@@ -315,9 +329,9 @@ function runEdgeFunction(file, { supabase, env, fetchImpl, extra = {} }) {
 
 const gatewayEnv = { SUPABASE_URL: 'test', SUPABASE_SERVICE_ROLE_KEY: 'test', SUPABASE_ANON_KEY: 'anon', BAC_SECURITY_KEY: 'private-key', BAC_GATEWAY_URL: 'https://gateway.example.com' };
 
-function loadProcessFunction({ gatewayText, gatewayError, beginError, env = {} } = {}) {
+function loadProcessFunction({ gatewayText, gatewayError, beginError, env = {}, currency = 'USD' } = {}) {
   const calls = { rpc: [], fetch: [], calendar: 0, emails: 0, notices: [] };
-  const booking = { id: '00000000-0000-4000-8000-000000000001', booking_reference: 'PFT-1', customers: { full_name: 'Ana Mora', email: 'ana@example.com' }, boats: { name: 'Second Wind' }, tour_packages: { name: 'Half Day' } };
+  const booking = { id: '00000000-0000-4000-8000-000000000001', booking_reference: 'PFT-1', currency, customers: { full_name: 'Ana Mora', email: 'ana@example.com' }, boats: { name: 'Second Wind' }, tour_packages: { name: 'Half Day' } };
   const query = { select() { return this; }, eq() { return this; }, single: async () => ({ data: booking, error: null }) };
   const supabase = {
     from: () => query,
@@ -389,6 +403,33 @@ test('checkout declines, missing 3DS, limits and unknown outcomes fail safely', 
   const timeout = loadProcessFunction({ gatewayError: new Error('aborted') });
   assert.equal((await timeout.call(request)).status, 502);
   assert.ok(!timeout.calls.rpc.some((entry) => entry.name === 'complete_bac_payment_attempt'), 'unknown outcomes stay processing for reconciliation');
+});
+
+test('checkout sends BAC_PROCESSOR_ID and refuses non-USD bookings before any attempt or charge', async () => {
+  const routed = loadProcessFunction({ gatewayText: approvedText, env: { BAC_PROCESSOR_ID: '12345678' } });
+  assert.equal((await routed.call(request)).status, 200);
+  assert.equal(routed.calls.fetch[0].body.get('processor_id'), '12345678');
+  assert.equal(routed.calls.fetch[0].body.get('currency'), 'USD');
+
+  const colones = loadProcessFunction({ gatewayText: approvedText, currency: 'CRC' });
+  assert.equal((await colones.call(request)).status, 422);
+  assert.equal(colones.calls.rpc.length + colones.calls.fetch.length, 0, 'no attempt row is opened and nothing is charged');
+
+  const misconfigured = loadProcessFunction({ gatewayText: approvedText, env: { BAC_PROCESSOR_ID: 'bad id' } });
+  assert.equal((await misconfigured.call(request)).status, 503);
+  assert.equal(misconfigured.calls.rpc.length + misconfigured.calls.fetch.length, 0);
+});
+
+test('browser config keeps the Collect.js tokenization key and the Gateway.js checkout key apart', () => {
+  const { resolveBacConfig } = loadTs('src/utils/bacConfig.ts', vm.createContext({}));
+  const env = { tokenizationKey: '000000-111111-222222-333333', checkoutKey: 'checkout_public_00000000000000000000000000000000', gatewayUrl: 'https://gateway.example.com/' };
+  const config = plain(resolveBacConfig(env));
+  assert.deepEqual(config, { tokenizationKey: env.tokenizationKey, checkoutKey: env.checkoutKey, gatewayUrl: 'https://gateway.example.com', isMock: false, configured: true });
+  assert.equal(resolveBacConfig({ ...env, tokenizationKey: env.checkoutKey, checkoutKey: env.tokenizationKey }).configured, false, 'swapped keys are rejected');
+  assert.equal(resolveBacConfig({ ...env, checkoutKey: '' }).configured, false, '3DS cannot run without the checkout key');
+  assert.equal(resolveBacConfig({ ...env, tokenizationKey: '' }).configured, false);
+  assert.equal(resolveBacConfig({ ...env, gatewayUrl: 'http://gateway.example.com' }).configured, false);
+  assert.equal(resolveBacConfig({ tokenizationKey: 'mock' }).isMock, true);
 });
 
 // Booking state each approved operation leaves behind (what complete_bac_admin_operation returns).

@@ -7,9 +7,11 @@ import { enqueueBookingConfirmationEmails } from '../_shared/booking-confirmatio
 import { syncBookingCalendarAfterConfirmation } from '../_shared/booking-calendar.ts';
 import { sendAdminBookingNotice } from '../_shared/admin-booking-notice.ts';
 import {
+  BAC_CURRENCY,
   buildSaleRequest,
   getBacCheckoutType,
   getBacGatewayApiUrl,
+  getBacProcessorId,
   getBacSecurityKey,
   getClientIpAddress,
   parseGatewayResponse,
@@ -42,9 +44,11 @@ serve(withCors(async (req) => {
 
   let securityKey: string;
   let gatewayUrl: string;
+  let processorId: string | undefined;
   try {
     securityKey = getBacSecurityKey();
     gatewayUrl = getBacGatewayApiUrl();
+    processorId = getBacProcessorId();
   } catch {
     return Response.json({ message: 'Card payments are not available right now' }, { status: 503, headers });
   }
@@ -53,10 +57,12 @@ serve(withCors(async (req) => {
   const supabase = getSupabase();
   const { data: booking, error: bookingError } = await supabase
     .from('bookings')
-    .select('id, booking_reference, customers(full_name, email), boats(name), tour_packages(name)')
+    .select('id, booking_reference, currency, customers(full_name, email), boats(name), tour_packages(name)')
     .eq('id', parsed.data.bookingId)
     .single();
   if (bookingError || !booking) return Response.json({ message: 'Booking not found' }, { status: 404, headers });
+  // Checked before an attempt exists, so an unsupported currency never leaves a "processing" row behind.
+  if (booking.currency !== BAC_CURRENCY) return Response.json({ message: `Card payments are only available in ${BAC_CURRENCY}` }, { status: 422, headers });
 
   const { data: attempt, error: attemptError } = await supabase.rpc('begin_bac_payment_attempt', {
     p_booking_id: booking.id,
@@ -72,6 +78,7 @@ serve(withCors(async (req) => {
     amount: Number(attempt.amount).toFixed(2),
     taxAmount: Number(attempt.tax_amount).toFixed(2),
     currency: attempt.currency,
+    processorId,
     orderId: attempt.booking_reference,
     orderDescription: `${booking.boats?.name ?? 'Boat'} - ${booking.tour_packages?.name ?? 'Tour package'}`,
     attemptId: attempt.attempt_id,

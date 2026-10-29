@@ -17,6 +17,9 @@ export interface BacThreeDSecure {
   directoryServerId?: string;
 }
 
+/** The BAC merchant account (and its processor id) is contracted for US dollars only. */
+export const BAC_CURRENCY = 'USD';
+
 /** Customer checkout: charge now (`sale`) or only hold the funds for a later admin capture (`auth`). */
 export type BacCheckoutType = 'sale' | 'auth';
 /** Admin follow-up operations on an existing gateway transaction. */
@@ -29,6 +32,8 @@ export interface BacSaleInput {
   amount: string;
   taxAmount: string;
   currency: string;
+  /** BAC_PROCESSOR_ID: routes the charge to the contracted processor (MID). */
+  processorId?: string;
   orderId: string;
   orderDescription: string;
   attemptId: string;
@@ -104,6 +109,7 @@ export function getBacCheckoutType(): BacCheckoutType {
 /** Builds the urlencoded body for the Payment API sale / auth. Amounts always come from the booking row. */
 export function buildSaleRequest(input: BacSaleInput): URLSearchParams {
   if (input.type !== 'sale' && input.type !== 'auth') throw new Error('Invalid checkout transaction type');
+  if (input.currency !== BAC_CURRENCY) throw new Error(`BAC card payments only accept ${BAC_CURRENCY}`);
   const { firstName, lastName } = splitCustomerName(input.customer.fullName);
   const body = new URLSearchParams({
     security_key: input.securityKey,
@@ -123,13 +129,17 @@ export function buildSaleRequest(input: BacSaleInput): URLSearchParams {
     cardholder_auth: input.threeDSecure.cardHolderAuth,
     three_ds_version: input.threeDSecure.threeDsVersion,
   });
+  if (input.processorId) body.set('processor_id', input.processorId);
   if (input.threeDSecure.xid) body.set('xid', input.threeDSecure.xid);
   if (input.threeDSecure.directoryServerId) body.set('directory_server_id', input.threeDSecure.directoryServerId);
   if (input.ipAddress) body.set('ipaddress', input.ipAddress);
   return body;
 }
 
-/** Capture / void / refund of an existing transaction. Amounts are decided server side from the payments ledger. */
+/**
+ * Capture / void / refund of an existing transaction. Amounts are decided server side from the payments ledger.
+ * No processor_id: the Payment API only accepts it on sale/auth; follow-ups stay on the original transaction's processor.
+ */
 export function buildFollowUpRequest(input: BacFollowUpInput): URLSearchParams {
   if (!['capture', 'void', 'refund'].includes(input.type)) throw new Error('Invalid follow-up transaction type');
   if (!/^[A-Za-z0-9-]{1,64}$/.test(input.transactionId)) throw new Error('Invalid gateway transaction id');
@@ -192,6 +202,14 @@ export function getBacSecurityKey(): string {
   const key = Deno.env.get('BAC_SECURITY_KEY');
   if (!key) throw new Error('BAC gateway is not configured');
   return key;
+}
+
+/** Optional BAC_PROCESSOR_ID. A malformed value is a configuration error, never silently dropped. */
+export function getBacProcessorId(): string | undefined {
+  const processorId = Deno.env.get('BAC_PROCESSOR_ID')?.trim();
+  if (!processorId) return undefined;
+  if (!/^[A-Za-z0-9_-]{1,64}$/.test(processorId)) throw new Error('BAC processor id is invalid');
+  return processorId;
 }
 
 /** Returns the caller IP only when it is a well-formed IPv4/IPv6 literal. */

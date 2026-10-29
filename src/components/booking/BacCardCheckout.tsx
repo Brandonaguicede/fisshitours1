@@ -1,6 +1,7 @@
 import { Lock } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
+import { BAC_CURRENCY } from '../../utils/bacConfig';
 import { splitFullName } from '../../utils/bookingPayment';
 import {
   BacPaymentError,
@@ -42,7 +43,7 @@ export function BacCardCheckout({ createdBooking, customerName, customerEmail, c
   useEffect(() => {
     let mounted = true;
     const config = getBacConfig();
-    if (!config.configured) {
+    if (!config.configured || currency !== BAC_CURRENCY) {
       setState('unavailable');
       setError(es ? 'El pago con tarjeta no está disponible en este momento. Elige otro método de pago.' : 'Card payment is not available right now. Please choose another payment method.');
       return;
@@ -75,7 +76,7 @@ export function BacCardCheckout({ createdBooking, customerName, customerEmail, c
     }
 
     function authenticate(paymentToken: string) {
-      const gateway = window.Gateway!.create(config.publicKey);
+      const gateway = window.Gateway!.create(config.checkoutKey);
       gateway.on('error', () => fail(es ? 'No se pudo verificar la tarjeta. Inténtalo de nuevo.' : 'The card could not be verified. Please try again.'));
       const { firstName, lastName } = splitFullName(customerName);
       const threeDS = gateway.get3DSecure().createUI({

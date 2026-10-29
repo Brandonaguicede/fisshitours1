@@ -67,17 +67,30 @@ Secretos de Supabase (servidor), nunca en el frontend ni en git:
 ```
 npx supabase secrets set BAC_SECURITY_KEY=<llave privada> BAC_GATEWAY_URL=https://<dominio del gateway>
 npx supabase secrets set BAC_TRANSACTION_TYPE=sale   # o auth para autorizar y capturar después
+npx supabase secrets set BAC_PROCESSOR_ID=<processor id que asignó BAC>
 ```
 
 Variables de Vercel (frontend, son públicas por diseño):
 
 ```
-VITE_BAC_PUBLIC_KEY=<llave pública con permiso Checkout / tokenización>
+VITE_BAC_TOKENIZATION_KEY=<llave "Token" de BAC>
+VITE_BAC_CHECKOUT_KEY=<llave "CHECKOUT" de BAC, empieza con checkout_public_>
 VITE_BAC_GATEWAY_URL=https://<mismo dominio del gateway>
 ```
 
+BAC entrega tres credenciales y cada una tiene un solo uso:
+
+| Credencial de BAC | Variable | Dónde se usa |
+|---|---|---|
+| Private Security Key | `BAC_SECURITY_KEY` (Supabase) | Payment API: sale, auth, capture, void y refund |
+| Token | `VITE_BAC_TOKENIZATION_KEY` (Vercel) | `data-tokenization-key` de Collect.js |
+| CHECKOUT (`checkout_public_…`) | `VITE_BAC_CHECKOUT_KEY` (Vercel) | `Gateway.create()` de Gateway.js, para 3-D Secure |
+
 - **Dominio:** solo el dominio con `https://` y sin `/` al final. El código agrega `/token/Collect.js`, `/js/v1/Gateway.js` y `/api/transact.php`.
-- **Modo simulado:** `VITE_BAC_PUBLIC_KEY=mock` solo funciona con `MOCK_EXTERNAL_PROVIDERS=true` en Supabase local.
+- **Llaves cruzadas:** si falta una de las dos llaves públicas o vienen intercambiadas, el método se muestra como no disponible en lugar de fallar a mitad del pago.
+- **Processor ID:** según la Payment API de NMI, `processor_id` enruta la transacción al procesador (MID) indicado y solo existe en sale y auth. Capture, void y refund no lo llevan porque se ejecutan sobre la transacción original, que ya tiene su procesador. Si `BAC_PROCESSOR_ID` tiene un formato inválido, la función responde 503 y no cobra.
+- **Moneda:** la cuenta de BAC es solo en USD (contado). Una reserva en otra moneda se rechaza con 422 antes de abrir el intento, así que no queda ninguna fila "processing". El formulario de tarjeta tampoco se muestra.
+- **Modo simulado:** `VITE_BAC_TOKENIZATION_KEY=mock` solo funciona con `MOCK_EXTERNAL_PROVIDERS=true` en Supabase local.
 
 ## Puesta en marcha
 
@@ -139,7 +152,6 @@ Si BAC no responde, la operación queda en "Procesando" y bloquea nuevas operaci
 ## Por confirmar con BAC
 
 - **Dominio del gateway:** confirmar el host exacto para scripts y Payment API en sandbox y producción.
-- **Llaves:** confirmar que una sola llave pública sirve para Collect.js y Gateway.js.
 - **API:** el paso 3 apunta a la Payment API clásica (`transact.php`). NMI recomienda la REST v5 para integraciones nuevas, así que conviene confirmar cuál certifica BAC.
 - **Validez de la autorización:** confirmar cuántos días dura una autorización antes de vencer en el banco emisor. El admin debe capturar o anular antes.
 - **Términos y condiciones:** `/terminos` muestra la versión vigente de `supabase/functions/_shared/terms.mjs`, el mismo texto del modal y del correo. Hoy la v1 solo menciona comisiones de transferencia y PayPal. Si BAC pide texto sobre pagos con tarjeta o reembolsos a la tarjeta, el cliente debe aprobar una v2. Las versiones publicadas no se editan.
