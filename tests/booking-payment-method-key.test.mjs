@@ -207,7 +207,7 @@ test('BAC checkout shows card selection and locks uncertain results on desktop a
   const pending = new Promise((resolve) => { finish = resolve; });
   await f.page.route('https://secure.nmi.com/**', (route) => route.fulfill({ contentType: 'application/javascript', body:
     route.request().url().includes('Collect.js')
-      ? `window.CollectJS = { configure(config) { this.config = config; for (const field of Object.values(config.fields)) { const frame = document.createElement('iframe'); frame.title = field.title; frame.style.cssText = 'width:100%;height:24px;border:0;display:block'; document.querySelector(field.selector).appendChild(frame); } config.fieldsAvailableCallback(); }, startPaymentRequest() { this.config.callback({ token: 'test-token-123' }); } };`
+      ? `window.CollectJS = { configure(config) { this.config = config; for (const field of Object.values(config.fields)) { const frame = document.createElement('iframe'); frame.title = field.title; frame.style.cssText = 'width:100%;height:24px;border:0;display:block'; document.querySelector(field.selector).appendChild(frame); } config.fieldsAvailableCallback(); config.validationCallback('ccnumber', false); }, startPaymentRequest() { if (!this.attempted) { this.attempted = true; this.config.validationCallback('ccnumber', false); return; } this.config.callback({ token: 'test-token-123' }); } };`
       : `window.Gateway = { create() { return { on() {}, get3DSecure() { return { createUI() { const handlers = {}; return { on(event, fn) { handlers[event] = fn; }, start() { const result = { cavv: 'TEST', eci: '05', cardHolderAuth: 'verified', threeDsVersion: '2.2.0' }; handlers.complete(result); handlers.complete(result); } }; } }; } }; } };`,
   }));
   await f.page.route('**/functions/v1/bac-process-payment', async (route) => {
@@ -227,6 +227,11 @@ test('BAC checkout shows card selection and locks uncertain results on desktop a
     await f.page.setViewportSize({ width: 390, height: 844 });
     await f.page.screenshot({ path: 'tmp/bac-checkout-mobile.png', fullPage: true });
     assert.equal(await f.page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+    await expect(f.page.getByRole('alert')).toHaveCount(0);
+    await pay.click();
+    await expect(f.page.getByRole('alert')).toContainText('Check your card details');
+    await expect(pay).toBeEnabled();
+    assert.equal(charges, 0, 'invalid fields must not submit a payment');
     await pay.click();
     await expect.poll(() => charges).toBe(1);
     await expect(f.page.locator('[data-payment-method="paypal"]')).toBeDisabled();

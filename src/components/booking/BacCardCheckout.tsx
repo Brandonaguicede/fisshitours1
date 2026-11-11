@@ -33,10 +33,12 @@ export function BacCardCheckout({ createdBooking, customerName, customerEmail, c
   const es = language === 'es';
   const [state, setState] = useState<CheckoutState>('loading');
   const [error, setError] = useState('');
+  const [fieldValidationError, setFieldValidationError] = useState(false);
   const [notice, setNotice] = useState('');
   const onSuccessRef = useRef(onSuccess);
   const inFlightRef = useRef(false);
   const submittedRef = useRef(false);
+  const collectingRef = useRef(false);
   onSuccessRef.current = onSuccess;
 
   useEffect(() => {
@@ -70,6 +72,8 @@ export function BacCardCheckout({ createdBooking, customerName, customerEmail, c
 
     function fail(message: string) {
       if (!mounted || submittedRef.current) return;
+      collectingRef.current = false;
+      setFieldValidationError(false);
       inFlightRef.current = false;
       setError(message);
       setState('ready');
@@ -143,10 +147,16 @@ export function BacCardCheckout({ createdBooking, customerName, customerEmail, c
           timeoutDuration: 15000,
           timeoutCallback: () => fail(es ? 'La validación de la tarjeta tardó demasiado. Inténtalo de nuevo.' : 'Card validation timed out. Please try again.'),
           validationCallback: (_field, valid) => {
-            if (!valid) fail(es ? 'Revisa el número, vencimiento y código de seguridad de la tarjeta.' : 'Please check your card number, expiration and security code.');
+            // Hosted fields also validate on load/blur. Only report errors for an explicit payment attempt.
+            if (!mounted || !collectingRef.current || submittedRef.current) return;
+            if (!valid) {
+              fail(es ? 'Completa o corrige el número, vencimiento y código de seguridad de la tarjeta antes de pagar.' : 'Complete or correct your card number, expiration and security code before paying.');
+              setFieldValidationError(true);
+            }
           },
           callback: (response) => {
             if (!mounted || !inFlightRef.current || submittedRef.current) return;
+            collectingRef.current = false;
             if (!response?.token) { fail(es ? 'No se pudo validar la tarjeta. Revisa los datos.' : 'The card could not be validated. Please check the details.'); return; }
             setState('authenticating');
             try { authenticate(response.token); }
@@ -171,6 +181,7 @@ export function BacCardCheckout({ createdBooking, customerName, customerEmail, c
     // Terms were already accepted (and stored) before the booking was created.
     if (state !== 'ready' || inFlightRef.current) return;
     inFlightRef.current = true;
+    setFieldValidationError(false);
     setError('');
     setNotice('');
     if (getBacConfig().isMock) {
@@ -185,10 +196,12 @@ export function BacCardCheckout({ createdBooking, customerName, customerEmail, c
       return;
     }
     setState('tokenizing');
+    collectingRef.current = true;
     try {
       if (!window.CollectJS) throw new Error('Card form unavailable');
       window.CollectJS.startPaymentRequest();
     } catch {
+      collectingRef.current = false;
       inFlightRef.current = false;
       setState('unavailable');
       setError(es ? 'No se pudo cargar el formulario seguro. Recarga la página antes de intentarlo de nuevo.' : 'The secure form is unavailable. Reload the page before trying again.');
@@ -255,9 +268,20 @@ export function BacCardCheckout({ createdBooking, customerName, customerEmail, c
         {notice ? <p className="mt-3 text-xs text-ocean-200" role="status">{notice}</p> : null}
         {error ? (
           <div className="mt-3 rounded-xl border border-red-300/30 bg-red-500/10 p-3 text-sm text-red-100" role="alert">
-            <p className="font-bold">{es ? 'No se pudo completar el pago' : 'Payment could not be completed'}</p>
-            <p className="mt-1">{error}</p>
-            {state === 'locked' ? <p className="mt-1">{es ? `No vuelvas a pagar hasta que confirmemos el resultado. Contáctanos con la referencia: ${createdBooking.booking_reference}` : `Do not pay again until we confirm the result. Contact us with reference: ${createdBooking.booking_reference}`}</p> : null}
+            <p className="font-bold">{state === 'locked'
+              ? (es ? 'Pago pendiente de verificación' : 'Payment result needs verification')
+              : fieldValidationError
+                ? (es ? 'Revisa los datos de la tarjeta' : 'Check your card details')
+                : (es ? 'No se pudo completar el pago' : 'Payment could not be completed')}</p>
+            <p className="mt-1">{state === 'locked'
+              ? (es ? 'Aún no podemos confirmar si se realizó el cobro. Este aviso no significa que tu tarjeta haya sido rechazada.' : 'We cannot yet confirm whether you were charged. This notice does not mean your card was declined.')
+              : error}</p>
+            {state === 'locked' ? (
+              <>
+                <p className="mt-2">{es ? 'Para evitar un cobro duplicado, no vuelvas a pagar ni uses otro método de pago. Contáctanos para verificar la operación con BAC.' : 'Do not pay again or use another payment method, to avoid a duplicate charge. Contact us so we can verify the transaction with BAC.'}</p>
+                <p className="mt-2 font-semibold break-words">{es ? 'Referencia para consultar:' : 'Reference for your inquiry:'} {createdBooking.booking_reference}</p>
+              </>
+            ) : null}
           </div>
         ) : null}
       </div>
