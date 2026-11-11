@@ -14,6 +14,7 @@ import {
   getBacProcessorId,
   getBacSecurityKey,
   getClientIpAddress,
+  hashClientIp,
   parseGatewayResponse,
   postGatewayRequest,
   validateThreeDSecure,
@@ -64,6 +65,22 @@ serve(withCors(async (req) => {
   // Checked before an attempt exists, so an unsupported currency never leaves a "processing" row behind.
   if (booking.currency !== BAC_CURRENCY) return Response.json({ message: `Card payments are only available in ${BAC_CURRENCY}` }, { status: 422, headers });
 
+  // Card-testing brake: per-booking attempts are capped below, this caps the caller across bookings.
+  const clientIp = getClientIpAddress(req);
+  let ipHash: string;
+  try {
+    ipHash = await hashClientIp(clientIp);
+  } catch {
+    return Response.json({ message: 'Card payments are not available right now' }, { status: 503, headers });
+  }
+  const { data: allowed, error: rateError } = await supabase.rpc('check_bac_payment_rate_limit', {
+    p_ip_hash: ipHash,
+    p_limit: envNumber('BAC_PAYMENT_RATE_LIMIT_MAX_REQUESTS', 10),
+    p_window_minutes: envNumber('BAC_PAYMENT_RATE_LIMIT_WINDOW_MINUTES', 15),
+  });
+  if (rateError) return Response.json({ message: 'Card payments are not available right now' }, { status: 503, headers });
+  if (!allowed) return Response.json({ message: 'Too many payment attempts. Please try again later.' }, { status: 429, headers });
+
   const { data: attempt, error: attemptError } = await supabase.rpc('begin_bac_payment_attempt', {
     p_booking_id: booking.id,
     p_max_attempts: MAX_ATTEMPTS_PER_BOOKING,
@@ -88,7 +105,7 @@ serve(withCors(async (req) => {
     orderDescription: `${boat?.name ?? 'Boat'} - ${tourPackage?.name ?? 'Tour package'}`,
     attemptId: attempt.attempt_id,
     customer: { fullName: customer?.full_name ?? '', email: customer?.email ?? '' },
-    ipAddress: getClientIpAddress(req),
+    ipAddress: clientIp,
     threeDSecure,
   });
 
@@ -106,6 +123,15 @@ serve(withCors(async (req) => {
   }
 
   const result = parseGatewayResponse(rawResponse, attempt.booking_reference);
+  // An empty/malformed answer, an incomplete approval or a processor communication
+  // error is not evidence of a decline. Keep the attempt locked for reconciliation.
+  const gatewayFields = new URLSearchParams(rawResponse);
+  const definiteDecline = gatewayFields.get('response') === '2'
+    && /^2\d{2}$/.test(result.responseCode)
+    && (!gatewayFields.has('orderid') || gatewayFields.get('orderid') === attempt.booking_reference);
+  if (!result.approved && !definiteDecline) {
+    return Response.json({ message: UNKNOWN_OUTCOME_MESSAGE, bookingReference: attempt.booking_reference }, { status: 502, headers });
+  }
   const audit = { ...result.audit, eci: threeDSecure.eci, cardholder_auth: threeDSecure.cardHolderAuth, three_ds_version: threeDSecure.threeDsVersion };
 
   const { data: settled, error: settleError } = await supabase.rpc('complete_bac_payment_attempt', {
@@ -159,6 +185,11 @@ function attemptErrorResponse(error: { code?: string } | null, headers: HeadersI
   if (error?.code === '55P03') return Response.json({ message: 'A payment for this booking is already being processed' }, { status: 409, headers });
   if (error?.code === '54000') return Response.json({ message: 'Too many payment attempts for this booking. Please contact us.' }, { status: 429, headers });
   return Response.json({ message: 'This booking cannot be paid by card right now' }, { status: 400, headers });
+}
+
+function envNumber(name: string, fallback: number) {
+  const value = Number(Deno.env.get(name));
+  return Number.isInteger(value) && value > 0 ? value : fallback;
 }
 
 function getSupabase() {

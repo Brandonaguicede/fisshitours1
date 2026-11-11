@@ -1,5 +1,21 @@
 # Pago con tarjeta BAC Credomatic
 
+## Configuración local actualizada — 2026-11-10
+
+El correo de BAC confirma Gateway.js, Payer Authentication 3DS y Payment API clásica, con el procesador `70608880` para contado en USD. La aclaración posterior del responsable indica que las credenciales entregadas son productivas y que la certificación requiere una transacción por marca (Visa, Mastercard y American Express), por USD 1 cada una.
+
+Por autorización del usuario, `.env.local` y `.env.bac.local` apuntan ahora a `https://secure.nmi.com`. Se conserva `BAC_TRANSACTION_TYPE=sale` y el procesador indicado. Las claves existentes se conservan en archivos ignorados por Git. La comprobación local valida presencia, formato, separación de claves y coincidencia de dominios; no autentica las claves contra BAC.
+
+Tras autenticar las CLI con las cuentas autorizadas, se actualizaron los cuatro secretos BAC del proyecto Supabase vinculado y las tres variables públicas `VITE_BAC_TOKENIZATION_KEY`, `VITE_BAC_CHECKOUT_KEY` y `VITE_BAC_GATEWAY_URL` de Vercel en Development, Preview y Production. No se activó `bac-card` ni se realizaron transacciones. Las variables de Production requieren un nuevo despliegue para aplicarse al sitio público; no se publicó en producción. Antes de probar, hay que verificar el estado del método. El total enviado sigue siendo el total de la reserva: no existe un límite automático de USD 1. Preparar y revisar ese importe final antes de autorizar cualquier cargo real.
+
+Los apartados históricos que solicitan nuevas credenciales sandbox describen la premisa anterior, sustituida por la aclaración del responsable. La validación real de CHECKOUT/3DS y de la clave privada continúa pendiente. PayPal no se modifica.
+
+## Estado comprobado el 2026-10-29
+
+Las tres migraciones y las seis funciones necesarias ya se publicaron en Supabase. Las variables locales pasan la comprobación de formato y separación de claves.
+
+La prueba real encontró que Token responde `User not found` en sandbox.nmi.com, mientras que secure.nmi.com crea los tres campos y devuelve `testMode: false`. Por ello BAC quedó **inactivo**, sin cambiar el gateway configurado a secure ni enviar pagos. Antes de activarlo de nuevo se requiere Test Mode habilitado o credenciales sandbox válidas. Ver [resultados y alcance de las pruebas](bac-test-results-2026-10-29.md).
+
 Integración basada en los pasos que indicó BAC (plataforma NMI):
 
 1. **Gateway.js / Collect.js** (navegador): la tarjeta se escribe en iframes del gateway y se convierte en un `payment_token` de un solo uso.
@@ -67,7 +83,7 @@ Secretos de Supabase (servidor), nunca en el frontend ni en git:
 ```
 npx supabase secrets set BAC_SECURITY_KEY=<llave privada> BAC_GATEWAY_URL=https://<dominio del gateway>
 npx supabase secrets set BAC_TRANSACTION_TYPE=sale   # o auth para autorizar y capturar después
-npx supabase secrets set BAC_PROCESSOR_ID=<processor id que asignó BAC>
+npx supabase secrets set BAC_PROCESSOR_ID=70608880
 ```
 
 Variables de Vercel (frontend, son públicas por diseño):
@@ -155,3 +171,29 @@ Si BAC no responde, la operación queda en "Procesando" y bloquea nuevas operaci
 - **API:** el paso 3 apunta a la Payment API clásica (`transact.php`). NMI recomienda la REST v5 para integraciones nuevas, así que conviene confirmar cuál certifica BAC.
 - **Validez de la autorización:** confirmar cuántos días dura una autorización antes de vencer en el banco emisor. El admin debe capturar o anular antes.
 - **Términos y condiciones:** `/terminos` muestra la versión vigente de `supabase/functions/_shared/terms.mjs`, el mismo texto del modal y del correo. Hoy la v1 solo menciona comisiones de transferencia y PayPal. Si BAC pide texto sobre pagos con tarjeta o reembolsos a la tarjeta, el cliente debe aprobar una v2. Las versiones publicadas no se editan.
+
+## Visibilidad y diagnóstico del checkout (2026-10-29)
+
+### Preparación local de credenciales
+
+- `.env.local`: completar las variables públicas de Supabase, `VITE_BAC_TOKENIZATION_KEY` y `VITE_BAC_CHECKOUT_KEY` con los valores completos. No poner la clave privada en este archivo.
+- `.env.bac.local`: archivo local privado preparado desde `.env.bac.example`. Completar `BAC_SECURITY_KEY`; ya contiene `BAC_PROCESSOR_ID=70608880` y `BAC_TRANSACTION_TYPE=sale`. No lo carga el frontend ni se sube automáticamente a Supabase.
+- Los dos archivos locales están ignorados por Git. Mantener `VITE_BAC_GATEWAY_URL` y `BAC_GATEWAY_URL` vacíos hasta que BAC confirme el gateway y el entorno de pruebas.
+- Ejecutar `node scripts/check-bac-config.mjs` para revisar presencia, formato local y coincidencia de dominios sin imprimir claves ni contactar al banco. Los valores vacíos se reportan como `PENDIENTE`; no significa que una clave haya sido rechazada por BAC.
+- Cuando BAC confirme el entorno, configurar las variables públicas en Vercel Preview y los secretos privados en el proyecto Supabase de staging. Estos archivos locales por sí solos no cambian el despliegue de Vercel ni habilitan el método.
+
+Los cambios de claves y procesador de feature/bac-keys-processor están integrados en development. Vercel debe construir esa revisión con sus variables y Supabase debe tener las funciones correspondientes desplegadas.
+
+El método se ofrece únicamente si la consulta pública devuelve una fila activa con key no vacía y type=card, y resolveBacConfig valida las dos claves públicas y el origen HTTPS. La migración crea bac-card con active=false deliberadamente. Un catálogo vacío o fallido no habilita métodos de respaldo. Pagar el día del tour sigue retirado por las reglas existentes.
+
+Al inicio del diagnóstico, .env.local solo contenía una variable de Vercel y faltaban las variables de Supabase y BAC. Posteriormente se completaron, se aplicaron las migraciones y se publicaron las funciones. El estado actual y el bloqueo encontrado al probar las claves están descritos al inicio de este documento.
+
+Para pruebas bancarias: usar staging, las claves de prueba suministradas por BAC y su dominio exacto, BAC_PROCESSOR_ID=70608880 y BAC_TRANSACTION_TYPE=sale. Activar bac-card solo en la base de pruebas cuando backend y frontend estén configurados. Reiniciar Vite tras editar variables; Vercel necesita un nuevo build. Nunca reutilizar VITE_BAC_PUBLIC_KEY.
+
+La moneda se verifica como USD en el formulario y en el servidor antes de abrir un intento. La clave privada y el procesador se verifican en el servidor; no pueden deducirse de las claves del navegador. Un SDK bloqueado por red, CSP o permisos del gateway muestra error al abrir el formulario. Los términos y la validación de datos controlan la selección, sin cambiar la disponibilidad comercial.
+
+El modo mock del navegador solo se permite con import.meta.env.DEV. El backend simulado exige además MOCK_EXTERNAL_PROVIDERS=true, APP_ENV=local/test y Supabase local. Las pruebas de interfaz usan claves ficticias y scripts interceptados; no sustituyen la certificación de BAC.
+
+Durante tokenización, 3DS, procesamiento o resultado incierto se bloquea cambiar de método o volver al paso anterior. Eventos 3DS complete repetidos no generan otra venta. Una respuesta vacía, incompleta, de comunicación o con otra referencia deja el intento processing para conciliación. Solo un rechazo inequívoco permite intentar otra tarjeta; nunca se reintenta automáticamente. El cliente muestra éxito únicamente ante estados servidor paid/confirmed, o autorización pendiente cuando corresponde.
+
+Documentación oficial: [Gateway.js](https://docs.nmi.com/docs/gatewayjs), [3DS](https://docs.nmi.com/docs/payer-authentication-3ds) y [Payment API](https://docs.nmi.com/reference/process).

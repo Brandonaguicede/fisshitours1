@@ -67,8 +67,7 @@ serve(withCors(async (req) => {
       p_actor: actor,
     });
     if (error || !reconciled) {
-      // RPC messages are our own validation texts (never gateway or secret data).
-      return Response.json({ message: error?.message ?? 'The card operation could not be reconciled' }, { status: error?.code === '55P03' ? 409 : 400, headers });
+      return Response.json({ message: safeOperationMessage(error, 'The card operation could not be reconciled') }, { status: error?.code === '55P03' ? 409 : 400, headers });
     }
     if (reconciled.approved === true) await runFollowUps(db, input.bookingId, followUpFor(reconciled.reconciled, reconciled.booking_status));
     return Response.json(reconciled, { headers });
@@ -91,7 +90,7 @@ serve(withCors(async (req) => {
   });
   if (beginError || !operation) {
     if (beginError?.code === '55P03') return Response.json({ message: 'Another card operation for this booking is still pending: use Conciliar after checking the BAC portal' }, { status: 409, headers });
-    return Response.json({ message: beginError?.message ?? 'Card operation is not allowed for this booking' }, { status: 400, headers });
+    return Response.json({ message: safeOperationMessage(beginError, 'Card operation is not allowed for this booking') }, { status: 400, headers });
   }
 
   let rawResponse: string;
@@ -132,6 +131,15 @@ serve(withCors(async (req) => {
   await runFollowUps(db, input.bookingId, followUpFor(operation.operation, settled.booking_status));
   return Response.json(settled, { headers });
 }));
+
+// Only the validation texts our own RPCs raise (errcode 22023 / 55P03) reach the admin UI. Anything else
+// (constraint names, column types, driver errors) is replaced by the generic fallback.
+const OWN_RPC_MESSAGE = /^(booking not found|booking payment method is not card|a card operation is already in progress|booking has no [a-z ]+|only the full authorized amount can be captured|a refunded transaction cannot be voided|refund amount must be between [0-9.]+ and [0-9.]+|original card transaction not found|invalid card operation|there is no pending card operation to reconcile|the card operation may still be in progress; try again in a few minutes|the BAC transaction id is required to record an approved operation|invalid BAC transaction id|card operation (not found|is already settled)|card amount does not match booking total)$/;
+
+function safeOperationMessage(error: { code?: string; message?: string } | null, fallback: string) {
+  const message = error?.message ?? '';
+  return (error?.code === '22023' || error?.code === '55P03') && OWN_RPC_MESSAGE.test(message) ? message : fallback;
+}
 
 type FollowUp = 'confirmed' | 'cancelled' | null;
 

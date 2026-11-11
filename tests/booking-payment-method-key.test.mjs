@@ -169,7 +169,7 @@ test('a payment method with an unsupported type never renders a dead-end card', 
   }
 });
 
-test('an active BAC card method is not offered while the BAC browser keys are missing (it would hold a slot it cannot charge)', async () => {
+test('an active BAC card method is not offered while the BAC browser keys are missing (it would hold a slot it cannot charge)', { skip: process.env.BAC_TEST_CONFIGURED === 'true' }, async () => {
   // .env.test has no VITE_BAC_* keys, exactly like a Preview whose Vercel variables were not set yet.
   const paymentMethods = [
     { id: '1', key: 'paypal', name: 'PayPal', description: '', type: 'paypal', active: true, instructions: null, logo_url: null, sort_order: 1, created_at: '', updated_at: '' },
@@ -185,6 +185,77 @@ test('an active BAC card method is not offered while the BAC browser keys are mi
   } finally {
     await f.browser.close();
   }
+});
+
+test('an empty payment catalog never enables fallback payment methods', async () => {
+  const f = await fixture([]);
+  try {
+    await runBookingFlowToPaymentStep(f.page);
+    await expect(f.page.locator('[data-payment-method]')).toHaveCount(0);
+    await expect(f.page.getByText('No payment methods are available right now.', { exact: false })).toBeVisible();
+    assert.equal(f.createBookingRequests.length, 0);
+  } finally { await f.browser.close(); }
+});
+
+test('BAC checkout shows card selection and locks uncertain results on desktop and mobile', { skip: process.env.BAC_TEST_CONFIGURED !== 'true' }, async () => {
+  const f = await fixture([
+    { key: 'bac-card', name: 'Card', type: 'card', active: true, sort_order: 1 },
+    { key: 'paypal', name: 'PayPal', type: 'paypal', active: true, sort_order: 2 },
+  ]);
+  let charges = 0;
+  let finish;
+  const pending = new Promise((resolve) => { finish = resolve; });
+  await f.page.route('https://secure.nmi.com/**', (route) => route.fulfill({ contentType: 'application/javascript', body:
+    route.request().url().includes('Collect.js')
+      ? `window.CollectJS = { configure(config) { this.config = config; for (const field of Object.values(config.fields)) { const frame = document.createElement('iframe'); frame.title = field.title; frame.style.cssText = 'width:100%;height:24px;border:0;display:block'; document.querySelector(field.selector).appendChild(frame); } config.fieldsAvailableCallback(); }, startPaymentRequest() { this.config.callback({ token: 'test-token-123' }); } };`
+      : `window.Gateway = { create() { return { on() {}, get3DSecure() { return { createUI() { const handlers = {}; return { on(event, fn) { handlers[event] = fn; }, start() { const result = { cavv: 'TEST', eci: '05', cardHolderAuth: 'verified', threeDsVersion: '2.2.0' }; handlers.complete(result); handlers.complete(result); } }; } }; } }; } };`,
+  }));
+  await f.page.route('**/functions/v1/bac-process-payment', async (route) => {
+    charges += 1;
+    await pending;
+    await route.fulfill({ status: 502, json: { message: 'Payment outcome unknown' } });
+  });
+  try {
+    await runBookingFlowToPaymentStep(f.page);
+    const card = f.page.getByRole('button', { name: /Pay by card/ });
+    await expect(card).toBeVisible();
+    await card.click();
+    await expect(card).toHaveAttribute('aria-pressed', 'true');
+    const pay = f.page.getByRole('button', { name: 'Pay USD 734.50', exact: true });
+    await expect(pay).toBeEnabled();
+    await f.page.screenshot({ path: 'tmp/bac-checkout-desktop.png', fullPage: true });
+    await f.page.setViewportSize({ width: 390, height: 844 });
+    await f.page.screenshot({ path: 'tmp/bac-checkout-mobile.png', fullPage: true });
+    assert.equal(await f.page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+    await pay.click();
+    await expect.poll(() => charges).toBe(1);
+    await expect(f.page.locator('[data-payment-method="paypal"]')).toBeDisabled();
+    finish();
+    await expect(f.page.getByRole('alert')).toContainText('Do not pay again');
+    await expect(f.page.getByRole('button', { name: 'Pay USD 734.50', exact: true })).toBeDisabled();
+    assert.equal(charges, 1, 'duplicate 3DS completion must not submit another sale');
+    assert.equal(f.createBookingRequests.length, 1);
+  } finally { finish(); await f.browser.close(); }
+});
+
+test('BAC checkout reports hosted field loading failure instead of waiting forever', { skip: process.env.BAC_TEST_CONFIGURED !== 'true' }, async () => {
+  const f = await fixture([{ key: 'bac-card', name: 'Card', type: 'card', active: true, sort_order: 1 }]);
+  await f.page.route('https://secure.nmi.com/**', (route) => route.fulfill({ contentType: 'application/javascript', body:
+    route.request().url().includes('Collect.js')
+      ? `window.CollectJS = { configure() { this.configured = true; }, startPaymentRequest() { throw new Error('Must never submit'); } };`
+      : 'window.Gateway = {};',
+  }));
+  try {
+    await runBookingFlowToPaymentStep(f.page);
+    await f.page.clock.install();
+    await f.page.getByRole('button', { name: /Pay by card/ }).click();
+    await expect.poll(() => f.page.evaluate(() => Boolean(window.CollectJS?.configured))).toBe(true);
+    await f.page.clock.fastForward(20001);
+    const form = f.page.locator('[data-testid="bac-card-checkout"]');
+    await expect(form.getByRole('alert')).toContainText('We could not load the secure BAC fields');
+    await expect(form.getByRole('button')).toHaveCount(0);
+    assert.equal(f.createBookingRequests.length, 1);
+  } finally { await f.browser.close(); }
 });
 
 test('delayed remote catalog never sends static IDs; guest changes and create-booking use remote selection', async () => {

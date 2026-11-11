@@ -98,7 +98,7 @@ for (const name of ['calculate-booking-price', 'get-booking-availability', 'crea
       check(invalid, origin);
       const payload = name === 'calculate-booking-price' ? { tourPackageId: 'package', boatId: 'boat', guests: 1 }
         : name === 'create-review' ? { name: 'Test Customer', quote: 'A wonderful fishing trip.', rating: 5 }
-          : { boatId: 'boat', date: '2026-10-01' };
+          : { boatId: 'boat', tourId: 'tour', tourPackageId: 'package', date: '2026-10-01' };
       const missingSecrets = await handler(request('POST', payload));
       assert.equal(missingSecrets.status, 500);
       check(missingSecrets, origin);

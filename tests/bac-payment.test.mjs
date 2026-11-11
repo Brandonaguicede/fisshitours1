@@ -14,6 +14,7 @@ const migrations = [
   'supabase/migrations/202610280001_bac_card_payments.sql',
   'supabase/migrations/202610290001_bac_basic_methods.sql',
   'supabase/migrations/202610300001_bac_reconciliation.sql',
+  'supabase/migrations/202610310001_bac_security_hardening.sql',
 ].map((file) => fs.readFileSync(file, 'utf8'));
 
 async function createDatabase() {
@@ -36,6 +37,7 @@ async function createDatabase() {
     create table booking_status_history (booking_id uuid, previous_booking_status text, new_booking_status text,
       previous_payment_status text, new_payment_status text, note text);
     create table availability_blocks (booking_id uuid, source text, active boolean);
+    create function public.is_admin() returns boolean language sql stable as $$ select coalesce(current_setting('test.admin', true), '') = 'on' $$;
   `);
   for (const sql of migrations) await db.exec(sql);
   return db;
@@ -242,13 +244,20 @@ test('RPCs are not executable by browser roles', async () => {
 });
 
 function loadGateway(env = {}) {
-  return loadTs('supabase/functions/_shared/bac-gateway.ts', vm.createContext({ URLSearchParams, Deno: { env: { get: (key) => env[key] } } }));
+  return loadTs('supabase/functions/_shared/bac-gateway.ts', vm.createContext({ URLSearchParams, TextEncoder, crypto: globalThis.crypto, Deno: { env: { get: (key) => env[key] } } }));
 }
 
 const validThreeDs = { cavv: 'AAABBEg0VhI0VniQEjRWAAAAAAA=', eci: '05', cardHolderAuth: 'verified', threeDsVersion: '2.2.0', directoryServerId: 'c3f0f4a6-8f1b-4c5e-9b1a-2d3e4f5a6b7c' };
 
 test('3-D Secure data is mandatory and strictly shaped', () => {
   const gateway = loadGateway();
+  // ECI must prove authentication: 00/07 ("not authenticated") and values that contradict cardHolderAuth never pass.
+  for (const eci of ['00', '07', '0', '7', '99', '5x', '']) assert.equal(gateway.validateThreeDSecure({ ...validThreeDs, eci }), null, `eci ${eci}`);
+  assert.equal(gateway.validateThreeDSecure({ ...validThreeDs, eci: '02' }).eci, '02');
+  assert.equal(gateway.validateThreeDSecure({ ...validThreeDs, eci: '5' }).eci, '05', 'single digit is normalised');
+  assert.equal(gateway.validateThreeDSecure({ ...validThreeDs, cardHolderAuth: 'attempted', eci: '06' }).eci, '06');
+  assert.equal(gateway.validateThreeDSecure({ ...validThreeDs, cardHolderAuth: 'attempted', eci: '05' }), null, 'full-auth ECI with attempt flag is contradictory');
+  assert.equal(gateway.validateThreeDSecure({ ...validThreeDs, cardHolderAuth: 'verified', eci: '06' }), null);
   assert.deepEqual(plain(gateway.validateThreeDSecure(validThreeDs)), validThreeDs);
   assert.equal(gateway.validateThreeDSecure({ ...validThreeDs, cavv: '' }), null);
   assert.equal(gateway.validateThreeDSecure({ ...validThreeDs, cardHolderAuth: 'failed' }), null);
@@ -258,7 +267,7 @@ test('3-D Secure data is mandatory and strictly shaped', () => {
 });
 
 test('sale/auth requests carry server amounts and 3DS values; response parsing is fail-closed', () => {
-  const gateway = loadGateway({ BAC_GATEWAY_URL: 'https://gateway.example.com/' });
+  const gateway = loadGateway({ BAC_GATEWAY_URL: 'https://secure.nmi.com/' });
   const saleInput = { type: 'sale', securityKey: 'secret', paymentToken: 'tok_1', amount: '791.00', taxAmount: '91.00', currency: 'USD',
     orderId: 'PFT-1', orderDescription: 'Boat - Half day', attemptId: 'attempt-1', customer: { fullName: 'Ana María Mora', email: 'ana@example.com' },
     ipAddress: '203.0.113.9', threeDSecure: validThreeDs };
@@ -272,7 +281,7 @@ test('sale/auth requests carry server amounts and 3DS values; response parsing i
   assert.equal(body.get('directory_server_id'), validThreeDs.directoryServerId);
   assert.equal(gateway.buildSaleRequest({ ...saleInput, type: 'auth' }).get('type'), 'auth');
   assert.throws(() => gateway.buildSaleRequest({ ...saleInput, type: 'credit' }));
-  assert.equal(gateway.getBacGatewayApiUrl(), 'https://gateway.example.com/api/transact.php');
+  assert.equal(gateway.getBacGatewayApiUrl(), 'https://secure.nmi.com/api/transact.php');
   assert.equal(loadGateway({ BAC_TRANSACTION_TYPE: 'AUTH' }).getBacCheckoutType(), 'auth');
   assert.equal(loadGateway({}).getBacCheckoutType(), 'sale');
 
@@ -318,7 +327,7 @@ test('capture/void/refund requests reference the original transaction with stric
 
 function runEdgeFunction(file, { supabase, env, fetchImpl, extra = {} }) {
   let handler;
-  const context = vm.createContext({ z, Response, Headers, URLSearchParams, AbortController, setTimeout, clearTimeout, crypto: globalThis.crypto, console: { error() {}, log() {} },
+  const context = vm.createContext({ z, Response, Headers, URLSearchParams, TextEncoder, AbortController, setTimeout, clearTimeout, crypto: globalThis.crypto, console: { error() {}, log() {} },
     Deno: { env: { get: (key) => env[key] } }, createClient: () => supabase, serve: (fn) => { handler = fn; }, withCors: (fn) => fn,
     corsHeaders: () => ({}), corsPreflight: () => new Response(null), areExternalProviderMocksAllowed: () => false, fetch: fetchImpl, ...extra });
   loadTs('supabase/functions/_shared/bac-gateway.ts', context);
@@ -327,15 +336,16 @@ function runEdgeFunction(file, { supabase, env, fetchImpl, extra = {} }) {
   return (body, headers = {}) => handler({ method: 'POST', headers: new Headers({ 'x-forwarded-for': '203.0.113.9', ...headers }), json: async () => body });
 }
 
-const gatewayEnv = { SUPABASE_URL: 'test', SUPABASE_SERVICE_ROLE_KEY: 'test', SUPABASE_ANON_KEY: 'anon', BAC_SECURITY_KEY: 'private-key', BAC_GATEWAY_URL: 'https://gateway.example.com' };
+const gatewayEnv = { SUPABASE_URL: 'test', SUPABASE_SERVICE_ROLE_KEY: 'test', SUPABASE_ANON_KEY: 'anon', BAC_SECURITY_KEY: 'private-key', BAC_GATEWAY_URL: 'https://secure.nmi.com', RATE_LIMIT_HASH_SECRET: 'test-rate-secret' };
 
-function loadProcessFunction({ gatewayText, gatewayError, beginError, env = {}, currency = 'USD' } = {}) {
-  const calls = { rpc: [], fetch: [], calendar: 0, emails: 0, notices: [] };
+function loadProcessFunction({ gatewayText, gatewayError, beginError, env = {}, currency = 'USD', rateLimited = false } = {}) {
+  const calls = { rpc: [], rate: [], fetch: [], calendar: 0, emails: 0, notices: [] };
   const booking = { id: '00000000-0000-4000-8000-000000000001', booking_reference: 'PFT-1', currency, customers: { full_name: 'Ana Mora', email: 'ana@example.com' }, boats: { name: 'Second Wind' }, tour_packages: { name: 'Half Day' } };
   const query = { select() { return this; }, eq() { return this; }, single: async () => ({ data: booking, error: null }) };
   const supabase = {
     from: () => query,
     rpc: async (name, args) => {
+      if (name === 'check_bac_payment_rate_limit') { calls.rate.push(args); return { data: !rateLimited, error: null }; }
       calls.rpc.push({ name, args });
       if (name === 'begin_bac_payment_attempt') return beginError ? { data: null, error: beginError } : { data: { attempt_id: 'attempt-1', transaction_type: args.p_transaction_type, booking_reference: 'PFT-1', amount: 791, tax_amount: 91, currency: 'USD' }, error: null };
       const auth = calls.rpc[0].args.p_transaction_type === 'auth';
@@ -362,7 +372,7 @@ test('checkout SALE charges the stored total, confirms, syncs Calendar and queue
   const response = await call(request);
   assert.equal(response.status, 200);
   const sale = calls.fetch[0];
-  assert.equal(sale.url, 'https://gateway.example.com/api/transact.php');
+  assert.equal(sale.url, 'https://secure.nmi.com/api/transact.php');
   assert.equal(sale.body.get('type'), 'sale');
   assert.equal(sale.body.get('amount'), '791.00', 'the browser-supplied amount must be ignored');
   assert.equal(sale.body.get('security_key'), 'private-key');
@@ -420,16 +430,33 @@ test('checkout sends BAC_PROCESSOR_ID and refuses non-USD bookings before any at
   assert.equal(misconfigured.calls.rpc.length + misconfigured.calls.fetch.length, 0);
 });
 
+test('ambiguous gateway answers never unlock a second charge or confirm a booking', async () => {
+  for (const gatewayText of ['', '<html>Unavailable</html>',
+    'response=1&response_code=100&orderid=PFT-1',
+    'response=1&response_code=100&transactionid=TX-1&orderid=OTHER',
+    'response=3&response_code=420', 'response=3&response_code=430']) {
+    const pending = loadProcessFunction({ gatewayText });
+    assert.equal((await pending.call(request)).status, 502, gatewayText);
+    assert.ok(!pending.calls.rpc.some((entry) => entry.name === 'complete_bac_payment_attempt'));
+    assert.equal(pending.calls.emails, 0);
+  }
+});
+
 test('browser config keeps the Collect.js tokenization key and the Gateway.js checkout key apart', () => {
   const { resolveBacConfig } = loadTs('src/utils/bacConfig.ts', vm.createContext({}));
-  const env = { tokenizationKey: '000000-111111-222222-333333', checkoutKey: 'checkout_public_00000000000000000000000000000000', gatewayUrl: 'https://gateway.example.com/' };
+  const env = { tokenizationKey: '000000-111111-222222-333333', checkoutKey: 'checkout_public_00000000000000000000000000000000', gatewayUrl: 'https://secure.nmi.com/' };
   const config = plain(resolveBacConfig(env));
-  assert.deepEqual(config, { tokenizationKey: env.tokenizationKey, checkoutKey: env.checkoutKey, gatewayUrl: 'https://gateway.example.com', isMock: false, configured: true });
+  assert.deepEqual(config, { tokenizationKey: env.tokenizationKey, checkoutKey: env.checkoutKey, gatewayUrl: 'https://secure.nmi.com', isMock: false, configured: true });
   assert.equal(resolveBacConfig({ ...env, tokenizationKey: env.checkoutKey, checkoutKey: env.tokenizationKey }).configured, false, 'swapped keys are rejected');
   assert.equal(resolveBacConfig({ ...env, checkoutKey: '' }).configured, false, '3DS cannot run without the checkout key');
+  assert.equal(resolveBacConfig({ ...env, checkoutKey: 'checkout_public_Ab12Cd3' }).configured, true, 'do not invent a minimum Checkout key length');
   assert.equal(resolveBacConfig({ ...env, tokenizationKey: '' }).configured, false);
-  assert.equal(resolveBacConfig({ ...env, gatewayUrl: 'http://gateway.example.com' }).configured, false);
-  assert.equal(resolveBacConfig({ tokenizationKey: 'mock' }).isMock, true);
+  assert.equal(resolveBacConfig({ ...env, gatewayUrl: 'http://secure.nmi.com' }).configured, false);
+  for (const gatewayUrl of ['https://evil.example.com', 'https://nmi.com.evil.io', 'https://notnmi.com']) {
+    assert.equal(resolveBacConfig({ ...env, gatewayUrl }).configured, false, `${gatewayUrl} must not load payment scripts`);
+  }
+  assert.equal(resolveBacConfig({ tokenizationKey: 'mock' }).configured, false, 'mock must never enable a production checkout');
+  assert.equal(resolveBacConfig({ tokenizationKey: 'mock', allowMock: true }).isMock, true);
 });
 
 // Booking state each approved operation leaves behind (what complete_bac_admin_operation returns).
@@ -566,4 +593,87 @@ test('dashboard revenue subtracts partial card refunds from what was charged', a
   assert.equal(metrics.collectedCents(row), 55370);
   assert.equal(metrics.collectedCents({ ...row, payments: [{ status: 'paid', amount: 100 }] }), 10000);
   assert.equal(metrics.collectedCents({ ...row, payments: [] }), 79100, 'manual payments still use the booking total');
+});
+
+test('the security key is only sent to BAC/NMI gateway hosts', () => {
+  assert.equal(loadGateway({ BAC_GATEWAY_URL: 'https://secure.nmi.com' }).getBacGatewayApiUrl(), 'https://secure.nmi.com/api/transact.php');
+  assert.equal(loadGateway({ BAC_GATEWAY_URL: 'https://credomatic.compassmerchantsolutions.com/' }).getBacGatewayApiUrl(), 'https://credomatic.compassmerchantsolutions.com/api/transact.php');
+  for (const url of ['https://evil.example.com', 'https://nmi.com.evil.io', 'https://notnmi.com', 'https://secure.nmi.com@evil.io', 'https://secure.nmi.com:8443']) {
+    assert.throws(() => loadGateway({ BAC_GATEWAY_URL: url }).getBacGatewayApiUrl(), undefined, url);
+  }
+  assert.equal(loadGateway({ BAC_GATEWAY_URL: 'https://pay.partner.test', BAC_GATEWAY_ALLOWED_HOSTS: 'pay.partner.test' }).getBacGatewayApiUrl(), 'https://pay.partner.test/api/transact.php');
+});
+
+test('client IP prefers the platform header over a spoofable x-forwarded-for, and is hashed for rate limiting', async () => {
+  const gateway = loadGateway({ RATE_LIMIT_HASH_SECRET: 's3cret' });
+  const req = (headers) => ({ headers: new Headers(headers) });
+  assert.equal(gateway.getClientIpAddress(req({ 'cf-connecting-ip': '198.51.100.7', 'x-forwarded-for': '6.6.6.6, 198.51.100.7' })), '198.51.100.7');
+  assert.equal(gateway.getClientIpAddress(req({ 'x-forwarded-for': '203.0.113.9' })), '203.0.113.9');
+  assert.equal(gateway.getClientIpAddress(req({ 'cf-connecting-ip': 'not-an-ip' })), undefined);
+  const hash = await gateway.hashClientIp('198.51.100.7');
+  assert.match(hash, /^[0-9a-f]{64}$/);
+  assert.equal(hash, await gateway.hashClientIp('198.51.100.7'));
+  assert.notEqual(hash, await gateway.hashClientIp('198.51.100.8'));
+  await assert.rejects(() => loadGateway({}).hashClientIp('198.51.100.7'));
+});
+
+test('checkout is rate limited per caller before any attempt row or charge', async () => {
+  const limited = loadProcessFunction({ gatewayText: approvedText, rateLimited: true });
+  assert.equal((await limited.call(request, { 'cf-connecting-ip': '198.51.100.7' })).status, 429);
+  assert.equal(limited.calls.rpc.length + limited.calls.fetch.length, 0);
+  assert.match(limited.calls.rate[0].p_ip_hash, /^[0-9a-f]{64}$/);
+  assert.ok(!JSON.stringify(limited.calls.rate).includes('198.51.100.7'), 'the raw IP is never stored');
+
+  const open = loadProcessFunction({ gatewayText: approvedText });
+  assert.equal((await open.call(request)).status, 200);
+  assert.deepEqual([open.calls.rate[0].p_limit, open.calls.rate[0].p_window_minutes], [10, 15]);
+
+  const noSecret = loadProcessFunction({ gatewayText: approvedText, env: { RATE_LIMIT_HASH_SECRET: '' } });
+  assert.equal((await noSecret.call(request)).status, 503, 'fails closed without the hash secret');
+  assert.equal(noSecret.calls.rpc.length + noSecret.calls.fetch.length, 0);
+});
+
+test('admin errors only surface our own validation texts', async () => {
+  const leaky = loadAdminFunction({ beginError: { code: '23514', message: 'new row for relation "payments" violates check constraint "payments_status_check"' } });
+  const leakyResponse = await leaky.call({ operation: 'void' });
+  assert.equal(leakyResponse.status, 400);
+  assert.ok(!/payments_status_check|relation/.test((await leakyResponse.json()).message));
+  const own = loadAdminFunction({ beginError: { code: '22023', message: 'booking has no card transaction to void' } });
+  assert.equal((await (await own.call({ operation: 'void' })).json()).message, 'booking has no card transaction to void');
+});
+
+test('the rate-limit table and function are server only and count per window', async () => {
+  const db = await createDatabase();
+  try {
+    const row = await one(db, `select has_function_privilege('anon', 'check_bac_payment_rate_limit(text,int,int)', 'execute') as anon,
+      has_function_privilege('authenticated', 'check_bac_payment_rate_limit(text,int,int)', 'execute') as auth,
+      has_function_privilege('service_role', 'check_bac_payment_rate_limit(text,int,int)', 'execute') as service,
+      has_table_privilege('authenticated', 'bac_payment_rate_limits', 'select') as table_auth`);
+    assert.deepEqual(row, { anon: false, auth: false, service: true, table_auth: false });
+    const results = [];
+    for (let i = 0; i < 4; i += 1) results.push((await one(db, `select check_bac_payment_rate_limit('h1', 3, 15) as ok`)).ok);
+    assert.deepEqual(results, [true, true, true, false]);
+    assert.equal((await one(db, `select check_bac_payment_rate_limit('h2', 3, 15) as ok`)).ok, true, 'other callers keep their own budget');
+  } finally { await db.close(); }
+});
+
+test('API roles cannot change a booking money column unless they are admin', async () => {
+  const db = await createDatabase();
+  try {
+    await db.exec(`grant usage on schema public to authenticated; grant select, update on bookings to authenticated;
+      grant execute on function public.is_admin() to authenticated;`);
+    const booking = await insertCardBooking(db);
+    await db.exec('set role authenticated');
+    assert.match((await rpcError(db.query(`update bookings set payment_status = 'paid' where id = $1`, [booking.id]))).message, /only be changed by an administrator/);
+    assert.match((await rpcError(db.query(`update bookings set total_snapshot = 1 where id = $1`, [booking.id]))).message, /administrator/);
+    await db.query(`update bookings set booking_status = 'cancelled' where id = $1`, [booking.id]);
+    await db.exec(`select set_config('test.admin', 'on', false)`);
+    await db.query(`update bookings set payment_status = 'paid' where id = $1`, [booking.id]);
+    await db.exec('reset role');
+    assert.deepEqual(await bookingState(db, booking.id), { payment_status: 'paid', booking_status: 'cancelled' });
+    // Security-definer RPCs (the real payment flow) keep working.
+    const second = await insertCardBooking(db, 'PFT-CARD0002');
+    await checkout(db, second);
+    assert.equal((await bookingState(db, second.id)).payment_status, 'paid');
+  } finally { await db.close(); }
 });

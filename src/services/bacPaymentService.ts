@@ -13,6 +13,8 @@ export interface BacCollectResponse {
 
 interface CollectJsConfig {
   variant: 'inline';
+  styleSniffer?: boolean;
+  focusCss?: Record<string, string>;
   fields: Record<'ccnumber' | 'ccexp' | 'cvv', { selector: string; placeholder?: string; title?: string }>;
   callback: (response: BacCollectResponse) => void;
   validationCallback?: (field: string, valid: boolean, message: string) => void;
@@ -88,6 +90,7 @@ export function getBacConfig() {
     tokenizationKey: import.meta.env.VITE_BAC_TOKENIZATION_KEY,
     checkoutKey: import.meta.env.VITE_BAC_CHECKOUT_KEY,
     gatewayUrl: import.meta.env.VITE_BAC_GATEWAY_URL,
+    allowMock: import.meta.env.DEV,
   });
 }
 
@@ -140,6 +143,13 @@ export async function processBacPayment(bookingId: string, paymentToken: string,
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
     throw new BacPaymentError(data?.message || (getStoredLanguage() === 'es' ? 'No se pudo completar el pago con tarjeta.' : 'The card payment could not be completed.'), response.status);
+  }
+  if (data.bookingId !== bookingId || !data.transactionId
+    || !((data.paymentStatus === 'paid' && data.bookingStatus === 'confirmed')
+      || (data.paymentStatus === 'authorized' && data.bookingStatus === 'pending_confirmation'))) {
+    throw new BacPaymentError(getStoredLanguage() === 'es'
+      ? 'No pudimos confirmar el resultado. No vuelvas a pagar; contáctanos con tu referencia de reserva.'
+      : 'We could not confirm the result. Do not pay again; contact us with your booking reference.', 502);
   }
   return data as BacPaymentResult;
 }

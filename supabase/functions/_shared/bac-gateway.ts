@@ -63,6 +63,8 @@ export interface BacSaleResult {
 
 const AUDIT_FIELDS = ['response', 'responsetext', 'response_code', 'authcode', 'transactionid', 'avsresponse', 'cvvresponse', 'orderid', 'type'];
 
+const ECI_BY_AUTH: Record<'verified' | 'attempted', string[]> = { verified: ['05', '02'], attempted: ['06', '01'] };
+
 const BASE64ISH = /^[A-Za-z0-9+/=_-]{1,128}$/;
 const UUIDISH = /^[A-Za-z0-9-]{1,64}$/;
 
@@ -79,15 +81,18 @@ export function validateThreeDSecure(value: unknown): BacThreeDSecure | null {
   const directoryServerId = text('directoryServerId');
 
   if (!BASE64ISH.test(cavv)) return null;
-  if (!/^\d{1,2}$/.test(eci)) return null;
   if (cardHolderAuth !== 'verified' && cardHolderAuth !== 'attempted') return null;
+  // ECI must prove the cardholder was authenticated (05 Visa/Amex, 02 Mastercard) or that the issuer
+  // acknowledged an attempt (06 / 01). 00 and 07 mean "not authenticated" and must never reach the gateway.
+  const normalizedEci = /^\d$/.test(eci) ? `0${eci}` : eci;
+  if (!ECI_BY_AUTH[cardHolderAuth].includes(normalizedEci)) return null;
   if (!/^2\.\d{1,2}\.\d{1,2}$/.test(threeDsVersion)) return null;
   if (xid && !BASE64ISH.test(xid)) return null;
   if (directoryServerId && !UUIDISH.test(directoryServerId)) return null;
 
   return {
     cavv,
-    eci,
+    eci: normalizedEci,
     cardHolderAuth,
     threeDsVersion,
     ...(xid ? { xid } : {}),
@@ -192,9 +197,19 @@ export async function postGatewayRequest(url: string, body: URLSearchParams, tim
   }
 }
 
+/** The security key is only ever sent to a BAC/NMI gateway host (or one explicitly added in BAC_GATEWAY_ALLOWED_HOSTS). */
+const GATEWAY_HOST_SUFFIXES = ['nmi.com', 'compassmerchantsolutions.com', 'credomatic.com'];
+
+export function isAllowedGatewayHost(host: string, extraHosts: string[] = []): boolean {
+  const name = host.toLowerCase();
+  return GATEWAY_HOST_SUFFIXES.some((suffix) => name === suffix || name.endsWith(`.${suffix}`)) || extraHosts.includes(name);
+}
+
 export function getBacGatewayApiUrl(): string {
   const base = (Deno.env.get('BAC_GATEWAY_URL') ?? '').trim().replace(/\/+$/, '');
   if (!/^https:\/\/[a-z0-9.-]+$/i.test(base)) throw new Error('BAC gateway is not configured');
+  const extraHosts = (Deno.env.get('BAC_GATEWAY_ALLOWED_HOSTS') ?? '').split(',').map((host) => host.trim().toLowerCase()).filter(Boolean);
+  if (!isAllowedGatewayHost(base.slice('https://'.length), extraHosts)) throw new Error('BAC gateway host is not allowed');
   return `${base}/api/transact.php`;
 }
 
@@ -212,10 +227,24 @@ export function getBacProcessorId(): string | undefined {
   return processorId;
 }
 
-/** Returns the caller IP only when it is a well-formed IPv4/IPv6 literal. */
+const isIpLiteral = (value: string) => /^(\d{1,3}\.){3}\d{1,3}$/.test(value) || (/^[0-9a-f:]{2,45}$/i.test(value) && value.includes(':'));
+
+/**
+ * Returns the caller IP only when it is a well-formed IPv4/IPv6 literal. The platform-set cf-connecting-ip wins:
+ * the first x-forwarded-for entry can be written by the client itself, so it is only a fallback.
+ */
 export function getClientIpAddress(req: Request): string | undefined {
-  const candidate = (req.headers.get('x-forwarded-for') ?? '').split(',')[0]?.trim() ?? '';
-  if (/^(\d{1,3}\.){3}\d{1,3}$/.test(candidate)) return candidate;
-  if (/^[0-9a-f:]{2,45}$/i.test(candidate) && candidate.includes(':')) return candidate;
-  return undefined;
+  const cloudflare = (req.headers.get('cf-connecting-ip') ?? '').trim();
+  if (isIpLiteral(cloudflare)) return cloudflare;
+  const forwarded = (req.headers.get('x-forwarded-for') ?? '').split(',')[0]?.trim() ?? '';
+  return isIpLiteral(forwarded) ? forwarded : undefined;
+}
+
+/** HMAC of the caller IP (never the raw IP) used as the rate-limit key. Throws when RATE_LIMIT_HASH_SECRET is missing. */
+export async function hashClientIp(ip: string | undefined): Promise<string> {
+  const secret = Deno.env.get('RATE_LIMIT_HASH_SECRET');
+  if (!secret) throw new Error('Rate limit secret is not configured');
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const signature = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`bac:${ip ?? 'unknown'}`));
+  return Array.from(new Uint8Array(signature)).map((byte) => byte.toString(16).padStart(2, '0')).join('');
 }
