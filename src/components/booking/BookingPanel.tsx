@@ -7,7 +7,7 @@ import { useLanguage } from '../../i18n/LanguageContext';
 import { text, tr } from '../../i18n/translations';
 import { MOCK_TURNSTILE_TOKEN, USE_LOCAL_TURNSTILE_MOCK } from '../../lib/turnstile';
 import { cancelPayPalOrder, capturePayPalOrder, createPayPalOrder, getPayPalErrorMessage, loadPayPalSdk, type PayPalCaptureResult } from '../../services/paypalService';
-import type { BacPaymentResult } from '../../services/bacPaymentService';
+import { getBacConfig, type BacPaymentResult } from '../../services/bacPaymentService';
 import { AvailabilityError, getBookingAvailability, type AvailabilitySlot } from '../../services/availabilityService';
 import { calculateBookingPrice, createBooking, getActiveDepartureLocations, type BookingResult, type DepartureLocation, type PriceResult } from '../../services/bookingService';
 import { getActivePaymentMethods } from '../../services/paymentService';
@@ -61,10 +61,11 @@ const paymentMethods: Array<{ id: BookingPaymentMethod; type: SupportedPaymentTy
 const SPANISH_COPY_BY_TYPE: Record<SupportedPaymentType, { title: string; description: string }> = {
   paypal: { title: 'Pagar con PayPal', description: 'Checkout seguro en USD.' },
   whatsapp_link: { title: 'Solicitar enlace por WhatsApp', description: 'Solicita un enlace de pago.' },
-  card: { title: 'Tarjeta de crédito o débito', description: 'Visa, Mastercard o American Express.' },
+  card: { title: 'Pagar con tarjeta', description: 'Crédito o débito · BAC Credomatic' },
 };
 
 function getPaymentMethodCopy(method: { title: string; description: string; type: SupportedPaymentType }, language: 'es' | 'en') {
+  if (method.type === 'card' && language === 'en') return { ...method, title: 'Pay by card', description: 'Credit or debit · BAC Credomatic' };
   if (language === 'en') return method;
   return { ...method, ...SPANISH_COPY_BY_TYPE[method.type] };
 }
@@ -98,6 +99,7 @@ export function BookingPanel({ selectedBoat, selectedTour: requestedTour, boats,
   const [paypalInfo, setPaypalInfo] = useState('');
   const [paypalSuccess, setPaypalSuccess] = useState<PayPalCaptureResult | null>(null);
   const [cardCheckoutVisible, setCardCheckoutVisible] = useState(false);
+  const [cardBlocked, setCardBlocked] = useState(false);
   const [cardSuccess, setCardSuccess] = useState<BacPaymentResult | null>(null);
   const [successNotice, setSuccessNotice] = useState<{ title: string; message: string; reference?: string; whatsappUrl?: string } | null>(null);
   const [createdBooking, setCreatedBooking] = useState<BookingResult | null>(null);
@@ -154,6 +156,9 @@ export function BookingPanel({ selectedBoat, selectedTour: requestedTour, boats,
     // payment_method_key later — exclude it rather than silently falling
     // back to some other key at submit time (see submitBooking).
     ?.filter((method): method is typeof method & { type: SupportedPaymentType } => Boolean(method.key) && SUPPORTED_PAYMENT_TYPES.includes(method.type as SupportedPaymentType))
+    // Picking a method creates the booking first, so a card row is only offered when the BAC browser keys are
+    // valid; otherwise the customer would hold a slot with a form that can never load.
+    .filter((method) => method.type !== 'card' || getBacConfig().configured)
     .map((method) => ({
       id: method.key as BookingPaymentMethod,
       type: method.type,
@@ -166,7 +171,8 @@ export function BookingPanel({ selectedBoat, selectedTour: requestedTour, boats,
       logo: method.logo_url ?? undefined,
       logoAlt: method.name,
     }));
-  const backendPaymentMethods = remotePaymentMethods?.length ? remotePaymentMethods : paymentMethods;
+  // Never invent enabled methods when the catalog is empty, loading or unavailable.
+  const backendPaymentMethods = remotePaymentMethods ?? [];
   const priceQuery = useQuery({
     queryKey: ['bookingPrice', selectedBoat.id, selectedTour?.tourId, selectedTour?.id, guests, selectedDepartureLocation?.id, selectedTour?.boatTourId],
     queryFn: ({ signal }) => calculateBookingPrice({
@@ -474,15 +480,22 @@ export function BookingPanel({ selectedBoat, selectedTour: requestedTour, boats,
   }
 
   function handleCardSuccess(result: BacPaymentResult) {
+    setCardBlocked(false);
+    // In authorize mode the funds are only held; the charge happens when our team confirms (captures) the booking.
+    const authorized = result.paymentStatus === 'authorized';
     setCardCheckoutVisible(false);
     setCardSuccess(result);
-    setBookingStatus('confirmed');
-    setPaymentStatus('paid');
+    setBookingStatus(authorized ? 'pending_confirmation' : 'confirmed');
+    setPaymentStatus(authorized ? 'authorized' : 'paid');
     setSuccessNotice({
-      title: language === 'es' ? 'Pago completado' : 'Payment completed',
-      message: language === 'es'
-        ? 'Tu pago con tarjeta fue aprobado. En unos momentos recibirás un correo con la confirmación de tu reserva. Muchas gracias por reservar con nosotros.'
-        : 'Your card payment was approved. In a few moments you will receive a confirmation email for your reservation.',
+      title: authorized ? (language === 'es' ? 'Pago autorizado' : 'Payment authorized') : (language === 'es' ? 'Pago completado' : 'Payment completed'),
+      message: authorized
+        ? (language === 'es'
+          ? 'Tu banco autorizó el monto. Lo cobraremos cuando confirmemos tu reserva y te enviaremos la confirmación por correo.'
+          : 'Your bank authorized the amount. We will charge it once we confirm your reservation and email you the confirmation.')
+        : (language === 'es'
+          ? 'Tu pago con tarjeta fue aprobado. En unos momentos recibirás un correo con la confirmación de tu reserva. Muchas gracias por reservar con nosotros.'
+          : 'Your card payment was approved. In a few moments you will receive a confirmation email for your reservation.'),
       reference: result.bookingReference,
     });
   }
@@ -493,7 +506,7 @@ export function BookingPanel({ selectedBoat, selectedTour: requestedTour, boats,
     date,
     selectedTimeSlot,
     guests,
-    selectedPayment: selectedPayment.title,
+    selectedPayment: selectedPayment ? getPaymentMethodCopy(selectedPayment, language).title : (language === 'es' ? 'Por seleccionar' : 'Select a method'),
     paymentStatus,
     mealOption,
     pricing,
@@ -620,6 +633,8 @@ export function BookingPanel({ selectedBoat, selectedTour: requestedTour, boats,
                 onTermsAcceptedChange={(accepted) => { setTermsAccepted(accepted); if (accepted) setTermsError(false); }}
                 onTermsRequired={() => setTermsError(true)}
                 isSubmitting={createBookingMutation.isPending}
+                cardBlocked={cardBlocked}
+                onCardBlockedChange={setCardBlocked}
                 booking={bookingPayload}
                 createdBooking={createdBooking}
                 turnstileToken={turnstileToken}
@@ -696,7 +711,7 @@ export function BookingPanel({ selectedBoat, selectedTour: requestedTour, boats,
             BookingSummary below — no second source of truth, no accordion. */}
         <StepActionBar
           backLabel={tr(text.booking.back, language)}
-          onBack={activeStep > 0 ? () => setActiveStep(activeStep - 1) : undefined}
+          onBack={activeStep > 0 && !cardBlocked ? () => setActiveStep(activeStep - 1) : undefined}
           primaryLabel={activeStep < 3 ? tr(text.booking.continue, language) : undefined}
           primaryDisabled={
             activeStep === 1 ? !canContinueToCustomer
@@ -1187,6 +1202,8 @@ function CustomerStep(props: {
   onTermsAcceptedChange: (accepted: boolean) => void;
   onTermsRequired: () => void;
   isSubmitting: boolean;
+  cardBlocked: boolean;
+  onCardBlockedChange: (blocked: boolean) => void;
   booking: BookingPaymentPayload | null;
   createdBooking: BookingResult | null;
   turnstileToken: string;
@@ -1221,7 +1238,7 @@ function CustomerStep(props: {
   const { language } = useLanguage();
 
   function handlePaymentMethodAction(method: BookingPaymentMethod, type: SupportedPaymentType) {
-    if (props.isSubmitting) return;
+    if (props.isSubmitting || props.cardBlocked || props.cardSuccess) return;
     // Not a real `disabled` (that would swallow the click and the feedback): the method is aria-disabled and answers with an inline message.
     if (!props.termsAccepted) {
       props.onTermsRequired();
@@ -1276,7 +1293,8 @@ function CustomerStep(props: {
 
       {/* Group B: Payment method */}
       <div className="mt-4">
-        <p className="text-xs font-extrabold uppercase tracking-[0.12em] text-ocean-400">{language === 'es' ? 'Método de pago' : 'Payment method'}</p>
+        <h3 className="text-base font-extrabold text-white">{language === 'es' ? 'Selecciona cómo deseas pagar' : 'Choose how to pay'}</h3>
+        {!props.paymentMethods.length ? <p className="mt-2 text-sm text-ocean-100" role="status">{language === 'es' ? 'No hay métodos de pago disponibles en este momento. Inténtalo más tarde o contáctanos.' : 'No payment methods are available right now. Please try later or contact us.'}</p> : null}
         {/* Columns follow the number of methods actually rendered (never a fixed empty third column). Classes are spelled out so Tailwind keeps them. */}
         <div className={cn('mt-2.5 grid grid-cols-1 gap-2', props.paymentMethods.length <= 1 ? 'sm:grid-cols-1' : props.paymentMethods.length === 2 ? 'sm:grid-cols-2' : 'sm:grid-cols-2 lg:grid-cols-3')} data-payment-methods-grid>
           {props.paymentMethods.map((method) => {
@@ -1289,17 +1307,19 @@ function CustomerStep(props: {
                 shape="rounded"
                 className={cn('relative flex min-w-0 flex-col justify-center gap-1 p-3 text-left', !props.termsAccepted && 'opacity-60')}
                 aria-disabled={!props.termsAccepted || undefined}
-                disabled={props.isSubmitting}
+                disabled={props.isSubmitting || props.cardBlocked || Boolean(props.cardSuccess)}
                 selected={selected}
+                aria-pressed={selected}
                 onClick={() => handlePaymentMethodAction(method.id, method.type)}
               >
                 <span className="flex items-center gap-2">
                   <span className={cn('grid size-4 shrink-0 place-items-center rounded-full border', selected ? 'border-ocean-100 bg-ocean-100' : 'border-white/25')}>
                     {selected ? <span className="size-1.5 rounded-full bg-ocean-950" /> : null}
                   </span>
-                  <span className="truncate text-[0.8rem] font-extrabold leading-tight text-white sm:text-sm">{methodCopy.title}</span>
+                  <method.icon size={18} aria-hidden="true" className="shrink-0 text-ocean-100" />
+                  <span className="min-w-0 text-[0.8rem] font-extrabold leading-tight text-white sm:text-sm">{methodCopy.title}</span>
                 </span>
-                <span className="truncate pl-6 text-[0.7rem] leading-4 text-ocean-200">{methodCopy.description}</span>
+                <span className="pl-6 text-xs leading-5 text-ocean-100">{methodCopy.description}</span>
               </ChoiceCard>
             );
           })}
@@ -1322,15 +1342,23 @@ function CustomerStep(props: {
           customerPhone={props.customerWhatsapp}
           language={language}
           onSuccess={props.onCardSuccess}
+          onBlockedChange={props.onCardBlockedChange}
         />
       ) : null}
 
       {props.cardSuccess && props.booking ? (
         <div className="mt-4 rounded-2xl border border-seafoam-400/30 bg-seafoam-500/10 p-4 text-ocean-50" role="status">
-          <p className="text-lg font-extrabold">{language === 'es' ? 'Pago exitoso' : 'Payment Successful'}</p>
+          <p className="text-lg font-extrabold">
+            {props.cardSuccess.paymentStatus === 'authorized'
+              ? (language === 'es' ? 'Pago autorizado' : 'Payment Authorized')
+              : (language === 'es' ? 'Pago exitoso' : 'Payment Successful')}
+          </p>
           <div className="mt-3 grid gap-2 text-sm">
             <SummaryLine label={language === 'es' ? 'Referencia de reserva' : 'Booking reference'} value={props.cardSuccess.bookingReference} />
-            <SummaryLine label={language === 'es' ? 'Monto pagado' : 'Amount paid'} value={`${props.cardSuccess.amount} ${props.cardSuccess.currency}`} />
+            <SummaryLine
+              label={props.cardSuccess.paymentStatus === 'authorized' ? (language === 'es' ? 'Monto autorizado' : 'Amount authorized') : (language === 'es' ? 'Monto pagado' : 'Amount paid')}
+              value={`${props.cardSuccess.amount} ${props.cardSuccess.currency}`}
+            />
             <SummaryLine label={language === 'es' ? 'Referencia de transacción' : 'Transaction reference'} value={props.cardSuccess.transactionId} />
             <SummaryLine label={language === 'es' ? 'Información del tour' : 'Tour information'} value={`${getTourText(props.booking.tour, language).title} - ${props.booking.packageLabel}`} />
           </div>

@@ -150,6 +150,8 @@ function loadService(options) {
   const { supabase, writes } = fakeSupabase(options);
   const context = vm.createContext({ Number, Array, Error, Object, String, Math, JSON, Promise, Date, supabase });
   loadTs('src/utils/packageRequirements.ts', context);
+  // adminBoatToursService calls demoteUnsellablePublishedTours after a save (imports are stripped, so it is loaded first).
+  loadTs('src/services/tourPublicationService.ts', context);
   loadTs('src/services/adminBoatToursService.ts', context);
   return { context, writes, call: (name, ...args) => vm.runInContext(name, context)(...args) };
 }

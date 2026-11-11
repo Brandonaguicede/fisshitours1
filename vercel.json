@@ -1,5 +1,15 @@
 {
   "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "Content-Security-Policy", "value": "default-src 'self'; script-src 'self' 'sha256-642WGxH6x870Bt82XM3bbq4GoHF4eq6GCdw5nP7gu34=' https://challenges.cloudflare.com https://*.nmi.com https://*.paypal.com https://*.paypalobjects.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src 'self' blob: https:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://challenges.cloudflare.com https://*.nmi.com https://*.paypal.com; frame-src https:; frame-ancestors 'none'; object-src 'none'; base-uri 'self'" },
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
+        { "key": "Strict-Transport-Security", "value": "max-age=31536000; includeSubDomains" },
+        { "key": "Permissions-Policy", "value": "camera=(), microphone=(), geolocation=()" }
+      ]
+    },
     { "source": "/videos/hero-papagayo-desktop-v2.mp4", "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }] },
     { "source": "/videos/hero-papagayo-mobile-v2.mp4", "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }] },
     { "source": "/images/hero-papagayo-poster-v2.webp", "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }] },

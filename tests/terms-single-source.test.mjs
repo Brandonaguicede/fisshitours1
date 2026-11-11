@@ -33,9 +33,12 @@ test('the legacy paraphrased policy list is gone: no getBookingTerms anywhere in
 test('no contractual wording (penalties, refunds, deposits, rescheduling, weather rules, no-show) outside terms.mjs', () => {
   // Status codes such as `refunded` / "Reembolsado" are not policy text, hence the word boundaries.
   const contractual = /\bpenalty\b|penalidad|penalizaci[oó]n|hurricane|huracane|reschedul|reprogram|\bdeposit\b|dep[oó]sito del|\bno[- ]show\b|\brefund\b|reembolso\b|derecho a reembolso|cancelaci[oó]n(es)? (dentro|sin|con|al menos)|cancellations? (within|at least|before|with)/i;
+  // `'refund'` as a quoted identifier is the card gateway's operation name (NMI Payment API `type=refund`, payments.transaction_type),
+  // not policy text: only that exact literal is exempt, so any refund *wording* is still caught.
+  const gatewayOperationLiteral = /(['"])refund\1/g;
   const offenders = [];
   for (const file of files) {
-    const code = stripComments(fs.readFileSync(file, 'utf8'));
+    const code = stripComments(fs.readFileSync(file, 'utf8')).replace(gatewayOperationLiteral, "''");
     const hit = contractual.exec(code);
     if (hit) offenders.push(`${file}: "${hit[0]}"`);
   }

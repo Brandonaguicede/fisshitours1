@@ -443,6 +443,10 @@ verify_jwt = false
 [functions.sync-reservation-calendar]
 verify_jwt = false
 
+# Validates the bearer token and requires an active `admin` profile (capture / void / refund move money).
+[functions.admin-bac-transaction]
+verify_jwt = false
+
 [analytics]
 enabled = false
 port = 54327

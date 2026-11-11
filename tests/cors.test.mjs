@@ -52,7 +52,7 @@ test('every Edge Function entrypoint returns allowed-origin preflight', async ()
   for (const name of names) {
     let handler;
     context.serve = (value) => { handler = value; };
-    const source = fs.readFileSync(`supabase/functions/${name}/index.ts`, 'utf8').replace(/^import .*;\r?\n/gm, '');
+    const source = fs.readFileSync(`supabase/functions/${name}/index.ts`, 'utf8').replace(/^import [\s\S]*?;\r?\n/gm, '');
     vm.runInContext(`{ ${ts.transpile(source, { target: ts.ScriptTarget.ES2022 })} }`, context);
     for (const origin of origins.slice(0, 2)) {
       const response = await handler(new Request('https://edge.example', { method: 'OPTIONS', headers: { origin } }));
@@ -86,7 +86,7 @@ for (const name of ['calculate-booking-price', 'get-booking-availability', 'crea
     context.serve = (value) => { handler = value; };
     context.createClient = () => { throw Error('simulated client failure'); };
     // Isolate each function's schema while using the real shared CORS helper.
-    const source = fs.readFileSync(`supabase/functions/${name}/index.ts`, 'utf8').replace(/^import .*;\r?\n/gm, '');
+    const source = fs.readFileSync(`supabase/functions/${name}/index.ts`, 'utf8').replace(/^import [\s\S]*?;\r?\n/gm, '');
     vm.runInContext(`{ ${ts.transpile(source, { target: ts.ScriptTarget.ES2022 })} }`, context);
     for (const origin of origins.slice(0, 2)) {
       const request = (method, body) => new Request('https://edge.example', { method, headers: { origin, 'content-type': 'application/json' }, ...(body ? { body: JSON.stringify(body) } : {}) });
@@ -98,7 +98,7 @@ for (const name of ['calculate-booking-price', 'get-booking-availability', 'crea
       check(invalid, origin);
       const payload = name === 'calculate-booking-price' ? { tourPackageId: 'package', boatId: 'boat', guests: 1 }
         : name === 'create-review' ? { name: 'Test Customer', quote: 'A wonderful fishing trip.', rating: 5 }
-          : { boatId: 'boat', date: '2026-10-01' };
+          : { boatId: 'boat', tourId: 'tour', tourPackageId: 'package', date: '2026-10-01' };
       const missingSecrets = await handler(request('POST', payload));
       assert.equal(missingSecrets.status, 500);
       check(missingSecrets, origin);

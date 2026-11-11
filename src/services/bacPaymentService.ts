@@ -1,5 +1,6 @@
 import { functionsUrl, supabase } from '../lib/supabase';
 import { getStoredLanguage } from '../i18n/LanguageContext';
+import { resolveBacConfig } from '../utils/bacConfig';
 
 // Card data is entered in iframes served by the BAC gateway (Collect.js) and
 // authenticated with 3-D Secure (Gateway.js). This app only ever receives a
@@ -12,6 +13,8 @@ export interface BacCollectResponse {
 
 interface CollectJsConfig {
   variant: 'inline';
+  styleSniffer?: boolean;
+  focusCss?: Record<string, string>;
   fields: Record<'ccnumber' | 'ccexp' | 'cvv', { selector: string; placeholder?: string; title?: string }>;
   callback: (response: BacCollectResponse) => void;
   validationCallback?: (field: string, valid: boolean, message: string) => void;
@@ -52,7 +55,7 @@ declare global {
   interface Window {
     CollectJS?: { configure: (config: CollectJsConfig) => void; startPaymentRequest: () => void };
     Gateway?: {
-      create: (publicKey: string) => {
+      create: (checkoutKey: string) => {
         get3DSecure: () => { createUI: (options: BacThreeDSecureOptions) => ThreeDSecureInterface };
         on: (event: 'error', handler: (event: unknown) => void) => void;
       };
@@ -83,11 +86,12 @@ export class BacPaymentError extends Error {
 }
 
 export function getBacConfig() {
-  const publicKey = import.meta.env.VITE_BAC_PUBLIC_KEY?.trim() ?? '';
-  const gatewayUrl = (import.meta.env.VITE_BAC_GATEWAY_URL?.trim() ?? '').replace(/\/+$/, '');
-  const isMock = publicKey === 'mock';
-  const configured = isMock || (Boolean(publicKey) && /^https:\/\/[a-z0-9.-]+$/i.test(gatewayUrl));
-  return { publicKey, gatewayUrl, isMock, configured };
+  return resolveBacConfig({
+    tokenizationKey: import.meta.env.VITE_BAC_TOKENIZATION_KEY,
+    checkoutKey: import.meta.env.VITE_BAC_CHECKOUT_KEY,
+    gatewayUrl: import.meta.env.VITE_BAC_GATEWAY_URL,
+    allowMock: import.meta.env.DEV,
+  });
 }
 
 const scriptPromises = new Map<string, Promise<void>>();
@@ -114,9 +118,9 @@ function loadScript(src: string, attributes: Record<string, string> = {}) {
 
 /** Scripts must come from the gateway itself (never self-hosted), per BAC/NMI requirements. */
 export async function loadBacScripts() {
-  const { publicKey, gatewayUrl } = getBacConfig();
+  const { tokenizationKey, gatewayUrl } = getBacConfig();
   await Promise.all([
-    loadScript(`${gatewayUrl}/token/Collect.js`, { 'data-tokenization-key': publicKey, 'data-variant': 'inline' }),
+    loadScript(`${gatewayUrl}/token/Collect.js`, { 'data-tokenization-key': tokenizationKey, 'data-variant': 'inline' }),
     loadScript(`${gatewayUrl}/js/v1/Gateway.js`),
   ]);
   if (!window.CollectJS || !window.Gateway) throw new Error(getStoredLanguage() === 'es' ? 'El formulario de pago no está disponible.' : 'The payment form is not available.');
@@ -139,6 +143,13 @@ export async function processBacPayment(bookingId: string, paymentToken: string,
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
     throw new BacPaymentError(data?.message || (getStoredLanguage() === 'es' ? 'No se pudo completar el pago con tarjeta.' : 'The card payment could not be completed.'), response.status);
+  }
+  if (data.bookingId !== bookingId || !data.transactionId
+    || !((data.paymentStatus === 'paid' && data.bookingStatus === 'confirmed')
+      || (data.paymentStatus === 'authorized' && data.bookingStatus === 'pending_confirmation'))) {
+    throw new BacPaymentError(getStoredLanguage() === 'es'
+      ? 'No pudimos confirmar el resultado. No vuelvas a pagar; contáctanos con tu referencia de reserva.'
+      : 'We could not confirm the result. Do not pay again; contact us with your booking reference.', 502);
   }
   return data as BacPaymentResult;
 }

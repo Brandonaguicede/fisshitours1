@@ -9,9 +9,11 @@ export type BookingPaymentMethod = 'paypal' | 'whatsapp-link' | 'bac-card';
 export type PaymentStatus =
   | 'pending'
   | 'processing'
+  | 'authorized'
   | 'paid'
   | 'failed'
-  | 'refunded';
+  | 'refunded'
+  | 'voided';
 
 export type BookingStatus =
   | 'pending'

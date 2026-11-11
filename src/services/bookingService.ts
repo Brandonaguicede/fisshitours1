@@ -147,6 +147,43 @@ export function confirmBooking(bookingId: string) {
   return callFunction<AdminConfirmBookingResult>('admin-confirm-booking', { bookingId });
 }
 
+export type BacAdminOperation = 'capture' | 'void' | 'refund';
+
+export interface BacAdminOperationResult {
+  booking_id: string;
+  booking_reference: string;
+  operation: BacAdminOperation;
+  approved: boolean;
+  amount: number;
+  payment_status: string;
+  booking_status: string;
+  transaction_id: string | null;
+}
+
+/** BAC card capture / void / refund (admin role only). The server resolves the original transaction and every limit. */
+export function runBacAdminOperation(bookingId: string, operation: BacAdminOperation, amount?: number) {
+  return callFunction<BacAdminOperationResult>('admin-bac-transaction', { bookingId, operation, ...(amount !== undefined ? { amount } : {}) });
+}
+
+export interface BacReconciliationResult {
+  booking_id: string;
+  booking_reference: string;
+  reconciled: 'sale' | 'auth' | BacAdminOperation;
+  approved: boolean;
+  payment_status: string;
+  booking_status: string;
+}
+
+/** Records the real outcome (checked in the BAC portal) of a card operation whose gateway answer was lost. Admin role only. */
+export function reconcileBacOperation(bookingId: string, approved: boolean, transactionId?: string) {
+  return callFunction<BacReconciliationResult>('admin-bac-transaction', {
+    bookingId,
+    operation: 'reconcile',
+    approved,
+    ...(transactionId ? { transactionId } : {}),
+  });
+}
+
 export interface AdminCancelBookingResult {
   booking_id: string;
   booking_status: 'cancelled';

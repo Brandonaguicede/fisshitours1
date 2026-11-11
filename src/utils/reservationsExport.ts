@@ -59,8 +59,10 @@ export const PAYMENT_STATUS_LABELS: Record<string, string> = {
   paid: 'Pagado',
   pending: 'Pendiente',
   processing: 'Procesando',
+  authorized: 'Autorizado',
   failed: 'Fallido',
   refunded: 'Reembolsado',
+  voided: 'Anulado',
 };
 
 /** Singular wording for a single reservation (exports); the filter dropdown keeps its own plural options. */

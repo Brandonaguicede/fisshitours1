@@ -1,92 +1,210 @@
 # Pago con tarjeta BAC Credomatic
 
+## Configuración local actualizada — 2026-11-10
+
+El correo de BAC confirma Gateway.js, Payer Authentication 3DS y Payment API clásica, con el procesador `70608880` para contado en USD. La aclaración posterior del responsable indica que las credenciales entregadas son productivas y que la certificación requiere una transacción por marca (Visa, Mastercard y American Express), por USD 1 cada una.
+
+Por autorización del usuario, `.env.local` y `.env.bac.local` apuntan ahora a `https://secure.nmi.com`. Se conserva `BAC_TRANSACTION_TYPE=sale` y el procesador indicado. Las claves existentes se conservan en archivos ignorados por Git. La comprobación local valida presencia, formato, separación de claves y coincidencia de dominios; no autentica las claves contra BAC.
+
+Tras autenticar las CLI con las cuentas autorizadas, se actualizaron los cuatro secretos BAC del proyecto Supabase vinculado y las tres variables públicas `VITE_BAC_TOKENIZATION_KEY`, `VITE_BAC_CHECKOUT_KEY` y `VITE_BAC_GATEWAY_URL` de Vercel en Development, Preview y Production. No se activó `bac-card` ni se realizaron transacciones. Las variables de Production requieren un nuevo despliegue para aplicarse al sitio público; no se publicó en producción. Antes de probar, hay que verificar el estado del método. El total enviado sigue siendo el total de la reserva: no existe un límite automático de USD 1. Preparar y revisar ese importe final antes de autorizar cualquier cargo real.
+
+Los apartados históricos que solicitan nuevas credenciales sandbox describen la premisa anterior, sustituida por la aclaración del responsable. La validación real de CHECKOUT/3DS y de la clave privada continúa pendiente. PayPal no se modifica.
+
+## Estado comprobado el 2026-10-29
+
+Las tres migraciones y las seis funciones necesarias ya se publicaron en Supabase. Las variables locales pasan la comprobación de formato y separación de claves.
+
+La prueba real encontró que Token responde `User not found` en sandbox.nmi.com, mientras que secure.nmi.com crea los tres campos y devuelve `testMode: false`. Por ello BAC quedó **inactivo**, sin cambiar el gateway configurado a secure ni enviar pagos. Antes de activarlo de nuevo se requiere Test Mode habilitado o credenciales sandbox válidas. Ver [resultados y alcance de las pruebas](bac-test-results-2026-10-29.md).
+
 Integración basada en los pasos que indicó BAC (plataforma NMI):
 
 1. **Gateway.js / Collect.js** (navegador): la tarjeta se escribe en iframes del gateway y se convierte en un `payment_token` de un solo uso.
 2. **Payer Authentication 3DS** (navegador): Gateway.js autentica ese token con el banco emisor y devuelve `cavv`, `eci`, `cardHolderAuth`, `threeDsVersion`, `directoryServerId` y, a veces, `xid`.
-3. **Process** (servidor): la Edge Function `bac-process-payment` ejecuta la venta (`type=sale`) en la Payment API con la llave **privada**.
+3. **Process** (servidor): la Payment API se llama solo desde Edge Functions, con la llave **privada**.
+4. **Métodos básicos** que BAC certifica, todos implementados:
 
-## Flujo
+| Método NMI | Dónde se usa | Quién lo ejecuta |
+|---|---|---|
+| Credit Card - Sale (`sale`) | Checkout del cliente, modo por defecto | `bac-process-payment` |
+| Credit Card - Authorize (`auth`) | Checkout del cliente con `BAC_TRANSACTION_TYPE=auth` | `bac-process-payment` |
+| Credit Card - Capture (`capture`) | Botón **Capturar** en Admin > Reservas | `admin-bac-transaction` |
+| Void Transaction (`void`) | Botón **Anular** en Admin > Reservas | `admin-bac-transaction` |
+| Refund Transaction (`refund`) | Botón **Reembolsar** en Admin > Reservas, total o parcial | `admin-bac-transaction` |
 
+## Flujos
+
+**Venta (por defecto):**
 ```
 Cliente elige "Tarjeta" -> create-booking (pending_payment, retención 30 min)
-  -> Collect.js tokeniza -> Gateway.js 3DS (posible desafío del banco)
-  -> bac-process-payment { bookingId, paymentToken, threeDSecure }
-       begin_bac_payment_attempt   (bloquea la reserva, máx. 3 intentos)
-       POST /api/transact.php      (monto y orderid leídos de la reserva)
-       complete_bac_payment_attempt (pagado+confirmado o vuelve a pendiente)
-  -> correo de confirmación en cola
+  -> Collect.js tokeniza -> Gateway.js 3DS -> bac-process-payment (type=sale)
+  -> pagada + confirmada -> Google Calendar + correo de confirmación
 ```
+
+**Autorización y captura (`BAC_TRANSACTION_TYPE=auth`):**
+```
+... -> bac-process-payment (type=auth) -> pago "Autorizado", reserva "Por confirmar"
+  -> Admin: Capturar -> pagada + confirmada -> Google Calendar + correo
+  -> o Admin: Anular -> fondos liberados, reserva cancelada, horario libre
+```
+
+**Después de cobrar:**
+- **Anular:** solo funciona antes de la liquidación diaria de BAC. Cancela la reserva y libera el horario.
+- **Reembolsar:** sirve después de la liquidación. Permite montos parciales que se acumulan hasta lo cobrado. La reserva no se cancela sola.
+
+## Reglas de cada operación
+
+| Operación | Requiere | Resultado |
+|---|---|---|
+| Capturar | Pago "Autorizado" | Monto autorizado completo, reserva confirmada |
+| Anular | Pago "Autorizado" o "Pagado" sin reembolsos | Pago "Anulado", reserva cancelada |
+| Reembolsar | Pago "Pagado" | Monto entre 0.01 y lo cobrado menos lo ya reembolsado |
+
+- **Captura parcial:** no se permite. NMI la acepta, pero dejaría el total de la reserva distinto de lo cobrado.
+- **Cancelar una reserva autorizada:** el panel lo bloquea. Hay que anular primero para no dejar el dinero retenido en la tarjeta.
+- **Monto 0.00 en reembolso:** NMI lo interpreta como reembolso total, así que el servidor lo rechaza.
 
 ## Seguridad
 
 - **Datos de tarjeta:** nunca pasan por este proyecto. Solo viaja un token de un solo uso.
-- **Monto:** siempre sale de `bookings.total_snapshot`. El navegador no puede elegirlo.
-- **3-D Secure obligatorio:** el servidor rechaza pagos sin `cavv` válido y `cardholder_auth` en `verified` o `attempted`.
-- **`cardHolderInfo`:** se muestra al cliente y nunca se envía a la Payment API, como pide NMI.
-- **Doble cobro:** un índice único y el bloqueo de fila impiden dos ventas simultáneas para la misma reserva.
-- **Resultado desconocido:** ante timeout o error de red, el intento queda en `processing`. No se reintenta ni se cancela solo.
-- **Pruebas de tarjetas robadas:** máximo 3 intentos por reserva, más el límite de reservas por IP ya existente. Los rechazos devuelven un mensaje genérico.
-- **Permisos:** las funciones SQL solo las puede ejecutar `service_role`. Se revocan para `anon` y `authenticated`.
-- **Auditoría:** `payments.raw_response` guarda solo campos de una lista blanca. Nunca guarda token ni llave.
-- **Confirmación manual:** el panel y `admin-confirm-booking` no permiten confirmar una reserva con tarjeta sin pago aprobado.
+- **Montos:** siempre salen de la base. El navegador no elige el monto de venta ni de captura. El de reembolso se valida contra el saldo.
+- **Transacción original:** captura, anulación y reembolso toman el `transactionid` del registro en `payments`, nunca del navegador.
+- **3-D Secure obligatorio:** el servidor rechaza ventas y autorizaciones sin `cavv` válido y `cardholder_auth` en `verified` o `attempted`.
+- **Una operación a la vez:** cada llamada al gateway es una fila `processing` en `payments`. Un índice único y el bloqueo de fila impiden dos llamadas simultáneas por reserva.
+- **Resultado desconocido:** ante timeout o error de red, la fila queda en `processing` y bloquea nuevas operaciones hasta conciliarla. Nunca se reintenta sola.
+- **Pruebas de tarjetas robadas:** máximo 3 intentos de pago por reserva y mensajes de rechazo genéricos al cliente.
+- **Permisos:** capturar, anular y reembolsar exige un perfil `admin` activo. Los editores no ven esos botones y el servidor responde 403.
+- **Funciones SQL:** solo las ejecuta `service_role`. Se revocan para `anon` y `authenticated`.
+- **Auditoría:** cada operación guarda quién la hizo, en `raw_response.actor` y en el historial de la reserva. Solo se guardan campos de una lista blanca, nunca el token ni la llave.
 
 ## Configuración
 
 Secretos de Supabase (servidor), nunca en el frontend ni en git:
 
 ```
-supabase secrets set BAC_SECURITY_KEY=<llave privada del portal BAC>
-supabase secrets set BAC_GATEWAY_URL=https://<dominio del gateway que indique BAC>
+npx supabase secrets set BAC_SECURITY_KEY=<llave privada> BAC_GATEWAY_URL=https://<dominio del gateway>
+npx supabase secrets set BAC_TRANSACTION_TYPE=sale   # o auth para autorizar y capturar después
+npx supabase secrets set BAC_PROCESSOR_ID=70608880
 ```
 
 Variables de Vercel (frontend, son públicas por diseño):
 
 ```
-VITE_BAC_PUBLIC_KEY=<llave pública con permiso Checkout / tokenización>
+VITE_BAC_TOKENIZATION_KEY=<llave "Token" de BAC>
+VITE_BAC_CHECKOUT_KEY=<llave "CHECKOUT" de BAC, empieza con checkout_public_>
 VITE_BAC_GATEWAY_URL=https://<mismo dominio del gateway>
 ```
 
-`VITE_BAC_PUBLIC_KEY=mock` activa un modo simulado que solo funciona con `MOCK_EXTERNAL_PROVIDERS=true` en Supabase local.
+BAC entrega tres credenciales y cada una tiene un solo uso:
+
+| Credencial de BAC | Variable | Dónde se usa |
+|---|---|---|
+| Private Security Key | `BAC_SECURITY_KEY` (Supabase) | Payment API: sale, auth, capture, void y refund |
+| Token | `VITE_BAC_TOKENIZATION_KEY` (Vercel) | `data-tokenization-key` de Collect.js |
+| CHECKOUT (`checkout_public_…`) | `VITE_BAC_CHECKOUT_KEY` (Vercel) | `Gateway.create()` de Gateway.js, para 3-D Secure |
+
+- **Dominio:** solo el dominio con `https://` y sin `/` al final. El código agrega `/token/Collect.js`, `/js/v1/Gateway.js` y `/api/transact.php`.
+- **Llaves cruzadas:** si falta una de las dos llaves públicas o vienen intercambiadas, el método se muestra como no disponible en lugar de fallar a mitad del pago.
+- **Processor ID:** según la Payment API de NMI, `processor_id` enruta la transacción al procesador (MID) indicado y solo existe en sale y auth. Capture, void y refund no lo llevan porque se ejecutan sobre la transacción original, que ya tiene su procesador. Si `BAC_PROCESSOR_ID` tiene un formato inválido, la función responde 503 y no cobra.
+- **Moneda:** la cuenta de BAC es solo en USD (contado). Una reserva en otra moneda se rechaza con 422 antes de abrir el intento, así que no queda ninguna fila "processing". El formulario de tarjeta tampoco se muestra.
+- **Modo simulado:** `VITE_BAC_TOKENIZATION_KEY=mock` solo funciona con `MOCK_EXTERNAL_PROVIDERS=true` en Supabase local.
 
 ## Puesta en marcha
 
-1. Aplicar la migración `202610280001_bac_card_payments.sql`.
-2. Desplegar `bac-process-payment`, `create-booking`, `get-booking-availability` y `admin-confirm-booking`.
-3. Configurar secretos y variables con las llaves **sandbox** de BAC.
+1. Aplicar las migraciones `202610280001_bac_card_payments.sql`, `202610290001_bac_basic_methods.sql` y `202610300001_bac_reconciliation.sql`.
+2. Desplegar estas funciones:
+```
+npx supabase functions deploy bac-process-payment admin-bac-transaction create-booking get-booking-availability admin-confirm-booking admin-cancel-booking
+```
+3. Configurar secretos y variables con las llaves **sandbox** de BAC, y volver a desplegar en Vercel.
 4. Activar "Credit or debit card" en Admin > Métodos de pago.
 5. Hacer las pruebas de certificación y enviarlas a BAC.
 6. Cambiar a llaves de producción solo después del visto bueno de BAC.
 
-## Pruebas de certificación que pide BAC
+## Pruebas de certificación
 
-Hacer al menos una venta aprobada y una rechazada con cada marca, usando las tarjetas de prueba que entregue BAC:
+Cada operación con cada marca, usando las tarjetas de prueba de BAC. Anotar la referencia de reserva y el `transactionid`.
 
-| Marca | Aprobada | Rechazada | Con desafío 3DS |
+| Operación | Visa | Mastercard | American Express |
 |---|---|---|---|
-| Visa | | | |
-| Mastercard | | | |
-| American Express | | | |
+| Sale aprobada | | | |
+| Sale rechazada | | | |
+| Sale con desafío 3DS | | | |
+| Authorize (`BAC_TRANSACTION_TYPE=auth`) | | | |
+| Capture de esa autorización | | | |
+| Void de una autorización | | | |
+| Void de una venta del día | | | |
+| Refund total | | | |
+| Refund parcial | | | |
 
-Anotar en cada fila la referencia de reserva y el `transactionid` del gateway.
+Para probar autorizaciones, cambiar `BAC_TRANSACTION_TYPE=auth`, hacer esas filas y volver a `sale` si el negocio prefiere cobrar de inmediato.
 
-## Conciliación de pagos en `processing`
+## Avisos
 
-Si una reserva queda con pago `processing` por más de unos minutos:
+- **Venta aprobada o captura:** el cliente recibe el correo de confirmación y la reserva se agenda en Google Calendar.
+- **Autorización aprobada:** el admin recibe un aviso interno, "Pago con tarjeta autorizado, pendiente de captura". El cliente ve el resultado en pantalla y recibe su confirmación cuando se captura, igual que en el resto de métodos.
+- **Anulación:** el evento de Google Calendar se elimina.
+- **Reembolso:** no se reenvía nada.
+
+## Conciliación de operaciones en `processing`
+
+Si BAC no responde, la operación queda en "Procesando" y bloquea nuevas operaciones de esa reserva. Para resolverla:
 
 1. Buscar la referencia de reserva en el portal BAC. El campo `orderid` es esa referencia.
-2. Buscar el intento con `select id from payments where provider = 'bac' and status = 'processing' and booking_id = '<id>'`.
-3. Registrar el resultado real desde el SQL Editor de Supabase. Usar `true` si la venta aparece aprobada y `false` si no aparece:
+2. En Admin > Reservas, usar **Conciliar** en esa reserva. El botón aparece cuando el pago está "Procesando" o cuando una operación responde que hay otra pendiente.
+3. Elegir lo que muestra el portal:
+   - **Aprobada:** escribir el Transaction ID de BAC.
+   - **No aparece o fue rechazada:** no se escribe nada más.
 
-```sql
-select complete_bac_payment_attempt('<id del intento>', true, '<transactionid>', <total>, 'USD', 'Conciliado manualmente', '{"source":"manual-reconciliation"}');
-```
+**Reglas de la conciliación:**
+- **Espera mínima:** se rechaza si la operación tiene menos de 2 minutos, porque podría seguir en curso.
+- **Mismas reglas:** usa las mismas funciones que el flujo automático, con monto, estados y liberación del horario.
+- **Auditoría:** queda registrado quién concilió, en `raw_response.actor` y en el historial de la reserva.
 
-Todavía no existe una pantalla de admin para esto.
+## Antes de activar el método en producción
+
+- **Turnstile:** hoy `DISABLE_TURNSTILE=true` en los secretos de producción, así que la verificación antibots de `create-booking` está apagada. Con tarjetas activas, la única defensa contra pruebas de tarjetas robadas sería el límite por IP y los 3 intentos por reserva. Hay que configurar Turnstile con `VITE_TURNSTILE_SITE_KEY` en Vercel y `TURNSTILE_SECRET_KEY` en Supabase. Después hay que pasar `DISABLE_TURNSTILE` a `false` en Supabase y confirmar que `VITE_DISABLE_TURNSTILE` no sea `true` en Vercel.
+- **Base de datos de pruebas:** solo hay un proyecto de Supabase. Para no probar sobre datos reales conviene crear un proyecto de pruebas y apuntar ahí las vistas previas de Vercel.
 
 ## Por confirmar con BAC
 
 - **Dominio del gateway:** confirmar el host exacto para scripts y Payment API en sandbox y producción.
-- **Llaves:** confirmar que una sola llave pública sirve para Collect.js y Gateway.js.
 - **API:** el paso 3 apunta a la Payment API clásica (`transact.php`). NMI recomienda la REST v5 para integraciones nuevas, así que conviene confirmar cuál certifica BAC.
+- **Validez de la autorización:** confirmar cuántos días dura una autorización antes de vencer en el banco emisor. El admin debe capturar o anular antes.
 - **Términos y condiciones:** `/terminos` muestra la versión vigente de `supabase/functions/_shared/terms.mjs`, el mismo texto del modal y del correo. Hoy la v1 solo menciona comisiones de transferencia y PayPal. Si BAC pide texto sobre pagos con tarjeta o reembolsos a la tarjeta, el cliente debe aprobar una v2. Las versiones publicadas no se editan.
+
+## Visibilidad y diagnóstico del checkout (2026-10-29)
+
+### Preparación local de credenciales
+
+- `.env.local`: completar las variables públicas de Supabase, `VITE_BAC_TOKENIZATION_KEY` y `VITE_BAC_CHECKOUT_KEY` con los valores completos. No poner la clave privada en este archivo.
+- `.env.bac.local`: archivo local privado preparado desde `.env.bac.example`. Completar `BAC_SECURITY_KEY`; ya contiene `BAC_PROCESSOR_ID=70608880` y `BAC_TRANSACTION_TYPE=sale`. No lo carga el frontend ni se sube automáticamente a Supabase.
+- Los dos archivos locales están ignorados por Git. Mantener `VITE_BAC_GATEWAY_URL` y `BAC_GATEWAY_URL` vacíos hasta que BAC confirme el gateway y el entorno de pruebas.
+- Ejecutar `node scripts/check-bac-config.mjs` para revisar presencia, formato local y coincidencia de dominios sin imprimir claves ni contactar al banco. Los valores vacíos se reportan como `PENDIENTE`; no significa que una clave haya sido rechazada por BAC.
+- Cuando BAC confirme el entorno, configurar las variables públicas en Vercel Preview y los secretos privados en el proyecto Supabase de staging. Estos archivos locales por sí solos no cambian el despliegue de Vercel ni habilitan el método.
+
+Los cambios de claves y procesador de feature/bac-keys-processor están integrados en development. Vercel debe construir esa revisión con sus variables y Supabase debe tener las funciones correspondientes desplegadas.
+
+El método se ofrece únicamente si la consulta pública devuelve una fila activa con key no vacía y type=card, y resolveBacConfig valida las dos claves públicas y el origen HTTPS. La migración crea bac-card con active=false deliberadamente. Un catálogo vacío o fallido no habilita métodos de respaldo. Pagar el día del tour sigue retirado por las reglas existentes.
+
+Al inicio del diagnóstico, .env.local solo contenía una variable de Vercel y faltaban las variables de Supabase y BAC. Posteriormente se completaron, se aplicaron las migraciones y se publicaron las funciones. El estado actual y el bloqueo encontrado al probar las claves están descritos al inicio de este documento.
+
+Para pruebas bancarias: usar staging, las claves de prueba suministradas por BAC y su dominio exacto, BAC_PROCESSOR_ID=70608880 y BAC_TRANSACTION_TYPE=sale. Activar bac-card solo en la base de pruebas cuando backend y frontend estén configurados. Reiniciar Vite tras editar variables; Vercel necesita un nuevo build. Nunca reutilizar VITE_BAC_PUBLIC_KEY.
+
+La moneda se verifica como USD en el formulario y en el servidor antes de abrir un intento. La clave privada y el procesador se verifican en el servidor; no pueden deducirse de las claves del navegador. Un SDK bloqueado por red, CSP o permisos del gateway muestra error al abrir el formulario. Los términos y la validación de datos controlan la selección, sin cambiar la disponibilidad comercial.
+
+El modo mock del navegador solo se permite con import.meta.env.DEV. El backend simulado exige además MOCK_EXTERNAL_PROVIDERS=true, APP_ENV=local/test y Supabase local. Las pruebas de interfaz usan claves ficticias y scripts interceptados; no sustituyen la certificación de BAC.
+
+Durante tokenización, 3DS, procesamiento o resultado incierto se bloquea cambiar de método o volver al paso anterior. Eventos 3DS complete repetidos no generan otra venta. Una respuesta vacía, incompleta, de comunicación o con otra referencia deja el intento processing para conciliación. Solo un rechazo inequívoco permite intentar otra tarjeta; nunca se reintenta automáticamente. El cliente muestra éxito únicamente ante estados servidor paid/confirmed, o autorización pendiente cuando corresponde.
+
+Documentación oficial: [Gateway.js](https://docs.nmi.com/docs/gatewayjs), [3DS](https://docs.nmi.com/docs/payer-authentication-3ds) y [Payment API](https://docs.nmi.com/reference/process).
+
+## Endurecimiento de seguridad (2026-11-10)
+
+- **3-D Secure:** el servidor solo acepta ECI `05`/`02` con `cardHolderAuth=verified` y `06`/`01` con `attempted`. `00`, `07` o combinaciones contradictorias se rechazan antes de llamar al gateway.
+- **Host del gateway:** la llave privada solo se envía a `*.nmi.com`, `*.compassmerchantsolutions.com` o `*.credomatic.com`. Para otro dominio confirmado por BAC, agregarlo en el secreto `BAC_GATEWAY_ALLOWED_HOSTS` (lista separada por comas) y en `GATEWAY_HOST_SUFFIXES` de `src/utils/bacConfig.ts` para el navegador.
+- **Rate limit del cobro:** `bac-process-payment` limita por IP (HMAC, nunca la IP cruda) a 10 intentos cada 15 min. Ajustable con `BAC_PAYMENT_RATE_LIMIT_MAX_REQUESTS` y `BAC_PAYMENT_RATE_LIMIT_WINDOW_MINUTES`. **Requiere el secreto `RATE_LIMIT_HASH_SECRET`** (el mismo de `create-booking`); sin él el cobro responde 503. Aplicar la migración `202610310001_bac_security_hardening.sql`.
+- **IP al gateway:** se usa `cf-connecting-ip`; `x-forwarded-for` es solo respaldo.
+- **Columnas de dinero:** un trigger impide que un editor cambie `payment_status`, `total_snapshot`, `currency` o `payment_method_key` por la API; solo un admin. Edge Functions (service role) y RPCs no se afectan.
+- **Errores admin:** solo se muestran los textos propios de las RPC; cualquier otro error se reemplaza por un mensaje genérico.
+- **Cabeceras (`vercel.json`):** CSP, nosniff, Referrer-Policy, HSTS y Permissions-Policy. `frame-src https:` es deliberado: el reto 3DS se carga en el dominio de cada banco emisor. Si Vercel cambia el HTML inline de `index.html`, regenerar el hash `sha256` de la CSP (se calcula sobre `dist/index.html`). **Probar un Preview con el checkout real antes de pasar a main.**
+- **Aceptado, sin cambio:** el `bookingId` sigue siendo la única referencia de la reserva (UUID aleatorio, no exponerlo en URLs ni logs); `reconcile` confía en el ID que registre un admin (queda auditado con el actor).

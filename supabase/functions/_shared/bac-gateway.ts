@@ -17,18 +17,39 @@ export interface BacThreeDSecure {
   directoryServerId?: string;
 }
 
+/** The BAC merchant account (and its processor id) is contracted for US dollars only. */
+export const BAC_CURRENCY = 'USD';
+
+/** Customer checkout: charge now (`sale`) or only hold the funds for a later admin capture (`auth`). */
+export type BacCheckoutType = 'sale' | 'auth';
+/** Admin follow-up operations on an existing gateway transaction. */
+export type BacFollowUpType = 'capture' | 'void' | 'refund';
+
 export interface BacSaleInput {
+  type: BacCheckoutType;
   securityKey: string;
   paymentToken: string;
   amount: string;
   taxAmount: string;
   currency: string;
+  /** BAC_PROCESSOR_ID: routes the charge to the contracted processor (MID). */
+  processorId?: string;
   orderId: string;
   orderDescription: string;
   attemptId: string;
   customer: { fullName: string; email: string };
   ipAddress?: string;
   threeDSecure: BacThreeDSecure;
+}
+
+export interface BacFollowUpInput {
+  type: BacFollowUpType;
+  securityKey: string;
+  /** Gateway transaction id of the original auth / sale / capture. */
+  transactionId: string;
+  /** Required for capture and refund (x.xx). Void always cancels the whole transaction. */
+  amount?: string;
+  orderId: string;
 }
 
 export interface BacSaleResult {
@@ -41,6 +62,8 @@ export interface BacSaleResult {
 }
 
 const AUDIT_FIELDS = ['response', 'responsetext', 'response_code', 'authcode', 'transactionid', 'avsresponse', 'cvvresponse', 'orderid', 'type'];
+
+const ECI_BY_AUTH: Record<'verified' | 'attempted', string[]> = { verified: ['05', '02'], attempted: ['06', '01'] };
 
 const BASE64ISH = /^[A-Za-z0-9+/=_-]{1,128}$/;
 const UUIDISH = /^[A-Za-z0-9-]{1,64}$/;
@@ -58,15 +81,18 @@ export function validateThreeDSecure(value: unknown): BacThreeDSecure | null {
   const directoryServerId = text('directoryServerId');
 
   if (!BASE64ISH.test(cavv)) return null;
-  if (!/^\d{1,2}$/.test(eci)) return null;
   if (cardHolderAuth !== 'verified' && cardHolderAuth !== 'attempted') return null;
+  // ECI must prove the cardholder was authenticated (05 Visa/Amex, 02 Mastercard) or that the issuer
+  // acknowledged an attempt (06 / 01). 00 and 07 mean "not authenticated" and must never reach the gateway.
+  const normalizedEci = /^\d$/.test(eci) ? `0${eci}` : eci;
+  if (!ECI_BY_AUTH[cardHolderAuth].includes(normalizedEci)) return null;
   if (!/^2\.\d{1,2}\.\d{1,2}$/.test(threeDsVersion)) return null;
   if (xid && !BASE64ISH.test(xid)) return null;
   if (directoryServerId && !UUIDISH.test(directoryServerId)) return null;
 
   return {
     cavv,
-    eci,
+    eci: normalizedEci,
     cardHolderAuth,
     threeDsVersion,
     ...(xid ? { xid } : {}),
@@ -80,12 +106,19 @@ export function splitCustomerName(fullName: string) {
   return { firstName: parts.slice(0, -1).join(' '), lastName: parts.at(-1) ?? '' };
 }
 
-/** Builds the urlencoded body for the Payment API sale. Amounts always come from the booking row. */
+/** Reads BAC_TRANSACTION_TYPE: `auth` holds funds for a later capture; anything else charges immediately. */
+export function getBacCheckoutType(): BacCheckoutType {
+  return Deno.env.get('BAC_TRANSACTION_TYPE')?.trim().toLowerCase() === 'auth' ? 'auth' : 'sale';
+}
+
+/** Builds the urlencoded body for the Payment API sale / auth. Amounts always come from the booking row. */
 export function buildSaleRequest(input: BacSaleInput): URLSearchParams {
+  if (input.type !== 'sale' && input.type !== 'auth') throw new Error('Invalid checkout transaction type');
+  if (input.currency !== BAC_CURRENCY) throw new Error(`BAC card payments only accept ${BAC_CURRENCY}`);
   const { firstName, lastName } = splitCustomerName(input.customer.fullName);
   const body = new URLSearchParams({
     security_key: input.securityKey,
-    type: 'sale',
+    type: input.type,
     payment_token: input.paymentToken,
     amount: input.amount,
     tax: input.taxAmount,
@@ -101,14 +134,31 @@ export function buildSaleRequest(input: BacSaleInput): URLSearchParams {
     cardholder_auth: input.threeDSecure.cardHolderAuth,
     three_ds_version: input.threeDSecure.threeDsVersion,
   });
+  if (input.processorId) body.set('processor_id', input.processorId);
   if (input.threeDSecure.xid) body.set('xid', input.threeDSecure.xid);
   if (input.threeDSecure.directoryServerId) body.set('directory_server_id', input.threeDSecure.directoryServerId);
   if (input.ipAddress) body.set('ipaddress', input.ipAddress);
   return body;
 }
 
-/** Payment API answers `response=1&responsetext=...&response_code=100...`. Approved only on 1 + 100. */
-export function parseSaleResponse(raw: string, expectedOrderId: string): BacSaleResult {
+/**
+ * Capture / void / refund of an existing transaction. Amounts are decided server side from the payments ledger.
+ * No processor_id: the Payment API only accepts it on sale/auth; follow-ups stay on the original transaction's processor.
+ */
+export function buildFollowUpRequest(input: BacFollowUpInput): URLSearchParams {
+  if (!['capture', 'void', 'refund'].includes(input.type)) throw new Error('Invalid follow-up transaction type');
+  if (!/^[A-Za-z0-9-]{1,64}$/.test(input.transactionId)) throw new Error('Invalid gateway transaction id');
+  const body = new URLSearchParams({ security_key: input.securityKey, type: input.type, transactionid: input.transactionId });
+  if (input.type !== 'void') {
+    if (!input.amount || !/^\d+\.\d{2}$/.test(input.amount) || Number(input.amount) <= 0) throw new Error('A positive x.xx amount is required');
+    body.set('amount', input.amount);
+  }
+  if (input.type === 'capture') body.set('orderid', input.orderId);
+  return body;
+}
+
+/** Payment API answers `response=1&responsetext=...&response_code=100...`. Approved only on 1 + 100 (fail closed otherwise). */
+export function parseGatewayResponse(raw: string, expectedOrderId: string): BacSaleResult {
   const params = new URLSearchParams(raw.trim());
   const audit: Record<string, string> = {};
   for (const field of AUDIT_FIELDS) {
@@ -126,9 +176,40 @@ export function parseSaleResponse(raw: string, expectedOrderId: string): BacSale
   };
 }
 
+/**
+ * POSTs one Payment API request. Throws on timeout, network error or non-2xx: callers must treat that as
+ * "outcome unknown" (never as a decline) and leave the ledger row "processing" for reconciliation.
+ */
+export async function postGatewayRequest(url: string, body: URLSearchParams, timeoutMs = 30000): Promise<string> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body,
+      signal: controller.signal,
+    });
+    if (!response.ok) throw new Error(`Gateway HTTP ${response.status}`);
+    return await response.text();
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+/** The security key is only ever sent to a BAC/NMI gateway host (or one explicitly added in BAC_GATEWAY_ALLOWED_HOSTS). */
+const GATEWAY_HOST_SUFFIXES = ['nmi.com', 'compassmerchantsolutions.com', 'credomatic.com'];
+
+export function isAllowedGatewayHost(host: string, extraHosts: string[] = []): boolean {
+  const name = host.toLowerCase();
+  return GATEWAY_HOST_SUFFIXES.some((suffix) => name === suffix || name.endsWith(`.${suffix}`)) || extraHosts.includes(name);
+}
+
 export function getBacGatewayApiUrl(): string {
   const base = (Deno.env.get('BAC_GATEWAY_URL') ?? '').trim().replace(/\/+$/, '');
   if (!/^https:\/\/[a-z0-9.-]+$/i.test(base)) throw new Error('BAC gateway is not configured');
+  const extraHosts = (Deno.env.get('BAC_GATEWAY_ALLOWED_HOSTS') ?? '').split(',').map((host) => host.trim().toLowerCase()).filter(Boolean);
+  if (!isAllowedGatewayHost(base.slice('https://'.length), extraHosts)) throw new Error('BAC gateway host is not allowed');
   return `${base}/api/transact.php`;
 }
 
@@ -138,10 +219,32 @@ export function getBacSecurityKey(): string {
   return key;
 }
 
-/** Returns the caller IP only when it is a well-formed IPv4/IPv6 literal. */
+/** Optional BAC_PROCESSOR_ID. A malformed value is a configuration error, never silently dropped. */
+export function getBacProcessorId(): string | undefined {
+  const processorId = Deno.env.get('BAC_PROCESSOR_ID')?.trim();
+  if (!processorId) return undefined;
+  if (!/^[A-Za-z0-9_-]{1,64}$/.test(processorId)) throw new Error('BAC processor id is invalid');
+  return processorId;
+}
+
+const isIpLiteral = (value: string) => /^(\d{1,3}\.){3}\d{1,3}$/.test(value) || (/^[0-9a-f:]{2,45}$/i.test(value) && value.includes(':'));
+
+/**
+ * Returns the caller IP only when it is a well-formed IPv4/IPv6 literal. The platform-set cf-connecting-ip wins:
+ * the first x-forwarded-for entry can be written by the client itself, so it is only a fallback.
+ */
 export function getClientIpAddress(req: Request): string | undefined {
-  const candidate = (req.headers.get('x-forwarded-for') ?? '').split(',')[0]?.trim() ?? '';
-  if (/^(\d{1,3}\.){3}\d{1,3}$/.test(candidate)) return candidate;
-  if (/^[0-9a-f:]{2,45}$/i.test(candidate) && candidate.includes(':')) return candidate;
-  return undefined;
+  const cloudflare = (req.headers.get('cf-connecting-ip') ?? '').trim();
+  if (isIpLiteral(cloudflare)) return cloudflare;
+  const forwarded = (req.headers.get('x-forwarded-for') ?? '').split(',')[0]?.trim() ?? '';
+  return isIpLiteral(forwarded) ? forwarded : undefined;
+}
+
+/** HMAC of the caller IP (never the raw IP) used as the rate-limit key. Throws when RATE_LIMIT_HASH_SECRET is missing. */
+export async function hashClientIp(ip: string | undefined): Promise<string> {
+  const secret = Deno.env.get('RATE_LIMIT_HASH_SECRET');
+  if (!secret) throw new Error('Rate limit secret is not configured');
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const signature = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`bac:${ip ?? 'unknown'}`));
+  return Array.from(new Uint8Array(signature)).map((byte) => byte.toString(16).padStart(2, '0')).join('');
 }

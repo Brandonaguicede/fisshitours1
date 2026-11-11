@@ -7,6 +7,7 @@ import { AdminBadge, AdminCreateButton, AdminFilterMenu, AdminListToolbar, Admin
 import { AdminDangerRow } from '../../components/admin/AdminStatusSection';
 import FormSection from '../../components/admin/FormSection';
 import AdminConfirmDialog from '../../components/admin/AdminConfirmDialog';
+import { BacPaymentActions } from '../../components/admin/BacPaymentActions';
 import { Modal } from '../../components/common/Modal';
 import { TermsConsent } from '../../components/booking/TermsModal';
 import { supabase } from '../../lib/supabase';
@@ -333,6 +334,12 @@ export default function AdminReservationsPage() {
     await loadReservations();
   }
 
+  async function handleBacOperationCompleted(notice: string) {
+    setError('');
+    setNotice(notice);
+    await loadReservations();
+  }
+
   async function retryReservationConfirmation(reservation: AdminReservation) {
     setBusyId(reservation.id);
     setNotice('');
@@ -583,6 +590,12 @@ export default function AdminReservationsPage() {
             {busyId === reservation.id ? <Loader2 className="animate-spin" size={14} /> : <RefreshCw size={14} />} Reenviar correo
           </button>
         ) : null}
+        <BacPaymentActions
+          reservation={reservation}
+          disabled={busy}
+          onCompleted={(notice) => void handleBacOperationCompleted(notice)}
+          onError={(message) => { setNotice(''); setError(message); void loadReservations(); }}
+        />
         <button className="admin-icon-action" type="button" title="Editar reserva" aria-label={`Editar reserva ${reservation.booking_reference}`} disabled={busy} onClick={() => openEdit(reservation)}><Pencil size={17} /></button>
       </div>
     );

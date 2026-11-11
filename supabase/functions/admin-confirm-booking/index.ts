@@ -51,7 +51,13 @@ serve(withCors(async (req) => {
       return Response.json({ message: 'PayPal payment must be verified before confirming the booking' }, { status: 409, headers });
     }
     if (booking.payment_method_key === 'bac-card' && booking.payment_status !== 'paid') {
-      return Response.json({ message: 'Card payment must be approved before confirming the booking' }, { status: 409, headers });
+      // Card bookings are confirmed by the gateway flow itself (sale, or admin capture of an authorization), never by hand.
+      const message = booking.payment_status === 'authorized'
+        ? 'Use Capturar to charge the authorized card payment; that confirms the booking'
+        : booking.payment_status === 'processing'
+          ? 'A card operation is pending: use Conciliar after checking the BAC portal'
+          : 'Card payment must be approved before confirming the booking';
+      return Response.json({ message }, { status: 409, headers });
     }
 
     const { data, error } = await userClient.rpc('update_booking_status', {
