@@ -212,7 +212,14 @@ export function BacCardCheckout({ createdBooking, customerName, customerEmail, c
           <span className="text-sm text-ocean-100">{es ? 'Total a pagar' : 'Amount due'}</span>
           <span className="text-2xl font-bold tabular-nums text-white"><span className="mr-2 text-sm font-medium text-ocean-200">{currency}</span>{amount}</span>
         </div>
-        <p className="mb-5 text-xs font-medium text-ocean-100">Visa · Mastercard · American Express</p>
+        <div className="mb-5">
+          <p className="mb-2 text-sm text-ocean-200">{es ? 'Aceptamos estas tarjetas' : 'We accept these cards'}</p>
+          <ul className="flex flex-wrap gap-2" aria-label={es ? 'Tarjetas aceptadas' : 'Accepted cards'}>
+            {['Visa', 'Mastercard', 'American Express'].map((brand) => (
+              <li key={brand} className="rounded-md border border-white/20 bg-white px-3 py-1.5 text-xs font-bold text-ocean-950">{brand}</li>
+            ))}
+          </ul>
+        </div>
 
         {state !== 'unavailable' ? (
           <div className={state === 'locked' ? 'pointer-events-none opacity-50' : undefined}>
