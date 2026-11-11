@@ -170,6 +170,14 @@ export function Footer() {
               {language === 'es' ? 'Métodos de pago' : 'Payment methods'}
             </p>
             <img
+                alt="PayPal"
+                className="mb-2 h-auto w-full max-w-[90px]"
+                height={119}
+                loading="lazy"
+                src="/footer/paypal-logo.png"
+                width={360}
+              />
+            <img
                 alt={language === 'es' ? 'Métodos de pago aceptados: BAC Credomatic, American Express, Mastercard, Visa, Discover, JCB y Diners Club' : 'Accepted payment methods: BAC Credomatic, American Express, Mastercard, Visa, Discover, JCB and Diners Club'}
                 className="h-auto w-full max-w-[220px]"
                 height={120}
@@ -277,6 +285,14 @@ export function Footer() {
                 <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-ocean-700">
                   {language === 'es' ? 'Métodos de pago' : 'Payment methods'}
                 </p>
+                <img
+                alt="PayPal"
+                className="mb-2 h-auto w-full max-w-[90px]"
+                height={119}
+                loading="lazy"
+                src="/footer/paypal-logo.png"
+                width={360}
+              />
                 <img
                 alt={language === 'es' ? 'Métodos de pago aceptados: BAC Credomatic, American Express, Mastercard, Visa, Discover, JCB y Diners Club' : 'Accepted payment methods: BAC Credomatic, American Express, Mastercard, Visa, Discover, JCB and Diners Club'}
                 className="h-auto w-full max-w-[250px]"
