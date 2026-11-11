@@ -214,11 +214,13 @@ export function BacCardCheckout({ createdBooking, customerName, customerEmail, c
         </div>
         <div className="mb-5">
           <p className="mb-2 text-sm text-ocean-200">{es ? 'Aceptamos estas tarjetas' : 'We accept these cards'}</p>
-          <ul className="flex flex-wrap gap-2" aria-label={es ? 'Tarjetas aceptadas' : 'Accepted cards'}>
-            {['Visa', 'Mastercard', 'American Express'].map((brand) => (
-              <li key={brand} className="rounded-md border border-white/20 bg-white px-3 py-1.5 text-xs font-bold text-ocean-950">{brand}</li>
-            ))}
-          </ul>
+          <img
+            src="/galeria/bac.png"
+            width={520}
+            height={90}
+            alt="BAC Credomatic · American Express · Mastercard · Visa · Discover · JCB · Diners Club"
+            className="block h-auto w-full rounded-lg bg-white"
+          />
         </div>
 
         {state !== 'unavailable' ? (
