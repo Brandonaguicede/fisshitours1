@@ -274,7 +274,7 @@ test('sale/auth requests carry server amounts and 3DS values; response parsing i
   const body = gateway.buildSaleRequest(saleInput);
   assert.equal(body.get('type'), 'sale');
   assert.equal(body.get('amount'), '791.00');
-  assert.equal(body.get('tax'), '91.00');
+  assert.equal(body.has('tax'), false);
   assert.equal(body.get('first_name'), 'Ana María');
   assert.equal(body.get('last_name'), 'Mora');
   assert.equal(body.get('cardholder_auth'), 'verified');

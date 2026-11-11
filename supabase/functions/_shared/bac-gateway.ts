@@ -120,8 +120,10 @@ export function buildSaleRequest(input: BacSaleInput): URLSearchParams {
     security_key: input.securityKey,
     type: input.type,
     payment_token: input.paymentToken,
+    // `amount` is the final total (tax included). `tax` is deliberately not sent: BAC's processor answered
+    // IA / INVALID AMOUNT (PFT-A40A7060) when amount=5.65 carried tax=0.65. input.taxAmount stays in the
+    // interface and the ledger; it is just not forwarded to the gateway.
     amount: input.amount,
-    tax: input.taxAmount,
     currency: input.currency,
     orderid: input.orderId,
     order_description: input.orderDescription.slice(0, 255),
