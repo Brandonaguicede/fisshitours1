@@ -1,4 +1,4 @@
-import { CreditCard, Lock } from 'lucide-react';
+import { CalendarDays, CreditCard, Info, Lock, ShieldCheck } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
 import { BAC_CURRENCY } from '../../utils/bacConfig';
@@ -209,45 +209,46 @@ export function BacCardCheckout({ createdBooking, customerName, customerEmail, c
   }
 
   const busy = state === 'tokenizing' || state === 'authenticating' || state === 'processing';
-  const fieldBox = 'min-h-[52px] rounded-xl border border-ocean-200/40 bg-white px-4 py-3 transition-colors focus-within:border-ocean-400 [&>iframe]:block [&>iframe]:w-full';
+  const fieldBox = 'min-h-[52px] rounded-xl border border-ocean-200/40 bg-white px-4 py-3 transition-colors focus-within:border-ocean-300 focus-within:ring-2 focus-within:ring-ocean-300/50 [&>iframe]:block [&>iframe]:w-full';
 
   return (
     <div className="mt-5 rounded-2xl border border-ocean-400/25 bg-ocean-950/60 px-5 py-6 sm:p-7" data-testid="bac-card-checkout">
       <div className="mx-auto w-full max-w-md">
         <div className="flex items-start justify-between gap-4">
-          <div>
-            <h3 className="flex items-center gap-2 text-lg font-bold text-white"><Lock size={18} aria-hidden="true" /> {es ? 'Pago seguro con tarjeta' : 'Secure card payment'}</h3>
-            <p className="mt-1 text-sm text-ocean-200">BAC Credomatic</p>
+          <div className="flex items-start gap-3">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-ocean-300/40 bg-ocean-400/10 text-ocean-200"><Lock size={20} aria-hidden="true" /></span>
+            <div>
+              <h3 className="text-lg font-bold leading-tight text-white">{es ? 'Pago seguro con tarjeta' : 'Secure card payment'}</h3>
+              <p className="mt-0.5 text-sm text-ocean-200">{es ? 'Transacción protegida y encriptada · BAC Credomatic' : 'Protected, encrypted transaction · BAC Credomatic'}</p>
+            </div>
           </div>
-          <CreditCard size={28} strokeWidth={1.5} aria-hidden="true" className="shrink-0 text-ocean-300" />
+          <ShieldCheck size={30} strokeWidth={1.5} aria-hidden="true" className="shrink-0 text-ocean-300" />
         </div>
-        <div className="my-5 flex flex-wrap items-baseline justify-between gap-2 border-y border-white/10 py-4">
-          <span className="text-sm text-ocean-100">{es ? 'Total a pagar' : 'Amount due'}</span>
-          <span className="text-2xl font-bold tabular-nums text-white"><span className="mr-2 text-sm font-medium text-ocean-200">{currency}</span>{amount}</span>
-        </div>
-        <div className="mb-5">
-          <p className="mb-2 text-sm text-ocean-200">{es ? 'Aceptamos estas tarjetas' : 'We accept these cards'}</p>
+        <div className="my-5 rounded-2xl border border-ocean-300/30 bg-ocean-900/50 p-4 sm:p-5">
+          <p className="text-sm text-ocean-200">{es ? 'Total a pagar' : 'Amount due'}</p>
+          <p className="mt-1 text-3xl font-extrabold tabular-nums text-white sm:text-4xl"><span className="mr-2 text-base font-medium text-ocean-200 sm:text-lg">{currency}</span>{amount}</p>
+          <p className="mb-2 mt-4 text-xs font-semibold uppercase tracking-wider text-ocean-200">{es ? 'Aceptamos estas tarjetas' : 'We accept these cards'}</p>
           <img
-            src="/galeria/bac.png"
-            width={520}
-            height={90}
+            src="/footer/payment-cards.png"
+            width={1100}
+            height={120}
             alt="BAC Credomatic · American Express · Mastercard · Visa · Discover · JCB · Diners Club"
-            className="block h-auto w-full rounded-lg bg-white"
+            className="block h-auto w-full"
           />
         </div>
 
         {state !== 'unavailable' ? (
           <div className={state === 'locked' ? 'pointer-events-none opacity-50' : undefined}>
             {/* Gateway-owned iframes are injected into these empty nodes; React must never render children here. */}
-            <label className="block text-sm font-semibold text-ocean-100" htmlFor={FIELD_IDS.ccnumber}>{es ? 'Número de tarjeta' : 'Card number'}</label>
+            <label className="flex items-center gap-2 text-sm font-semibold text-ocean-100" htmlFor={FIELD_IDS.ccnumber}><CreditCard size={16} aria-hidden="true" />{es ? 'Número de tarjeta' : 'Card number'}</label>
             <div id={FIELD_IDS.ccnumber} className={`mt-2 ${fieldBox}`} />
-            <div className="mt-4 grid grid-cols-2 gap-4">
+            <div className="mt-4 grid grid-cols-1 gap-4 min-[420px]:grid-cols-2">
               <div className="min-w-0">
-                <label className="block text-sm font-semibold text-ocean-100" htmlFor={FIELD_IDS.ccexp}>{es ? 'Vencimiento' : 'Expiration'}</label>
+                <label className="flex items-center gap-2 text-sm font-semibold text-ocean-100" htmlFor={FIELD_IDS.ccexp}><CalendarDays size={16} aria-hidden="true" />{es ? 'Vencimiento' : 'Expiration'}</label>
                 <div id={FIELD_IDS.ccexp} className={`mt-2 ${fieldBox}`} />
               </div>
               <div className="min-w-0">
-                <label className="block text-sm font-semibold text-ocean-100" htmlFor={FIELD_IDS.cvv}>CVV</label>
+                <label className="flex items-center gap-2 text-sm font-semibold text-ocean-100" htmlFor={FIELD_IDS.cvv}><Lock size={16} aria-hidden="true" />CVV</label>
                 <div id={FIELD_IDS.cvv} className={`mt-2 ${fieldBox}`} />
               </div>
             </div>
@@ -260,7 +261,7 @@ export function BacCardCheckout({ createdBooking, customerName, customerEmail, c
                   : state === 'processing' ? (es ? 'Procesando pago...' : 'Processing payment...')
                     : (es ? `Pagar ${currency} ${amount}` : `Pay ${currency} ${amount}`)}
             </Button>
-            <p className="mt-3 text-center text-xs leading-5 text-ocean-200">{es ? 'Tu banco puede solicitar una verificación adicional para autorizar el pago.' : 'Your bank may request additional verification to authorize your payment.'}</p>
+            <p className="mt-3 flex items-start justify-center gap-2 text-center text-xs leading-5 text-ocean-200"><Info size={14} aria-hidden="true" className="mt-0.5 shrink-0" />{es ? 'Tu banco puede solicitar una verificación adicional para autorizar el pago.' : 'Your bank may request additional verification to authorize your payment.'}</p>
             {busy ? <p className="mt-2 text-sm text-ocean-100" role="status">{es ? 'Mantén esta página abierta mientras verificamos el pago.' : 'Keep this page open while we verify your payment.'}</p> : null}
           </div>
         ) : null}

@@ -170,10 +170,21 @@ export function Footer() {
               {language === 'es' ? 'Métodos de pago' : 'Payment methods'}
             </p>
             <img
-              alt={language === 'es' ? 'Métodos de pago aceptados' : 'Accepted payment methods'}
-              className="h-auto w-full max-w-[160px] object-contain"
-              src="/footer/payment_methods.png"
-            />
+                alt={language === 'es' ? 'Métodos de pago aceptados: BAC Credomatic, American Express, Mastercard, Visa, Discover, JCB y Diners Club' : 'Accepted payment methods: BAC Credomatic, American Express, Mastercard, Visa, Discover, JCB and Diners Club'}
+                className="h-auto w-full max-w-[220px]"
+                height={120}
+                loading="lazy"
+                src="/footer/payment-cards.png"
+                width={1100}
+              />
+            <img
+                alt="PayPal"
+                className="mt-2 h-auto w-full max-w-[90px]"
+                height={119}
+                loading="lazy"
+                src="/footer/paypal-logo.png"
+                width={360}
+              />
           </div>
 
           {/* Copyright */}
@@ -275,10 +286,21 @@ export function Footer() {
                   {language === 'es' ? 'Métodos de pago' : 'Payment methods'}
                 </p>
                 <img
-                  alt={language === 'es' ? 'Métodos de pago aceptados' : 'Accepted payment methods'}
-                  className="h-auto w-full max-w-[190px] object-contain"
-                  src="/footer/payment_methods.png"
-                />
+                alt={language === 'es' ? 'Métodos de pago aceptados: BAC Credomatic, American Express, Mastercard, Visa, Discover, JCB y Diners Club' : 'Accepted payment methods: BAC Credomatic, American Express, Mastercard, Visa, Discover, JCB and Diners Club'}
+                className="h-auto w-full max-w-[250px]"
+                height={120}
+                loading="lazy"
+                src="/footer/payment-cards.png"
+                width={1100}
+              />
+                <img
+                alt="PayPal"
+                className="mt-2 h-auto w-full max-w-[90px]"
+                height={119}
+                loading="lazy"
+                src="/footer/paypal-logo.png"
+                width={360}
+              />
               </div>
             </div>
 
