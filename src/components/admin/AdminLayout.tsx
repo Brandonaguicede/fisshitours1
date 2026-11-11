@@ -22,6 +22,7 @@ const navGroups = [
       { label: 'Resumen de paquetes', to: '/admin/boat-tours', icon: Package },
       { label: 'Lugares de salida', to: '/admin/departure-locations', icon: MapPin },
       { label: 'Metodos de pago', to: '/admin/payment-methods', icon: CreditCard },
+      { label: 'Pruebas BAC · USD 1', to: '/admin/bac-certification', icon: CreditCard },
     ],
   },
   {
@@ -46,6 +47,7 @@ const titles: Record<string, string> = {
   '/admin/portada': 'Portada',
   '/admin/sobre-nosotros': 'Sobre Nosotros',
   '/admin/payment-methods': 'Metodos de pago',
+  '/admin/bac-certification': 'Pruebas BAC · USD 1',
   '/admin/departure-locations': 'Lugares de salida',
 };
 
@@ -224,7 +226,7 @@ export default function AdminLayout() {
             <div key={group.caption}>
               <p className="admin-sidebar__caption">{group.caption}</p>
               <ul className="admin-sidebar__nav">
-                {group.items.map((item) => (
+                {group.items.filter((item) => item.to !== '/admin/bac-certification' || profile.role === 'admin').map((item) => (
                   <li key={item.to}>
                     <NavLink
                       end={item.to === '/admin'}

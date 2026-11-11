@@ -22,6 +22,7 @@ const AdminGalleryPage = lazy(() => import('../pages/admin/AdminGalleryPage'));
 const AdminPortadaPage = lazy(() => import('../pages/admin/AdminPortadaPage'));
 const AdminAboutPage = lazy(() => import('../pages/admin/AdminAboutPage'));
 const AdminPaymentMethodsPage = lazy(() => import('../pages/admin/AdminPaymentMethodsPage'));
+const AdminBacCertificationPage = lazy(() => import('../pages/admin/AdminBacCertificationPage'));
 const AdminDepartureLocationsPage = lazy(() => import('../pages/admin/AdminDepartureLocationsPage'));
 
 // /admin/content used to hold Hero and About as two tabs. Old bookmarks land on Portada, except when they
@@ -57,6 +58,7 @@ export function AppRoutes() {
         {/* Videos lived under content before the Portada screen grouped Media (photos + video); same reason. */}
         <Route path="videos" element={<Navigate to="/admin/portada" replace />} />
         <Route path="payment-methods" element={<AdminPaymentMethodsPage />} />
+        <Route path="bac-certification" element={<AdminBacCertificationPage />} />
         <Route path="departure-locations" element={<AdminDepartureLocationsPage />} />
       </Route>
       <Route element={<MainLayout />}>

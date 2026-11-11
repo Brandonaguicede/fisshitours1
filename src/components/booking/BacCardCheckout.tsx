@@ -17,19 +17,20 @@ import { Button } from '../ui';
 type CheckoutState = 'loading' | 'ready' | 'tokenizing' | 'authenticating' | 'processing' | 'locked' | 'unavailable';
 
 interface BacCardCheckoutProps {
-  createdBooking: BookingResult;
+  createdBooking: Pick<BookingResult, 'booking_id' | 'booking_reference' | 'total_snapshot' | 'currency'>;
   customerName: string;
   customerEmail: string;
   customerPhone: string;
   language: 'es' | 'en';
   onSuccess: (result: BacPaymentResult) => void;
   onBlockedChange: (blocked: boolean) => void;
+  submitPayment?: typeof processBacPayment;
 }
 
 const FIELD_IDS = { ccnumber: 'bac-ccnumber', ccexp: 'bac-ccexp', cvv: 'bac-cvv' } as const;
 const THREE_DS_MOUNT_ID = 'bac-three-ds-mount';
 
-export function BacCardCheckout({ createdBooking, customerName, customerEmail, customerPhone, language, onSuccess, onBlockedChange }: BacCardCheckoutProps) {
+export function BacCardCheckout({ createdBooking, customerName, customerEmail, customerPhone, language, onSuccess, onBlockedChange, submitPayment = processBacPayment }: BacCardCheckoutProps) {
   const es = language === 'es';
   const [state, setState] = useState<CheckoutState>('loading');
   const [error, setError] = useState('');
@@ -81,7 +82,7 @@ export function BacCardCheckout({ createdBooking, customerName, customerEmail, c
       setState('processing');
       if (authentication.cardHolderInfo) setNotice(authentication.cardHolderInfo);
       try {
-        const result = await processBacPayment(createdBooking.booking_id, paymentToken, authentication);
+        const result = await submitPayment(createdBooking.booking_id, paymentToken, authentication);
         if (mounted) onSuccessRef.current(result);
       } catch (paymentError) {
         if (!mounted) return;
@@ -175,7 +176,7 @@ export function BacCardCheckout({ createdBooking, customerName, customerEmail, c
     setNotice('');
     if (getBacConfig().isMock) {
       setState('processing');
-      processBacPayment(createdBooking.booking_id, 'MOCK-APPROVE-TOKEN', { cavv: 'MOCKCAVV', eci: '05', cardHolderAuth: 'verified', threeDsVersion: '2.2.0' })
+      submitPayment(createdBooking.booking_id, 'MOCK-APPROVE-TOKEN', { cavv: 'MOCKCAVV', eci: '05', cardHolderAuth: 'verified', threeDsVersion: '2.2.0' })
         .then((result) => onSuccessRef.current(result))
         .catch((paymentError: Error) => {
           inFlightRef.current = false;
