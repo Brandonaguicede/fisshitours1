@@ -447,10 +447,6 @@ verify_jwt = false
 [functions.admin-bac-transaction]
 verify_jwt = false
 
-# Authenticates an active admin before accessing the separate certification ledger.
-[functions.admin-bac-certification]
-verify_jwt = false
-
 [analytics]
 enabled = false
 port = 54327
