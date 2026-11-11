@@ -197,3 +197,14 @@ El modo mock del navegador solo se permite con import.meta.env.DEV. El backend s
 Durante tokenización, 3DS, procesamiento o resultado incierto se bloquea cambiar de método o volver al paso anterior. Eventos 3DS complete repetidos no generan otra venta. Una respuesta vacía, incompleta, de comunicación o con otra referencia deja el intento processing para conciliación. Solo un rechazo inequívoco permite intentar otra tarjeta; nunca se reintenta automáticamente. El cliente muestra éxito únicamente ante estados servidor paid/confirmed, o autorización pendiente cuando corresponde.
 
 Documentación oficial: [Gateway.js](https://docs.nmi.com/docs/gatewayjs), [3DS](https://docs.nmi.com/docs/payer-authentication-3ds) y [Payment API](https://docs.nmi.com/reference/process).
+
+## Endurecimiento de seguridad (2026-11-10)
+
+- **3-D Secure:** el servidor solo acepta ECI `05`/`02` con `cardHolderAuth=verified` y `06`/`01` con `attempted`. `00`, `07` o combinaciones contradictorias se rechazan antes de llamar al gateway.
+- **Host del gateway:** la llave privada solo se envía a `*.nmi.com`, `*.compassmerchantsolutions.com` o `*.credomatic.com`. Para otro dominio confirmado por BAC, agregarlo en el secreto `BAC_GATEWAY_ALLOWED_HOSTS` (lista separada por comas) y en `GATEWAY_HOST_SUFFIXES` de `src/utils/bacConfig.ts` para el navegador.
+- **Rate limit del cobro:** `bac-process-payment` limita por IP (HMAC, nunca la IP cruda) a 10 intentos cada 15 min. Ajustable con `BAC_PAYMENT_RATE_LIMIT_MAX_REQUESTS` y `BAC_PAYMENT_RATE_LIMIT_WINDOW_MINUTES`. **Requiere el secreto `RATE_LIMIT_HASH_SECRET`** (el mismo de `create-booking`); sin él el cobro responde 503. Aplicar la migración `202610310001_bac_security_hardening.sql`.
+- **IP al gateway:** se usa `cf-connecting-ip`; `x-forwarded-for` es solo respaldo.
+- **Columnas de dinero:** un trigger impide que un editor cambie `payment_status`, `total_snapshot`, `currency` o `payment_method_key` por la API; solo un admin. Edge Functions (service role) y RPCs no se afectan.
+- **Errores admin:** solo se muestran los textos propios de las RPC; cualquier otro error se reemplaza por un mensaje genérico.
+- **Cabeceras (`vercel.json`):** CSP, nosniff, Referrer-Policy, HSTS y Permissions-Policy. `frame-src https:` es deliberado: el reto 3DS se carga en el dominio de cada banco emisor. Si Vercel cambia el HTML inline de `index.html`, regenerar el hash `sha256` de la CSP (se calcula sobre `dist/index.html`). **Probar un Preview con el checkout real antes de pasar a main.**
+- **Aceptado, sin cambio:** el `bookingId` sigue siendo la única referencia de la reserva (UUID aleatorio, no exponerlo en URLs ni logs); `reconcile` confía en el ID que registre un admin (queda auditado con el actor).
