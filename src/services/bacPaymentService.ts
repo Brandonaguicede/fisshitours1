@@ -1,4 +1,5 @@
 import { functionsUrl, supabase } from '../lib/supabase';
+import type { MeasurementReceipt } from '../analytics/events';
 import { getStoredLanguage } from '../i18n/LanguageContext';
 import { resolveBacConfig } from '../utils/bacConfig';
 
@@ -64,6 +65,7 @@ declare global {
 }
 
 export interface BacPaymentResult {
+  measurement?: MeasurementReceipt;
   bookingId: string;
   bookingReference: string;
   transactionId: string;

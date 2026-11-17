@@ -10,6 +10,7 @@ import { cancelPayPalOrder, capturePayPalOrder, createPayPalOrder, getPayPalErro
 import { getBacConfig, type BacPaymentResult } from '../../services/bacPaymentService';
 import { AvailabilityError, getBookingAvailability, type AvailabilitySlot } from '../../services/availabilityService';
 import { calculateBookingPrice, createBooking, getActiveDepartureLocations, type BookingResult, type DepartureLocation, type PriceResult } from '../../services/bookingService';
+import { bookingAttribution } from '../../analytics/bookingAttribution';
 import { getActivePaymentMethods } from '../../services/paymentService';
 import type { Boat } from '../../types/boat';
 import type { BoatTour } from '../../types/boatTour';
@@ -24,9 +25,19 @@ import { Button, ChoiceCard, Field, FieldError, GlassPanel, Input, ModalShell, T
 import { CURRENT_TERMS_VERSION } from '../../../supabase/functions/_shared/terms.mjs';
 import { TermsConsent } from './TermsModal';
 import { BacCardCheckout } from './BacCardCheckout';
+import { trackAddPaymentInfo, trackBeginCheckout, trackReservation, trackVerifiedResult, trackWhatsApp, type CommerceContext } from '../../analytics/events';
+import { stageEnhancedConversionEmail } from '../../analytics/enhancedConversions';
 
 function formatCurrency(value: number) {
   return Number.isFinite(value) ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value) : '\u2026';
+}
+
+// Keep this boundary aligned with create-booking's public contract. Formatting
+// characters are allowed because customers commonly paste an E.164 number with
+// spaces, but blank padding is never sent to the backend.
+function isValidWhatsapp(value: string) {
+  const normalized = value.trim();
+  return normalized.length >= 7 && normalized.length <= 32;
 }
 
 interface BookingPanelProps {
@@ -41,7 +52,7 @@ interface BookingPanelProps {
 }
 
 // `type` is what actually has a working checkout integration below
-// (handlePaymentMethodAction dispatches on it) — a payment_methods row with
+// (handlePaymentContinue dispatches on it) — a payment_methods row with
 // any other `type` (e.g. bank_transfer, sinpe, cash, manual — all valid per
 // the DB's own CHECK constraint) has no real handler yet, so it's filtered
 // out rather than rendered as a card that does nothing when clicked.
@@ -91,7 +102,7 @@ export function BookingPanel({ selectedBoat, selectedTour: requestedTour, boats,
   const [bookingStatus, setBookingStatus] = useState<BookingStatus>('pending');
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>('pending');
   const [validationMessage, setValidationMessage] = useState('');
-  // Terms and Conditions: the payment methods stay logically locked (aria-disabled) until accepted, because choosing one is what creates the booking.
+  // Choosing a method is local state; only the explicit continue action creates a booking.
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [termsError, setTermsError] = useState(false);
   const [paypalVisible, setPaypalVisible] = useState(false);
@@ -106,6 +117,7 @@ export function BookingPanel({ selectedBoat, selectedTour: requestedTour, boats,
   const [turnstileToken, setTurnstileToken] = useState('');
   const [turnstileResetKey, setTurnstileResetKey] = useState(0);
   const headingRef = useRef<HTMLHeadingElement | null>(null);
+  const bookingSubmitInFlight = useRef(false);
   const availabilityAlertKey = useRef('');
   const parentIdentity = selectedBoat.id + ':' + (selectedTour?.boatTourId ?? '') + ':' + (selectedTour?.id ?? '');
   const previousParent = useRef(parentIdentity);
@@ -156,7 +168,7 @@ export function BookingPanel({ selectedBoat, selectedTour: requestedTour, boats,
     // payment_method_key later — exclude it rather than silently falling
     // back to some other key at submit time (see submitBooking).
     ?.filter((method): method is typeof method & { type: SupportedPaymentType } => Boolean(method.key) && SUPPORTED_PAYMENT_TYPES.includes(method.type as SupportedPaymentType))
-    // Picking a method creates the booking first, so a card row is only offered when the BAC browser keys are
+    // Continuing to payment creates the booking first, so a card row is only offered when the BAC browser keys are
     // valid; otherwise the customer would hold a slot with a form that can never load.
     .filter((method) => method.type !== 'card' || getBacConfig().configured)
     .map((method) => ({
@@ -209,7 +221,8 @@ export function BookingPanel({ selectedBoat, selectedTour: requestedTour, boats,
   const canContinueToCustomer = Boolean(selectionReady && selectedTimeSlot && !hasCapacityError && priceQuery.data && !priceQuery.isFetching && !priceQuery.isError && availabilityQuery.data && !availabilityQuery.isError && !availabilityQuery.isFetching && selectedTimeSlot.available !== false);
   const hasTurnstileToken = USE_LOCAL_TURNSTILE_MOCK || Boolean(turnstileToken);
   const canContinueToPayment = Boolean(canContinueToCustomer && selectedDepartureLocation);
-  const canReview = Boolean(canContinueToPayment && customerName.trim() && customerEmail.trim() && customerWhatsapp.trim() && isValidEmail(customerEmail) && hasTurnstileToken);
+  const canReview = Boolean(canContinueToPayment && customerName.trim() && customerEmail.trim()
+    && isValidWhatsapp(customerWhatsapp) && isValidEmail(customerEmail) && hasTurnstileToken);
   const bookingPayload = selectionReady && selectedTour
     ? buildBookingPaymentPayload({
         bookingReference: createdBooking?.booking_reference ?? 'Pending',
@@ -228,6 +241,26 @@ export function BookingPanel({ selectedBoat, selectedTour: requestedTour, boats,
         language,
       })
     : null;
+  const commerceContext: CommerceContext | null = bookingPayload && bookingPayload.total > 0
+    ? {
+        currency: 'USD',
+        value: bookingPayload.total,
+        tax: bookingPayload.taxAmount,
+        items: [{ item_id: selectedTour!.id, item_name: selectedTour!.name,
+          item_category: selectedTour!.category, item_variant: selectedBoat.name,
+          price: Math.max(0, bookingPayload.total - bookingPayload.taxAmount), quantity: 1 }],
+      }
+    : null;
+
+  useEffect(() => {
+    // Wait for the backend quote that includes the selected departure location. The local estimate and the
+    // location-aware quote can have different totals; emitting both would count one checkout twice. The package
+    // key stays stable if a later quote refresh changes guests or pricing during the same checkout.
+    if (activeStep < 1 || !commerceContext || !selectedTour || !selectedDepartureLocation
+      || !priceQuery.data || priceQuery.isFetching || priceQuery.isError) return;
+    trackBeginCheckout(commerceContext, selectedTour.id);
+  }, [activeStep, commerceContext, priceQuery.data, priceQuery.isError, priceQuery.isFetching,
+    selectedDepartureLocation, selectedTour]);
 
   useEffect(() => {
     if (!currentSlots.some((slot) => slot.id === timeSlotId && slot.available !== false)) {
@@ -349,9 +382,11 @@ export function BookingPanel({ selectedBoat, selectedTour: requestedTour, boats,
       setValidationMessage(language === 'es' ? 'Ingresa el nombre del cliente.' : 'Please enter the customer name.');
       return null;
     }
-    if (!customerWhatsapp.trim()) {
+    if (!isValidWhatsapp(customerWhatsapp)) {
       setActiveStep(3);
-      setValidationMessage(language === 'es' ? 'Ingresa el número de teléfono.' : 'Please enter the phone number.');
+      setValidationMessage(language === 'es'
+        ? 'Ingresa un número de WhatsApp de entre 7 y 32 caracteres.'
+        : 'Enter a WhatsApp number between 7 and 32 characters.');
       return null;
     }
     if (!isValidEmail(customerEmail)) {
@@ -375,6 +410,8 @@ export function BookingPanel({ selectedBoat, selectedTour: requestedTour, boats,
   const createBookingMutation = useMutation({
     mutationFn: createBooking,
     onSuccess: (booking) => {
+      stageEnhancedConversionEmail(customerEmail);
+      trackReservation(booking.measurement, commerceContext ?? undefined);
       setCreatedBooking(booking);
       queryClient.invalidateQueries({ queryKey: ['availability', selectedBoat.id, selectedTour?.tourId, selectedTour?.id, date] });
     },
@@ -394,37 +431,52 @@ export function BookingPanel({ selectedBoat, selectedTour: requestedTour, boats,
   });
 
   async function submitBooking(method: BookingPaymentMethod) {
+    if (bookingSubmitInFlight.current || createdBooking) return null;
     const booking = validateBookingForPayment();
     if (!booking || !selectedTour || !selectedTimeSlot) return null;
     if (!selectedTour.tourId) {
       setValidationMessage(language === 'es' ? 'Este tour no está disponible para reservar.' : 'This tour is not available to book.');
       return null;
     }
-    const result = await createBookingMutation.mutateAsync({
-      customer: { fullName: customerName, email: customerEmail, whatsapp: customerWhatsapp },
-      boatId: selectedBoat.id,
-      tourId: selectedTour.tourId,
-      tourPackageId: selectedTour.id,
-      tourDate: date,
-      timeSlotId,
-      guests,
-      departureLocationId: selectedDepartureLocation!.id,
-      mealOption: mealOption || undefined,
-      specialRequests: specialRequests || undefined,
-      paymentMethodKey: method,
-      extras: [],
-      turnstileToken: USE_LOCAL_TURNSTILE_MOCK ? MOCK_TURNSTILE_TOKEN : turnstileToken,
-      language,
-      termsAccepted: true,
-      termsVersion: CURRENT_TERMS_VERSION,
-    });
-    setTurnstileToken('');
-    setTurnstileResetKey((value) => value + 1);
-    return result;
+    const methodType = backendPaymentMethods.find((entry) => entry.id === method)?.type;
+    const paymentType = methodType === 'paypal' ? 'PayPal' : methodType === 'card' ? 'BAC/NMI'
+      : methodType === 'whatsapp_link' ? 'WhatsApp payment link' : '';
+    if (commerceContext && paymentType) {
+      trackAddPaymentInfo(commerceContext, paymentType, `${method}:${selectedTour.id}:${commerceContext.value}`);
+    }
+    bookingSubmitInFlight.current = true;
+    try {
+      const attribution = await bookingAttribution();
+      const result = await createBookingMutation.mutateAsync({
+        customer: { fullName: customerName.trim(), email: customerEmail.trim(), whatsapp: customerWhatsapp.trim() },
+        boatId: selectedBoat.id,
+        tourId: selectedTour.tourId,
+        tourPackageId: selectedTour.id,
+        tourDate: date,
+        timeSlotId,
+        guests,
+        departureLocationId: selectedDepartureLocation!.id,
+        mealOption: mealOption || undefined,
+        specialRequests: specialRequests || undefined,
+        paymentMethodKey: method,
+        extras: [],
+        turnstileToken: USE_LOCAL_TURNSTILE_MOCK ? MOCK_TURNSTILE_TOKEN : turnstileToken,
+        language,
+        termsAccepted: true,
+        termsVersion: CURRENT_TERMS_VERSION,
+        attribution,
+      });
+      setTurnstileToken('');
+      setTurnstileResetKey((value) => value + 1);
+      return result;
+    } finally {
+      bookingSubmitInFlight.current = false;
+    }
   }
 
   function openWhatsAppBooking(booking: BookingPaymentPayload, variant: 'payment_link' | 'paid_confirmation') {
     const url = getWhatsAppBookingUrl(createWhatsAppBookingMessage(booking, variant, language));
+    trackWhatsApp(url, 'open_attempt');
     window.location.assign(url);
   }
 
@@ -443,6 +495,7 @@ export function BookingPanel({ selectedBoat, selectedTour: requestedTour, boats,
         reference: result.booking_reference,
         whatsappUrl,
       });
+      trackWhatsApp(whatsappUrl, 'open_attempt');
       window.location.assign(whatsappUrl);
     }).catch((error: unknown) => {
       setValidationMessage(error instanceof Error ? error.message : (language === 'es' ? 'No se pudo abrir WhatsApp. Intenta nuevamente.' : 'Unable to open WhatsApp. Please try again.'));
@@ -480,6 +533,8 @@ export function BookingPanel({ selectedBoat, selectedTour: requestedTour, boats,
   }
 
   function handleCardSuccess(result: BacPaymentResult) {
+    stageEnhancedConversionEmail(customerEmail);
+    trackVerifiedResult(result.measurement, commerceContext ?? undefined);
     setCardBlocked(false);
     // In authorize mode the funds are only held; the charge happens when our team confirms (captures) the booking.
     const authorized = result.paymentStatus === 'authorized';
@@ -656,6 +711,8 @@ export function BookingPanel({ selectedBoat, selectedTour: requestedTour, boats,
                 onPayPalRequest={handlePayPalRequest}
                 onPaymentLinkRequest={handlePaymentLinkRequest}
                 onPayPalSuccess={(result) => {
+                  stageEnhancedConversionEmail(customerEmail);
+                  trackVerifiedResult(result.measurement, commerceContext ?? undefined);
                   setPaypalError('');
                   setPaypalInfo('');
                   setPaypalSuccess(result);
@@ -679,8 +736,8 @@ export function BookingPanel({ selectedBoat, selectedTour: requestedTour, boats,
                 onPayPalCancel={() => {
                   setPaypalError('');
                   setPaypalInfo(language === 'es'
-                    ? 'La ventana de PayPal se cerró sin completar el pago. Puedes volver a intentarlo con el botón de PayPal o elegir otro método de pago.'
-                    : 'The PayPal window closed without completing payment. You can try again using the PayPal button or choose another payment method.');
+                    ? 'La ventana de PayPal se cerró sin completar el pago. Puedes volver a intentarlo con el botón de PayPal de esta misma reserva.'
+                    : 'The PayPal window closed without completing payment. You can try again using the PayPal button for this same booking.');
                   setBookingStatus('pending_payment');
                   setPaymentStatus('pending');
                 }}
@@ -1222,11 +1279,7 @@ function CustomerStep(props: {
   onSpecialRequestsChange: (value: string) => void;
   onTurnstileTokenChange: (token: string) => void;
   onPaymentMethodChange: (method: BookingPaymentMethod) => void;
-  // Take the selected row's real key as a parameter rather than reading
-  // `paymentMethod` state inside the handler: `onPaymentMethodChange` above
-  // schedules a state update that hasn't committed yet when these run in the
-  // same click, so a handler reading state here would see the *previous*
-  // render's value, not the one just selected (classic stale-closure trap).
+  // Dispatch with the selected catalog row's real key, not a hardcoded provider key.
   onPayPalRequest: (key: BookingPaymentMethod) => void;
   onPaymentLinkRequest: (key: BookingPaymentMethod) => void;
   onPayPalSuccess: (result: PayPalCaptureResult) => void;
@@ -1237,21 +1290,18 @@ function CustomerStep(props: {
 }) {
   const { language } = useLanguage();
 
-  function handlePaymentMethodAction(method: BookingPaymentMethod, type: SupportedPaymentType) {
-    if (props.isSubmitting || props.cardBlocked || props.cardSuccess) return;
-    // Not a real `disabled` (that would swallow the click and the feedback): the method is aria-disabled and answers with an inline message.
+  const selectedMethod = props.paymentMethods.find(method => method.id === props.paymentMethod) ?? props.paymentMethods[0];
+  const checkoutStarted = Boolean(props.createdBooking);
+  const paymentLocked = props.isSubmitting || props.cardBlocked || Boolean(props.cardSuccess) || Boolean(props.paypalSuccess) || checkoutStarted;
+
+  function handlePaymentContinue() {
+    if (paymentLocked || !selectedMethod) return;
+    // Keep acceptance feedback on the explicit action; selecting a method never submits.
     if (!props.termsAccepted) {
       props.onTermsRequired();
       return;
     }
-    // `key` (`method`) is what gets persisted as payment_method_key — real,
-    // schema-backed identity of the exact row the customer picked. `type`
-    // only decides which integration to run; two rows can share a `type`
-    // (e.g. a second PayPal-style method) and must still be told apart here.
-    // A row with no usable key never makes it into props.paymentMethods (see
-    // remotePaymentMethods' filter in the parent), so `method` is always a
-    // real, non-empty key by the time this runs.
-    props.onPaymentMethodChange(method);
+    const { id: method, type } = selectedMethod;
     if (type === 'paypal') props.onPayPalRequest(method);
     if (type === 'whatsapp_link') props.onPaymentLinkRequest(method);
     if (type === 'card') props.onCardRequest(method);
@@ -1276,7 +1326,7 @@ function CustomerStep(props: {
 
       <div className="mt-2.5">
         <Field htmlFor="booking-phone" label={tr(text.booking.phone, language)} labelClassName="uppercase tracking-[0.12em] text-ocean-400">
-          <Input id="booking-phone" className="py-2.5" autoComplete="tel" inputMode="tel" placeholder="+506 0000 0000" startIcon={<Phone size={17} />} type="tel" value={props.customerWhatsapp} onChange={(event) => props.onCustomerWhatsappChange(event.target.value)} />
+          <Input id="booking-phone" className="py-2.5" autoComplete="tel" inputMode="tel" maxLength={32} placeholder="+506 0000 0000" startIcon={<Phone size={17} />} type="tel" value={props.customerWhatsapp} onChange={(event) => props.onCustomerWhatsappChange(event.target.value)} />
         </Field>
       </div>
 
@@ -1299,18 +1349,17 @@ function CustomerStep(props: {
         <div className={cn('mt-2.5 grid grid-cols-1 gap-2', props.paymentMethods.length <= 1 ? 'sm:grid-cols-1' : props.paymentMethods.length === 2 ? 'sm:grid-cols-2' : 'sm:grid-cols-2 lg:grid-cols-3')} data-payment-methods-grid>
           {props.paymentMethods.map((method) => {
             const methodCopy = getPaymentMethodCopy(method, language);
-            const selected = props.paymentMethod === method.id;
+            const selected = selectedMethod?.id === method.id;
             return (
               <ChoiceCard
                 key={method.id}
                 data-payment-method={method.id}
                 shape="rounded"
-                className={cn('relative flex min-w-0 flex-col justify-center gap-1 p-3 text-left', !props.termsAccepted && 'opacity-60')}
-                aria-disabled={!props.termsAccepted || undefined}
-                disabled={props.isSubmitting || props.cardBlocked || Boolean(props.cardSuccess)}
+                className="relative flex min-w-0 flex-col justify-center gap-1 p-3 text-left"
+                disabled={paymentLocked}
                 selected={selected}
                 aria-pressed={selected}
-                onClick={() => handlePaymentMethodAction(method.id, method.type)}
+                onClick={() => props.onPaymentMethodChange(method.id)}
               >
                 <span className="flex items-center gap-2">
                   <span className={cn('grid size-4 shrink-0 place-items-center rounded-full border', selected ? 'border-ocean-100 bg-ocean-100' : 'border-white/25')}>
@@ -1324,6 +1373,28 @@ function CustomerStep(props: {
             );
           })}
         </div>
+        {!checkoutStarted && selectedMethod ? <div className="mt-4">
+          <p id="payment-continue-description" className="mb-3 text-sm leading-6 text-ocean-100">
+            {language === 'es'
+              ? 'Elegir un método no envía tu solicitud. Al continuar, crearemos una reserva pendiente; todavía no estará confirmada.'
+              : 'Choosing a method does not submit your request. Continuing creates a pending booking; it will not be confirmed yet.'}
+          </p>
+          <Button
+            type="button"
+            fullWidth
+            data-payment-continue
+            aria-describedby="payment-continue-description"
+            aria-disabled={!props.termsAccepted || undefined}
+            disabled={paymentLocked}
+            onClick={handlePaymentContinue}
+          >
+            {props.isSubmitting
+              ? (language === 'es' ? 'Creando solicitud…' : 'Creating request…')
+              : selectedMethod.type === 'whatsapp_link'
+                ? (language === 'es' ? 'Solicitar enlace por WhatsApp' : 'Request link via WhatsApp')
+                : (language === 'es' ? 'Continuar al pago' : 'Continue to payment')}
+          </Button>
+        </div> : null}
       </div>
 
       {props.paypalVisible && props.booking && props.createdBooking && props.paypalInfo ? (

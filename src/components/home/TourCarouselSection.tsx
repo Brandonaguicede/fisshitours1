@@ -11,6 +11,8 @@ import { useLanguage } from '../../i18n/LanguageContext';
 import { text, tr } from '../../i18n/translations';
 import { CarouselArrow, FilterMenu, SectionHeader } from '../ui';
 import { reveal, SectionReveal } from '../common/SectionReveal';
+import { trackItemList } from '../../analytics/events';
+import { getTourText } from '../../i18n/content';
 
 interface TourCarouselSectionProps {
   boats: Boat[];
@@ -52,6 +54,26 @@ export function TourCarouselSection({ boats, tours, selectedTour, onSelectTour }
     const frame = window.requestAnimationFrame(updateControls);
     return () => window.cancelAnimationFrame(frame);
   }, [groupedTours.length, activeBoatId, updateControls, visibleCardCount]);
+
+  useEffect(() => {
+    const element = scrollerRef.current;
+    if (!element || !groupedTours.length) return;
+    const observer = new IntersectionObserver(([entry]) => {
+      if (!entry.isIntersecting) return;
+      const items = groupedTours.map((item, index) => ({
+        item_id: item.tourId,
+        item_name: getTourText(item.tour, language).title,
+        item_category: item.tour.category,
+        price: item.fromPrice,
+        index,
+      }));
+      trackItemList(language === 'es' ? 'Todos los tours' : 'All tours', items,
+        `home:${activeBoatId}:${items.map((item) => item.item_id).join(',')}`);
+      observer.disconnect();
+    }, { threshold: 0.25 });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [activeBoatId, groupedTours, language, scrollerRef]);
 
   useEffect(() => {
     const element = scrollerRef.current;

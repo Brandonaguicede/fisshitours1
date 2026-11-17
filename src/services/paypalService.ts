@@ -1,4 +1,5 @@
 import { functionsUrl, supabase } from '../lib/supabase';
+import type { MeasurementReceipt } from '../analytics/events';
 import { getStoredLanguage } from '../i18n/LanguageContext';
 
 declare global {
@@ -18,6 +19,7 @@ interface PayPalButtonOptions {
 }
 
 export interface PayPalCaptureResult {
+  measurement?: MeasurementReceipt;
   bookingReference: string;
   bookingId: string;
   orderId: string;
@@ -88,6 +90,7 @@ export async function cancelPayPalOrder(bookingId: string, orderId?: string) {
 
 export async function capturePayPalOrder(orderId: string, bookingId: string, bookingReference: string) {
   const data = await callPayPalFunction<{
+    measurement?: MeasurementReceipt;
     booking_id: string;
     booking_status: string;
     payment_status: string;
@@ -95,12 +98,13 @@ export async function capturePayPalOrder(orderId: string, bookingId: string, boo
     paypal_capture_id: string;
   }>('paypal-capture-order', { bookingId, orderId });
   return {
+    measurement: data.measurement,
     bookingReference,
     bookingId: data.booking_id,
     orderId: data.paypal_order_id,
     transactionId: data.paypal_capture_id,
-    amount: '',
-    currency: 'USD',
+    amount: data.measurement?.value?.toString() ?? '',
+    currency: data.measurement?.currency ?? 'USD',
     paymentStatus: data.payment_status,
     bookingStatus: data.booking_status,
   } satisfies PayPalCaptureResult;

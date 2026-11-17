@@ -1,4 +1,5 @@
 import { Users } from 'lucide-react';
+import { trackViewItem } from '../../analytics/events';
 import { useEffect } from 'react';
 import type { RefObject } from 'react';
 
@@ -79,7 +80,11 @@ export function BoatCard({ boat, startingPrice, isSelected, isActive, onActiveCh
               <Users aria-hidden="true" className="size-3 shrink-0 text-ocean-300" strokeWidth={2} />
               {language === 'es' ? `Máx. ${boat.maxGuests}` : `Max ${boat.maxGuests} guests`}
             </span>
-            <CardActions aria-label={`${language === 'es' ? 'Ver barco' : 'Explore boat'} ${boat.name}`} className="mt-0.5" onClick={(event) => { event.stopPropagation(); onSelect(boat); }}>
+            <CardActions aria-label={`${language === 'es' ? 'Ver barco' : 'Explore boat'} ${boat.name}`} className="mt-0.5" onClick={(event) => {
+              event.stopPropagation();
+              trackViewItem({ item_id: boat.id, item_name: boat.name, item_category: 'Boat', price: startingPrice, quantity: 1 }, `boat:${boat.id}`);
+              onSelect(boat);
+            }}>
               {language === 'es' ? 'Ver barco' : 'Explore Boat'}
             </CardActions>
           </span>

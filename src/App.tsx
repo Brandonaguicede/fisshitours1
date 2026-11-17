@@ -1,4 +1,5 @@
 import { Suspense } from 'react';
+import { AnalyticsObserver } from './analytics/AnalyticsObserver';
 import { BrowserRouter } from 'react-router-dom';
 
 import { AppErrorBoundary } from './components/common/AppErrorBoundary';
@@ -17,6 +18,7 @@ export default function App() {
     <AppErrorBoundary>
       <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <SeoMetadata />
+        <AnalyticsObserver />
         <BookingSelectionProvider>
           <Suspense fallback={<LoadingFallback />}>
             <AppRoutes />

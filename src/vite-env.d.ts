@@ -1,6 +1,10 @@
 /// <reference types="vite/client" />
 
 interface ImportMetaEnv {
+  readonly VITE_MARKETING_ENABLED?: string;
+  readonly VITE_GTM_CONTAINER_REVIEWED?: string;
+  readonly VITE_MARKETING_PREVIEW_ENABLED?: string;
+  readonly VITE_ENHANCED_CONVERSIONS_ENABLED?: string;
   readonly VITE_PAYPAL_CLIENT_ID?: string;
   /** BAC "Token" public key, used only by Collect.js. Never put the private security key in a VITE_ variable. */
   readonly VITE_BAC_TOKENIZATION_KEY?: string;

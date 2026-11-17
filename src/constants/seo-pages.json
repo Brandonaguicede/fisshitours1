@@ -1,22 +1,62 @@
 {
   "/": {
-    "es": { "title": "Papagayo Fishing Tours | Tours en Barco en Costa Rica", "description": "Papagayo Fishing Tours ofrece pesca deportiva, tours en barco, snorkeling, paseos a la playa y experiencias de bioluminiscencia en Costa Rica." },
-    "en": { "title": "Papagayo Fishing Tours | Boat Tours in Costa Rica", "description": "Papagayo Fishing Tours offers sport fishing, boat tours, snorkeling, beach trips and bioluminescence experiences in Costa Rica." }
+    "es": {
+      "title": "Papagayo Fishing Tours | Tours en Barco en Costa Rica",
+      "description": "Papagayo Fishing Tours ofrece pesca deportiva, tours en barco, snorkeling, paseos a la playa y experiencias de bioluminiscencia en Costa Rica."
+    },
+    "en": {
+      "title": "Papagayo Fishing Tours | Boat Tours in Costa Rica",
+      "description": "Papagayo Fishing Tours offers sport fishing, boat tours, snorkeling, beach trips and bioluminescence experiences in Costa Rica."
+    }
   },
   "/tours": {
-    "es": { "title": "Tours de Pesca y Barco en Costa Rica | Papagayo Fishing Tours", "description": "Explora tours de pesca, snorkeling, playa y bioluminiscencia con Papagayo Fishing Tours en Costa Rica." },
-    "en": { "title": "Fishing & Boat Tours in Costa Rica | Papagayo Fishing Tours", "description": "Explore fishing, snorkeling, beach and bioluminescence tours with Papagayo Fishing Tours in Costa Rica." }
+    "es": {
+      "title": "Tours de Pesca y Barco en Costa Rica | Papagayo Fishing Tours",
+      "description": "Explora tours de pesca, snorkeling, playa y bioluminiscencia con Papagayo Fishing Tours en Costa Rica."
+    },
+    "en": {
+      "title": "Fishing & Boat Tours in Costa Rica | Papagayo Fishing Tours",
+      "description": "Explore fishing, snorkeling, beach and bioluminescence tours with Papagayo Fishing Tours in Costa Rica."
+    }
   },
   "/reservar": {
-    "es": { "title": "Reserva tu Tour en Barco | Papagayo Fishing Tours", "description": "Elige tu bote, tour y fecha para reservar tu experiencia en Costa Rica con Papagayo Fishing Tours." },
-    "en": { "title": "Book Your Boat Tour | Papagayo Fishing Tours", "description": "Choose your boat, tour and date to book your Costa Rica experience with Papagayo Fishing Tours." }
+    "es": {
+      "title": "Reserva tu Tour en Barco | Papagayo Fishing Tours",
+      "description": "Elige tu bote, tour y fecha para reservar tu experiencia en Costa Rica con Papagayo Fishing Tours."
+    },
+    "en": {
+      "title": "Book Your Boat Tour | Papagayo Fishing Tours",
+      "description": "Choose your boat, tour and date to book your Costa Rica experience with Papagayo Fishing Tours."
+    }
   },
   "/contacto": {
-    "es": { "title": "Contáctanos | Papagayo Fishing Tours", "description": "Contacta a Papagayo Fishing Tours para planear tu viaje de pesca o tour en barco en Costa Rica." },
-    "en": { "title": "Contact Us | Papagayo Fishing Tours", "description": "Contact Papagayo Fishing Tours to plan your fishing trip or boat tour in Costa Rica." }
+    "es": {
+      "title": "Contáctanos | Papagayo Fishing Tours",
+      "description": "Contacta a Papagayo Fishing Tours para planear tu viaje de pesca o tour en barco en Costa Rica."
+    },
+    "en": {
+      "title": "Contact Us | Papagayo Fishing Tours",
+      "description": "Contact Papagayo Fishing Tours to plan your fishing trip or boat tour in Costa Rica."
+    }
   },
   "/terminos": {
-    "es": { "title": "Términos y Condiciones | Papagayo Fishing Tours", "description": "Términos y condiciones, políticas de cancelación, clima y privacidad de Papagayo Fishing Tours." },
-    "en": { "title": "Terms and Conditions | Papagayo Fishing Tours", "description": "Terms and conditions, cancellation, weather and privacy policies of Papagayo Fishing Tours." }
+    "es": {
+      "title": "Términos y Condiciones | Papagayo Fishing Tours",
+      "description": "Términos y condiciones, políticas de cancelación, clima y privacidad de Papagayo Fishing Tours."
+    },
+    "en": {
+      "title": "Terms and Conditions | Papagayo Fishing Tours",
+      "description": "Terms and conditions, cancellation, weather and privacy policies of Papagayo Fishing Tours."
+    }
+  },
+  "/privacidad": {
+    "es": {
+      "title": "Privacidad y cookies | Papagayo Fishing Tours",
+      "description": "Preferencias de cookies, medici?n opcional y privacidad."
+    },
+    "en": {
+      "title": "Privacy and cookies | Papagayo Fishing Tours",
+      "description": "Cookie preferences, optional measurement and privacy."
+    }
   }
 }

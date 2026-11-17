@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 import App from './App';
+import { initializeConsent } from './analytics/consent';
 import { LanguageProvider } from './i18n/LanguageContext';
 import './index.css';
 
@@ -17,6 +18,7 @@ if (typeof window !== 'undefined' && 'scrollRestoration' in window.history) {
 }
 
 const queryClient = new QueryClient();
+initializeConsent();
 
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>

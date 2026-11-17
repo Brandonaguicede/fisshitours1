@@ -1,4 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
+import { trackContact } from '../analytics/events';
 import { useQuery } from '@tanstack/react-query';
 import { Mail, MapPin, MessageCircle, Phone, Send } from 'lucide-react';
 import { useForm } from 'react-hook-form';
@@ -152,6 +153,7 @@ export default function ContactPage() {
         },
       });
       if (error) throw error;
+      trackContact();
       reset();
     } catch {
       setSubmitError(true);
