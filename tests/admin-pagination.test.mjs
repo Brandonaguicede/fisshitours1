@@ -8,6 +8,9 @@ import { loadTs, plain } from './support/load-ts.mjs';
 
 const base = process.env.ADMIN_TEST_BASE_URL ?? 'http://localhost:5174';
 const user = { id: '00000000-0000-4000-8000-000000000001', aud: 'authenticated', role: 'authenticated', email: 'admin@example.com', app_metadata: {}, user_metadata: {}, created_at: new Date().toISOString() };
+const enterExternalPaymentEvidence = async (dialog, reference = 'BAC-TEST-1001') => {
+  await dialog.getByLabel('Referencia o comprobante BAC').fill(reference);
+};
 const initialBookings = Array.from({ length: 76 }, (_, i) => ({
   id: `booking-${i}`, booking_reference: `PFT-${String(i + 1).padStart(3, '0')}`, boat_id: 'boat-1', tour_id: 'tour-1', tour_package_id: 'package-1', time_slot_id: 'time-1',
   tour_date: i < 50 ? '2026-09-16' : '2026-09-17', created_at: '2026-09-15T08:00:00Z', guests: 2, total_snapshot: 350,
@@ -130,7 +133,9 @@ test('reservations paginate on the server, preserve filters, export all matches 
     await expect(page.getByRole('heading', { name: 'Confirmar reserva' })).toHaveCount(0);
     assert.equal(f.writes.length, 0);
     await confirmButton.click();
-    await page.locator('.admin-modal-card').getByRole('button', { name: 'Confirmar', exact: true }).click();
+    const confirmDialog = page.locator('.admin-modal-card');
+    await enterExternalPaymentEvidence(confirmDialog);
+    await confirmDialog.getByRole('button', { name: 'Confirmar', exact: true }).click();
     await expect(page.locator('.admin-reservations-table')).toContainText('No hay reservas para este filtro.');
     assert.equal(f.writes[0].bookingId, 'booking-1');
     assert.equal(f.writes.length, 1);
@@ -187,6 +192,7 @@ test('Confirmar shows loading, blocks double clicks and the row turns confirmed'
     const dialog = page.locator('.admin-modal-card');
     await expect(dialog).toContainText('¿Confirmar esta reserva');
     const confirm = dialog.getByRole('button', { name: 'Confirmar', exact: true });
+    await enterExternalPaymentEvidence(dialog);
     await confirm.dblclick();
     await expect(confirm).toBeDisabled();
     await expect(dialog.getByRole('button', { name: 'Cancelar', exact: true })).toBeDisabled();
@@ -279,7 +285,9 @@ test('filter round trips reset the page and confirming the last match returns to
     }
     await expect(page.locator('.admin-reservations-table tbody tr')).toHaveCount(1);
     await page.locator('.admin-reservations-table').getByRole('button', { name: /Confirmar/ }).click();
-    await page.locator('.admin-modal-card').getByRole('button', { name: 'Confirmar', exact: true }).click();
+    const dialog = page.locator('.admin-modal-card');
+    await enterExternalPaymentEvidence(dialog);
+    await dialog.getByRole('button', { name: 'Confirmar', exact: true }).click();
     await expect(page.locator('.admin-reservations-table tbody tr')).toHaveCount(10);
     await expect(nav.getByRole('button', { name: 'Página siguiente' })).toBeDisabled();
   } finally { await f.browser.close(); }

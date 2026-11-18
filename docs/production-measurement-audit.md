@@ -202,7 +202,7 @@ La documentación oficial vigente indica que las nuevas implementaciones de conv
 El worker `process-measurement-outbox` está implementado localmente pero permanece desactivado por defecto:
 
 - Exige `MEASUREMENT_WORKER_SECRET` de al menos 32 caracteres.
-- No reclama filas si `SERVER_CONVERSIONS_ENABLED` no es exactamente `true`.
+- No reclama filas si `SERVER_CONVERSIONS_MODE` no es `validate` o `live`.
 - Solo reclama destinos cuya configuración backend esté completa.
 - Usa leases de 90 segundos y `FOR UPDATE SKIP LOCKED` para impedir procesamiento concurrente.
 - Mantiene una fila por proveedor; un éxito de GA4 no oculta un fallo de Meta.
@@ -233,6 +233,6 @@ Referencias oficiales revisadas el 2026-11-15:
 
 ## Veredicto actual
 
-**PENDIENTE DE CORRECCIONES Y VALIDACIÓN EXTERNA.**
+**PENDIENTE DE VALIDACIÓN EXTERNA.**
 
-El frontend y la captura de evidencia están preparados localmente, pero todavía no existe evidencia de recepción de conversiones de servidor por GA4, Meta o Google Ads. Producción no está aprobada.
+El frontend, la captura de evidencia y el outbox idempotente están preparados. Meta usa `event_id = transaction_id`, pero todavía no existe evidencia de recepción de conversiones de servidor por GA4, Meta o Google Ads. Producción publicitaria no está aprobada.

@@ -93,7 +93,9 @@ const openEditor = async (page, id) => { await row(page, id).getByRole('button',
 const calendarRow = (page) => page.getByRole('group', { name: 'Google Calendar' });
 const confirmFromTable = async (page, id) => {
   await row(page, id).getByRole('button', { name: /Confirmar/ }).click();
-  await page.locator('.admin-modal-card').getByRole('button', { name: 'Confirmar', exact: true }).click();
+  const dialog = page.locator('.admin-modal-card');
+  await dialog.getByLabel('Referencia o comprobante BAC').fill(`BAC-${id.toUpperCase()}-1001`);
+  await dialog.getByRole('button', { name: 'Confirmar', exact: true }).click();
 };
 
 test('confirming: the booking is confirmed FIRST, then the calendar is synced with ONLY the reservation id, and the editor shows "Agendada"', async () => {

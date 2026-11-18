@@ -13,6 +13,7 @@ export interface AdminConfirmDialogProps {
   confirmLabel?: string;
   cancelLabel?: string;
   loading?: boolean;
+  confirmDisabled?: boolean;
   /** `danger` (default) keeps the destructive look; `primary` is for positive actions like confirming a booking. */
   tone?: 'danger' | 'primary';
 }
@@ -23,7 +24,7 @@ export interface AdminConfirmDialogProps {
 // used to hand-roll this same markup (Tours, Boats, Paquetes, Galería,
 // Comentarios) now renders through this instead, so the pattern — and any
 // future fix to it — lives in one place.
-export function AdminConfirmDialog({ open, onClose, onConfirm, titleId, title, message, confirmLabel = 'Eliminar', cancelLabel = 'Cancelar', loading = false, tone = 'danger' }: AdminConfirmDialogProps) {
+export function AdminConfirmDialog({ open, onClose, onConfirm, titleId, title, message, confirmLabel = 'Eliminar', cancelLabel = 'Cancelar', loading = false, confirmDisabled = false, tone = 'danger' }: AdminConfirmDialogProps) {
   const Icon = tone === 'primary' ? Check : Trash2;
   return (
     <Modal open={open} onClose={onClose} titleId={titleId} className={tone === 'primary' ? 'admin-confirm-dialog--compact' : 'max-w-md'}>
@@ -31,7 +32,7 @@ export function AdminConfirmDialog({ open, onClose, onConfirm, titleId, title, m
         <h2 id={titleId} className="admin-card__title"><Icon size={18} /> {title}</h2>
         <div className="admin-muted mt-2">{message}</div>
         <div className="admin-actions mt-5">
-          <button className={tone === 'primary' ? 'admin-btn' : 'admin-btn admin-btn--danger'} type="button" disabled={loading} onClick={() => void onConfirm()}>
+          <button className={tone === 'primary' ? 'admin-btn' : 'admin-btn admin-btn--danger'} type="button" disabled={loading || confirmDisabled} onClick={() => void onConfirm()}>
             {loading ? <Loader2 className="animate-spin" size={16} /> : <Icon size={16} />} {confirmLabel}
           </button>
           <button className="admin-btn admin-btn--secondary" type="button" disabled={loading} onClick={onClose}>{cancelLabel}</button>
