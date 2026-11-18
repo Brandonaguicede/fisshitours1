@@ -13,7 +13,15 @@ export function AnalyticsObserver() {
     };
     page();
     window.addEventListener('pft-consent-change', page);
-    return () => { window.clearTimeout(timer); window.removeEventListener('pft-consent-change', page); };
+    // GTM can acknowledge the stored/new consent before React's deferred route
+    // callback creates the initial page event. Retrying here is safe because
+    // trackPage deduplicates the current canonical route.
+    window.addEventListener('pft-consent-applied', page);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener('pft-consent-change', page);
+      window.removeEventListener('pft-consent-applied', page);
+    };
   }, [pathname]);
   useEffect(() => {
     const click = (event: MouseEvent) => {

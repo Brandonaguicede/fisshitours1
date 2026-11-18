@@ -93,6 +93,15 @@ test('each live consent revision is announced once after GTM loads, including wi
   assert.equal(updates()[1].marketing_consent, false);
 });
 
+test('the initial route remains idempotent when consent acknowledgement retries tracking', () => {
+  const b = browser({ production: true }); const c = b.context;
+  c.applyConsent({ analytics: true, marketing: true });
+  c.trackPage('/reservar');
+  b.window.pftConsentApplied(b.window.pftReadConsent().revision);
+  c.trackPage('/reservar'); // AnalyticsObserver retries on pft-consent-applied.
+  assert.equal(b.events().filter(entry => entry.event === 'page_view_spa').length, 1);
+});
+
 test('withdrawal drops pending conversions, expiry discards undelivered events and stable IDs survive reload', () => {
   const b = browser({ production: true }); const c = b.context;
   const receipt = { booking_id: 'stable', production: true };
