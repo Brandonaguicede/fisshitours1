@@ -65,11 +65,13 @@ function flushEvents() {
   }
 }
 window.addEventListener('pft-consent-applied', () => {
-  // Consent can be acknowledged before React's deferred route observer runs.
-  // Generate the current canonical route here as the reliable first-page
-  // source; trackPage makes repeated acknowledgements idempotent.
-  trackPage(location.pathname);
-  flushEvents();
+  // A sandboxed GTM template invokes this callback while GTM is still
+  // processing its current dataLayer entry. Defer our push one task so it is
+  // observed as the next entry, never nested inside consent initialization.
+  window.setTimeout(() => {
+    trackPage(location.pathname);
+    flushEvents();
+  }, 0);
 });
 window.addEventListener('online', () => { loadConsentedGtm(); flushEvents(); });
 window.addEventListener('pft-consent-change', () => {

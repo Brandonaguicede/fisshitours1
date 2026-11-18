@@ -17,7 +17,7 @@ function browser({ production = false, blockedStorage = false } = {}) {
     }
     this.dataLayer.push(args);
   },
-    setTimeout() { return 1; }, clearTimeout() {},
+    setTimeout(callback, delay) { if (delay === 0) callback(); return 1; }, clearTimeout() {},
     dispatchEvent(event) { for (const fn of listeners.get(event.type) ?? []) fn(event); },
     addEventListener(name, fn) { listeners.set(name, [...(listeners.get(name) ?? []), fn]); },
     pftLoadGtm() { this.loaded = (this.loaded ?? 0) + 1; return Promise.resolve(true); } };
