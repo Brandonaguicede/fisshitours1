@@ -54,6 +54,7 @@ test('no events or GTM before consent; reject persists and route events dedupe',
 
 test('live events wait for the matching consent acknowledgement; no persistent delivery claim', () => {
   const b = browser({ production: true }); const c = b.context;
+  const conversions = () => b.events().filter(entry => entry.event !== 'page_view_spa');
   c.applyConsent({ analytics: true, marketing: false });
   c.trackReservation({ booking_id: 'booking-1', production: true });
   assert.equal(b.events().length, 0);
@@ -62,11 +63,11 @@ test('live events wait for the matching consent acknowledgement; no persistent d
   b.window.pftConsentApplied(original); // stale acknowledgement cannot release anything
   assert.equal(b.events().length, 0);
   b.window.pftConsentApplied(b.window.pftReadConsent().revision);
-  assert.equal(b.events().length, 1);
-  assert.equal(b.events()[0].analytics_consent, true);
-  assert.equal(b.events()[0].marketing_consent, false); // no retroactive advertising
+  assert.equal(conversions().length, 1);
+  assert.equal(conversions()[0].analytics_consent, true);
+  assert.equal(conversions()[0].marketing_consent, false); // no retroactive advertising
   c.trackReservation({ booking_id: 'booking-1', production: true });
-  assert.equal(b.events().length, 1);
+  assert.equal(conversions().length, 1);
   assert.equal([...b.storage.keys()].filter(k => k.startsWith('pft-event:')).length, 0);
 });
 
@@ -96,27 +97,27 @@ test('each live consent revision is announced once after GTM loads, including wi
 test('the initial route remains idempotent when consent acknowledgement retries tracking', () => {
   const b = browser({ production: true }); const c = b.context;
   c.applyConsent({ analytics: true, marketing: true });
-  c.trackPage('/reservar');
   b.window.pftConsentApplied(b.window.pftReadConsent().revision);
-  c.trackPage('/reservar'); // AnalyticsObserver retries on pft-consent-applied.
+  b.window.pftConsentApplied(b.window.pftReadConsent().revision);
   assert.equal(b.events().filter(entry => entry.event === 'page_view_spa').length, 1);
 });
 
 test('withdrawal drops pending conversions, expiry discards undelivered events and stable IDs survive reload', () => {
   const b = browser({ production: true }); const c = b.context;
+  const conversions = () => b.events().filter(entry => entry.event !== 'page_view_spa');
   const receipt = { booking_id: 'stable', production: true };
   c.applyConsent({ analytics: true, marketing: true });
   c.trackReservation(receipt);
   c.applyConsent({ analytics: false, marketing: false });
   c.applyConsent({ analytics: true, marketing: true });
   b.window.pftConsentApplied(b.window.pftReadConsent().revision);
-  assert.equal(b.events().length, 0);
+  assert.equal(conversions().length, 0);
   c.trackReservation(receipt); // fresh backend result, not an automatic replay
-  assert.equal(b.events()[0].event_id, 'reservation_submit_success:stable');
+  assert.equal(conversions()[0].event_id, 'reservation_submit_success:stable');
   const reloaded = browser();
   reloaded.context.applyConsent({ analytics: true, marketing: false });
   reloaded.context.trackReservation(receipt);
-  assert.equal(reloaded.events()[0].event_id, b.events()[0].event_id);
+  assert.equal(reloaded.events()[0].event_id, conversions()[0].event_id);
   c.applyConsent({ analytics: true, marketing: true });
   c.trackReservation({ booking_id: 'expires', production: true });
   b.advance(30 * 60 * 1000 + 1);
@@ -134,7 +135,7 @@ test('verified settlement only; authorization, cancelled, zero, sandbox and repe
   c.trackVerifiedResult(receipt, commerce);
   c.trackVerifiedResult({ ...receipt, payment_confirmed: true, value: 0 }, commerce);
   c.trackVerifiedResult({ ...receipt, payment_confirmed: true, production: false }, commerce);
-  assert.equal(b.events().length, 0);
+  assert.equal(b.events().filter(e => e.event !== 'page_view_spa').length, 0);
   c.trackVerifiedResult({ ...receipt, payment_confirmed: true, booking_confirmed: true, email: 'private@example.com', paymentToken: 'secret' }, commerce);
   c.trackVerifiedResult({ ...receipt, payment_confirmed: true, booking_confirmed: true }, commerce);
   assert.equal(b.events().filter(e => e.event === 'purchase').length, 1);
@@ -142,7 +143,7 @@ test('verified settlement only; authorization, cancelled, zero, sandbox and repe
   assert.equal(b.events().find(e => e.event === 'purchase').ecommerce.value, 125);
   assert.doesNotMatch(JSON.stringify(b.events()), /private|secret|email|paymentToken/);
   c.applyConsent({ analytics: false, marketing: false }); c.trackContact();
-  assert.equal(b.events().length, 2);
+  assert.equal(b.events().filter(e => e.event !== 'page_view_spa').length, 2);
 });
 
 test('GA4 ecommerce contract emits the six events with a clean object and real values', () => {

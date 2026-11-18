@@ -64,7 +64,13 @@ function flushEvents() {
     entry.emitted = true; // Enqueued ONLY. This is not a tag or provider acknowledgement.
   }
 }
-window.addEventListener('pft-consent-applied', flushEvents);
+window.addEventListener('pft-consent-applied', () => {
+  // Consent can be acknowledged before React's deferred route observer runs.
+  // Generate the current canonical route here as the reliable first-page
+  // source; trackPage makes repeated acknowledgements idempotent.
+  trackPage(location.pathname);
+  flushEvents();
+});
 window.addEventListener('online', () => { loadConsentedGtm(); flushEvents(); });
 window.addEventListener('pft-consent-change', () => {
   const consent = getConsent();
