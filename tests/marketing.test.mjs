@@ -234,7 +234,7 @@ test('campaign context is consented, limited, expires, survives SPA and clears b
 
 test('booking attribution persists only identifiers covered by the recorded consent', async () => {
   const b = browser(); const c = b.context;
-  c.location.search = '?gclid=AbCdEf0123456789&gbraid=GbRaid0123456789&wbraid=WbRaid0123456789&fbclid=FbClick0123456789';
+  c.location.search = '?gclid=AbCdEf0123456789&gbraid=GbRaid0123456789&wbraid=WbRaid0123456789&fbclid=FbClick0123456789&utm_source=google&utm_medium=cpc&utm_campaign=papagayo_2026&utm_content=boat_card&utm_term=fishing_tour';
   c.document.cookie = '_fbp=fb.1.1794609108.123456789; _fbc=fb.1.1794609108.FbClick0123456789';
   const denied = plain(await c.bookingAttribution());
   assert.equal(denied.analyticsConsent, false);
@@ -248,17 +248,29 @@ test('booking attribution persists only identifiers covered by the recorded cons
   assert.equal(granted.gclid, 'AbCdEf0123456789');
   assert.equal(granted.gbraid, 'GbRaid0123456789');
   assert.equal(granted.wbraid, 'WbRaid0123456789');
+  assert.equal(granted.fbclid, 'FbClick0123456789');
   assert.equal(granted.fbp, 'fb.1.1794609108.123456789');
   assert.equal(granted.fbc, 'fb.1.1794609108.FbClick0123456789');
+  assert.equal(granted.utmSource, 'google');
+  assert.equal(granted.utmMedium, 'cpc');
+  assert.equal(granted.utmCampaign, 'papagayo_2026');
+  assert.equal(granted.utmContent, 'boat_card');
+  assert.equal(granted.utmTerm, 'fishing_tour');
   assert.equal(granted.gaClientId, '123456789.987654321');
   assert.equal(granted.gaSessionId, '1794609108');
-  assert.equal(Object.hasOwn(granted, 'fbclid'), false);
 
   c.applyConsent({ analytics: true, marketing: false });
   const revoked = plain(await c.bookingAttribution());
   assert.equal(revoked.gclid, undefined);
+  assert.equal(revoked.fbclid, undefined);
   assert.equal(revoked.fbp, undefined);
+  assert.equal(revoked.utmSource, 'google');
   assert.equal(revoked.gaClientId, '123456789.987654321');
+});
+
+test('checkout selection emits view_item from the real quoted commerce item', () => {
+  const source = fs.readFileSync('src/components/booking/BookingPanel.tsx', 'utf8');
+  assert.match(source, /trackViewItem\(commerceContext\.items\[0\], `checkout:\$\{selectedBoat\.id\}:\$\{selectedTour\.id\}`\)/);
 });
 
 test('unknown paths, sensitive campaigns, repeated keys and programmatic WhatsApp do not become clicks', () => {

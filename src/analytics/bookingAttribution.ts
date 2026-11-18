@@ -1,4 +1,4 @@
-import { advertisingAttribution } from './attribution';
+import { advertisingAttribution, measurementAttribution } from './attribution';
 import { getConsentRecord } from './consent';
 
 export interface BookingAttribution {
@@ -9,8 +9,14 @@ export interface BookingAttribution {
   gclid?: string;
   gbraid?: string;
   wbraid?: string;
+  fbclid?: string;
   fbp?: string;
   fbc?: string;
+  utmSource?: string;
+  utmMedium?: string;
+  utmCampaign?: string;
+  utmContent?: string;
+  utmTerm?: string;
   gaClientId?: string;
   gaSessionId?: string;
 }
@@ -18,6 +24,7 @@ export interface BookingAttribution {
 const SAFE_CLICK_ID = /^[A-Za-z0-9_-]{10,256}$/;
 const SAFE_META_COOKIE = /^fb\.\d+\.\d+\.[A-Za-z0-9_-]{1,256}$/;
 const SAFE_GA_ID = /^[A-Za-z0-9._-]{1,128}$/;
+const SAFE_CAMPAIGN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
 
 function cookieValue(name: string) {
   const prefix = `${encodeURIComponent(name)}=`;
@@ -55,7 +62,7 @@ export async function bookingAttribution(): Promise<BookingAttribution> {
 
   if (consent.marketing) {
     const clicks = advertisingAttribution();
-    for (const key of ['gclid', 'gbraid', 'wbraid'] as const) {
+    for (const key of ['gclid', 'gbraid', 'wbraid', 'fbclid'] as const) {
       const value = clicks[key];
       if (typeof value === 'string' && SAFE_CLICK_ID.test(value)) result[key] = value;
     }
@@ -66,6 +73,15 @@ export async function bookingAttribution(): Promise<BookingAttribution> {
   }
 
   if (consent.analytics) {
+    const campaigns = measurementAttribution().campaigns;
+    const campaignFields = {
+      utm_source: 'utmSource', utm_medium: 'utmMedium', utm_campaign: 'utmCampaign',
+      utm_content: 'utmContent', utm_term: 'utmTerm',
+    } as const;
+    for (const [source, target] of Object.entries(campaignFields) as Array<[keyof typeof campaignFields, typeof campaignFields[keyof typeof campaignFields]]>) {
+      const value = campaigns[source];
+      if (typeof value === 'string' && SAFE_CAMPAIGN.test(value)) result[target] = value;
+    }
     const [clientId, sessionId] = await Promise.all([gtagValue('client_id'), gtagValue('session_id')]);
     if (clientId) result.gaClientId = clientId;
     if (sessionId) result.gaSessionId = sessionId;

@@ -25,7 +25,7 @@ import { Button, ChoiceCard, Field, FieldError, GlassPanel, Input, ModalShell, T
 import { CURRENT_TERMS_VERSION } from '../../../supabase/functions/_shared/terms.mjs';
 import { TermsConsent } from './TermsModal';
 import { BacCardCheckout } from './BacCardCheckout';
-import { trackAddPaymentInfo, trackBeginCheckout, trackReservation, trackVerifiedResult, trackWhatsApp, type CommerceContext } from '../../analytics/events';
+import { trackAddPaymentInfo, trackBeginCheckout, trackReservation, trackVerifiedResult, trackViewItem, trackWhatsApp, type CommerceContext } from '../../analytics/events';
 import { stageEnhancedConversionEmail } from '../../analytics/enhancedConversions';
 
 function formatCurrency(value: number) {
@@ -251,6 +251,11 @@ export function BookingPanel({ selectedBoat, selectedTour: requestedTour, boats,
           price: Math.max(0, bookingPayload.total - bookingPayload.taxAmount), quantity: 1 }],
       }
     : null;
+
+  useEffect(() => {
+    if (!commerceContext || !selectedTour) return;
+    trackViewItem(commerceContext.items[0], `checkout:${selectedBoat.id}:${selectedTour.id}`);
+  }, [commerceContext, selectedBoat.id, selectedTour]);
 
   useEffect(() => {
     // Wait for the backend quote that includes the selected departure location. The local estimate and the

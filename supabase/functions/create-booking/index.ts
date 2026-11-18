@@ -3,6 +3,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2';
 import { z } from 'npm:zod@3.23.8';
 import { areExternalProviderMocksAllowed } from '../_shared/environment.ts';
 import { corsHeaders, corsPreflight, withCors } from '../_shared/cors.ts';
+import { measurementReceipt } from '../_shared/measurement.ts';
 import { checkTermsAcceptance } from '../_shared/terms.mjs';
 
 const schema = z.object({
@@ -30,6 +31,25 @@ const schema = z.object({
   // TERMS_NOT_ACCEPTED. The timestamp and the "web" source are set here / in the database, never by the client.
   termsAccepted: z.unknown().optional(),
   termsVersion: z.unknown().optional(),
+  attribution: z.object({
+    analyticsConsent: z.boolean(),
+    marketingConsent: z.boolean(),
+    consentRevision: z.number().int().min(0),
+    capturedAt: z.string().datetime(),
+    gclid: z.string().regex(/^[A-Za-z0-9_-]{10,256}$/).optional(),
+    gbraid: z.string().regex(/^[A-Za-z0-9_-]{10,256}$/).optional(),
+    wbraid: z.string().regex(/^[A-Za-z0-9_-]{10,256}$/).optional(),
+    fbclid: z.string().regex(/^[A-Za-z0-9_-]{10,256}$/).optional(),
+    fbp: z.string().regex(/^fb\.\d+\.\d+\.[A-Za-z0-9_-]{1,256}$/).optional(),
+    fbc: z.string().regex(/^fb\.\d+\.\d+\.[A-Za-z0-9_-]{1,256}$/).optional(),
+    utmSource: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/).optional(),
+    utmMedium: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/).optional(),
+    utmCampaign: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/).optional(),
+    utmContent: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/).optional(),
+    utmTerm: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/).optional(),
+    gaClientId: z.string().regex(/^[A-Za-z0-9._-]{1,128}$/).optional(),
+    gaSessionId: z.string().regex(/^[A-Za-z0-9._-]{1,128}$/).optional(),
+  }).strict().optional(),
 });
 
 serve(withCors(async (req) => {
@@ -77,15 +97,56 @@ serve(withCors(async (req) => {
     return Response.json({ message }, { status, headers });
   }
 
+  await persistAttribution(supabase, data.booking_id, parsed.data.attribution).catch((attributionError) => {
+    // Measurement must never invalidate an accepted reservation.
+    console.error('Booking attribution could not be persisted', attributionError);
+  });
+
   await sendBookingEmails(supabase, data, payload).catch((emailError) => {
     console.error('Booking email notification failed', emailError);
   });
 
-  return Response.json(data, { status: 201, headers });
+  const measurement = await measurementReceipt({ bookingId: data.booking_id, bookingStatus: data.booking_status });
+  return Response.json({ ...data, measurement }, { status: 201, headers });
 }));
 
 function clean(value?: string) {
   return value?.trim().replace(/\s+/g, ' ') ?? undefined;
+}
+
+async function persistAttribution(
+  supabase: ReturnType<typeof createClient>,
+  bookingId: string,
+  value?: z.infer<typeof schema>['attribution'],
+) {
+  if (!value || !bookingId) return;
+  const marketing = value.marketingConsent === true;
+  const analytics = value.analyticsConsent === true;
+  const { error } = await supabase.from('measurement_attribution').insert({
+    booking_id: bookingId,
+    analytics_consent: analytics,
+    marketing_consent: marketing,
+    consent_revision: value.consentRevision,
+    captured_at: value.capturedAt,
+    ...(marketing ? {
+      gclid: value.gclid ?? null,
+      gbraid: value.gbraid ?? null,
+      wbraid: value.wbraid ?? null,
+      fbclid: value.fbclid ?? null,
+      fbp: value.fbp ?? null,
+      fbc: value.fbc ?? null,
+    } : {}),
+    ...(analytics ? {
+      utm_source: value.utmSource ?? null,
+      utm_medium: value.utmMedium ?? null,
+      utm_campaign: value.utmCampaign ?? null,
+      utm_content: value.utmContent ?? null,
+      utm_term: value.utmTerm ?? null,
+      ga_client_id: value.gaClientId ?? null,
+      ga_session_id: value.gaSessionId ?? null,
+    } : {}),
+  });
+  if (error) throw error;
 }
 
 function getClientIp(req: Request) {
