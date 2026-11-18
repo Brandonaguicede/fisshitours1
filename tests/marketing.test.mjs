@@ -70,6 +70,29 @@ test('live events wait for the matching consent acknowledgement; no persistent d
   assert.equal([...b.storage.keys()].filter(k => k.startsWith('pft-event:')).length, 0);
 });
 
+test('each live consent revision is announced once after GTM loads, including withdrawal', async () => {
+  const b = browser({ production: true }); const c = b.context;
+  const updates = () => b.window.dataLayer.filter(entry => entry.event === 'consent_updated');
+
+  c.initializeConsent();
+  assert.equal(updates().length, 0, 'denied-by-default must not load or notify an absent container');
+
+  c.applyConsent({ analytics: true, marketing: true });
+  c.loadConsentedGtm(); // Mirrors the route observer racing with applyConsent.
+  await Promise.resolve(); await Promise.resolve();
+  assert.equal(updates().length, 1);
+  assert.equal(updates()[0].consent_revision, b.window.pftReadConsent().revision);
+
+  c.loadConsentedGtm();
+  await Promise.resolve();
+  assert.equal(updates().length, 1, 'repeated loaders must not announce the same revision');
+
+  c.applyConsent({ analytics: false, marketing: false });
+  assert.equal(updates().length, 2, 'a loaded container must receive withdrawal');
+  assert.equal(updates()[1].analytics_consent, false);
+  assert.equal(updates()[1].marketing_consent, false);
+});
+
 test('withdrawal drops pending conversions, expiry discards undelivered events and stable IDs survive reload', () => {
   const b = browser({ production: true }); const c = b.context;
   const receipt = { booking_id: 'stable', production: true };

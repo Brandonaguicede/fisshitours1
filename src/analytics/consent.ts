@@ -27,6 +27,8 @@ export function storedConsent(): Consent | null {
 let current = storedConsent() ?? denied;
 let revision = 0;
 let appliedRevision = -1;
+let announcedRevision = -1;
+let gtmLoaded = false;
 export const getConsent = (): Consent => ({ ...current });
 export const getConsentRecord = (): Consent & { revision: number } => ({ ...current, revision });
 export function marketingEnabled() {
@@ -46,14 +48,27 @@ window.pftConsentApplied = (value: number) => {
   window.dispatchEvent(new Event('pft-consent-applied'));
 };
 export function loadConsentedGtm() {
-  if ((current.analytics || current.marketing) && marketingEnabled()
-    && isMeasurementPath(location.pathname)) {
-    window.gtag?.('set', { page_location: location.origin + normalizePath(location.pathname), page_referrer: '', send_page_view: false });
-    void window.pftLoadGtm?.().then((loaded) => {
-      if (loaded) window.dataLayer?.push({ event: 'consent_updated', consent_revision: revision,
-        analytics_consent: current.analytics, marketing_consent: current.marketing });
-    }).catch(() => { /* External measurement must not affect the site. */ });
+  if (!marketingEnabled() || !isMeasurementPath(location.pathname)) return;
+  const expectedRevision = revision;
+  const announce = () => {
+    if (expectedRevision !== revision || announcedRevision === expectedRevision) return;
+    announcedRevision = expectedRevision;
+    window.dataLayer?.push({ event: 'consent_updated', consent_revision: expectedRevision,
+      analytics_consent: current.analytics, marketing_consent: current.marketing });
+  };
+  // Once GTM exists, revocations must reach its consent template even though no
+  // category remains granted. Before the first grant there is intentionally no
+  // external container to notify.
+  if (!current.analytics && !current.marketing) {
+    if (gtmLoaded) announce();
+    return;
   }
+  window.gtag?.('set', { page_location: location.origin + normalizePath(location.pathname), page_referrer: '', send_page_view: false });
+  void window.pftLoadGtm?.().then((loaded) => {
+    if (!loaded) return;
+    gtmLoaded = true;
+    announce();
+  }).catch(() => { /* External measurement must not affect the site. */ });
 }
 function removeMarketingCookies() {
   // Only measurement cookies: never touch auth, BAC, NMI, PayPal or booking storage.
@@ -81,8 +96,6 @@ export function applyConsent(choice: Consent, persist = true) {
   window.fbq?.('consent', current.marketing ? 'grant' : 'revoke');
   if (!current.analytics || !current.marketing) removeMarketingCookies();
   loadConsentedGtm();
-  window.dataLayer?.push({ event: 'consent_updated', consent_revision: revision,
-    analytics_consent: current.analytics, marketing_consent: current.marketing });
   // Remove indefinite dedupe records written by the previous implementation only.
   try {
     for (let i = localStorage.length - 1; i >= 0; i--) {
