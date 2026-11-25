@@ -134,7 +134,7 @@ test('overview scan asks for statuses + paid payments in one embedded query, pag
   assert.equal(requests.length, 2, 'one request per 1000-row page, no per-booking requests');
   for (const request of requests) {
     assert.equal(request.url.pathname, '/rest/v1/bookings');
-    assert.equal(request.url.searchParams.get('select'), 'id,created_at,tour_date,boat_id,tour_id,payment_status,booking_status,payment_method_key,total_snapshot,customers(full_name),boats(name),tours(title),payment_methods(name),payments(amount,status)');
+    assert.equal(request.url.searchParams.get('select'), 'id,created_at,tour_date,boat_id,tour_id,payment_status,booking_status,payment_method_key,total_snapshot,customer_name_snapshot,customers(full_name),boats(name),tours(title),payment_methods(name),payments(amount,status)');
     assert.equal(request.url.searchParams.get('payments.status'), 'eq.paid');
     assert.equal(request.url.searchParams.get('order'), 'id.asc');
   }

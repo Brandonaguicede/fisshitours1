@@ -3,6 +3,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2';
 import { z } from 'npm:zod@3.23.8';
 import { corsHeaders, corsPreflight, withCors } from '../_shared/cors.ts';
 import { enqueueBookingConfirmationEmails } from '../_shared/booking-confirmation-email.ts';
+import { getBookingContact } from '../_shared/booking-contact.mjs';
 
 const schema = z.object({ bookingId: z.string().uuid() });
 
@@ -43,7 +44,7 @@ serve(withCors(async (req) => {
 
     const { data: booking, error: bookingError } = await adminClient
       .from('bookings')
-      .select('payment_method_key, payment_status, customers(email)')
+      .select('payment_method_key, payment_status, customer_name_snapshot, customer_email_snapshot, customers(email, full_name)')
       .eq('id', parsed.data.bookingId)
       .single();
     if (bookingError || !booking) return Response.json({ message: 'Booking not found' }, { status: 404, headers });
@@ -68,7 +69,7 @@ serve(withCors(async (req) => {
     });
     if (error) return Response.json({ message: error.message }, { status: error.message.includes('BOAT_TIME_CONFLICT') || error.message.includes('already reserved') ? 409 : 400, headers });
 
-    const customerEmailPresent = Boolean(booking?.customers?.email);
+    const customerEmailPresent = Boolean(getBookingContact(booking).email);
     let emailQueued = false;
     if (customerEmailPresent) {
       await enqueueBookingConfirmationEmails(adminClient, parsed.data.bookingId)

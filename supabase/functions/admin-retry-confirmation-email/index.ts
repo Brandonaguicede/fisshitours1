@@ -3,6 +3,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2';
 import { z } from 'npm:zod@3.23.8';
 import { corsHeaders, corsPreflight, withCors } from '../_shared/cors.ts';
 import { enqueueBookingConfirmationEmails } from '../_shared/booking-confirmation-email.ts';
+import { getBookingContact } from '../_shared/booking-contact.mjs';
 
 const schema = z.object({ bookingId: z.string().uuid() });
 
@@ -34,10 +35,10 @@ serve(withCors(async (req) => {
     if (!profile?.active || !['admin', 'editor'].includes(profile.role)) return Response.json({ message: 'Admin or editor role required' }, { status: 403, headers });
 
     const { data: booking, error: bookingError } = await adminClient
-      .from('bookings').select('booking_status, customers(email)').eq('id', parsed.data.bookingId).single();
+      .from('bookings').select('booking_status, customer_name_snapshot, customer_email_snapshot, customers(email, full_name)').eq('id', parsed.data.bookingId).single();
     if (bookingError || !booking) return Response.json({ message: 'Booking not found' }, { status: 404, headers });
     if (booking.booking_status !== 'confirmed') return Response.json({ message: 'Booking must be confirmed' }, { status: 400, headers });
-    if (!booking.customers?.email) return Response.json({ customerEmailPresent: false, queued: 0 }, { headers });
+    if (!getBookingContact(booking).email) return Response.json({ customerEmailPresent: false, queued: 0 }, { headers });
 
     await enqueueBookingConfirmationEmails(adminClient, parsed.data.bookingId);
     const { data, error } = await adminClient.rpc('ensure_booking_confirmation_email_queue', { p_booking_id: parsed.data.bookingId });

@@ -4,6 +4,7 @@ import path from 'node:path';
 import test from 'node:test';
 import vm from 'node:vm';
 import ts from 'typescript';
+import * as bookingContact from '../supabase/functions/_shared/booking-contact.mjs';
 import { z } from 'zod';
 
 // The official mailbox comes ONLY from configuration (Supabase secrets); no sender / recipient / reply-to is built into the code.
@@ -200,7 +201,7 @@ function confirmationMessages({ env, customerEmail = 'cliente@example.com' }) {
     customers: { full_name: 'Ana', email: customerEmail, whatsapp: '50688888888' }, boats: { name: 'Boat' }, tours: { title: 'Tour' }, tour_packages: { name: 'Half day' }, time_slots: { starts_at: '07:00:00' },
   };
   const supabase = { from: () => { const query = { select: () => query, eq: () => query, single: async () => ({ data: booking, error: null }), maybeSingle: async () => ({ data: { value: '50686105784' }, error: null }) }; return query; } };
-  const context = vm.createContext({ console, Response, Deno: { env: envOf(env) } });
+  const context = vm.createContext({ console, Response, Deno: { env: envOf(env) }, ...bookingContact });
   const source = fs.readFileSync('supabase/functions/_shared/booking-confirmation-email.ts', 'utf8').replace(/^﻿/, '').replace(/^import .*;\r?\n/gm, '').replace(/^export /gm, '');
   vm.runInContext(ts.transpile(source, { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None }), context);
   return context.getBookingConfirmationMessages(supabase, 'b-1');

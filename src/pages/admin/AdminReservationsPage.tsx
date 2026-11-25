@@ -8,6 +8,7 @@ import { AdminDangerRow } from '../../components/admin/AdminStatusSection';
 import FormSection from '../../components/admin/FormSection';
 import AdminConfirmDialog from '../../components/admin/AdminConfirmDialog';
 import { BacPaymentActions } from '../../components/admin/BacPaymentActions';
+import { AdminBookingLeadsSection } from '../../components/admin/AdminBookingLeadsSection';
 import { Modal } from '../../components/common/Modal';
 import { TermsConsent } from '../../components/booking/TermsModal';
 import { supabase } from '../../lib/supabase';
@@ -112,6 +113,7 @@ export default function AdminReservationsPage() {
   const [timeSlots, setTimeSlots] = useState<TourTimeSlot[]>([]);
   const [departureLocations, setDepartureLocations] = useState<DepartureLocation[]>([]);
   const [paymentMethodNames, setPaymentMethodNames] = useState<Record<string, string>>({});
+  const [section, setSection] = useState<'reservations' | 'leads'>('reservations');
   const [search, setSearch] = useState('');
   const [bookingStatus, setBookingStatus] = useState('all');
   const [paymentStatus, setPaymentStatus] = useState('all');
@@ -603,6 +605,13 @@ export default function AdminReservationsPage() {
 
   return (
     <div className="admin-page">
+      <nav className="admin-tabs" aria-label="Secciones de reservas" style={{ width: 'fit-content', maxWidth: '100%' }}>
+        <button type="button" aria-pressed={section === 'reservations'} className={`admin-tab${section === 'reservations' ? ' admin-tab--active' : ''}`} onClick={() => setSection('reservations')}>Reservas</button>
+        <button type="button" aria-pressed={section === 'leads'} className={`admin-tab${section === 'leads' ? ' admin-tab--active' : ''}`} onClick={() => setSection('leads')}>Intentos de reserva</button>
+      </nav>
+      {section === 'leads' ? <AdminBookingLeadsSection /> : null}
+      {section === 'reservations' ? (
+      <>
       <section className="admin-stat-grid">
         <AdminStatCard label="Reservas" value={statValue(stats?.total)} icon={Calendar} />
         <AdminStatCard label="Pendientes" value={statValue(stats?.pending)} icon={Clock} tone="warning" />
@@ -737,6 +746,8 @@ export default function AdminReservationsPage() {
       </div>
       <AdminPagination {...pagination} noun="reservas" loading={loading} />
       </AdminModuleSurface>
+      </>
+      ) : null}
       <Modal open={manualOpen} onClose={() => setManualOpen(false)} titleId="manual-booking-title" className="admin-reservation-modal">
         <form className="admin-modal-shell" onSubmit={(event) => { event.preventDefault(); void createManualReservation(); }}>
           <header className="admin-modal-header">

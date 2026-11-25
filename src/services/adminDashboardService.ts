@@ -14,7 +14,7 @@ const db = supabase as any;
  *   `total_snapshot` for revenue.
  * - Ordered by `id` (primary key) so offset pages are stable; the "latest five" are sorted by `created_at` in memory.
  */
-export const DASHBOARD_OVERVIEW_SELECT = 'id, created_at, tour_date, boat_id, tour_id, payment_status, booking_status, payment_method_key, total_snapshot, customers(full_name), boats(name), tours(title), payment_methods(name), payments(amount, status)';
+export const DASHBOARD_OVERVIEW_SELECT = 'id, created_at, tour_date, boat_id, tour_id, payment_status, booking_status, payment_method_key, total_snapshot, customer_name_snapshot, customers(full_name), boats(name), tours(title), payment_methods(name), payments(amount, status)';
 
 export async function fetchDashboardOverview(now: Date = new Date()): Promise<DashboardOverview> {
   const rows = await loadAllPages<DashboardOverviewRow>(async (from, to) => (await readWithAdminSession(() => db

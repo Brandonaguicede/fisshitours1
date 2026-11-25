@@ -331,6 +331,7 @@ function runEdgeFunction(file, { supabase, env, fetchImpl, extra = {} }) {
     Deno: { env: { get: (key) => env[key] } }, createClient: () => supabase, serve: (fn) => { handler = fn; }, withCors: (fn) => fn,
     corsHeaders: () => ({}), corsPreflight: () => new Response(null), areExternalProviderMocksAllowed: () => false, fetch: fetchImpl, ...extra });
   loadTs('supabase/functions/_shared/bac-gateway.ts', context);
+  loadTs('supabase/functions/_shared/booking-contact.mjs', context);
   const source = fs.readFileSync(file, 'utf8').replace(/^import [\s\S]*?;\r?\n/gm, '');
   vm.runInContext(ts.transpile(source, { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None }), context);
   return (body, headers = {}) => handler({ method: 'POST', headers: new Headers({ 'x-forwarded-for': '203.0.113.9', ...headers }), json: async () => body });
@@ -338,9 +339,9 @@ function runEdgeFunction(file, { supabase, env, fetchImpl, extra = {} }) {
 
 const gatewayEnv = { SUPABASE_URL: 'test', SUPABASE_SERVICE_ROLE_KEY: 'test', SUPABASE_ANON_KEY: 'anon', BAC_SECURITY_KEY: 'private-key', BAC_GATEWAY_URL: 'https://secure.nmi.com', RATE_LIMIT_HASH_SECRET: 'test-rate-secret' };
 
-function loadProcessFunction({ gatewayText, gatewayError, beginError, env = {}, currency = 'USD', rateLimited = false } = {}) {
+function loadProcessFunction({ gatewayText, gatewayError, beginError, env = {}, currency = 'USD', rateLimited = false, bookingOverrides = {} } = {}) {
   const calls = { rpc: [], rate: [], fetch: [], calendar: 0, emails: 0, notices: [] };
-  const booking = { id: '00000000-0000-4000-8000-000000000001', booking_reference: 'PFT-1', currency, customers: { full_name: 'Ana Mora', email: 'ana@example.com' }, boats: { name: 'Second Wind' }, tour_packages: { name: 'Half Day' } };
+  const booking = { id: '00000000-0000-4000-8000-000000000001', booking_reference: 'PFT-1', currency, customers: { full_name: 'Ana Mora', email: 'ana@example.com' }, ...bookingOverrides, boats: { name: 'Second Wind' }, tour_packages: { name: 'Half Day' } };
   const query = { select() { return this; }, eq() { return this; }, single: async () => ({ data: booking, error: null }) };
   const supabase = {
     from: () => query,
@@ -366,6 +367,20 @@ function loadProcessFunction({ gatewayText, gatewayError, beginError, env = {}, 
 
 const request = { bookingId: '00000000-0000-4000-8000-000000000001', paymentToken: 'tok_00000000', threeDSecure: validThreeDs, amount: '1.00' };
 const approvedText = 'response=1&responsetext=SUCCESS&response_code=100&transactionid=TX-9&orderid=PFT-1';
+
+test('checkout bills the name and email of THIS booking (snapshot), not the current profile of the customer; legacy rows fall back to the customer', async () => {
+  const snapshotRun = loadProcessFunction({ gatewayText: approvedText, bookingOverrides: { customer_name_snapshot: 'Maria Booking Contact', customer_email_snapshot: 'booking-contact@example.com', customer_whatsapp_snapshot: '+50611112222' } });
+  assert.equal((await snapshotRun.call(request)).status, 200);
+  const sale = snapshotRun.calls.fetch[0].body;
+  assert.equal(sale.get('email'), 'booking-contact@example.com');
+  assert.equal(sale.get('first_name'), 'Maria Booking');
+  assert.equal(sale.get('last_name'), 'Contact');
+  assert.doesNotMatch(sale.toString(), /ana%40example\.com|Ana/);
+  const legacyRun = loadProcessFunction({ gatewayText: approvedText });
+  assert.equal((await legacyRun.call(request)).status, 200);
+  assert.equal(legacyRun.calls.fetch[0].body.get('email'), 'ana@example.com');
+  assert.equal(legacyRun.calls.fetch[0].body.get('first_name'), 'Ana');
+});
 
 test('checkout SALE charges the stored total, confirms, syncs Calendar and queues the email', async () => {
   const { call, calls } = loadProcessFunction({ gatewayText: approvedText });

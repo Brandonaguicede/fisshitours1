@@ -5,6 +5,7 @@ import test from 'node:test';
 import ts from 'typescript';
 import { z } from 'zod';
 import * as terms from '../supabase/functions/_shared/terms.mjs';
+import * as bookingContact from '../supabase/functions/_shared/booking-contact.mjs';
 
 function fixture(paymentMethodKey = 'whatsapp-link') {
   const sent = [];
@@ -33,7 +34,7 @@ function fixture(paymentMethodKey = 'whatsapp-link') {
     },
   };
   const context = vm.createContext({
-    z, console, Response, Deno: { env: { get: (key) => env[key] } }, ...terms, // imports are stripped from the transpiled sources, so the shared terms module is injected as globals
+    z, console, Response, Deno: { env: { get: (key) => env[key] } }, ...terms, ...bookingContact, // imports are stripped from the transpiled sources, so the shared terms module is injected as globals
     serve() {}, withCors: (handler) => handler,
     fetch: async (_url, init) => { sent.push(JSON.parse(init.body)); return new Response('{}', { status: 200 }); },
   });

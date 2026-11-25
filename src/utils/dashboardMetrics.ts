@@ -23,6 +23,8 @@ export interface DashboardOverviewRow extends DashboardBookingRow {
   tour_date: string;
   boat_id: string;
   tour_id: string;
+  /** The name used for THAT reservation (booking snapshot). Rows created before the snapshots existed fall back to the customer. */
+  customer_name_snapshot?: string | null;
   customers?: { full_name: string | null } | null;
   boats?: { name: string | null } | null;
   tours?: { title: string | null } | null;
@@ -280,7 +282,7 @@ export function selectRecentReservations(rows: DashboardOverviewRow[], limit = R
   return [...rows]
     .sort((a, b) => (time(b) === time(a) ? (a.id < b.id ? 1 : a.id > b.id ? -1 : 0) : time(b) - time(a)))
     .slice(0, limit)
-    .map((row) => ({ id: row.id, customerName: row.customers?.full_name ?? null, tourDate: row.tour_date, paymentStatus: row.payment_status }));
+    .map((row) => ({ id: row.id, customerName: row.customer_name_snapshot ?? row.customers?.full_name ?? null, tourDate: row.tour_date, paymentStatus: row.payment_status }));
 }
 
 // ---- overview ---------------------------------------------------------------------------------------------------

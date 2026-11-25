@@ -9,7 +9,9 @@ import { MOCK_TURNSTILE_TOKEN, USE_LOCAL_TURNSTILE_MOCK } from '../../lib/turnst
 import { cancelPayPalOrder, capturePayPalOrder, createPayPalOrder, getPayPalErrorMessage, loadPayPalSdk, type PayPalCaptureResult } from '../../services/paypalService';
 import { getBacConfig, type BacPaymentResult } from '../../services/bacPaymentService';
 import { AvailabilityError, getBookingAvailability, type AvailabilitySlot } from '../../services/availabilityService';
-import { calculateBookingPrice, createBooking, getActiveDepartureLocations, type BookingResult, type DepartureLocation, type PriceResult } from '../../services/bookingService';
+import { buildBookingLeadPayload, getBookingLeadToken, resetBookingLeadToken } from '../../utils/bookingLead';
+import { DEFAULT_PHONE_COUNTRY, getPhoneCountryOptions, parsePhoneNumber, phoneErrorMessage } from '../../utils/phoneNumber';
+import { calculateBookingPrice, createBooking, getActiveDepartureLocations, saveBookingLead, type BookingResult, type DepartureLocation, type PriceResult } from '../../services/bookingService';
 import { getActivePaymentMethods } from '../../services/paymentService';
 import type { Boat } from '../../types/boat';
 import type { BoatTour } from '../../types/boatTour';
@@ -20,7 +22,7 @@ import { filterPackageSlots } from '../../utils/packageSettings';
 import { cn } from '../../utils/cn';
 import { getDefaultDepartureLocation } from '../../utils/departureLocations';
 import { formatTime, sortSlotsChronologically } from '../../utils/format';
-import { Button, ChoiceCard, Field, FieldError, GlassPanel, Input, ModalShell, TextArea } from '../ui';
+import { Button, ChoiceCard, Field, FieldError, GlassPanel, Input, ModalShell, Select, TextArea } from '../ui';
 import { CURRENT_TERMS_VERSION } from '../../../supabase/functions/_shared/terms.mjs';
 import { TermsConsent } from './TermsModal';
 import { BacCardCheckout } from './BacCardCheckout';
@@ -84,6 +86,9 @@ export function BookingPanel({ selectedBoat, selectedTour: requestedTour, boats,
   const [customerName, setCustomerName] = useState('');
   const [customerEmail, setCustomerEmail] = useState('');
   const [customerWhatsapp, setCustomerWhatsapp] = useState('');
+  // The country prefix is chosen by the customer (Costa Rica is only the initial value): the number is never completed from a guess.
+  const [phoneCountry, setPhoneCountry] = useState(DEFAULT_PHONE_COUNTRY);
+  const phone = useMemo(() => parsePhoneNumber(customerWhatsapp, phoneCountry), [customerWhatsapp, phoneCountry]);
   const [specialRequests, setSpecialRequests] = useState('');
   const [mealOption, setMealOption] = useState('');
   const [departureLocationId, setDepartureLocationId] = useState('');
@@ -109,9 +114,14 @@ export function BookingPanel({ selectedBoat, selectedTour: requestedTour, boats,
   const availabilityAlertKey = useRef('');
   const parentIdentity = selectedBoat.id + ':' + (selectedTour?.boatTourId ?? '') + ':' + (selectedTour?.id ?? '');
   const previousParent = useRef(parentIdentity);
+  // Steps the customer has actually been shown. Date, time and guests carry technical defaults (tomorrow, first slot, included guests):
+  // a booking attempt only records them once step 1 (where they are displayed and confirmed with "Continue") was visited.
+  const stepsSeen = useRef(new Set<number>());
+  useEffect(() => { stepsSeen.current.add(activeStep); }, [activeStep]);
   useEffect(() => {
     if (previousParent.current === parentIdentity) return;
     previousParent.current = parentIdentity;
+    stepsSeen.current = new Set([selectedTour ? 1 : 0]);
     setMealOption('');
     setTimeSlotId(selectedTour?.timeSlots[0]?.id ?? '');
     setGuests(getTourIncludedGuests(selectedBoat, selectedTour));
@@ -209,12 +219,12 @@ export function BookingPanel({ selectedBoat, selectedTour: requestedTour, boats,
   const canContinueToCustomer = Boolean(selectionReady && selectedTimeSlot && !hasCapacityError && priceQuery.data && !priceQuery.isFetching && !priceQuery.isError && availabilityQuery.data && !availabilityQuery.isError && !availabilityQuery.isFetching && selectedTimeSlot.available !== false);
   const hasTurnstileToken = USE_LOCAL_TURNSTILE_MOCK || Boolean(turnstileToken);
   const canContinueToPayment = Boolean(canContinueToCustomer && selectedDepartureLocation);
-  const canReview = Boolean(canContinueToPayment && customerName.trim() && customerEmail.trim() && customerWhatsapp.trim() && isValidEmail(customerEmail) && hasTurnstileToken);
+  const canReview = Boolean(canContinueToPayment && customerName.trim() && customerEmail.trim() && phone.valid && isValidEmail(customerEmail) && hasTurnstileToken);
   const bookingPayload = selectionReady && selectedTour
     ? buildBookingPaymentPayload({
         bookingReference: createdBooking?.booking_reference ?? 'Pending',
         customerName,
-        phone: customerWhatsapp,
+        phone: phone.valid ? phone.e164 : customerWhatsapp,
         email: customerEmail,
         boat: selectedBoat,
         tour: selectedTour,
@@ -228,6 +238,33 @@ export function BookingPanel({ selectedBoat, selectedTour: requestedTour, boats,
         language,
       })
     : null;
+
+  // Booking attempt: keep the contact data of someone who typed it but may leave before paying. Only on the last step, only once name,
+  // email and WhatsApp are valid, ~1.5 s after the last keystroke, and never twice with the same data. It cannot create a booking, hold a
+  // slot or take a payment, and a failure never blocks the checkout.
+  const lastSavedLead = useRef('');
+  useEffect(() => {
+    if (activeStep !== 3 || createdBooking || !selectedTour) return;
+    const payload = buildBookingLeadPayload({
+      customerName,
+      customerEmail,
+      customerWhatsapp: phone.valid ? phone.e164 : '',
+      language,
+      selection: { boatId: selectedBoat.id, tourId: selectedTour.tourId, tourPackageId: selectedTour.id },
+      tourDetailsConfirmed: stepsSeen.current.has(1),
+      tourDetails: { tourDate: date, timeSlotId, guests },
+    });
+    if (!payload) return;
+    const clientToken = getBookingLeadToken();
+    const key = clientToken + JSON.stringify(payload);
+    if (key === lastSavedLead.current) return;
+    const timer = window.setTimeout(() => {
+      saveBookingLead({ clientToken, ...payload })
+        .then(() => { lastSavedLead.current = key; })
+        .catch(() => { console.warn('[booking] the booking attempt could not be saved'); });
+    }, 1500);
+    return () => window.clearTimeout(timer);
+  }, [activeStep, createdBooking, customerName, customerEmail, phone, language, selectedBoat.id, selectedTour, date, timeSlotId, guests]);
 
   useEffect(() => {
     if (!currentSlots.some((slot) => slot.id === timeSlotId && slot.available !== false)) {
@@ -349,9 +386,9 @@ export function BookingPanel({ selectedBoat, selectedTour: requestedTour, boats,
       setValidationMessage(language === 'es' ? 'Ingresa el nombre del cliente.' : 'Please enter the customer name.');
       return null;
     }
-    if (!customerWhatsapp.trim()) {
+    if (!phone.valid) {
       setActiveStep(3);
-      setValidationMessage(language === 'es' ? 'Ingresa el número de teléfono.' : 'Please enter the phone number.');
+      setValidationMessage(phoneErrorMessage(phone, language));
       return null;
     }
     if (!isValidEmail(customerEmail)) {
@@ -375,6 +412,8 @@ export function BookingPanel({ selectedBoat, selectedTour: requestedTour, boats,
   const createBookingMutation = useMutation({
     mutationFn: createBooking,
     onSuccess: (booking) => {
+      // The attempt became a booking (the server marked it converted): the next attempt in this tab starts with a new token.
+      resetBookingLeadToken();
       setCreatedBooking(booking);
       queryClient.invalidateQueries({ queryKey: ['availability', selectedBoat.id, selectedTour?.tourId, selectedTour?.id, date] });
     },
@@ -401,7 +440,8 @@ export function BookingPanel({ selectedBoat, selectedTour: requestedTour, boats,
       return null;
     }
     const result = await createBookingMutation.mutateAsync({
-      customer: { fullName: customerName, email: customerEmail, whatsapp: customerWhatsapp },
+      // The normalized international number (E.164) built from the prefix the customer chose; validated above.
+      customer: { fullName: customerName, email: customerEmail, whatsapp: phone.valid ? phone.e164 : customerWhatsapp },
       boatId: selectedBoat.id,
       tourId: selectedTour.tourId,
       tourPackageId: selectedTour.id,
@@ -417,6 +457,7 @@ export function BookingPanel({ selectedBoat, selectedTour: requestedTour, boats,
       language,
       termsAccepted: true,
       termsVersion: CURRENT_TERMS_VERSION,
+      leadToken: getBookingLeadToken(),
     });
     setTurnstileToken('');
     setTurnstileResetKey((value) => value + 1);
@@ -621,6 +662,8 @@ export function BookingPanel({ selectedBoat, selectedTour: requestedTour, boats,
                 customerName={customerName}
                 customerEmail={customerEmail}
                 customerWhatsapp={customerWhatsapp}
+                phoneCountry={phoneCountry}
+                customerPhoneE164={phone.valid ? phone.e164 : ''}
                 specialRequests={specialRequests}
                 paymentMethod={paymentMethod}
                 paymentMethods={backendPaymentMethods}
@@ -651,6 +694,7 @@ export function BookingPanel({ selectedBoat, selectedTour: requestedTour, boats,
                 onCustomerNameChange={setCustomerName}
                 onCustomerEmailChange={setCustomerEmail}
                 onCustomerWhatsappChange={setCustomerWhatsapp}
+                onPhoneCountryChange={setPhoneCountry}
                 onSpecialRequestsChange={setSpecialRequests}
                 onPaymentMethodChange={setPaymentMethod}
                 onPayPalRequest={handlePayPalRequest}
@@ -1190,6 +1234,9 @@ function CustomerStep(props: {
   customerName: string;
   customerEmail: string;
   customerWhatsapp: string;
+  phoneCountry: string;
+  /** The normalized international number, or '' while the phone is missing or invalid. */
+  customerPhoneE164: string;
   specialRequests: string;
   paymentMethod: BookingPaymentMethod;
   paymentMethods: typeof paymentMethods;
@@ -1219,6 +1266,7 @@ function CustomerStep(props: {
   onCustomerNameChange: (name: string) => void;
   onCustomerEmailChange: (email: string) => void;
   onCustomerWhatsappChange: (value: string) => void;
+  onPhoneCountryChange: (iso: string) => void;
   onSpecialRequestsChange: (value: string) => void;
   onTurnstileTokenChange: (token: string) => void;
   onPaymentMethodChange: (method: BookingPaymentMethod) => void;
@@ -1236,6 +1284,11 @@ function CustomerStep(props: {
   onSendPaidConfirmation: () => void;
 }) {
   const { language } = useLanguage();
+  const phoneCountryOptions = useMemo(() => getPhoneCountryOptions(language), [language]);
+  const phoneResult = useMemo(() => parsePhoneNumber(props.customerWhatsapp, props.phoneCountry), [props.customerWhatsapp, props.phoneCountry]);
+  // The explanation appears once the customer left the field, never while they are still typing the first digits.
+  const [phoneTouched, setPhoneTouched] = useState(false);
+  const phoneError = phoneTouched && props.customerWhatsapp.trim() && !phoneResult.valid ? phoneErrorMessage(phoneResult, language) : '';
 
   function handlePaymentMethodAction(method: BookingPaymentMethod, type: SupportedPaymentType) {
     if (props.isSubmitting || props.cardBlocked || props.cardSuccess) return;
@@ -1276,7 +1329,27 @@ function CustomerStep(props: {
 
       <div className="mt-2.5">
         <Field htmlFor="booking-phone" label={tr(text.booking.phone, language)} labelClassName="uppercase tracking-[0.12em] text-ocean-400">
-          <Input id="booking-phone" className="py-2.5" autoComplete="tel" inputMode="tel" placeholder="+506 0000 0000" startIcon={<Phone size={17} />} type="tel" value={props.customerWhatsapp} onChange={(event) => props.onCustomerWhatsappChange(event.target.value)} />
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <Select
+              id="booking-phone-country"
+              className="py-2.5 sm:w-[13.5rem] sm:shrink-0"
+              aria-label={language === 'es' ? 'País / prefijo telefónico' : 'Country / phone prefix'}
+              value={props.phoneCountry}
+              onChange={(event) => props.onPhoneCountryChange(event.target.value)}
+            >
+              {phoneCountryOptions.map((option) => <option key={option.iso} value={option.iso}>{option.label}</option>)}
+            </Select>
+            <div className="min-w-0 flex-1">
+              <Input id="booking-phone" className="py-2.5" autoComplete="tel-national" inputMode="tel" placeholder="8888 0000" startIcon={<Phone size={17} />} type="tel" aria-invalid={phoneError ? true : undefined} aria-describedby="booking-phone-hint" value={props.customerWhatsapp} onBlur={() => setPhoneTouched(true)} onChange={(event) => props.onCustomerWhatsappChange(event.target.value)} />
+            </div>
+          </div>
+          <p id="booking-phone-hint" className={cn('mt-1.5 text-xs', phoneError ? 'font-semibold text-red-300' : 'text-ocean-300')} role={phoneError ? 'alert' : undefined}>
+            {phoneError
+              ? phoneError
+              : phoneResult.valid
+                ? (language === 'es' ? `Se guardará como ${phoneResult.e164}` : `Will be saved as ${phoneResult.e164}`)
+                : (language === 'es' ? 'Elige el prefijo de tu país y escribe tu número, o escríbelo completo con "+".' : 'Choose your country prefix and type your number, or type it in full starting with "+".')}
+          </p>
         </Field>
       </div>
 
@@ -1339,7 +1412,7 @@ function CustomerStep(props: {
           createdBooking={props.createdBooking}
           customerName={props.customerName}
           customerEmail={props.customerEmail}
-          customerPhone={props.customerWhatsapp}
+          customerPhone={props.customerPhoneE164 || props.customerWhatsapp}
           language={language}
           onSuccess={props.onCardSuccess}
           onBlockedChange={props.onCardBlockedChange}

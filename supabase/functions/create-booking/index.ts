@@ -30,6 +30,9 @@ const schema = z.object({
   // TERMS_NOT_ACCEPTED. The timestamp and the "web" source are set here / in the database, never by the client.
   termsAccepted: z.unknown().optional(),
   termsVersion: z.unknown().optional(),
+  // Token of the booking attempt (lead) this booking comes from. Only used AFTER the booking exists, to mark that lead converted.
+  // It is not part of the payload sent to create_booking_transaction.
+  leadToken: z.string().uuid().optional(),
 });
 
 serve(withCors(async (req) => {
@@ -75,6 +78,16 @@ serve(withCors(async (req) => {
     if (termsCode) return Response.json({ message: termsCode, code: termsCode }, { status: 400, headers });
     const status = message.includes('BOAT_TIME_CONFLICT') || message.includes('already reserved') ? 409 : 400;
     return Response.json({ message }, { status, headers });
+  }
+
+  // The booking is already committed. Marking the lead is best-effort: a failure is logged (ids only, never contact data) and never undoes the booking.
+  if (parsed.data.leadToken && data?.booking_id) {
+    try {
+      const { error: leadError } = await supabase.rpc('mark_booking_lead_converted', { p_token: parsed.data.leadToken, p_booking_id: data.booking_id });
+      if (leadError) console.error('Booking lead conversion failed', { bookingId: data.booking_id, code: leadError.code });
+    } catch {
+      console.error('Booking lead conversion failed', { bookingId: data.booking_id });
+    }
   }
 
   await sendBookingEmails(supabase, data, payload).catch((emailError) => {

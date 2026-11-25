@@ -2,6 +2,7 @@ import { functionsUrl, supabase } from '../lib/supabase';
 import type { BookingPaymentMethod } from '../utils/bookingPayment';
 import { getStoredLanguage } from '../i18n/LanguageContext';
 import { sortDepartureLocations } from '../utils/departureLocations';
+import type { BookingLeadPayload } from '../utils/bookingLead';
 
 export interface PriceRequest {
   boatId: string;
@@ -65,6 +66,8 @@ export interface CreateBookingRequest {
   /** Terms and Conditions acceptance. The backend rejects the booking without it (TERMS_NOT_ACCEPTED); the timestamp and the "web" source are set server-side. */
   termsAccepted: boolean;
   termsVersion: string;
+  /** Token of the booking attempt (lead) this booking comes from; the server marks that attempt as converted. Optional. */
+  leadToken?: string;
 }
 
 export interface AdminCreateBookingRequest extends Omit<CreateBookingRequest, 'turnstileToken' | 'customer' | 'termsVersion'> {
@@ -137,6 +140,11 @@ export function calculateBookingPrice(input: PriceRequest, signal?: AbortSignal)
 
 export function createBooking(input: CreateBookingRequest) {
   return callFunction<BookingResult>('create-booking', input);
+}
+
+/** Keeps the contact data of an unfinished booking attempt. Never creates a booking. Callers must not block the checkout on it. */
+export function saveBookingLead(input: { clientToken: string } & BookingLeadPayload) {
+  return callFunction<{ saved: boolean }>('save-booking-lead', input);
 }
 
 export function adminCreateBooking(input: AdminCreateBookingRequest) {

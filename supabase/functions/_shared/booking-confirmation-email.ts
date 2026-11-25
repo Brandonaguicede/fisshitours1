@@ -1,5 +1,6 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { getTerms, renderTermsText } from './terms.mjs';
+import { getBookingContact } from './booking-contact.mjs';
 
 type SupabaseClient = ReturnType<typeof createClient>;
 type ConfirmationMessage = { to: string; subject: string; text: string; html: string; dedupe: string; bcc?: string };
@@ -32,13 +33,14 @@ export async function refreshBookingConfirmationNotification(supabase: SupabaseC
 }
 
 async function getBookingConfirmationMessages(supabase: SupabaseClient, bookingId: string): Promise<ConfirmationMessage[]> {
-  const { data: booking, error } = await supabase.from('bookings').select(`id, booking_reference, payment_method_key, payment_status, tour_date, guests, special_requests, language, terms_accepted, terms_version, base_price_snapshot, extra_guests_total_snapshot, extras_total_snapshot, departure_surcharge_snapshot, subtotal_snapshot, tax_rate_snapshot, tax_amount_snapshot, total_snapshot, departure_location_name_snapshot, customers(full_name, email, whatsapp), boats(name), tours(title), tour_packages(name), time_slots(starts_at)`).eq('id', bookingId).single();
+  const { data: booking, error } = await supabase.from('bookings').select(`id, booking_reference, payment_method_key, payment_status, tour_date, guests, special_requests, language, terms_accepted, terms_version, base_price_snapshot, extra_guests_total_snapshot, extras_total_snapshot, departure_surcharge_snapshot, subtotal_snapshot, tax_rate_snapshot, tax_amount_snapshot, total_snapshot, departure_location_name_snapshot, customer_name_snapshot, customer_email_snapshot, customer_whatsapp_snapshot, customers(full_name, email, whatsapp), boats(name), tours(title), tour_packages(name), time_slots(starts_at)`).eq('id', bookingId).single();
   if (error) throw error;
-  if (!booking?.customers?.email) return [];
+  const contact = getBookingContact(booking);
+  if (!contact.email) return [];
   const language = bookingLanguage(booking.language);
   const es = language === 'es';
   const adminEmail = Deno.env.get('BOOKING_ADMIN_EMAIL');
-  const bcc = customerBcc(Deno.env.get('BOOKING_CONFIRMATION_BCC'), booking.customers.email);
+  const bcc = customerBcc(Deno.env.get('BOOKING_CONFIRMATION_BCC'), contact.email);
   const { data: whatsappSetting } = await supabase.from('site_settings').select('value').eq('key', 'whatsapp_number').eq('active', true).maybeSingle();
   const whatsappNumber = String(whatsappSetting?.value ?? '50686105784').replace(/\D/g, '');
   const paid = booking.payment_status === 'paid';
@@ -52,13 +54,13 @@ async function getBookingConfirmationMessages(supabase: SupabaseClient, bookingI
   const termsVersion: string | null = booking.terms_accepted && booking.terms_version ? booking.terms_version : null;
   const termsText = termsVersion ? `\n\n${renderTermsText(termsVersion, language)}` : '';
   const customerText = es
-    ? `Hola ${booking.customers.full_name},\n\n${paid ? (booking.payment_method_key === 'paypal' ? 'Tu pago de PayPal fue recibido correctamente.' : 'Tu pago fue recibido correctamente.') : 'Tu reserva esta confirmada y el pago queda pendiente.'} ${paid ? 'Tu reserva esta confirmada.' : ''} Muchas gracias por reservar con Papagayo Fishing Tours.\n\n${summary}\n\nInformación importante: llega al punto de salida al menos 15 minutos antes de la hora programada. Si tienes preguntas o necesitas hacer cambios, contáctanos con anticipación.\n\nWhatsApp: https://wa.me/${whatsappNumber}\n\nPura Vida,\nPapagayo Fishing Tours${termsText}`
-    : `Hi ${booking.customers.full_name},\n\n${paid ? (booking.payment_method_key === 'paypal' ? 'Your PayPal payment was received successfully.' : 'Your payment was received successfully.') : 'Your booking is confirmed and payment is still pending.'} ${paid ? 'Your booking is confirmed.' : ''} Thank you very much for booking with Papagayo Fishing Tours.\n\n${summary}\n\nImportant information: please arrive at the departure location at least 15 minutes before the scheduled departure time. If you need to make changes to your reservation, contact us in advance.\n\nWhatsApp: https://wa.me/${whatsappNumber}\n\nPura Vida,\nPapagayo Fishing Tours${termsText}`;
+    ? `Hola ${contact.fullName},\n\n${paid ? (booking.payment_method_key === 'paypal' ? 'Tu pago de PayPal fue recibido correctamente.' : 'Tu pago fue recibido correctamente.') : 'Tu reserva esta confirmada y el pago queda pendiente.'} ${paid ? 'Tu reserva esta confirmada.' : ''} Muchas gracias por reservar con Papagayo Fishing Tours.\n\n${summary}\n\nInformación importante: llega al punto de salida al menos 15 minutos antes de la hora programada. Si tienes preguntas o necesitas hacer cambios, contáctanos con anticipación.\n\nWhatsApp: https://wa.me/${whatsappNumber}\n\nPura Vida,\nPapagayo Fishing Tours${termsText}`
+    : `Hi ${contact.fullName},\n\n${paid ? (booking.payment_method_key === 'paypal' ? 'Your PayPal payment was received successfully.' : 'Your payment was received successfully.') : 'Your booking is confirmed and payment is still pending.'} ${paid ? 'Your booking is confirmed.' : ''} Thank you very much for booking with Papagayo Fishing Tours.\n\n${summary}\n\nImportant information: please arrive at the departure location at least 15 minutes before the scheduled departure time. If you need to make changes to your reservation, contact us in advance.\n\nWhatsApp: https://wa.me/${whatsappNumber}\n\nPura Vida,\nPapagayo Fishing Tours${termsText}`;
   const messages: ConfirmationMessage[] = [{
-    to: booking.customers.email,
+    to: contact.email,
     subject: es ? `Pago recibido y reserva confirmada - ${booking.booking_reference}` : `Payment received and booking confirmed - ${booking.booking_reference}`,
     text: customerText,
-    html: buildBookingHtml({ name: booking.customers.full_name, reference: booking.booking_reference, date: dateLabel, time: timeLabel, arrival: formatRecommendedArrival(booking.time_slots?.starts_at, language), tour: booking.tours?.title, boat: booking.boats?.name, packageName, guests: booking.guests, departureLocation: booking.departure_location_name_snapshot, specialRequests: String(booking.special_requests ?? '').trim(), termsVersion, ...bookingEmailAmounts(booking), total: formatEmailUsd(Number(booking.total_snapshot ?? 0)), paymentStatus: paidLabel, whatsappNumber, language }),
+    html: buildBookingHtml({ name: contact.fullName, reference: booking.booking_reference, date: dateLabel, time: timeLabel, arrival: formatRecommendedArrival(booking.time_slots?.starts_at, language), tour: booking.tours?.title, boat: booking.boats?.name, packageName, guests: booking.guests, departureLocation: booking.departure_location_name_snapshot, specialRequests: String(booking.special_requests ?? '').trim(), termsVersion, ...bookingEmailAmounts(booking), total: formatEmailUsd(Number(booking.total_snapshot ?? 0)), paymentStatus: paidLabel, whatsappNumber, language }),
     dedupe: `booking:${booking.id}:paypal-confirmation-customer-email`,
     // Hidden copy of the customer's confirmation (BOOKING_CONFIRMATION_BCC, independent from BOOKING_ADMIN_EMAIL). Only this customer-facing
     // message carries it, and never when the customer is that same address.
@@ -76,7 +78,7 @@ async function getBookingConfirmationMessages(supabase: SupabaseClient, bookingI
       subject: `${paid ? 'Pago confirmado' : 'Reserva confirmada'} ${booking.booking_reference}`,
       text: `${paid ? 'Pago confirmado.' : 'Reserva confirmada desde el panel de administración.'}\n\n${adminSummary}`,
       html: buildBookingHtml({
-        name: booking.customers.full_name,
+        name: contact.fullName,
         reference: booking.booking_reference,
         date: formatDate(booking.tour_date, 'es'),
         time: timeLabel,
@@ -87,10 +89,10 @@ async function getBookingConfirmationMessages(supabase: SupabaseClient, bookingI
         departureLocation: booking.departure_location_name_snapshot,
         ...bookingEmailAmounts(booking), total: formatEmailUsd(Number(booking.total_snapshot ?? 0)),
         paymentStatus: paid ? 'Pagado' : 'Pendiente',
-        whatsappNumber: (booking.customers.whatsapp ?? '').replace(/\D/g, '') || whatsappNumber,
+        whatsappNumber: (contact.whatsapp ?? '').replace(/\D/g, '') || whatsappNumber,
         heading: adminHeading,
         introduction: paid ? 'El pago del cliente fue recibido correctamente.' : 'La reserva fue confirmada manualmente desde el panel de administración.',
-        contact: { email: booking.customers.email, whatsapp: booking.customers.whatsapp },
+        contact: { email: contact.email, whatsapp: contact.whatsapp },
         ctaLabel: 'Contactar al cliente por WhatsApp',
         language: 'es',
       }),
@@ -214,13 +216,14 @@ export function formatRecommendedArrival(value: string | null | undefined, langu
 /** The plain-text summary lines of a booking. `operational` adds the customer-only lines (recommended arrival, special requests). */
 function bookingSummaryLines(booking: any, language: Language, ctx: { dateLabel: string; timeLabel: string; paymentLabel: string; operational: boolean }) {
   const es = language === 'es';
+  const contact = getBookingContact(booking);
   const arrival = ctx.operational ? formatRecommendedArrival(booking.time_slots?.starts_at, language) : '';
   const specialRequests = ctx.operational ? String(booking.special_requests ?? '').trim() : '';
   return [
     `${es ? 'Reserva' : 'Reservation'}: ${booking.booking_reference}`,
-    `${es ? 'Cliente' : 'Customer'}: ${booking.customers.full_name}`,
-    `${es ? 'Correo' : 'Email'}: ${booking.customers.email}`,
-    `WhatsApp: ${booking.customers.whatsapp}`,
+    `${es ? 'Cliente' : 'Customer'}: ${contact.fullName}`,
+    `${es ? 'Correo' : 'Email'}: ${contact.email}`,
+    `WhatsApp: ${contact.whatsapp}`,
     `${es ? 'Bote' : 'Boat'}: ${booking.boats?.name ?? '-'}`,
     `Tour: ${booking.tours?.title ?? '-'}`,
     `${es ? 'Paquete' : 'Package'}: ${booking.tour_packages?.name || '-'}`,

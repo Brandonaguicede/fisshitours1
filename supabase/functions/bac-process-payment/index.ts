@@ -6,6 +6,7 @@ import { areExternalProviderMocksAllowed } from '../_shared/environment.ts';
 import { enqueueBookingConfirmationEmails } from '../_shared/booking-confirmation-email.ts';
 import { syncBookingCalendarAfterConfirmation } from '../_shared/booking-calendar.ts';
 import { sendAdminBookingNotice } from '../_shared/admin-booking-notice.ts';
+import { getBookingContact } from '../_shared/booking-contact.mjs';
 import {
   BAC_CURRENCY,
   buildSaleRequest,
@@ -58,7 +59,7 @@ serve(withCors(async (req) => {
   const supabase = getSupabase();
   const { data: booking, error: bookingError } = await supabase
     .from('bookings')
-    .select('id, booking_reference, currency, customers(full_name, email), boats(name), tour_packages(name)')
+    .select('id, booking_reference, currency, customer_name_snapshot, customer_email_snapshot, customer_whatsapp_snapshot, customers(full_name, email), boats(name), tour_packages(name)')
     .eq('id', parsed.data.bookingId)
     .single();
   if (bookingError || !booking) return Response.json({ message: 'Booking not found' }, { status: 404, headers });
@@ -89,7 +90,7 @@ serve(withCors(async (req) => {
   if (attemptError || !attempt) return attemptErrorResponse(attemptError, headers);
 
   // Without generated DB types the client types to-one embeds as arrays; at runtime they are single rows.
-  const customer = Array.isArray(booking.customers) ? booking.customers[0] : booking.customers;
+  const contact = getBookingContact(booking); // the name and email of THIS booking (snapshot), not the customer's current profile
   const boat = Array.isArray(booking.boats) ? booking.boats[0] : booking.boats;
   const tourPackage = Array.isArray(booking.tour_packages) ? booking.tour_packages[0] : booking.tour_packages;
 
@@ -104,7 +105,7 @@ serve(withCors(async (req) => {
     orderId: attempt.booking_reference,
     orderDescription: `${boat?.name ?? 'Boat'} - ${tourPackage?.name ?? 'Tour package'}`,
     attemptId: attempt.attempt_id,
-    customer: { fullName: customer?.full_name ?? '', email: customer?.email ?? '' },
+    customer: { fullName: contact.fullName, email: contact.email ?? '' },
     ipAddress: clientIp,
     threeDSecure,
   });

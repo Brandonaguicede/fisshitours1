@@ -6,6 +6,8 @@
 //  - The booking is the source of truth: a Google failure never fails the booking, it is recorded (`failed`) and can be retried.
 //  - A cancelled booking has NO event: cancelling deletes it for real (no "[CANCELADA]" copy is kept); re-confirming creates it again.
 //  - Never logs or returns the private key, the signed JWT or the access token.
+import { getBookingContact } from './booking-contact.mjs';
+
 
 export const CALENDAR_TIMEZONE = 'America/Costa_Rica';
 const SCOPE = 'https://www.googleapis.com/auth/calendar.events';
@@ -37,7 +39,8 @@ export class CalendarSyncError extends Error {
 /** Everything the event needs comes from the DATABASE row (never from the caller). Throws CalendarSyncError when it cannot be built honestly. */
 export function buildEvent(booking) {
   const tourTitle = booking.tours?.title ?? '';
-  const customerName = booking.customers?.full_name ?? '';
+  const contact = getBookingContact(booking);
+  const customerName = contact.fullName;
   const startTime = booking.time_slots?.starts_at;
   const duration = booking.tour_packages?.duration_minutes;
   if (!booking.tour_date || !startTime) throw new CalendarSyncError('Falta la fecha o la hora de salida de la reserva.', 'missing_schedule');
@@ -46,8 +49,8 @@ export function buildEvent(booking) {
   const description = [
     `Reserva: ${booking.booking_reference ?? booking.id}`,
     `Cliente: ${customerName}`,
-    `Email: ${booking.customers?.email || '-'}`,
-    `WhatsApp: ${booking.customers?.whatsapp || '-'}`,
+    `Email: ${contact.email || '-'}`,
+    `WhatsApp: ${contact.whatsapp || '-'}`,
     `Bote: ${booking.boats?.name ?? '-'}`,
     `Tour: ${tourTitle}`,
     `Paquete: ${booking.tour_packages?.name ?? '-'}`,
@@ -184,7 +187,7 @@ export async function deleteBookingEvent({ env, fetchImpl = fetch, eventId, book
 
 // --- Booking sync -------------------------------------------------------------------------------------------------------------------
 
-export const BOOKING_SELECT = 'id, booking_reference, booking_status, payment_status, tour_date, guests, departure_location_name_snapshot, google_calendar_event_id, google_calendar_sync_status, customers(full_name, email, whatsapp), boats(name), tours(title), tour_packages(name, duration_minutes), time_slots(starts_at)';
+export const BOOKING_SELECT = 'id, booking_reference, booking_status, payment_status, tour_date, guests, departure_location_name_snapshot, google_calendar_event_id, google_calendar_sync_status, customer_name_snapshot, customer_email_snapshot, customer_whatsapp_snapshot, customers(full_name, email, whatsapp), boats(name), tours(title), tour_packages(name, duration_minutes), time_slots(starts_at)';
 
 /** Statuses that keep (or create) the event. A `cancelled` booking has no event: it is deleted. */
 const LIVE_STATUSES = ['confirmed', 'completed'];

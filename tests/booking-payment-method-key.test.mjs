@@ -104,7 +104,7 @@ async function runBookingFlowToPaymentStep(page, { acceptTerms = true } = {}) {
   await booking.getByRole('button', { name: /Continuar|Continue/i }).last().click();
   await page.getByPlaceholder('John Smith').fill('Key Test');
   await page.getByPlaceholder('john@email.com').fill('key-test@example.com');
-  await page.getByPlaceholder('+506 0000 0000').fill('50600000000');
+  await page.getByPlaceholder('8888 0000').fill('88881234');
   if (acceptTerms) await page.locator('label[for="booking-terms"]').click(); // click the visible selector, like a customer (the native input is visually hidden)
 }
 
@@ -440,7 +440,7 @@ test('terms: the modal shows the structured v1 policies (EN), closes with X / Es
     // Nothing was lost: customer fields, tour step data and the (still unchecked) box.
     await expect(f.page.getByPlaceholder('John Smith')).toHaveValue('Key Test');
     await expect(f.page.getByPlaceholder('john@email.com')).toHaveValue('key-test@example.com');
-    await expect(f.page.getByPlaceholder('+506 0000 0000')).toHaveValue('50600000000');
+    await expect(f.page.getByPlaceholder('8888 0000')).toHaveValue('88881234');
     await expect(f.page.locator('#booking-terms')).not.toBeChecked();
     await f.page.locator('label[for="booking-terms"]').click();
     await open.click();

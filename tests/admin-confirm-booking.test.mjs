@@ -4,6 +4,7 @@ import vm from 'node:vm';
 import test from 'node:test';
 import ts from 'typescript';
 import { z } from 'zod';
+import * as bookingContact from '../supabase/functions/_shared/booking-contact.mjs';
 
 async function confirm(method) {
   const calls = [];
@@ -30,7 +31,7 @@ async function confirm(method) {
     },
   };
   const env = { SUPABASE_URL: 'https://test.supabase.co', SUPABASE_SERVICE_ROLE_KEY: 'test-only' };
-  const context = vm.createContext({ z, Request, Response, Headers, console, createClient: () => client, serve: (value) => { handler = value; }, Deno: { env: { get: (key) => env[key] } } });
+  const context = vm.createContext({ z, Request, Response, Headers, console, createClient: () => client, serve: (value) => { handler = value; }, Deno: { env: { get: (key) => env[key] } }, ...bookingContact });
   for (const file of ['_shared/cors', '_shared/booking-confirmation-email', 'admin-confirm-booking/index']) {
     const source = fs.readFileSync(`supabase/functions/${file}.ts`, 'utf8').replace(/^\uFEFF/, '').replace(/^import .*;\r?\n/gm, '').replace(/^export /gm, '');
     const js = ts.transpile(source, { target: ts.ScriptTarget.ES2022 });

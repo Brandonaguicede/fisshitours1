@@ -4,6 +4,7 @@ import test from 'node:test';
 import vm from 'node:vm';
 import ts from 'typescript';
 import * as terms from '../supabase/functions/_shared/terms.mjs';
+import * as bookingContact from '../supabase/functions/_shared/booking-contact.mjs';
 
 // Loads the REAL shared email module (transpiled, imports stripped) with a fake Supabase. Same technique as booking-email.test.mjs.
 function load({ booking: overrides = {}, termsOverride = {} } = {}) {
@@ -30,7 +31,7 @@ function load({ booking: overrides = {}, termsOverride = {} } = {}) {
     },
     rpc: async (name, args) => { rpcCalls.push([name, args]); return { error: null }; },
   };
-  const context = vm.createContext({ console, Response, Deno: { env: { get: (key) => ({ BOOKING_ADMIN_EMAIL: 'admin@example.com' })[key] } }, ...terms, ...termsOverride });
+  const context = vm.createContext({ console, Response, Deno: { env: { get: (key) => ({ BOOKING_ADMIN_EMAIL: 'admin@example.com' })[key] } }, ...terms, ...bookingContact, ...termsOverride });
   const source = fs.readFileSync('supabase/functions/_shared/booking-confirmation-email.ts', 'utf8').replace(/^\uFEFF/, '').replace(/^import .*;\r?\n/gm, '').replace(/^export /gm, '');
   vm.runInContext(ts.transpile(source, { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None }), context);
   const messages = () => context.getBookingConfirmationMessages(supabase, 'b-1');

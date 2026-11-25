@@ -91,7 +91,7 @@ test.describe('Papagayo connected frontend', () => {
     await booking.getByRole('button', { name: /Continuar|Continue/i }).last().click();
     await page.getByPlaceholder('John Smith').fill('E2E Tester');
     await page.getByPlaceholder('john@email.com').fill('e2e@example.com');
-    await page.getByPlaceholder('+506 0000 0000').fill('50600000000');
+    await page.getByPlaceholder('8888 0000').fill('88881234');
     await page.locator('label[for="booking-terms"]').click(); // mandatory: the payment methods stay locked until the terms are accepted
     await page.getByText('Local verification mock is active.').waitFor();
     await page.locator('[data-payment-method="whatsapp-link"]').click();
@@ -127,7 +127,7 @@ test.describe('Papagayo connected frontend', () => {
     await booking.getByRole('button', { name: /Continuar|Continue/i }).last().click();
     await page.getByPlaceholder('John Smith').fill('WhatsApp Tester');
     await page.getByPlaceholder('john@email.com').fill('wa@example.com');
-    await page.getByPlaceholder('+506 0000 0000').fill('50600000000');
+    await page.getByPlaceholder('8888 0000').fill('88881234');
     await page.locator('label[for="booking-terms"]').click(); // mandatory: the payment methods stay locked until the terms are accepted
     await page.getByText('Local verification mock is active.').waitFor();
     await page.locator('[data-payment-method="whatsapp-link"]').click();
@@ -168,7 +168,7 @@ test.describe('Papagayo connected frontend', () => {
     await booking.getByRole('button', { name: /Continuar|Continue/i }).last().click();
     await page.getByPlaceholder('John Smith').fill('PayPal Tester');
     await page.getByPlaceholder('john@email.com').fill('paypal@example.com');
-    await page.getByPlaceholder('+506 0000 0000').fill('50600000000');
+    await page.getByPlaceholder('8888 0000').fill('88881234');
     await page.locator('label[for="booking-terms"]').click(); // mandatory: the payment methods stay locked until the terms are accepted
     await page.getByRole('button', { name: /PayPal/i }).click();
     await expect(page.getByText('Payment Successful')).toBeVisible();

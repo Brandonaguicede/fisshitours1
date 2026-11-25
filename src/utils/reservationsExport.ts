@@ -29,6 +29,7 @@ export interface AdminReservation {
   payment_status: string;
   booking_status: string;
   created_at: string;
+  /** The CONTACT OF THIS RESERVATION (name / email / WhatsApp used for it, from the booking snapshots), not necessarily the current profile of the customer. Named `customers` for compatibility with the API shape. */
   customers: {
     full_name: string;
     email: string | null;
