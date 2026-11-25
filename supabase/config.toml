@@ -474,3 +474,7 @@ enabled = true
 # declarative_schema_path = "./database"
 # JSON string passed through to pg-delta SQL formatting.
 # format_options = "{\"keywordCase\":\"upper\",\"indent\":2,\"maxWidth\":80,\"commaStyle\":\"trailing\"}"
+
+# Public endpoint like create-booking: the browser preflight (OPTIONS) must reach the function's own CORS handler.
+[functions.save-booking-lead]
+verify_jwt = false
