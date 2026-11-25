@@ -18,11 +18,19 @@ const PORT = 5174;
 const BASE_URL = `http://localhost:${PORT}`;
 
 function spawnNpm(args) {
+  const env = {
+    ...process.env,
+    VITE_SUPABASE_URL: 'https://admin-test.supabase.co',
+    VITE_SUPABASE_ANON_KEY: 'public-test-fixture-only',
+    VITE_DISABLE_TURNSTILE: 'true',
+    VITE_MARKETING_ENABLED: 'false',
+    VITE_GTM_CONTAINER_REVIEWED: 'false',
+  };
   // npm ships as a .cmd shim on Windows; spawning it needs shell:true, and
   // Node then wants a single command string (not an args array) to avoid
   // its own argument-escaping warning.
-  if (process.platform === 'win32') return spawn(['npm', ...args].join(' '), { stdio: 'inherit', shell: true });
-  return spawn('npm', args, { stdio: 'inherit' });
+  if (process.platform === 'win32') return spawn(['npm', ...args].join(' '), { stdio: 'inherit', shell: true, env });
+  return spawn('npm', args, { stdio: 'inherit', env });
 }
 
 async function waitForServer(url, timeoutMs = 30000) {
@@ -82,7 +90,9 @@ try {
   await warmUpAdminPages(BASE_URL);
   const extraArgs = process.argv.slice(2);
   const testFiles = ['tests/admin-dashboard.test.mjs', 'tests/admin-dashboard-kpis.test.mjs', 'tests/admin-dashboard-analytics.test.mjs', 'tests/admin-dashboard-overview.test.mjs', 'tests/admin-confirm-booking.test.mjs', 'tests/admin-list-service.test.mjs', 'tests/admin-pagination.test.mjs', 'tests/admin-reservations-export.test.mjs', 'tests/admin-critical-flows.test.mjs', 'tests/booking-payment-method-key.test.mjs', 'tests/admin-security-hardening.test.mjs', 'tests/admin-management-rules.test.mjs', 'tests/admin-drafts-and-reorder.test.mjs', 'tests/departure-locations.test.mjs', 'tests/admin-tour-wizard.test.mjs', 'tests/admin-boat-packages.test.mjs', 'tests/admin-content-translation.test.mjs', 'tests/admin-content-screens.test.mjs', 'tests/admin-action-consistency.test.mjs', 'tests/admin-accessibility.test.mjs', 'tests/admin-export-brand.test.mjs', 'tests/admin-refinement.test.mjs', 'tests/admin-round-two.test.mjs', 'tests/admin-round-three.test.mjs', 'tests/admin-round-four.test.mjs', 'tests/boat-publication-status.test.mjs', 'tests/package-requirements.test.mjs', 'tests/booking-package-completeness.test.mjs', 'tests/google-calendar-sync.test.mjs', 'tests/booking-cancel.test.mjs', 'tests/terms.test.mjs', 'tests/booking-terms.test.mjs', 'tests/booking-terms-backend.test.mjs', 'tests/booking-terms-rollout.test.mjs', 'tests/terms-single-source.test.mjs', 'tests/time-slots.test.mjs', 'tests/catalog-time-slots.test.mjs', 'tests/payment-method-retirement.test.mjs', 'tests/booking-confirmation-email.test.mjs', 'tests/booking-email.test.mjs', 'tests/admin-calendar-sync-ui.test.mjs', 'tests/booking-edit-slots.test.mjs', 'tests/translation-public.test.mjs', 'tests/admin-to-landing.test.mjs', 'tests/public-boats-translation.test.mjs', 'tests/package-included-public.test.mjs', 'tests/booking-included.test.mjs', 'tests/departure-time-order.test.mjs', 'tests/tour-content-levels.test.mjs', 'tests/tour-detail-levels.test.mjs', 'tests/public-catalog-order.test.mjs', 'tests/i18n-static-content.test.mjs', 'tests/paypal-checkout-lifecycle.test.mjs', 'tests/booking-leads-ui.test.mjs'];
-  const node = spawn(process.execPath, ['--test', ...testFiles, ...extraArgs], {
+  // Node test-runner options must precede file operands. Keeping caller
+  // arguments after the files made --test-name-pattern run unrelated tests.
+  const node = spawn(process.execPath, ['--test', ...extraArgs, ...testFiles], {
     stdio: 'inherit',
     env: { ...process.env, ADMIN_TEST_BASE_URL: BASE_URL },
   });

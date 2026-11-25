@@ -3,27 +3,120 @@
     {
       "source": "/(.*)",
       "headers": [
-        { "key": "Content-Security-Policy", "value": "default-src 'self'; script-src 'self' 'sha256-RXe0dXdyK0iNdi5E5chuHF2x1CRli+1gSHDhmlsPIgQ=' https://challenges.cloudflare.com https://*.nmi.com https://applepay.cdn-apple.com https://*.paypal.com https://*.paypalobjects.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://secure.nmi.com; font-src 'self' data: https://fonts.gstatic.com https://applepay.cdn-apple.com; img-src 'self' data: blob: https:; media-src 'self' blob: https:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://challenges.cloudflare.com https://*.nmi.com https://*.paypal.com; frame-src https:; frame-ancestors 'none'; object-src 'none'; base-uri 'self'" },
-        { "key": "X-Content-Type-Options", "value": "nosniff" },
-        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
-        { "key": "Strict-Transport-Security", "value": "max-age=31536000; includeSubDomains" },
-        { "key": "Permissions-Policy", "value": "camera=(), microphone=(), geolocation=()" }
+        {
+          "key": "Content-Security-Policy",
+              "value": "default-src 'self'; script-src 'self' https://www.googletagmanager.com https://connect.facebook.net https://cdn.jsdelivr.net/npm/meta-capi-param-builder-clientjs/dist/clientParamBuilder.bundle.js https://unpkg.com/meta-capi-param-builder-clientjs/dist/clientParamBuilder.bundle.js https://www.googleadservices.com https://www.google.com https://challenges.cloudflare.com https://*.nmi.com https://applepay.cdn-apple.com https://*.paypal.com https://*.paypalobjects.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://secure.nmi.com; font-src 'self' data: https://fonts.gstatic.com https://applepay.cdn-apple.com; img-src 'self' data: blob: https:; media-src 'self' blob: https:; connect-src 'self' https://www.googletagmanager.com https://*.google-analytics.com https://analytics.google.com https://*.analytics.google.com https://*.googletagmanager.com https://pagead2.googlesyndication.com https://www.google.com https://googleads.g.doubleclick.net https://stats.g.doubleclick.net https://www.googleadservices.com https://www.facebook.com https://ad.doubleclick.net https://*.supabase.co wss://*.supabase.co https://challenges.cloudflare.com https://*.nmi.com https://*.paypal.com; frame-src https:; frame-ancestors 'none'; object-src 'none'; base-uri 'self'"
+        },
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "strict-origin-when-cross-origin"
+        },
+        {
+          "key": "Strict-Transport-Security",
+          "value": "max-age=31536000; includeSubDomains"
+        },
+        {
+          "key": "Permissions-Policy",
+          "value": "camera=(), microphone=(), geolocation=()"
+        }
       ]
     },
-    { "source": "/videos/hero-papagayo-desktop-v2.mp4", "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }] },
-    { "source": "/videos/hero-papagayo-mobile-v2.mp4", "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }] },
-    { "source": "/images/hero-papagayo-poster-v2.webp", "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }] },
-    { "source": "/videos/hero-papagayo-desktop-v1.mp4", "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }] },
-    { "source": "/videos/hero-papagayo-mobile-v1.mp4", "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }] },
-    { "source": "/images/hero-papagayo-poster-v1.webp", "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }] },
-    { "source": "/admin/:path*", "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }] }
+    {
+      "source": "/videos/hero-papagayo-desktop-v2.mp4",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
+      ]
+    },
+    {
+      "source": "/videos/hero-papagayo-mobile-v2.mp4",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
+      ]
+    },
+    {
+      "source": "/images/hero-papagayo-poster-v2.webp",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
+      ]
+    },
+    {
+      "source": "/videos/hero-papagayo-desktop-v1.mp4",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
+      ]
+    },
+    {
+      "source": "/videos/hero-papagayo-mobile-v1.mp4",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
+      ]
+    },
+    {
+      "source": "/images/hero-papagayo-poster-v1.webp",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
+      ]
+    },
+    {
+      "source": "/admin/:path*",
+      "headers": [
+        {
+          "key": "X-Robots-Tag",
+          "value": "noindex, nofollow"
+        }
+      ]
+    }
   ],
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api/$1" },
-    { "source": "/tours", "destination": "/tours/index.html" },
-    { "source": "/reservar", "destination": "/reservar/index.html" },
-    { "source": "/contacto", "destination": "/contacto/index.html" },
-    { "source": "/terminos", "destination": "/terminos/index.html" },
-    { "source": "/(.*)", "destination": "/index.html" }
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/$1"
+    },
+    {
+      "source": "/tours",
+      "destination": "/tours/index.html"
+    },
+    {
+      "source": "/reservar",
+      "destination": "/reservar/index.html"
+    },
+    {
+      "source": "/contacto",
+      "destination": "/contacto/index.html"
+    },
+    {
+      "source": "/terminos",
+      "destination": "/terminos/index.html"
+    },
+    {
+      "source": "/privacidad",
+      "destination": "/privacidad/index.html"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
   ]
 }

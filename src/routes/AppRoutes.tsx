@@ -8,6 +8,7 @@ const BookingPage = lazy(() => import('../pages/BookingPage'));
 const ToursPage = lazy(() => import('../pages/ToursPage'));
 const ContactPage = lazy(() => import('../pages/ContactPage'));
 const TermsPage = lazy(() => import('../pages/TermsPage'));
+const PrivacyPage = lazy(() => import('../pages/PrivacyPage'));
 const NotFoundPage = lazy(() => import('../pages/NotFoundPage'));
 const AdminLoginPage = lazy(() => import('../pages/admin/AdminLoginPage'));
 const UpdatePasswordPage = lazy(() => import('../pages/UpdatePasswordPage'));
@@ -66,6 +67,7 @@ export function AppRoutes() {
         <Route path="tours/:slug" element={<Navigate to="/tours" replace />} />
         <Route path="contacto" element={<ContactPage />} />
         <Route path="terminos" element={<TermsPage />} />
+        <Route path="privacidad" element={<PrivacyPage />} />
         <Route path="*" element={<NotFoundPage />} />
       </Route>
     </Routes>

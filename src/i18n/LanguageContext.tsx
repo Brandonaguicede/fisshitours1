@@ -18,17 +18,15 @@ const LanguageContext = createContext<LanguageContextValue | null>(null);
  */
 export function getStoredLanguage(): Language {
   if (typeof window === 'undefined') return 'en';
-  return window.localStorage.getItem('language') === 'es' ? 'es' : 'en';
+  try { return window.localStorage.getItem('language') === 'es' ? 'es' : 'en'; }
+  catch { return 'en'; }
 }
 
 export function LanguageProvider({ children }: PropsWithChildren) {
-  const [language, setLanguageState] = useState<Language>(() => {
-    const savedLanguage = window.localStorage.getItem('language');
-    return savedLanguage === 'es' ? 'es' : 'en';
-  });
+  const [language, setLanguageState] = useState<Language>(getStoredLanguage);
 
   useEffect(() => {
-    window.localStorage.setItem('language', language);
+    try { window.localStorage.setItem('language', language); } catch { /* Private browsers retain the in-memory preference. */ }
     document.documentElement.lang = language;
   }, [language]);
 

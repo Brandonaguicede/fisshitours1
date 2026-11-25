@@ -10,9 +10,12 @@ import * as terms from '../supabase/functions/_shared/terms.mjs';
 function load(file, { profile = { role: 'admin', active: true }, env = {}, rpcError = null } = {}) {
   let handler;
   const created = [];
+  const attributed = [];
   const supabase = {
     auth: { getUser: async () => ({ data: { user: { id: 'u-1' } }, error: null }) },
-    from: () => ({ select() { return this; }, eq() { return this; }, maybeSingle: async () => ({ data: profile, error: null }) }),
+    from: (table) => table === 'measurement_attribution'
+      ? { insert: async (row) => { attributed.push(row); return { error: null }; } }
+      : ({ select() { return this; }, eq() { return this; }, maybeSingle: async () => ({ data: profile, error: null }) }),
     rpc: async (name, args) => {
       if (name === 'check_booking_rate_limit') return { data: true, error: null };
       if (name === 'create_booking_transaction' && rpcError) return { data: null, error: rpcError };
@@ -26,6 +29,7 @@ function load(file, { profile = { role: 'admin', active: true }, env = {}, rpcEr
     Deno: { env: { get: (key) => environment[key] } },
     serve: (fn) => { handler = fn; }, withCors: (fn) => fn, corsHeaders: () => ({}), corsPreflight: () => new Response(null, { status: 204 }),
     createClient: () => supabase, areExternalProviderMocksAllowed: () => false,
+    measurementReceipt: async ({ bookingId, bookingStatus }) => ({ booking_id: `opaque:${bookingId}`, booking_confirmed: bookingStatus === 'confirmed', payment_confirmed: false, production: false }),
     buildBookingRequestAdminHtml: async () => '', buildBookingRequestSummary: async () => '',
     fetch: async () => new Response('{}'),
     ...terms,
@@ -36,7 +40,7 @@ function load(file, { profile = { role: 'admin', active: true }, env = {}, rpcEr
     const response = await handler({ method: 'POST', headers: new Headers({ authorization: 'Bearer token', 'cf-connecting-ip': '1.1.1.1' }), json: async () => body });
     return { status: response.status, body: await response.json() };
   };
-  return { call, created };
+  return { call, created, attributed };
 }
 
 const web = (overrides = {}) => ({
@@ -103,6 +107,37 @@ test('create-booking (web): sends termsAccepted + version + via=web + language t
   const { call, created } = load('create-booking');
   await call(web({ termsAccepted: true, termsVersion: 'v1', language: undefined }));
   assert.equal(created[0].language, 'es', 'default language');
+});
+
+test('create-booking stamps only consent-covered attribution and never fails the booking for measurement', async () => {
+  const { call, attributed } = load('create-booking');
+  const response = await call(web({
+    termsAccepted: true,
+    termsVersion: 'v1',
+    attribution: {
+      analyticsConsent: true,
+      marketingConsent: false,
+      consentRevision: 3,
+      capturedAt: '2026-11-15T12:00:00.000Z',
+      gclid: 'ShouldNotPersist123',
+      fbclid: 'ShouldNotPersist456',
+      utmSource: 'google',
+      utmMedium: 'cpc',
+      utmCampaign: 'papagayo_2026',
+      gaClientId: '123456789.987654321',
+      gaSessionId: '1794609108',
+    },
+  }));
+  assert.equal(response.status, 201);
+  assert.equal(attributed.length, 1);
+  assert.equal(attributed[0].booking_id, 'b-1');
+  assert.equal(attributed[0].marketing_consent, false);
+  assert.equal('gclid' in attributed[0], false);
+  assert.equal('fbclid' in attributed[0], false);
+  assert.equal(attributed[0].utm_source, 'google');
+  assert.equal(attributed[0].utm_medium, 'cpc');
+  assert.equal(attributed[0].utm_campaign, 'papagayo_2026');
+  assert.equal(attributed[0].ga_client_id, '123456789.987654321');
 });
 
 test('create-booking (web): an invalid language is rejected', async () => {

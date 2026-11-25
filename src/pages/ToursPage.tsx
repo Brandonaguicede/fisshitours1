@@ -1,5 +1,6 @@
 ﻿import { useMemo, useRef, useState } from 'react';
 import { useBookingCatalog } from '../hooks/useBookingCatalog';
+import { useEffect } from 'react';
 
 import { BoatCard } from '../components/boats/BoatCard';
 import { BookingPanel } from '../components/booking/BookingPanel';
@@ -11,6 +12,8 @@ import type { Boat } from '../types/boat';
 import type { BoatTour } from '../types/boatTour';
 import { groupTourCatalog } from '../utils/tourCatalog';
 import { getBoatStartingPrice } from '../utils/bookingPricing';
+import { trackItemList } from '../analytics/events';
+import { getTourText } from '../i18n/content';
 
 export default function ToursPage() {
   const { language } = useLanguage();
@@ -30,6 +33,22 @@ export default function ToursPage() {
 
   const availableTours = useMemo(() => (selectedBoat ? catalogTours.filter((tour) => tour.boatId === selectedBoat.id) : []), [catalogTours, selectedBoat]);
   const groupedTours = useMemo(() => groupTourCatalog(availableTours, catalogBoats), [availableTours, catalogBoats]);
+
+  useEffect(() => {
+    const element = toursRef.current;
+    if (!element || !selectedBoat || !groupedTours.length) return;
+    const observer = new IntersectionObserver(([entry]) => {
+      if (!entry.isIntersecting) return;
+      const items = groupedTours.map((item, index) => ({ item_id: item.tourId,
+        item_name: getTourText(item.tour, language).title, item_category: item.tour.category,
+        item_variant: selectedBoat.name, price: item.fromPrice, index }));
+      trackItemList(`${language === 'es' ? 'Tours en' : 'Tours aboard'} ${selectedBoat.name}`, items,
+        `tours:${selectedBoat.id}:${items.map((item) => item.item_id).join(',')}`);
+      observer.disconnect();
+    }, { threshold: 0.25 });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [groupedTours, language, selectedBoat]);
 
   function selectBoat(boat: Boat) {
     changeBoat(boat);

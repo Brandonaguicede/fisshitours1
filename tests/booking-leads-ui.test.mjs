@@ -56,10 +56,15 @@ async function bookingFixture({ failLeadSave = false } = {}) {
   return { browser, page, leadRequests, createBookingRequests, forbidden };
 }
 
+// The consent banner can cover the checkout buttons: accept it like a customer would (it may appear a moment after the page loads).
+async function dismissConsent(page, timeout = 1500) {
+  const accept = page.getByRole("button", { name: /^(Accept|Aceptar)$/ });
+  await accept.first().waitFor({ state: "visible", timeout }).then(() => accept.first().click()).catch(() => undefined);
+}
+
 async function goToCustomerStep(page) {
   await page.goto(`${base}/reservar`);
-  const acceptDialog = page.getByRole('dialog').getByRole('button', { name: /Aceptar|Accept/i });
-  await acceptDialog.waitFor({ state: 'visible', timeout: 4000 }).then(() => acceptDialog.click()).catch(() => undefined);
+  await dismissConsent(page, 6000);
   const main = page.locator('main');
   await main.getByRole('button', { name: /Continue/i }).first().click();
   await main.getByRole('button', { name: /Fishing/i }).first().click();
@@ -123,7 +128,9 @@ test('booking leads UI: the booking carries the attempt token, and a failing sav
     await page.getByPlaceholder('8888 0000').fill('8888 1234');
     await expect.poll(() => leadRequests.length, { timeout: 5000 }).toBeGreaterThanOrEqual(1);
     await page.locator('label[for="booking-terms"]').click();
+    await dismissConsent(page);
     await page.locator('[data-payment-method="paypal"]').click();
+    await page.locator('[data-payment-continue]').click(); // main: choosing a method is local state; "Continue to payment" creates the booking
     await expect.poll(() => createBookingRequests.length).toBe(1);
     assert.equal(createBookingRequests[0].leadToken, leadRequests[0].body.clientToken, 'the same token ties the booking to its attempt');
     assert.equal(createBookingRequests[0].customer.email, 'ana@example.com');

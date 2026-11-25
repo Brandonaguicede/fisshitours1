@@ -5,7 +5,17 @@ import { corsHeaders, corsPreflight, withCors } from '../_shared/cors.ts';
 import { enqueueBookingConfirmationEmails } from '../_shared/booking-confirmation-email.ts';
 import { getBookingContact } from '../_shared/booking-contact.mjs';
 
-const schema = z.object({ bookingId: z.string().uuid() });
+const externalPaymentSchema = z.object({
+  paidAt: z.string().datetime({ offset: true }),
+  amount: z.number().finite().positive().multipleOf(0.01),
+  currency: z.literal('USD'),
+  providerReference: z.string().trim().min(4).max(128).regex(/^[A-Za-z0-9._\/-]+$/),
+}).strict();
+
+const schema = z.object({
+  bookingId: z.string().uuid(),
+  externalPayment: externalPaymentSchema.optional(),
+}).strict();
 
 serve(withCors(async (req) => {
   const headers = corsHeaders(req, 'POST, OPTIONS');
@@ -61,12 +71,28 @@ serve(withCors(async (req) => {
       return Response.json({ message }, { status: 409, headers });
     }
 
-    const { data, error } = await userClient.rpc('update_booking_status', {
-      p_booking_id: parsed.data.bookingId,
-      p_booking_status: 'confirmed',
-      p_payment_status: 'paid',
-      p_note: 'Reserva confirmada desde admin; pago manual recibido. Bote bloqueado en disponibilidad.',
-    });
+    const isExternalBacLink = booking.payment_method_key === 'whatsapp-link';
+    if (isExternalBacLink && !parsed.data.externalPayment) {
+      return Response.json({ message: 'External BAC payment evidence is required' }, { status: 400, headers });
+    }
+    if (!isExternalBacLink && parsed.data.externalPayment) {
+      return Response.json({ message: 'External payment evidence is only valid for WhatsApp BAC-link bookings' }, { status: 400, headers });
+    }
+
+    const { data, error } = isExternalBacLink
+      ? await userClient.rpc('confirm_external_bac_payment', {
+          p_booking_id: parsed.data.bookingId,
+          p_paid_at: parsed.data.externalPayment!.paidAt,
+          p_amount: parsed.data.externalPayment!.amount,
+          p_currency: parsed.data.externalPayment!.currency,
+          p_provider_reference: parsed.data.externalPayment!.providerReference,
+        })
+      : await userClient.rpc('update_booking_status', {
+          p_booking_id: parsed.data.bookingId,
+          p_booking_status: 'confirmed',
+          p_payment_status: 'paid',
+          p_note: 'Reserva confirmada desde admin. Bote bloqueado en disponibilidad.',
+        });
     if (error) return Response.json({ message: error.message }, { status: error.message.includes('BOAT_TIME_CONFLICT') || error.message.includes('already reserved') ? 409 : 400, headers });
 
     const customerEmailPresent = Boolean(getBookingContact(booking).email);
@@ -79,7 +105,7 @@ serve(withCors(async (req) => {
         });
     }
 
-    return Response.json({ ...data, customerEmailPresent, emailQueued }, { headers });
+    return Response.json({ ...data, customerEmailPresent, emailQueued, measurementQueued: Boolean(data?.measurement_queued) }, { headers });
   } catch (error) {
     return Response.json({ message: error instanceof Error ? error.message : 'Booking could not be confirmed' }, { status: 500, headers });
   }

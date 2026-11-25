@@ -337,8 +337,8 @@ test('leads: converting a lead leaves a booking whose snapshots are exactly what
 
 test('migrations: new numbers in a safe order, the superseded intermediate migration is gone', () => {
   const names = fs.readdirSync('supabase/migrations').filter((n) => n.endsWith('.sql')).sort();
-  const at = names.indexOf('202610310001_bac_security_hardening.sql');
-  assert.deepEqual(names.slice(at + 1), ['202611240001_booking_leads.sql', '202611240002_booking_contact_snapshots.sql', '202611240003_booking_contact_writers.sql']);
+  assert.deepEqual(names.slice(-3), ['202611240001_booking_leads.sql', '202611240002_booking_contact_snapshots.sql', '202611240003_booking_contact_writers.sql'], 'mine are the last three, in this order');
+  assert.ok(names.indexOf('202611240001_booking_leads.sql') > names.indexOf('202611170001_measurement_campaign_fields.sql'), 'after the migrations that main already applied');
   assert.ok(!names.some((n) => n.includes('phone_matching')));
   assert.match(WRITERS, /Apply ONLY after migration 202611240002 AND after the Edge Functions/);
 });

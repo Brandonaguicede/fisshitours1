@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { trackViewItem } from '../../analytics/events';
 import type { Boat } from '../../types/boat';
 import type { BoatTour } from '../../types/boatTour';
 import type { TourBoatOption } from '../../utils/tourCatalog';
@@ -21,6 +22,7 @@ interface TourDetailModalProps {
 }
 
 export function TourDetailModal({ boat, boatOptions, onClose, onSelect, open, packageTours, tour }: TourDetailModalProps) {
+  const measured = useRef('');
   const { language } = useLanguage();
   const options = boatOptions ?? [{ boat, boatTourId: tour.boatTourId, packages: packageTours }];
   const [selection, setSelection] = useState<{ boatId: string; boatTourId?: string; packageId?: string }>(() => {
@@ -34,6 +36,21 @@ export function TourDetailModal({ boat, boatOptions, onClose, onSelect, open, pa
     && item.boatId === selectedOption.boat.id && item.boatTourId === selectedOption.boatTourId
     && item.tourId === tour.tourId && isBookableCatalogPackage(item));
   const display = getTourText(tour, language);
+  useEffect(() => {
+    if (!open) { measured.current = ''; return; }
+    // Emit only the most specific item currently visible. This avoids one
+    // modal open becoming separate tour, boat and package views.
+    const item = selectedPackage && selectedOption
+      ? { item_id: selectedPackage.id, item_name: selectedPackage.name, item_category: selectedPackage.category,
+          item_variant: selectedOption.boat.name, price: selectedPackage.basePrice, quantity: 1 }
+      : selectedOption
+        ? { item_id: selectedOption.boat.id, item_name: selectedOption.boat.name, item_category: 'Boat',
+            price: Math.min(...selectedOption.packages.map((entry) => entry.basePrice)), quantity: 1 }
+        : { item_id: tour.tourId ?? tour.id, item_name: display.title, item_category: tour.category, quantity: 1 };
+    const key = `${item.item_id}:${item.item_variant ?? ''}`;
+    if (key !== measured.current) trackViewItem(item, key);
+    measured.current = key;
+  }, [open, boat, tour.tourId, tour.id, selectedOption, selectedPackage]);
   const selectedDisplay = selectedPackage ? getTourText(selectedPackage, language) : null;
   const rawGalleryImages = tour.tourDetails?.galleryImages.length ? tour.tourDetails.galleryImages
     : tour.galleryImages?.length ? tour.galleryImages : [{ alt: display.title, src: tour.tourDetails?.image ?? tour.image }];

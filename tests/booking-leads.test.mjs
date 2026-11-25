@@ -214,7 +214,7 @@ test('booking leads: retention deletes open leads 30 days after their last activ
 test('booking leads: the migration is new, does not redefine the booking RPC and keeps phase-one scope', () => {
   const migrations = fs.readdirSync('supabase/migrations').filter((name) => name.endsWith('.sql')).sort();
   assert.equal(migrations.filter((name) => name.includes('booking_leads')).length, 1);
-  assert.equal(migrations[migrations.indexOf('202610310001_bac_security_hardening.sql') + 1], '202611240001_booking_leads.sql', 'the next number after the last applied migration');
+  assert.ok(migrations.indexOf('202611240001_booking_leads.sql') > migrations.indexOf('202611170001_measurement_campaign_fields.sql'), 'after the latest migration of main');
   assert.doesNotMatch(LEAD_MIGRATION, /create or replace function public\.create_booking_transaction/);
   assert.doesNotMatch(LEAD_MIGRATION, /(insert into|update|delete from)\s+public\.(customers|bookings|availability_blocks|payments)/i);
 });
@@ -284,7 +284,7 @@ function loadCreateBookingFunction({ markError = null, markThrows = false } = {}
     },
   };
   const call = runEdgeFunction('supabase/functions/create-booking/index.ts', {
-    supabase, env, logs: calls.logs, extra: { checkTermsAcceptance: () => ({ ok: true, legacy: false, termsVersion: 'v1' }) },
+    supabase, env, logs: calls.logs, extra: { checkTermsAcceptance: () => ({ ok: true, legacy: false, termsVersion: 'v1' }), measurementReceipt: async () => undefined },
   });
   return { call, calls };
 }

@@ -1,7 +1,9 @@
 <!doctype html>
 <html lang="en">
   <head>
+    <script src="/measurement-bootstrap.js"></script>
     <meta charset="UTF-8" />
+    <meta name="referrer" content="origin" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       name="description"
@@ -51,21 +53,12 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link rel="preload" as="image" href="/images/papagayo-logo.png" />
     <title>Papagayo Fishing Tours | Boat Tours in Costa Rica</title>
-    <script>
-      (function () {
-        try {
-          var stored = localStorage.getItem('pft-admin-theme');
-          var theme = stored === 'light' || stored === 'dark'
-            ? stored
-            : (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-          document.documentElement.dataset.theme = theme;
-        } catch (error) {
-          document.documentElement.dataset.theme = 'light';
-        }
-      })();
-    </script>
+    <script src="/admin-theme.js"></script>
   </head>
   <body style="margin:0;background:#0B2842">
+    <noscript><!-- Kept inert: a no-JS iframe cannot read or enforce this consent choice. -->
+      <template><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-T5RBJH88" height="0" width="0" style="display:none;visibility:hidden"></iframe></template>
+    </noscript>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

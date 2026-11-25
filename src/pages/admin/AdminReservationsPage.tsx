@@ -18,7 +18,7 @@ import AdminPagination from '../../components/admin/AdminPagination';
 import { useAdminPagedList } from '../../hooks/useAdminPagedList';
 import { getAdminReservationsPage } from '../../services/adminListService';
 import { getActiveBoatTours, getActiveTimeSlots } from '../../services/boatTourService';
-import { adminCreateBooking, calculateBookingPrice, cancelBooking, confirmBooking, getActiveDepartureLocations, retryConfirmationEmail, syncReservationCalendar, updateBooking, type CalendarSyncResult, type DepartureLocation } from '../../services/bookingService';
+import { adminCreateBooking, calculateBookingPrice, cancelBooking, confirmBooking, getActiveDepartureLocations, retryConfirmationEmail, syncReservationCalendar, updateBooking, type CalendarSyncResult, type DepartureLocation, type ExternalPaymentEvidence } from '../../services/bookingService';
 import type { BoatTour, TourTimeSlot } from '../../types/boatTour';
 import { loadLogoDataUrl } from '../../utils/exportBrand';
 import {
@@ -57,6 +57,10 @@ function friendlyEditError(message: string) {
 }
 
 const money = (value: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 }).format(value);
+const localDateTimeValue = (date = new Date()) => {
+  const offset = date.getTimezoneOffset() * 60_000;
+  return new Date(date.getTime() - offset).toISOString().slice(0, 16);
+};
 
 const bookingStatusOptions = [
   { value: 'all', label: 'Todos los estados' },
@@ -137,6 +141,8 @@ export default function AdminReservationsPage() {
   // Syncs that never reached the server (network / session): nothing was recorded in the booking, so this session remembers them.
   const unreachableSyncs = useRef(new Set<string>());
   const [confirmTarget, setConfirmTarget] = useState<AdminReservation | null>(null);
+  const [externalPaidAt, setExternalPaidAt] = useState('');
+  const [externalPaymentReference, setExternalPaymentReference] = useState('');
   const [manualSaving, setManualSaving] = useState(false);
   const [manualForm, setManualForm] = useState<ManualBookingForm>(emptyManualBooking);
   const [manualTermsError, setManualTermsError] = useState(false);
@@ -289,7 +295,19 @@ export default function AdminReservationsPage() {
     return outcome;
   }
 
-  async function updateReservationStatus(reservation: AdminReservation, nextBookingStatus: 'confirmed' | 'cancelled') {
+  function openConfirmation(reservation: AdminReservation) {
+    setConfirmTarget(reservation);
+    setExternalPaidAt(reservation.payment_method_key === 'whatsapp-link' ? localDateTimeValue() : '');
+    setExternalPaymentReference('');
+  }
+
+  function closeConfirmation() {
+    setConfirmTarget(null);
+    setExternalPaidAt('');
+    setExternalPaymentReference('');
+  }
+
+  async function updateReservationStatus(reservation: AdminReservation, nextBookingStatus: 'confirmed' | 'cancelled', externalPayment?: ExternalPaymentEvidence) {
     setBusyId(reservation.id);
     setNotice('');
     setError('');
@@ -299,7 +317,7 @@ export default function AdminReservationsPage() {
     // Cancelling is ONE server-side request: the booking is cancelled, its availability released and its Calendar event deleted there, so
     // closing the tab cannot leave a cancelled booking with a live event. Confirming keeps its own order (confirm, then sync).
     const { error } = nextBookingStatus === 'confirmed'
-      ? await confirmBooking(reservation.id)
+      ? await confirmBooking(reservation.id, externalPayment)
         .then((result) => {
           confirmationResult = result;
           return { error: null };
@@ -575,7 +593,7 @@ export default function AdminReservationsPage() {
             title="Confirmar reserva"
             aria-label={`Confirmar reserva ${reservation.booking_reference}`}
             disabled={busy}
-            onClick={() => setConfirmTarget(reservation)}
+            onClick={() => openConfirmation(reservation)}
           >
             {busyId === reservation.id ? <Loader2 className="animate-spin" size={14} /> : <Check size={14} />} Confirmar
           </button>
@@ -934,22 +952,47 @@ export default function AdminReservationsPage() {
 
       <AdminConfirmDialog
         open={Boolean(confirmTarget)}
-        onClose={() => setConfirmTarget(null)}
+        onClose={closeConfirmation}
         titleId="confirm-booking-title"
         title="Confirmar reserva"
         tone="primary"
         confirmLabel="Confirmar"
         loading={Boolean(confirmTarget) && busyId === confirmTarget?.id}
+        confirmDisabled={Boolean(confirmTarget?.payment_method_key === 'whatsapp-link' && (
+          !externalPaidAt
+          || !/^[A-Za-z0-9._\/-]{4,128}$/.test(externalPaymentReference.trim())
+        ))}
         message={
           <>
             <p>¿Confirmar esta reserva{confirmTarget ? <> <strong>{confirmTarget.booking_reference}</strong></> : null}?</p>
             <p className="mt-2">Se marcará como pagada, se bloqueará el bote y se enviará el correo de confirmación si el cliente tiene email.</p>
+            {confirmTarget?.payment_method_key === 'whatsapp-link' ? (
+              <div className="mt-4 grid gap-3">
+                <p>Para pagos enviados por enlace BAC, registra la evidencia real. El monto debe coincidir con el total guardado de {money(Number(confirmTarget.total_snapshot))} USD.</p>
+                <label className="admin-field">
+                  <span className="admin-field__label">Fecha y hora real del pago</span>
+                  <input className="admin-input" type="datetime-local" max={localDateTimeValue()} required value={externalPaidAt} onChange={(event) => setExternalPaidAt(event.target.value)} />
+                </label>
+                <label className="admin-field">
+                  <span className="admin-field__label">Referencia o comprobante BAC</span>
+                  <input className="admin-input" type="text" minLength={4} maxLength={128} pattern="[A-Za-z0-9._/-]+" autoComplete="off" required value={externalPaymentReference} onChange={(event) => setExternalPaymentReference(event.target.value)} placeholder="Referencia BAC" />
+                </label>
+              </div>
+            ) : null}
           </>
         }
         onConfirm={async () => {
           if (!confirmTarget) return;
-          await updateReservationStatus(confirmTarget, 'confirmed');
-          setConfirmTarget(null);
+          const externalPayment = confirmTarget.payment_method_key === 'whatsapp-link'
+            ? {
+                paidAt: new Date(externalPaidAt).toISOString(),
+                amount: Number(confirmTarget.total_snapshot),
+                currency: 'USD' as const,
+                providerReference: externalPaymentReference.trim(),
+              }
+            : undefined;
+          await updateReservationStatus(confirmTarget, 'confirmed', externalPayment);
+          closeConfirmation();
         }}
       />
 

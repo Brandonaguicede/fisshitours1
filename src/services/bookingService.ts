@@ -1,8 +1,10 @@
 import { functionsUrl, supabase } from '../lib/supabase';
+import type { MeasurementReceipt } from '../analytics/events';
 import type { BookingPaymentMethod } from '../utils/bookingPayment';
 import { getStoredLanguage } from '../i18n/LanguageContext';
 import { sortDepartureLocations } from '../utils/departureLocations';
 import type { BookingLeadPayload } from '../utils/bookingLead';
+import type { BookingAttribution } from '../analytics/bookingAttribution';
 
 export interface PriceRequest {
   boatId: string;
@@ -68,9 +70,11 @@ export interface CreateBookingRequest {
   termsVersion: string;
   /** Token of the booking attempt (lead) this booking comes from; the server marks that attempt as converted. Optional. */
   leadToken?: string;
+  /** Consent-scoped advertising/session identifiers captured immediately before creation. */
+  attribution?: BookingAttribution;
 }
 
-export interface AdminCreateBookingRequest extends Omit<CreateBookingRequest, 'turnstileToken' | 'customer' | 'termsVersion'> {
+export interface AdminCreateBookingRequest extends Omit<CreateBookingRequest, 'turnstileToken' | 'customer' | 'termsVersion' | 'attribution'> {
   customer: Omit<CreateBookingRequest['customer'], 'email'> & { email?: string };
   adminNote?: string;
   /** The operator confirms the customer accepted the terms. The version and the "admin" source are fixed by the server. */
@@ -84,9 +88,21 @@ export interface AdminConfirmBookingResult {
   payment_status: string;
   customerEmailPresent: boolean;
   emailQueued: boolean;
+  measurementQueued?: boolean;
+}
+
+export interface ExternalPaymentEvidence {
+  /** Actual settlement time reported by BAC, not the later admin confirmation time. */
+  paidAt: string;
+  /** Full amount settled for this booking. Partial payments are intentionally unsupported. */
+  amount: number;
+  currency: 'USD';
+  /** Human/accounting reference from the external BAC payment link. */
+  providerReference: string;
 }
 
 export interface BookingResult {
+  measurement?: MeasurementReceipt;
   booking_id: string;
   booking_reference: string;
   boat_id: string;
@@ -151,8 +167,8 @@ export function adminCreateBooking(input: AdminCreateBookingRequest) {
   return callFunction<BookingResult>('admin-create-booking', input);
 }
 
-export function confirmBooking(bookingId: string) {
-  return callFunction<AdminConfirmBookingResult>('admin-confirm-booking', { bookingId });
+export function confirmBooking(bookingId: string, externalPayment?: ExternalPaymentEvidence) {
+  return callFunction<AdminConfirmBookingResult>('admin-confirm-booking', { bookingId, ...(externalPayment ? { externalPayment } : {}) });
 }
 
 export type BacAdminOperation = 'capture' | 'void' | 'refund';

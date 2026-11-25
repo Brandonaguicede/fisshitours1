@@ -25,6 +25,7 @@ function edgeOver(db, file) {
   const environment = { SUPABASE_URL: 'http://db', SUPABASE_SERVICE_ROLE_KEY: 'srv', DISABLE_TURNSTILE: 'true', RATE_LIMIT_HASH_SECRET: 'x' };
   const context = vm.createContext({ z, console, Response, crypto: globalThis.crypto, TextEncoder, Uint8Array, Deno: { env: { get: (key) => environment[key] } },
     serve: (fn) => { handler = fn; }, withCors: (fn) => fn, corsHeaders: () => ({}), corsPreflight: () => new Response(null), createClient: () => supabase, areExternalProviderMocksAllowed: () => false,
+    measurementReceipt: async ({ bookingId, bookingStatus }) => ({ booking_id: `opaque:${bookingId}`, booking_confirmed: bookingStatus === 'confirmed', payment_confirmed: false, production: false }),
     buildBookingRequestAdminHtml: async () => '', buildBookingRequestSummary: async () => '', fetch: async () => new Response('{}'), ...terms });
   vm.runInContext(ts.transpile(fs.readFileSync(`supabase/functions/${file}/index.ts`, 'utf8').replace(/^import .*;\r?\n/gm, ''), { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None }), context);
   return async (body) => { const response = await handler({ method: 'POST', headers: new Headers({ authorization: 'Bearer t', 'cf-connecting-ip': '1.1.1.1' }), json: async () => body }); return { status: response.status, body: await response.json() }; };
